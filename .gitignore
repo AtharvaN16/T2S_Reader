@@ -17,3 +17,6 @@ spikes/SpikeHarness/Resources/*.npz
 
 # SDD workspaces (superpowers)
 .superpowers/
+
+# Git worktrees for parallel plans (superpowers)
+.worktrees/

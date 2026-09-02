@@ -18,12 +18,12 @@ import Testing
     )
 
     @Test func roundTrips() throws {
-        let data = try TimelineCodec.encode(chapter)
-        #expect(try TimelineCodec.decode(data) == chapter)
+        let data = try TimelineCodec.encode(chapter, segmenterVersion: 1, normalizerVersion: 1)
+        #expect(try TimelineCodec.decode(data).chapter == chapter)
     }
 
     @Test func isCompactAndTagged() throws {
-        let data = try TimelineCodec.encode(chapter)
+        let data = try TimelineCodec.encode(chapter, segmenterVersion: 1, normalizerVersion: 1)
         #expect(data.prefix(4) == Data("T2SC".utf8))
         #expect(data.count < 200 * 100)                // well below one uncompressed JSON row per utterance
     }
@@ -33,22 +33,30 @@ import Testing
     }
 
     @Test func rejectsFutureVersion() throws {
-        var data = try TimelineCodec.encode(chapter)
+        var data = try TimelineCodec.encode(chapter, segmenterVersion: 1, normalizerVersion: 1)
         data[4] = 0xFF; data[5] = 0xFF
         #expect(throws: TimelineCodec.Error.unsupportedVersion(0xFFFF)) { try TimelineCodec.decode(data) }
     }
 
     @Test func decodesASliceWithNonZeroStartIndex() throws {
-        let blob = try TimelineCodec.encode(chapter)
+        let blob = try TimelineCodec.encode(chapter, segmenterVersion: 1, normalizerVersion: 1)
         let packed = Data([0xAA, 0xBB, 0xCC]) + blob
         let slice = packed[3...]
         #expect(slice.startIndex == 3)
-        #expect(try TimelineCodec.decode(slice) == chapter)
+        #expect(try TimelineCodec.decode(slice).chapter == chapter)
     }
 
     @Test func rejectsCorruptPayload() throws {
-        var data = try TimelineCodec.encode(chapter)
-        data.replaceSubrange(6..., with: Data("not lzfse".utf8))
+        var data = try TimelineCodec.encode(chapter, segmenterVersion: 1, normalizerVersion: 1)
+        data.replaceSubrange(10..., with: Data("not lzfse".utf8))
         #expect(throws: TimelineCodec.Error.corrupt) { try TimelineCodec.decode(data) }
+    }
+
+    @Test func roundTripsStageVersions() throws {
+        let data = try TimelineCodec.encode(chapter, segmenterVersion: 3, normalizerVersion: 7)
+        let decoded = try TimelineCodec.decode(data)
+        #expect(decoded.segmenterVersion == 3)
+        #expect(decoded.normalizerVersion == 7)
+        #expect(decoded.chapter == chapter)
     }
 }

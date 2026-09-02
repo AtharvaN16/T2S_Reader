@@ -1764,6 +1764,8 @@ public struct AACCodec: AudioCodec {
 
 The `AVAudioFile(forWriting:settings:)` initializer's file must be written with the processing format the file reports; if `file.write(from:)` throws a format mismatch, create the buffer with `file.processingFormat` instead of the standard format. Stereo input is out of scope (the engine is mono).
 
+**Implementation note (recorded after execution).** `AVAudioFile` reserves a fixed `free` atom of about 32 KB ahead of `mdat` in every `.m4a` it writes, so a one-second clip came out near 34 KB and failed the size assertion. The shipped `AACCodec.encode` strips top-level `free` boxes and rewrites `stco`/`co64` chunk offsets, shifting each offset only by the removed boxes that precede it, and leaves the data untouched if the layout is not the one `AVAudioFile` produces. `AVAudioFile` also finalizes the container only on deallocation, so the write happens inside a helper whose file object goes out of scope before the bytes are read back.
+
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `swift test --filter AACCodecTests`
@@ -1989,6 +1991,8 @@ public final class AudioPlayer: AudioPlaying {
 ```
 
 `player.stop()` resets the player node's sample time, which is why `consumedSeconds` is zero after `reset()`. If `segmentsFinishInOrderAndGaplessly` sees the second callback late, raise the run-loop drain to 0.05 s rather than loosening the assertions; if `consumedSeconds` overshoots after the queue drains, the `min(t.sampleTime, scheduledFrames)` clamp is the intended guard, so check `scheduledFrames` bookkeeping first.
+
+**Implementation note (recorded after execution).** Two things differ from the code above, both established empirically. `.dataPlayedBack` never fires in offline manual rendering, so the shipped player uses `.dataRendered` when `manualRendering` is true and `.dataPlayedBack` otherwise, and in manual mode it collects completions in a lock-protected `CompletionQueue` (`@unchecked Sendable`, the same precedent as `ManualTimeSource`) that `renderOffline` drains synchronously after each render instead of hopping through the main actor. And with `AVAudioUnitTimePitch` in the chain, `playerTime(forNodeTime:)` reads about 1,824 frames ahead of rendered output, so manual-mode `consumedSeconds` derives from `engine.manualRenderingSampleTime × rate` from a baseline captured at `reset()`; real-mode playback still uses `playerTime`, and that constant lead is a calibration item for Plan 4.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 

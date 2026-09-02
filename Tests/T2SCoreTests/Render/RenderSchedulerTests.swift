@@ -9,6 +9,19 @@ import Testing
         RenderRequest(job: RenderJob(documentID: doc, utteranceIndex: i, tier: .playAhead), key: key(i), spoken: spoken, voiceID: "v")
     }
 
+    /// Encodes successfully except for the very first call, which throws.
+    final class ThrowOnceCodec: AudioCodec, @unchecked Sendable {
+        let identifier = "throw-once"
+        private var calls = 0
+        private let inner = RawPCMCodec()
+        func encode(_ pcm: PCMAudio) throws -> Data {
+            calls += 1
+            if calls == 1 { throw AudioCodecError.malformed }
+            return try inner.encode(pcm)
+        }
+        func decode(_ data: Data) throws -> PCMAudio { try inner.decode(data) }
+    }
+
     /// Collects events until `.idle` has been seen `idles` times.
     func collect(_ s: RenderScheduler, idles: Int = 1) async -> [RenderEvent] {
         var out: [RenderEvent] = []
@@ -75,6 +88,18 @@ import Testing
         #expect(got[0] == .failed(documentID: doc, utteranceIndex: 0, message: "failed(\"boom\")"))
         #expect(got[1] == .rendered(RenderedUtterance(documentID: doc, utteranceIndex: 0, key: key(0), duration: 0.2, wordTimings: [])))
         if case .rendered(let r) = got[2] { #expect(r.utteranceIndex == 1 && r.duration == 0.2) } else { Issue.record("expected rendered 1") }
+        #expect(try await store.read(key(0))?.duration == 0.2)
+    }
+
+    @Test func writeFailureFallsBackToSilence() async throws {
+        let store = InMemoryAudioStore(codec: ThrowOnceCodec(), capacityBytes: 10_000_000)
+        let s = RenderScheduler(engine: FakeEngine(secondsPerCharacter: 0.1), store: store, timeSource: ManualTimeSource())
+        async let events = collect(s)
+        await s.setPlan([request(0, "abc")])
+        let got = await events
+        #expect(got.count == 3)
+        if case .failed(_, let i, _) = got[0] { #expect(i == 0) } else { Issue.record("expected .failed first") }
+        #expect(got[1] == .rendered(RenderedUtterance(documentID: doc, utteranceIndex: 0, key: key(0), duration: 0.2, wordTimings: [])))
         #expect(try await store.read(key(0))?.duration == 0.2)
     }
 

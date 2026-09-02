@@ -31,7 +31,8 @@ public struct RenderedUtterance: Hashable, Sendable {
 
 public enum RenderEvent: Hashable, Sendable {
     case rendered(RenderedUtterance)
-    /// Spec §6: logged; 200 ms of silence was stored under the key and a `.rendered` follows.
+    /// Spec §6: logged; 200 ms of silence is stored under the key and a `.rendered` follows,
+    /// unless storing the silence itself failed, in which case nothing follows.
     case failed(documentID: UUID, utteranceIndex: Int, message: String)
     /// Spec §6: the store refused the entry; rendering pauses until `resume()`.
     case storeFull
@@ -71,12 +72,11 @@ public actor RenderScheduler {
 
     /// Replaces all pending work. The request in flight, if any, finishes and is stored.
     public func setPlan(_ requests: [RenderRequest]) {
-        pending = requests
         if isPausedForStorage {
-            pending.removeAll()
             continuation.yield(.idle)                              // never leave a waiter hanging while paused
             return
         }
+        pending = requests
         if !running {
             running = true
             Task { await self.run() }
@@ -109,8 +109,16 @@ public actor RenderScheduler {
                 continuation.yield(.storeFull)
                 break
             } catch {
+                // Encoding or I/O failed for this clip: log it and fall back to the failure silence
+                // so the utterance still arrives (spec §6). Only if that write fails too does a
+                // bare `.failed` go out with no `.rendered` behind it.
                 continuation.yield(.failed(documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, message: "\(error)"))
-                continue
+                result = SynthesisResult(audio: .silence(seconds: Self.failureSilenceSeconds), wordTimings: [])
+                do {
+                    try await store.write(result.audio, for: request.key)
+                } catch {
+                    continue
+                }
             }
             continuation.yield(.rendered(RenderedUtterance(
                 documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, key: request.key,

@@ -11,3 +11,9 @@ public struct Playhead: Hashable, Sendable {
         self.offset = offset
     }
 }
+
+extension Playhead: Comparable {
+    public static func < (a: Playhead, b: Playhead) -> Bool {
+        a.utteranceIndex != b.utteranceIndex ? a.utteranceIndex < b.utteranceIndex : a.offset < b.offset
+    }
+}

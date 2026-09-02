@@ -42,6 +42,21 @@ import Testing
         #expect(Highlighter.highlight(at: Playhead(utteranceIndex: 5, offset: 0), in: timed()) == nil)
     }
 
+    @Test func nilForEmptySpokenOrAllInsertions() {
+        var n = NormalizedText(source: "")
+        n.replace(spokenRange: 0..<0, with: "Hello")
+        let t = makeTimeline([[Utterance(position: Position(resourceHref: "c.xhtml", progression: 0, charOffset: 0), source: n.source, spoken: n.spoken, spans: n.spans, duration: .estimated(1))]])
+        #expect(Highlighter.highlight(at: Playhead(utteranceIndex: 0, offset: 0.2), in: t) == nil)
+        let empty = makeTimeline([[Utterance(position: Position(resourceHref: "c.xhtml", progression: 0, charOffset: 0), source: "", spoken: "", spans: [], duration: .estimated(0.5))]])
+        #expect(Highlighter.highlight(at: Playhead(utteranceIndex: 0, offset: 0.1), in: empty) == nil)
+    }
+
+    @Test func offsetPastDurationClampsToLastWord() {
+        var t = timed()
+        t[utterance: 0].wordTimings = nil
+        #expect(Highlighter.highlight(at: Playhead(utteranceIndex: 0, offset: 99), in: t)?.sourceRange == 15..<18)
+    }
+
     @Test func skipsInsertedWords() {
         var t = timed()
         var n = NormalizedText(source: "world")

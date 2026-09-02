@@ -6,6 +6,12 @@ public struct HighlightRange: Hashable, Sendable {
     public var position: Position
     /// UTF-16 range within the utterance's `source`.
     public var sourceRange: Range<Int>
+
+    public init(utteranceIndex: Int, position: Position, sourceRange: Range<Int>) {
+        self.utteranceIndex = utteranceIndex
+        self.position = position
+        self.sourceRange = sourceRange
+    }
 }
 
 public enum Highlighter {
@@ -23,8 +29,10 @@ public enum Highlighter {
             let all = word.regex.matches(in: u.spoken, range: NSRange(location: 0, length: ns.length))
                 .map { $0.range.location..<($0.range.location + $0.range.length) }
             guard !all.isEmpty else { return nil }
-            let fraction = u.duration.seconds > 0 ? max(0, min(0.999, ph.offset / u.duration.seconds)) : 0
-            let i = Int(Double(all.count) * fraction)
+            let target = u.spokenOffset(atTime: ph.offset)
+            // No word ends after `target` once playback has run past the last word (target lands
+            // exactly at the end of `spoken`): clamp to the last word rather than reporting nil.
+            let i = all.firstIndex(where: { $0.upperBound > target }) ?? all.count - 1
             spokenWords = Array(all[i...])
         }
         let n = u.normalized

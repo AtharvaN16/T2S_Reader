@@ -1553,6 +1553,13 @@ import Testing
         let rule = PronunciationDictionaryRule(entries: [PronunciationEntry(term: "US", replacement: "U S", caseSensitive: true)])
         #expect(rule.apply(NormalizedText(source: "the US and us")).spoken == "the U S and us")
     }
+
+    @Test func termsEndingInSymbolsStillMatchWholeWords() {
+        let rule = PronunciationDictionaryRule(entries: [PronunciationEntry(term: "C++", replacement: "see plus plus")])
+        let t = rule.apply(NormalizedText(source: "I write C++ daily, not C+ or C++11."))
+        #expect(t.spoken == "I write see plus plus daily, not C+ or C++11.")
+        expectEveryWordMapsToSource(t)
+    }
 }
 ```
 
@@ -1625,9 +1632,12 @@ public struct PronunciationDictionaryRule: NormalizerRule {
     private let compiled: [(Pattern, String)]
 
     public init(entries: [PronunciationEntry]) {
+        // Lookarounds rather than \b: a term ending in a non-word character ("C++") has no
+        // word boundary after it, so \b would never match.
         compiled = entries.map { e in
             let escaped = NSRegularExpression.escapedPattern(for: e.term)
-            return (Pattern("\\b\(escaped)\\b", e.caseSensitive ? [] : [.caseInsensitive]), e.replacement)
+            let pattern = "(?<![\\p{L}\\p{N}_])\(escaped)(?![\\p{L}\\p{N}_])"
+            return (Pattern(pattern, e.caseSensitive ? [] : [.caseInsensitive]), e.replacement)
         }
     }
 
@@ -1669,7 +1679,7 @@ public struct TextNormalizer: Sendable {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test --filter "PronunciationDictionaryTests|TextNormalizerTests"`
-Expected: 6 tests passed.
+Expected: 7 tests passed.
 
 - [ ] **Step 5: Commit**
 

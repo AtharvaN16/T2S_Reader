@@ -10,7 +10,7 @@ import T2SCore
                                 cssSelector: "html > body > p:nth-child(2)")
         let locator = try #require(LocatorMapping.locator(for: position))
         #expect(locator.href.string == "OEBPS/ch1.xhtml")
-        #expect(locator.mediaType == .xhtml)
+        #expect(locator.mediaType.string == "application/xhtml+xml")
         #expect(locator.locations.progression == 0.4)
         #expect(locator.locations.otherLocations["cssSelector"] == .string("html > body > p:nth-child(2)"))
         var back = LocatorMapping.position(for: locator)

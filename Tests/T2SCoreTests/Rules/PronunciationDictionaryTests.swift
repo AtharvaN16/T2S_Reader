@@ -21,4 +21,11 @@ import Testing
         let rule = PronunciationDictionaryRule(entries: [PronunciationEntry(term: "US", replacement: "U S", caseSensitive: true)])
         #expect(rule.apply(NormalizedText(source: "the US and us")).spoken == "the U S and us")
     }
+
+    @Test func termsEndingInSymbolsStillMatchWholeWords() {
+        let rule = PronunciationDictionaryRule(entries: [PronunciationEntry(term: "C++", replacement: "see plus plus")])
+        let t = rule.apply(NormalizedText(source: "I write C++ daily, not C+ or C++11."))
+        #expect(t.spoken == "I write see plus plus daily, not C+ or C++11.")
+        expectEveryWordMapsToSource(t)
+    }
 }

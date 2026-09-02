@@ -5,9 +5,12 @@ public struct PronunciationDictionaryRule: NormalizerRule {
     private let compiled: [(Pattern, String)]
 
     public init(entries: [PronunciationEntry]) {
+        // Lookarounds rather than \b: a term ending in a non-word character ("C++") has no
+        // word boundary after it, so \b would never match.
         compiled = entries.map { e in
             let escaped = NSRegularExpression.escapedPattern(for: e.term)
-            return (Pattern("\\b\(escaped)\\b", e.caseSensitive ? [] : [.caseInsensitive]), e.replacement)
+            let pattern = "(?<![\\p{L}\\p{N}_])\(escaped)(?![\\p{L}\\p{N}_])"
+            return (Pattern(pattern, e.caseSensitive ? [] : [.caseInsensitive]), e.replacement)
         }
     }
 

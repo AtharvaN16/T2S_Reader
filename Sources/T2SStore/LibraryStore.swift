@@ -80,7 +80,7 @@ public actor LibraryStore {
                                  schemaVersion: timeline.schemaVersion,
                                  segmenterVersion: timeline.segmenterVersion,
                                  normalizerVersion: timeline.normalizerVersion)
-        row.resumePosition = try document.resumePosition.map { try JSONEncoder().encode($0) }
+        Self.setResume(row, document.resumePosition)
         modelContext.insert(row)
         try replaceChapters(of: row, with: timeline)
         try modelContext.save()
@@ -141,8 +141,10 @@ public actor LibraryStore {
         if queued {
             guard row.queueOrder == nil else { return }
             row.queueOrder = (try queueRows().last?.queueOrder ?? -1) + 1
+            try renumberQueue()
         } else {
             row.queueOrder = nil
+            try renumberQueue()
         }
         row.updatedAt = Date()
         try modelContext.save()
@@ -150,12 +152,19 @@ public actor LibraryStore {
 
     /// Moves a queued document to `index` (clamped) and renumbers the Queue 0…n-1.
     public func moveInQueue(_ id: UUID, to index: Int) throws {
-        var rows = try queueRows()
+        let rows = try queueRows()
         guard let from = rows.firstIndex(where: { $0.id == id }) else { throw LibraryStoreError.documentNotFound(id) }
-        let moving = rows.remove(at: from)
-        rows.insert(moving, at: max(0, min(index, rows.count)))
-        for (i, r) in rows.enumerated() { r.queueOrder = i }
+        let moving = rows[from]
+        let target = max(0, min(index, rows.count - 1))
+        if target < from {
+            for r in rows[target..<from] { r.queueOrder = (r.queueOrder ?? 0) + 1 }
+            moving.queueOrder = target
+        } else if target > from {
+            for r in rows[(from + 1)...target] { r.queueOrder = (r.queueOrder ?? 0) - 1 }
+            moving.queueOrder = target
+        }
         moving.updatedAt = Date()
+        try renumberQueue()
         try modelContext.save()
     }
 
@@ -230,6 +239,12 @@ public actor LibraryStore {
             sortBy: [SortDescriptor(\.queueOrder)]))
     }
 
+    /// Compacts the Queue's ranks to a dense 0…n-1, preserving relative order. Called after every
+    /// change to the Queue's membership or order so a rank never carries a gap.
+    private func renumberQueue() throws {
+        for (i, r) in try queueRows().enumerated() { r.queueOrder = i }
+    }
+
     private func replaceChapters(of row: StoredDocument, with timeline: Timeline) throws {
         for c in row.chapters { modelContext.delete(c) }
         row.chapters = []
@@ -256,12 +271,26 @@ public actor LibraryStore {
         c.renderedCount = chapter.utterances.filter { $0.audioRef != nil }.count
     }
 
+    /// Writes the four flattened resume columns, nil-ing them when `position` is nil.
+    private static func setResume(_ row: StoredDocument, _ position: Position?) {
+        row.resumeHref = position?.resourceHref
+        row.resumeProgression = position?.progression
+        row.resumeCharOffset = position?.charOffset
+        row.resumeCSSSelector = position?.cssSelector
+    }
+
     static func domain(_ r: StoredDocument) -> Document {
-        Document(id: r.id, title: r.title, author: r.author,
-                 sourceType: SourceType(rawValue: r.sourceType) ?? .epub,
-                 sourceURL: r.sourceURL.flatMap(URL.init(string:)),
-                 coverImagePath: r.coverImagePath, addedAt: r.addedAt, voiceID: r.voiceID,
-                 resumePosition: r.resumePosition.flatMap { try? JSONDecoder().decode(Position.self, from: $0) })
+        let resumePosition = r.resumeHref.map {
+            Position(resourceHref: $0, progression: r.resumeProgression ?? 0,
+                     charOffset: r.resumeCharOffset, cssSelector: r.resumeCSSSelector)
+        }
+        // Only a downgrade can produce an unknown raw value (this code writes every value);
+        // listing it as an EPUB beats hiding the document.
+        return Document(id: r.id, title: r.title, author: r.author,
+                        sourceType: SourceType(rawValue: r.sourceType) ?? .epub,
+                        sourceURL: r.sourceURL.flatMap(URL.init(string:)),
+                        coverImagePath: r.coverImagePath, addedAt: r.addedAt, voiceID: r.voiceID,
+                        resumePosition: resumePosition)
     }
 
     static func summary(_ r: StoredDocument) -> DocumentSummary {

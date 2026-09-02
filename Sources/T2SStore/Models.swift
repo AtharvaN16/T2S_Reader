@@ -16,8 +16,12 @@ final class StoredDocument {
     var updatedAt: Date
     var lastPlayedAt: Date?
     var voiceID: String?
-    /// JSON-encoded `Position`; nil until the first save.
-    var resumePosition: Data?
+    /// The resume `Position`, flattened: no serialization means no decode path that can fail.
+    /// `resumeHref == nil` means never saved.
+    var resumeHref: String?
+    var resumeProgression: Double?
+    var resumeCharOffset: Int?
+    var resumeCSSSelector: String?
     /// nil = not in the Queue; otherwise the row's rank, ascending and unique among queued rows.
     var queueOrder: Int?
     var isFinished: Bool
@@ -40,7 +44,10 @@ final class StoredDocument {
         self.updatedAt = addedAt
         self.lastPlayedAt = nil
         self.voiceID = voiceID
-        self.resumePosition = nil
+        self.resumeHref = nil
+        self.resumeProgression = nil
+        self.resumeCharOffset = nil
+        self.resumeCSSSelector = nil
         self.queueOrder = nil
         self.isFinished = false
         self.schemaVersion = schemaVersion

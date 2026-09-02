@@ -1032,6 +1032,8 @@ public actor LibraryStore {
 }
 ```
 
+**Implementation note (recorded after execution).** Two changes from the code above, both from the task review: `setQueued` renumbers the Queue densely through a shared `renumberQueue()`, so ranks never carry gaps after an archive; and the resume position is persisted as four flattened columns (`resumeHref`, `resumeProgression`, `resumeCharOffset`, `resumeCSSSelector`) instead of JSON `Data`, because a `try?` decode would silently drop a user's place. Task 3 stores bookmark positions the same way.
+
 - [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `swift test --filter LibraryStoreTests`

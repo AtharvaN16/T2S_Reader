@@ -43,6 +43,18 @@ import T2SCore
         let stored = try #require(try await store.timeline(for: doc.id))
         #expect(stored.isStale)
         #expect(stored.timeline.segmenterVersion == Versions.segmenter + 1)
+
+        let normalizerStale = makeDocument("normalizer-stale")
+        var normalizerTimeline = makeTimeline([[makeUtterance("One.")]])
+        normalizerTimeline.normalizerVersion = Versions.normalizer + 1
+        try await store.insert(normalizerStale, timeline: normalizerTimeline)
+        let normalizerStored = try #require(try await store.timeline(for: normalizerStale.id))
+        #expect(normalizerStored.isStale)
+
+        let current = makeDocument("current")
+        try await store.insert(current, timeline: makeTimeline([[makeUtterance("One.")]]))
+        let currentStored = try #require(try await store.timeline(for: current.id))
+        #expect(!currentStored.isStale)
     }
 
     @Test func deleteCascadesChapters() async throws {
@@ -71,8 +83,11 @@ import T2SCore
         #expect(try await store.queue().map(\.id) == [c.id, a.id, b.id])
         try await store.setQueued(a.id, false)                             // archive
         #expect(try await store.queue().map(\.id) == [c.id, b.id])
+        #expect(try await store.summary(id: c.id)?.queueOrder == 0)
+        #expect(try await store.summary(id: b.id)?.queueOrder == 1)
         try await store.setQueued(a.id, true)                              // back at the end
         #expect(try await store.queue().map(\.id) == [c.id, b.id, a.id])
+        #expect(try await store.summary(id: a.id)?.queueOrder == 2)
         try await store.moveInQueue(c.id, to: 99)                          // clamped
         #expect(try await store.queue().map(\.id) == [b.id, a.id, c.id])
         #expect(try await store.summary(id: b.id)?.queueOrder == 0)

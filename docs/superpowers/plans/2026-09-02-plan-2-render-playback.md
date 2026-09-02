@@ -1543,7 +1543,12 @@ public actor RenderScheduler {
     /// Replaces all pending work. The request in flight, if any, finishes and is stored.
     public func setPlan(_ requests: [RenderRequest]) {
         pending = requests
-        if !running && !isPausedForStorage {
+        if isPausedForStorage {
+            pending.removeAll()
+            continuation.yield(.idle)                              // never leave a waiter hanging while paused
+            return
+        }
+        if !running {
             running = true
             Task { await self.run() }
         }

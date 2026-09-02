@@ -55,17 +55,22 @@ public enum LibraryStoreError: Error, Equatable, Sendable {
 public actor LibraryStore {
     static let schema = Schema([StoredDocument.self, StoredChapter.self])
 
+    /// SwiftData crashes intermittently when several containers are created at once (Swift Testing
+    /// runs suites in parallel and each test opens its own store). Creation is rare and cheap, so
+    /// it is simply serialized.
+    private static let containerLock = NSLock()
+
     /// A throwaway store for tests and previews.
     public static func inMemory() throws -> LibraryStore {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        return LibraryStore(modelContainer: try ModelContainer(for: schema, configurations: config))
+        return LibraryStore(modelContainer: try containerLock.withLock { try ModelContainer(for: schema, configurations: config) })
     }
 
     /// The app's store at `url` (`LibraryPaths.databaseURL`). Creates the parent directory.
     public static func onDisk(at url: URL) throws -> LibraryStore {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let config = ModelConfiguration(url: url)
-        return LibraryStore(modelContainer: try ModelContainer(for: schema, configurations: config))
+        return LibraryStore(modelContainer: try containerLock.withLock { try ModelContainer(for: schema, configurations: config) })
     }
 
     // MARK: Documents
@@ -272,7 +277,7 @@ public actor LibraryStore {
     }
 
     /// Writes the four flattened resume columns, nil-ing them when `position` is nil.
-    private static func setResume(_ row: StoredDocument, _ position: Position?) {
+    static func setResume(_ row: StoredDocument, _ position: Position?) {
         row.resumeHref = position?.resourceHref
         row.resumeProgression = position?.progression
         row.resumeCharOffset = position?.charOffset

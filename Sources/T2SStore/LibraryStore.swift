@@ -190,6 +190,15 @@ public actor LibraryStore {
 
     // MARK: Timelines
 
+    /// Whether the document's persisted versions differ from `Versions`, without decoding a single
+    /// chapter blob (spec §3.7.3). `nil` when the document does not exist.
+    public func isStale(id: UUID) throws -> Bool? {
+        guard let row = try row(id) else { return nil }
+        return row.schemaVersion != Versions.schema
+            || row.segmenterVersion != Versions.segmenter
+            || row.normalizerVersion != Versions.normalizer
+    }
+
     /// Decodes every chapter blob. `isStale` when the persisted versions differ from `Versions`.
     public func timeline(for id: UUID) throws -> StoredTimeline? {
         guard let row = try row(id) else { return nil }
@@ -256,6 +265,17 @@ public actor LibraryStore {
     /// Test hook.
     func chapterRowCount() throws -> Int {
         try modelContext.fetchCount(FetchDescriptor<StoredChapter>())
+    }
+
+    /// Test hook: corrupts a chapter's blob so `TimelineCodec.decode` throws, to exercise the paths
+    /// that must survive an undecodable blob (delete, reprocess).
+    func corruptChapterBlob(_ index: Int, of id: UUID) throws {
+        let row = try existing(id)
+        guard let c = row.chapters.first(where: { $0.index == index }) else {
+            throw LibraryStoreError.chapterOutOfRange(index)
+        }
+        c.blob = Data([0, 1, 2])
+        try commit()
     }
 
     private func queueRows() throws -> [StoredDocument] {

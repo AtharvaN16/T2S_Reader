@@ -21,13 +21,13 @@ extension LibraryStore {
             modelContext.insert(StoredPronunciation(id: entry.id, term: entry.term, replacement: entry.replacement,
                                                     caseSensitive: entry.caseSensitive, updatedAt: Date()))
         }
-        try modelContext.save()
+        try commit()
     }
 
     public func deletePronunciation(id: UUID) throws {
         guard let row = try pronunciationRow(id) else { return }
         modelContext.delete(row)
-        try modelContext.save()
+        try commit()
     }
 
     private func pronunciationRow(_ id: UUID) throws -> StoredPronunciation? {

@@ -16,6 +16,6 @@ extension LibraryStore: PlayheadStore {
         let now = Date()
         row.lastPlayedAt = now
         row.updatedAt = now
-        try modelContext.save()
+        try commit()
     }
 }

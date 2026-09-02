@@ -91,7 +91,7 @@ public actor LibraryStore {
         modelContext.insert(row)
         try replaceChapters(of: row, with: timeline)
         if queued { row.queueOrder = (try queueRows().last?.queueOrder ?? -1) + 1 }
-        try modelContext.save()
+        try commit()
     }
 
     public func document(id: UUID) throws -> Document? { try row(id).map(Self.domain) }
@@ -132,14 +132,14 @@ public actor LibraryStore {
         row.coverImagePath = document.coverImagePath
         row.sourceURL = document.sourceURL?.absoluteString
         row.updatedAt = Date()
-        try modelContext.save()
+        try commit()
     }
 
     public func delete(id: UUID) throws {
         let row = try existing(id)
         try deleteBookmarks(for: id)
         modelContext.delete(row)
-        try modelContext.save()
+        try commit()
     }
 
     // MARK: Queue
@@ -156,7 +156,7 @@ public actor LibraryStore {
             try renumberQueue()
         }
         row.updatedAt = Date()
-        try modelContext.save()
+        try commit()
     }
 
     /// Moves a queued document to `index` (clamped) and renumbers the Queue 0…n-1.
@@ -174,14 +174,14 @@ public actor LibraryStore {
         }
         moving.updatedAt = Date()
         try renumberQueue()
-        try modelContext.save()
+        try commit()
     }
 
     public func setFinished(_ id: UUID, _ finished: Bool) throws {
         let row = try existing(id)
         row.isFinished = finished
         row.updatedAt = Date()
-        try modelContext.save()
+        try commit()
     }
 
     // MARK: Timelines
@@ -212,7 +212,7 @@ public actor LibraryStore {
         }
         try Self.fill(c, with: chapter, segmenterVersion: row.segmenterVersion, normalizerVersion: row.normalizerVersion)
         row.updatedAt = Date()
-        try modelContext.save()
+        try commit()
     }
 
     /// Replaces every chapter and the versions: re-derivation after a version bump (spec §3.7.3).
@@ -221,10 +221,22 @@ public actor LibraryStore {
         let row = try existing(id)
         try replaceChapters(of: row, with: timeline)
         row.updatedAt = Date()
-        try modelContext.save()
+        try commit()
     }
 
     // MARK: Internals
+
+    /// SwiftData keeps pending changes after a failed save; without a rollback the next unrelated
+    /// write would retry them. Not `private`: `LibraryStore`'s other mutators live in extensions in
+    /// separate files within this module, and all of them funnel their save through this one helper.
+    func commit() throws {
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            throw error
+        }
+    }
 
     func row(_ id: UUID) throws -> StoredDocument? {
         var descriptor = FetchDescriptor<StoredDocument>(predicate: #Predicate { $0.id == id })

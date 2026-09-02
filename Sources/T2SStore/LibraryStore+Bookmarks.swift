@@ -27,13 +27,13 @@ extension LibraryStore {
             modelContext.insert(StoredBookmark(id: bookmark.id, documentID: bookmark.documentID, position: bookmark.position,
                                                note: bookmark.note, createdAt: bookmark.createdAt))
         }
-        try modelContext.save()
+        try commit()
     }
 
     public func deleteBookmark(id: UUID) throws {
         guard let row = try bookmarkRow(id) else { return }
         modelContext.delete(row)
-        try modelContext.save()
+        try commit()
     }
 
     func deleteBookmarks(for documentID: UUID) throws {

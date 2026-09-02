@@ -27,11 +27,9 @@ import T2SCore
         #expect(c.playhead.utteranceIndex == 0)
         #expect(c.highlight != nil)
         try player.renderOffline(seconds: 1.0)
-        for _ in 0..<20 { await Task.yield() }                     // let the .dataPlayedBack hop land
         await c.settle(); c.tick()
         #expect(c.playhead.utteranceIndex >= 1)
         try player.renderOffline(seconds: 3.0)
-        for _ in 0..<20 { await Task.yield() }
         await c.settle(); c.tick()
         #expect(c.state == .finished)
         #expect(await saves.last?.charOffset != nil)

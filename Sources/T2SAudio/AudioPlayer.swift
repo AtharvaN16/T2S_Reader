@@ -42,6 +42,11 @@ public final class AudioPlayer: AudioPlaying {
     public private(set) var isPlaying = false
     public var onSegmentFinished: ((Int) -> Void)?
 
+    /// The time-pitch unit's processing latency: presented audio lags the source position it was
+    /// derived from by this many seconds. Plan 4 subtracts it from the playhead when placing
+    /// highlights against real hardware output.
+    public var outputLatencySeconds: TimeInterval { Double(timePitch.latency) }
+
     public var rate: Double {
         get { Double(timePitch.rate) }
         set {
@@ -69,7 +74,7 @@ public final class AudioPlayer: AudioPlaying {
     private func foldManualProgress() {
         guard manual else { return }
         let out = engine.manualRenderingSampleTime - manualBaseline
-        manualAccumulatedSourceFrames += Double(max(0, out)) * rate
+        manualAccumulatedSourceFrames = min(manualAccumulatedSourceFrames + Double(max(0, out)) * rate, Double(scheduledFrames))
         manualBaseline = engine.manualRenderingSampleTime
     }
 

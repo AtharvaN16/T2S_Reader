@@ -150,4 +150,79 @@ import T2SCore
         await c.waitForRenderIdle()                                // must return, not hang
         #expect(c.timeline?.isFullyRendered == true)
     }
+
+    @Test func evictedHeadClipRecovers() async throws {
+        let (c, player, _, store, _, doc, timeline) = fixture()
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        let key0 = RenderKey(rawValue: c.timeline![utterance: 0].audioRef!)
+        await store.remove(key0)                                   // LRU eviction is normal (spec §3.7.3)
+        await c.play()
+        #expect(c.state == .catchingUp)
+        await c.waitForRenderIdle()
+        #expect(c.state == .playing)
+        #expect(player.enqueuedTags.first == 0)
+    }
+
+    @Test func cachedAudioWithoutAudioRefDoesNotHang() async throws {
+        let (c, _, engine, store, _, doc, timeline) = fixture()
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()                                 // store now holds all three clips
+        let second = PlaybackCoordinator(engine: engine, store: store, player: FakePlayer(), playheadStore: MemoryPlayheadStore(), timeSource: ManualTimeSource(),
+                                         configuration: CoordinatorConfiguration(windowSeconds: 60, primeSeconds: 30, prepareBudgetSeconds: 300, queuedSegments: 2))
+        second.load(doc, timeline: timeline)                        // the original timeline: no audioRefs
+        await second.play()
+        await second.waitForRenderIdle()
+        #expect(second.state == .playing)
+        #expect(await engine.requests.count == 3)                  // nothing re-synthesized
+    }
+
+    @Test func concurrentPlayEnqueuesEachSegmentOnce() async throws {
+        let (c, player, _, _, _, doc, timeline) = fixture()
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        async let a: Void = c.play()
+        async let b: Void = c.play()
+        _ = await (a, b)
+        await c.settle()
+        #expect(player.enqueuedTags == [0, 1])
+    }
+
+    @Test func seekPastEndFinishes() async throws {
+        let (c, player, _, _, _, doc, timeline) = fixture()
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        await c.seek(toTime: 99)
+        #expect(c.state == .finished)
+        #expect(c.playhead == Playhead(utteranceIndex: 2, offset: 1.2))
+        await c.play()                                              // restarts from the top
+        #expect(c.playhead.utteranceIndex == 0 && c.state == .playing)
+        #expect(player.enqueuedTags.first == 0)
+    }
+
+    @Test func storeFullRecoversAfterResume() async throws {
+        let (c, _, _, store, _, doc, timeline) = fixture(capacity: 100)
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        #expect(c.device.storeFull)
+        await store.setCapacity(bytes: 10_000_000)
+        await c.resumeRendering()
+        await c.waitForRenderIdle()
+        #expect(c.timeline?.isFullyRendered == true)
+    }
+
+    @Test func nonFiniteRateIsIgnored() async throws {
+        let (c, player, _, _, _, doc, timeline) = fixture()
+        c.load(doc, timeline: timeline)
+        c.setRate(.nan)
+        #expect(c.rate == 1.0 && player.rate == 1.0)
+    }
+
+    @Test func failedRenderIsSurfaced() async throws {
+        let (c, _, engine, _, _, doc, timeline) = fixture()
+        await engine.fail(on: "Beta two.")
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        #expect(c.lastRenderError?.hasPrefix("utterance 1:") == true)
+    }
 }

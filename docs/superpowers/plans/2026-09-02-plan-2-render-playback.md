@@ -2564,6 +2564,8 @@ Notes for the implementer:
 - `save()` runs after `state` changes so a `.finished` save carries the clamped end position. Saved `charOffset`s in the tests reflect word timings from `FakeEngine` (the position is the start of the word being spoken), which is the same model `Highlighter` uses.
 - `apply` runs on the main actor because the coordinator is `@MainActor` and the event loop is a `Task` created inside it; do not mark `apply` `nonisolated`.
 
+**Implementation note (recorded after execution).** Two corrections to the code above shipped: `fill()` must re-read `self.timeline` on every loop iteration rather than binding it once before the `await store.read`, because `.rendered` events mutate the timeline while `fill` is suspended and a stale value-type copy misses them; and the finished playhead takes its offset from the last utterance's own `duration.seconds` instead of `timeIndex.clamp(…, offset: .infinity)`, whose prefix-sum subtraction can lose a ULP against the test's exact `1.2`.
+
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test --filter PlaybackCoordinatorTests`

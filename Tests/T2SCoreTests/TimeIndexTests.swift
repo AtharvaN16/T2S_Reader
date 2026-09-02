@@ -58,4 +58,14 @@ import Testing
         #expect(before == 4.5 && abs(after - 6.1) < 1e-9)                 // only the derived display time moved
         #expect(Highlighter.highlight(at: ph, in: t)?.utteranceIndex == 2)
     }
+
+    @Test func durationsAreExactNotSubtracted() {
+        var t = t
+        t[utterance: 0].duration = .actual(1.0)
+        t[utterance: 1].duration = .actual(0.9)
+        t[utterance: 2].duration = .actual(1.2)
+        let ix = TimeIndex(t)
+        #expect(ix.duration(ofUtterance: 2) == 1.2)                         // exactly, not 1.1999999999999997
+        #expect(ix.clamp(Playhead(utteranceIndex: 9, offset: 0)).offset == ix.duration(ofUtterance: 3))
+    }
 }

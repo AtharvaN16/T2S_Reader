@@ -5,25 +5,33 @@ import Foundation
 public struct TimeIndex: Hashable, Sendable {
     /// `starts[i]` is the start time of utterance `i`; `starts[count]` is the total duration.
     public let starts: [TimeInterval]
+    /// `durations[i]` is utterance `i`'s exact duration, stored rather than derived from a
+    /// subtraction of accumulated prefix sums (which can be off by a floating-point ULP or two).
+    public let durations: [TimeInterval]
 
     public init(_ timeline: Timeline) {
         var s: [TimeInterval] = [0]
         s.reserveCapacity(timeline.utteranceCount + 1)
+        var d: [TimeInterval] = []
+        d.reserveCapacity(timeline.utteranceCount)
         var acc: TimeInterval = 0
         for ch in timeline.chapters {
-            for u in ch.utterances {
-                acc += u.duration.seconds
+            for i in ch.utterances.indices {
+                let seconds = ch.utterances[i].duration.seconds
+                acc += seconds
                 s.append(acc)
+                d.append(seconds)
             }
         }
         starts = s
+        durations = d
     }
 
     public var utteranceCount: Int { starts.count - 1 }
     public var totalDuration: TimeInterval { starts[starts.count - 1] }
 
     public func startTime(ofUtterance i: Int) -> TimeInterval { starts[i] }
-    public func duration(ofUtterance i: Int) -> TimeInterval { starts[i + 1] - starts[i] }
+    public func duration(ofUtterance i: Int) -> TimeInterval { durations[i] }
 
     public func time(at ph: Playhead) -> TimeInterval {
         let c = clamp(ph)

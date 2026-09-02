@@ -181,6 +181,20 @@ public actor LibraryStore {
         try modelContext.save()
     }
 
+    /// Finished leaves the Queue; un-finishing puts the document back at the end — one save, so the
+    /// flag and the queue slot can never disagree (spec §2.3, §2.4.5 context menu).
+    public func finish(_ id: UUID, _ finished: Bool) throws {
+        let row = try existing(id)
+        row.isFinished = finished
+        if finished {
+            row.queueOrder = nil
+        } else if row.queueOrder == nil {
+            row.queueOrder = (try queueRows().last?.queueOrder ?? -1) + 1
+        }
+        row.updatedAt = Date()
+        try modelContext.save()
+    }
+
     // MARK: Timelines
 
     /// Decodes every chapter blob. `isStale` when the persisted versions differ from `Versions`.

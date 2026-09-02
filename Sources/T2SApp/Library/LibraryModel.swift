@@ -90,10 +90,7 @@ public final class LibraryModel {
 
     /// Finished leaves the Queue; un-finishing puts the document back at the end (spec §2.4.5 context menu).
     public func markFinished(_ id: UUID, _ finished: Bool) async {
-        await perform {
-            try await self.library.store.setFinished(id, finished)
-            try await self.library.store.setQueued(id, !finished)
-        }
+        await perform { try await self.library.store.finish(id, finished) }
     }
 
     public func delete(_ id: UUID) async { await perform { try await self.library.delete(id) } }

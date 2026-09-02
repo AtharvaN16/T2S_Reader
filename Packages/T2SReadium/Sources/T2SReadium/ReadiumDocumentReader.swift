@@ -27,23 +27,25 @@ public struct ReadiumDocumentReader: DocumentReader {
                   let text = textElement.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty
             else { continue }
             let locator = textElement.locator
-            let href = locator.href.string
+            let rawHref = locator.href.string
+            let href = Self.resourceKey(rawHref)
             if blocksByHref[href] == nil { hrefOrder.append(href) }
             let offset = offsets[href, default: 0]
             var cssSelector: String?
             if case .string(let selector)? = locator.locations.otherLocations["cssSelector"] { cssSelector = selector }
             blocksByHref[href, default: []].append(SourceBlock(
                 text: text,
-                position: Position(resourceHref: href, progression: locator.locations.progression ?? 0,
+                position: Position(resourceHref: rawHref, progression: locator.locations.progression ?? 0,
                                    charOffset: offset, cssSelector: cssSelector)))
             offsets[href] = offset + text.utf16.count + 1
         }
         guard !hrefOrder.isEmpty else { throw ImportError.noText }
 
-        let readingOrder = publication.readingOrder.map { $0.url().string }
-        func resourceIndex(_ href: String) -> Int? {
-            let key = Self.withoutFragment(href)
-            return readingOrder.firstIndex(of: key) ?? hrefOrder.firstIndex(of: key)
+        // Keyed by `resourceKey` (fragment-stripped, normalized) so a locator href and a reading-order
+        // href that Readium reports with different percent-encoding still identify the same resource.
+        let readingOrder = publication.readingOrder.map { Self.resourceKey($0.url().string) }
+        func resourceIndex(_ key: String) -> Int? {
+            readingOrder.firstIndex(of: key)
         }
 
         // Table of contents → (title, resource index), first title per resource, ordered by resource.
@@ -51,7 +53,7 @@ public struct ReadiumDocumentReader: DocumentReader {
         var entries: [(title: String, resource: Int)] = []
         func walk(_ links: [Link]) {
             for link in links {
-                if let r = resourceIndex(link.url().string), !entries.contains(where: { $0.resource == r }) {
+                if let r = resourceIndex(Self.resourceKey(link.url().string)), !entries.contains(where: { $0.resource == r }) {
                     let title = link.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     entries.append((title.isEmpty ? "Section \(entries.count + 1)" : title, r))
                 }
@@ -66,7 +68,7 @@ public struct ReadiumDocumentReader: DocumentReader {
             // No usable TOC: one chapter per resource with text, titled by the link or "Section n".
             for href in hrefOrder {
                 let blocks = blocksByHref[href] ?? []
-                let link = publication.readingOrder.first { $0.url().string == href }
+                let link = publication.readingOrder.first { Self.resourceKey($0.url().string) == href }
                 let title = link?.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 chapters.append(ChapterInput(title: title.isEmpty ? "Section \(chapters.count + 1)" : title,
                                              position: blocks[0].position, blocks: blocks))
@@ -118,7 +120,17 @@ public struct ReadiumDocumentReader: DocumentReader {
         }
     }
 
-    static func withoutFragment(_ href: String) -> String {
+    /// Identifies a resource for comparison across `locator.href.string` and `link.url().string`,
+    /// which Readium can report with different percent-encoding: strip any `#fragment`, then run
+    /// through `AnyURL`'s normalization. `Position.resourceHref` stays the raw `locator.href.string`
+    /// (spec §3.7.2: persisted positions are exactly what Readium reports) — this key is only ever
+    /// used to test resource identity, never persisted.
+    static func resourceKey(_ href: String) -> String {
+        let stripped = withoutFragment(href)
+        return AnyURL(string: stripped)?.normalized.string ?? stripped
+    }
+
+    private static func withoutFragment(_ href: String) -> String {
         href.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? href
     }
 }

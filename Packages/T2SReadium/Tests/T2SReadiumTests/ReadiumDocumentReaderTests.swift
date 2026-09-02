@@ -74,4 +74,17 @@ import T2SLibrary
         try Data("not an epub".utf8).write(to: url)
         await #expect(throws: ImportError.self) { _ = try await reader.read(fileURL: url, sourceType: .epub) }
     }
+
+    @Test func percentEncodedHrefsAreNotSkipped() async throws {
+        let read = try await reader.read(fileURL: try EPUBFixture.percentEncodedHrefBook(), sourceType: .epub)
+        #expect(read.skippedResources.isEmpty)
+        #expect(read.chapters.count == 2)
+        #expect(!read.chapters[0].blocks.isEmpty)
+    }
+
+    @Test func nestedTOCAndFragmentsGroupByResource() async throws {
+        let read = try await reader.read(fileURL: try EPUBFixture.nestedTOCBook(), sourceType: .epub)
+        #expect(read.chapters.map(\.title) == ["Front matter", "Part", "Chapter Two"])
+        #expect(read.chapters.map { $0.blocks.count } == [2, 3, 2])
+    }
 }

@@ -103,4 +103,53 @@ enum EPUBFixture {
             ZipEntry(name: "OEBPS/ch1.xhtml", data: Data(ch1.utf8)),
         ])
     }
+
+    static let percentEncodedOPF = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="pub-id">
+          <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+            <dc:identifier id="pub-id">urn:uuid:5f1a2b3c-0000-4000-8000-000000000002</dc:identifier>
+            <dc:title>Fixture Book</dc:title>
+            <dc:creator>Ada Author</dc:creator>
+            <dc:language>en</dc:language>
+            <meta property="dcterms:modified">2026-09-02T00:00:00Z</meta>
+          </metadata>
+          <manifest>
+            <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+            <item id="ch1" href="ch%201.xhtml" media-type="application/xhtml+xml"/>
+            <item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
+          </manifest>
+          <spine><itemref idref="ch1"/><itemref idref="ch2"/></spine>
+        </package>
+        """
+
+    /// ch1's manifest href is percent-encoded (`ch%201.xhtml`) and resolves to an entry stored under
+    /// a literal space (`OEBPS/ch 1.xhtml`) — Readium may report this href differently between the
+    /// reading order and content locators, which must not cause a false "skipped" resource.
+    static func percentEncodedHrefBook() throws -> URL {
+        try write([
+            ZipEntry(name: "OEBPS/content.opf", data: Data(percentEncodedOPF.utf8)),
+            ZipEntry(name: "OEBPS/nav.xhtml", data: Data(nav([("Chapter One", "ch%201.xhtml"), ("Chapter Two", "ch2.xhtml")]).utf8)),
+            ZipEntry(name: "OEBPS/ch 1.xhtml", data: Data(ch1.utf8)),
+            ZipEntry(name: "OEBPS/ch2.xhtml", data: Data(ch2.utf8)),
+        ])
+    }
+
+    static let nestedNav = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head>
+        <body><nav epub:type="toc"><ol><li><a href="ch1.xhtml">Part</a><ol><li><a href="ch1.xhtml">Chapter One</a></li></ol></li><li><a href="ch2.xhtml#start">Chapter Two</a></li></ol></nav></body></html>
+        """
+
+    /// front/ch1/ch2 spine; TOC has a parent entry and a nested child both pointing at ch1.xhtml
+    /// (first title wins), and a final entry pointing at ch2.xhtml with a `#fragment`.
+    static func nestedTOCBook() throws -> URL {
+        try write([
+            ZipEntry(name: "OEBPS/content.opf", data: Data(opf(spine: ["front.xhtml", "ch1.xhtml", "ch2.xhtml"]).utf8)),
+            ZipEntry(name: "OEBPS/nav.xhtml", data: Data(nestedNav.utf8)),
+            ZipEntry(name: "OEBPS/front.xhtml", data: Data(front.utf8)),
+            ZipEntry(name: "OEBPS/ch1.xhtml", data: Data(ch1.utf8)),
+            ZipEntry(name: "OEBPS/ch2.xhtml", data: Data(ch2.utf8)),
+        ])
+    }
 }

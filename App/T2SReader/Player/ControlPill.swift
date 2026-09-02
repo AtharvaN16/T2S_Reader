@@ -38,11 +38,11 @@ struct ControlPill: View {
             control("goforward.30", "Forward 30 seconds") { Task { await player.skip(by: 30) } }
             Spacer()
             Menu {
-                ForEach([0.8, 1.0, 1.2, 1.5, 2.0, 3.0], id: \.self) { rate in
+                ForEach(RateLimits.allRates, id: \.self) { rate in
                     Button { player.setRate(rate) } label: {
-                        Label(Self.rateText(rate), systemImage: player.coordinator.rate == rate ? "checkmark" : "")
+                        Label(Self.rateText(rate), systemImage: Self.matches(player.coordinator.rate, rate) ? "checkmark" : "")
                     }
-                    .disabled(!player.coordinator.availableRates.contains(rate))
+                    .disabled(!player.coordinator.availableRates.contains { Self.matches($0, rate) })
                 }
             } label: {
                 Text(Self.rateText(player.coordinator.rate)).typeRole(.mono).frame(width: 44, height: 44).contentShape(Rectangle())
@@ -65,4 +65,6 @@ struct ControlPill: View {
     static func rateText(_ rate: Double) -> String {
         rate == rate.rounded() ? "\(Int(rate))x" : String(format: "%.1fx", rate)
     }
+
+    private static func matches(_ a: Double, _ b: Double) -> Bool { abs(a - b) < 0.001 }
 }

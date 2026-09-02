@@ -92,7 +92,14 @@ public struct AACCodec: T2SCore.AudioCodec {
         let top = topLevelBoxes(in: 0..<bytes.count)
         let freeBoxes = top.filter { $0.type == "free" }
         guard !freeBoxes.isEmpty, let moovBox = top.first(where: { $0.type == "moov" }) else { return data }
-        let totalFreed = freeBoxes.reduce(0) { $0 + $1.size }
+
+        // Only a `free` box that precedes a given chunk offset should shift that offset down —
+        // a `free` box located after `mdat` (before a trailing `moov`, say) must not move chunks
+        // that come before it.
+        let removed = freeBoxes.map { (start: $0.offset, size: $0.size) }
+        func shift(for chunkOffset: Int) -> Int {
+            removed.filter { $0.start < chunkOffset }.reduce(0) { $0 + $1.size }
+        }
 
         // Descend only into known container boxes to find the sample-table chunk-offset boxes.
         let containerTypes: Set<String> = ["moov", "trak", "mdia", "minf", "stbl", "mvex", "edts"]
@@ -120,9 +127,11 @@ public struct AACCodec: T2SCore.AudioCodec {
             for _ in 0..<count {
                 guard entryOff + entrySize <= bytes.count else { break }
                 if box.type == "co64" {
-                    writeU64(entryOff, readU64(entryOff) - UInt64(totalFreed))
+                    let v = readU64(entryOff)
+                    writeU64(entryOff, v - UInt64(shift(for: Int(v))))
                 } else {
-                    writeU32(entryOff, readU32(entryOff) - UInt32(totalFreed))
+                    let v = readU32(entryOff)
+                    writeU32(entryOff, v - UInt32(shift(for: Int(v))))
                 }
                 entryOff += entrySize
             }

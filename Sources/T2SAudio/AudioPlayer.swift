@@ -23,14 +23,20 @@ public final class AudioPlayer: AudioPlaying {
     /// at 24 kHz, even at rate 1.0). `engine.manualRenderingSampleTime` tracks true rendered output frames.
     private var manualBaseline: AVAudioFramePosition = 0
     private var generation = 0
-    /// Segment completions collected by `AVAudioPlayerNode`'s completion callback, which fires on a
-    /// background thread. In manual-rendering mode there is no real run loop / app event cycle to hop
-    /// back onto the main actor with (`renderOffline` is the only pump available, and it was confirmed
-    /// empirically to not reliably drain a `Task { @MainActor in ... }` or `DispatchQueue.main.async`
-    /// hop within its drain window in this environment), so `renderOffline` drains this queue directly
-    /// and synchronously, from the main actor, after each render.
-    private let manualCompletionLock = NSLock()
-    nonisolated(unsafe) private var manualCompletions: [(generation: Int, tag: Int)] = []
+    /// Completions collected on `AVAudioEngine`'s background completion thread and drained on the
+    /// main actor by `renderOffline`. In manual-rendering mode there is no real run loop / app event
+    /// cycle to hop back onto the main actor with (`renderOffline` is the only pump available, and it
+    /// was confirmed empirically to not reliably drain a `Task { @MainActor in ... }` or
+    /// `DispatchQueue.main.async` hop within its drain window in this environment), so `renderOffline`
+    /// drains this queue directly and synchronously, from the main actor, after each render.
+    private final class CompletionQueue: @unchecked Sendable {
+        private let lock = NSLock()
+        private var entries: [(generation: Int, tag: Int)] = []
+        func append(generation: Int, tag: Int) { lock.withLock { entries.append((generation, tag)) } }
+        func drain() -> [(generation: Int, tag: Int)] { lock.withLock { let e = entries; entries.removeAll(); return e } }
+        func removeAll() { lock.withLock { entries.removeAll() } }
+    }
+    private let manualCompletions = CompletionQueue()
     public private(set) var isPlaying = false
     public var onSegmentFinished: ((Int) -> Void)?
 
@@ -88,9 +94,7 @@ public final class AudioPlayer: AudioPlaying {
         player.scheduleBuffer(buffer, at: nil, options: [], completionCallbackType: completionType) { [weak self] _ in
             guard let self else { return }
             if isManual {
-                self.manualCompletionLock.lock()
-                self.manualCompletions.append((generation: gen, tag: tag))
-                self.manualCompletionLock.unlock()
+                self.manualCompletions.append(generation: gen, tag: tag)
             } else {
                 Task { @MainActor in
                     guard self.generation == gen else { return }
@@ -115,9 +119,7 @@ public final class AudioPlayer: AudioPlaying {
         player.stop()
         scheduledFrames = 0
         if manual { manualBaseline = engine.manualRenderingSampleTime }
-        manualCompletionLock.lock()
         manualCompletions.removeAll()
-        manualCompletionLock.unlock()
         isPlaying = false
     }
 
@@ -139,11 +141,7 @@ public final class AudioPlayer: AudioPlaying {
     }
 
     private func drainManualCompletions() {
-        manualCompletionLock.lock()
-        let finished = manualCompletions
-        manualCompletions.removeAll()
-        manualCompletionLock.unlock()
-        for entry in finished where entry.generation == generation {
+        for entry in manualCompletions.drain() where entry.generation == generation {
             onSegmentFinished?(entry.tag)
         }
     }

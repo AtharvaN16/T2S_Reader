@@ -14,6 +14,12 @@ import Testing
         #expect(t.spoken == "well-known")
     }
 
+    @Test func rejoinsAcrossCRLF() {
+        let t = RejoinHyphenationRule().apply(NormalizedText(source: "con-\r\ntinent"))
+        #expect(t.spoken == "continent")
+        expectEveryWordMapsToSource(t)
+    }
+
     @Test func collapsesRunsAndTrims() {
         let t = CollapseWhitespaceRule().apply(NormalizedText(source: "  a  b\n\tc "))
         #expect(t.spoken == "a b c")

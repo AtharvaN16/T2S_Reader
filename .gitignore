@@ -14,3 +14,6 @@ spikes/SpikeHarness/Resources/*.npz
 
 # macOS
 .DS_Store
+
+# SDD workspaces (superpowers)
+.superpowers/

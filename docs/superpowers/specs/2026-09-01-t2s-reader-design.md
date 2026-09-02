@@ -1,7 +1,7 @@
 # t2s_reader — Design Spec
 
 **Date:** 2026-09-01
-**Revised:** 2026-09-01 (rev 2 — see §11 changelog)
+**Revised:** 2026-09-02 (rev 3 — see §11 changelog)
 **Status:** Draft for review
 **Working name:** t2s_reader (TBD)
 
@@ -105,14 +105,160 @@ pages change and die. See §3.7.
 - Mac, iPad-specific layouts (v1 is iPhone, adaptive enough to be usable
   on iPad)
 
-### 2.3 Deferred UI decision
+### 2.3 Library organization — RESOLVED (rev 3)
 
-**Library organization is unresolved and deliberately deferred.** EPUBs
-want a cover grid with progress rings; saved articles want a dense,
-reorderable queue with auto-advance. Options: two tabs, one filtered list,
-or one primary with the other second-class. Current lean is two tabs. To
-be settled from reference flows before UI work begins; it is confined to
-the UI layer and constrains nothing in §3–§5.
+Resolved by reference-flow review of **Queue — Simple podcasts** (iOS),
+which is the visual reference for the whole app (§2.4).
+
+**One ordered Queue is the primary list; a Collection grid is the second
+page; there are no tabs.** Everything imported — article, EPUB, PDF — is
+queued on import. Queue shows queued documents in user order, with
+articles and books as peers. Collection shows every EPUB/PDF as a cover
+grid regardless of queue state, so a book archived from the Queue stays
+findable. Archive removes from Queue; delete removes from both.
+
+**The Reader is a separate full-screen page, not a region of the player
+sheet.** The player sheet is audio chrome; the Reader is text with a
+compact control bar. Both observe the same `PlaybackCoordinator`, and
+leaving either never stops playback.
+
+### 2.4 Visual direction
+
+Reference: **Queue — Simple podcasts**. Every screen below maps to a
+Queue screen; where Queue has no equivalent (the Reader) the same
+language is extended. Light and dark are both first-class from the
+first commit.
+
+#### 2.4.1 Type
+
+Inter (SIL OFL 1.1, bundled). Tight tracking on display and label text.
+Long-form reading text is the one exception and uses normal tracking.
+Digits that align or count down use a monospaced face.
+
+| Role | Face | Size / weight | Tracking |
+|---|---|---|---|
+| Page title | Inter Display | 34 / Black | −0.03em |
+| Player title | Inter Display | 26 / ExtraBold, ≤4 lines | −0.025em |
+| Section header | Inter | 17 / Semibold | −0.01em |
+| Row title | Inter | 17 / Medium, ≤2 lines | −0.01em |
+| Pill label | Inter | 15 / Medium | −0.01em |
+| Meta | Inter | 13 / Regular | 0 |
+| Reader body | Inter | 18 / Regular, 1.5 line height | 0 |
+| Timestamps, counts | System monospaced | 13 / Regular | 0 |
+
+All sizes are Dynamic Type relative. Reader body size and line height
+are user-adjustable independently of the system text size.
+
+#### 2.4.2 Color
+
+Semantic tokens only; no literal colors in views. The accent hue is the
+one tunable (§10); the values below are starting points.
+
+| Token | Light | Dark | Used for |
+|---|---|---|---|
+| `ground` | #F8F8F7 | #101010 | page background |
+| `surface` | #EEEEEC | #1E1E1E | pills, chips, row controls |
+| `raised` | #FFFFFF | #1A1A1A | sheets, mini-player, popovers |
+| `ink` | #111111 | #F2F2F2 | primary text, selected chips |
+| `ink2` | #8A8A8A | #8E8E8E | meta, descriptions |
+| `ink3` | #C9C9C7 | #3A3A3A | disabled, unrendered scrubber ticks |
+| `accent` | #FF7A1A | #FF8C3A | the one primary action per screen |
+| `accentSoft` | accent @ 18% | accent @ 22% | read-along word highlight, soft pills |
+| `positive` | #22A559 | #34C070 | rendered / finished states |
+| `destructive` | #E5453B | #FF5A50 | archive, delete, discard cache |
+
+Rules: at most one `accent` element per screen. Selected chips are
+solid `ink` with `ground` text, never accent. `positive` and
+`destructive` appear only on state tags and confirming actions. Dark
+mode inverts ground and ink and lifts the accent slightly; it
+introduces no new hues.
+
+#### 2.4.3 Surface and spacing
+
+- 8pt grid. 24pt horizontal margins. 28pt between list rows, 40pt
+  between sections, 56pt from the safe-area top to a page title.
+- **No cards in lists and no hairline dividers.** Rhythm comes from
+  white space and type weight alone.
+- Pills are fully rounded. Sheets have 28pt top corners. Artwork is 8pt
+  radius small, 16pt large.
+- Sheets slide up over the page, which dims and scales to ~0.94.
+
+#### 2.4.4 Navigation
+
+No tab bar. The root is a three-page horizontal pager —
+**Collection · Queue · Preferences** — opening on Queue. A three-glyph
+indicator under the mini-player shows the current page and is
+tappable. A floating **mini-player pill** sits above the indicator on
+all three pages: artwork, title, play/pause, skip-forward. It shows the
+playing item, or the next queued item with "Play" when idle, and is
+hidden only when the Queue is empty. Tap expands it to the player
+sheet.
+
+Page titles are dropdowns where a page has views: `Queue ▾` switches
+between *Queue* and *Finished*.
+
+#### 2.4.5 Screens
+
+**Queue page.** Title with dropdown, "Search" pill top-right. Subtitle:
+item count and remaining time (`14 items · ~6h 20m`). Each row: 16pt
+source mark, source name, added-age, and a `positive` check once fully
+rendered; row title; then a pill row — `▶ Play  ~12m` (remaining time;
+becomes `❚❚ Pause` on the playing row), archive pill, overflow. Tap the
+title → Reader page. Tap Play → plays in place. Swipe → Archive. Books
+show `Chapter 4 of 12` in the meta line. Empty state: title, a grey
+paragraph explaining the share sheet, an "Import" pill.
+
+**Collection page.** Title, `N books` subtitle, `+` button (Files
+import). 3-up cover grid, 16pt radius, thin progress bar under each
+cover. Tap → **book sheet**: large floating cover, title in Player
+style, author, stat row (Chapters · Length `~5h 10m` · Rendered `42%`),
+accent "Play" pill, `+ Add to Queue` / `✓ In Queue` pill, then the
+chapter list with per-chapter play and progress.
+
+**Player sheet.** Top: 56pt artwork; bookmark, sleep-timer, and
+overflow buttons. Source and age line. Player title. Author. A row
+`Chapter 3 ▾` opens the chapter list (title and duration per chapter).
+A row `Read along →` dismisses the sheet and opens the Reader page.
+Scrubber: uniform tick marks — rendered ticks in `ink`, unrendered in
+`ink3`, so the render frontier (§3.3) is visible without a legend.
+Times below in monospaced; total prefixed `~` until fully rendered.
+Control pill: overflow | back 15 · play · forward 30 | speed as a bare
+number.
+
+**Reader page.** Separate full-screen page. Entered from a Queue row
+title, a chapter in the book sheet, or `Read along` in the player. Back
+chevron top-left, chapter title center (tap → chapter list), overflow
+right (bookmark, appearance). Body is the Readium navigator at 24pt
+margins on `ground`. The active word is decorated with `accentSoft`,
+4pt radius; nothing else on the page uses accent. Auto-scroll keeps the
+active line in the middle third of the screen; a manual scroll suspends
+it and shows a `Back to current` pill until tapped. Tap a sentence →
+seek there. Bottom bar pinned over a `ground` fade: tick scrubber, then
+back 15 · play · forward 30 · speed. During underrun (§3.6) the play
+glyph becomes a ring and a caption reads `catching up…`. PDF uses the
+same page with page-level highlight (§6.1).
+
+**Speed picker.** Vertical list, 0.5x–4.0x in 0.1x steps. Rates whose
+sustained demand exceeds the §3.6 threshold are drawn in `ink3` with a
+one-line footnote. Current rate is checked.
+
+**Sleep timer.** Sheet: sleep glyph, chips `10 · 20 · 30 · 45 · 60 min
+· End of chapter`, selected chip solid `ink`, accent "Start" pill, grey
+caption noting the timer ends early if the document does.
+
+**Context menu.** Native menu: Archive (`destructive`), Mark as finished
+(`positive`), Details, Sleep timer, Change voice, Render whole document.
+
+**Preferences page.** Title. Sections as a header plus rows of title,
+grey subtitle, and a right-aligned control: **Voice** (default voice →
+voice list with preview), **Playback** (skip intervals, default speed,
+autoplay next), **Reading** (text size, line height, theme
+System / Light / Dark), **Pronunciation** (→ dictionary list),
+**Storage** (cache size, cap, "Render on charge" toggle, evict),
+**Cloud voices** (BYO key), **iCloud sync** toggle, links.
+
+**Voice-change warning** (§5): a sheet stating how much rendered audio
+will be discarded, with a `destructive` confirm.
 
 ---
 
@@ -121,7 +267,7 @@ the UI layer and constrains nothing in §3–§5.
 ```
 ┌──────────────────────────────────────────────────┐
 │ UI (SwiftUI)                                     │
-│   Library · Reader (Readium Navigator) · Player  │
+│   Queue · Collection · Reader · Player           │
 └────────────┬─────────────────────────────────────┘
              │ observes
 ┌────────────▼─────────────────────────────────────┐
@@ -566,7 +712,8 @@ deterministic and fast to test, with no model and no audio hardware.
 5. RenderScheduler + AudioPlayer — audio-only, no UI polish
 6. Readium reader view + Decoration highlighting + auto-scroll
 7. KokoroEngine, replacing `FakeEngine`
-8. Library UI (**resolve §2.3 first**), Share Extension, player chrome
+8. Queue, Collection, Player, and Reader pages per §2.3–§2.4; Share
+   Extension
 9. Now Playing, sleep timer, speed + rate coupling, pronunciation
    dictionary, BYO-key HTTP engine
 10. CloudKit sync behind `SyncProvider`
@@ -580,16 +727,26 @@ against a pipeline that is already proven.
 
 ## 10. Open questions
 
-1. **Library organization** (§2.3) — two tabs, or one list? Deferred to
-   reference-flow review.
-2. **App name.**
-3. **Distribution** — App Store one-time fee, open source, or both. The
-   license choice must be compatible with Readium, Kokoro, and MisakiSwift
-   (§3.7.5).
+1. **App name.**
+2. **Distribution** — App Store one-time fee, open source, or both. The
+   license choice must be compatible with Readium, Kokoro, MisakiSwift,
+   and Inter (§3.7.5).
+3. **Accent hue** (§2.4.2) — orange is inherited from the reference;
+   settle it on a device, in both themes, before UI work begins.
 
 ---
 
 ## 11. Changelog
+
+**rev 3 (2026-09-02)** — UI resolution pass.
+
+- **§2.3** resolved: one ordered Queue as the primary list, a Collection
+  cover grid as the second pager page, no tabs. The Reader is a separate
+  full-screen page, not part of the player sheet.
+- **§2.4** added: visual direction from reference-flow review of Queue —
+  type scale (Inter, tight tracking), semantic color tokens for light and
+  dark, spacing, navigation, and a per-screen mapping.
+- **§3** diagram, **§9** step 8, and **§10** updated to match.
 
 **rev 2 (2026-09-01)** — review pass. Substantive changes:
 

@@ -312,9 +312,12 @@ echo "simulator: $SIMULATOR_ID"
 set +e
 xcodebuild test -scheme T2SReadium -destination "id=$SIMULATOR_ID" \
   -derivedDataPath .build/DerivedData "$@" 2>&1 \
-  | grep -E "error:|warning: .*T2SReadium|Suite |Test run|Executed|TEST (SUCCEEDED|FAILED)|Testing failed"
+  | grep -E "error:|warning:|Suite |Test run|Executed|TEST (SUCCEEDED|FAILED)|Testing failed" \
+  | grep -Ev "/checkouts/.*: warning:"
 exit "${PIPESTATUS[0]}"
 ```
+
+**Implementation note (recorded after execution).** The original filter matched `warning: .*T2SReadium`, which never matches a real diagnostic because the module name sits in the path before `warning:`; the script now shows every warning except those from dependency checkouts.
 
 Run: `chmod +x scripts/test-readium.sh && scripts/test-readium.sh`
 Expected: `** TEST SUCCEEDED **` with the smoke test passing. The first run resolves and builds Readium and its dependencies for the simulator (several minutes); later runs are incremental. If `xcodebuild` reports no matching destination, run `xcrun simctl list devices available` and pass `SIMULATOR_ID=<udid>`.

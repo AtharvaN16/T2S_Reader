@@ -21,5 +21,6 @@ echo "simulator: $SIMULATOR_ID"
 set +e
 xcodebuild test -scheme T2SReadium -destination "id=$SIMULATOR_ID" \
   -derivedDataPath .build/DerivedData "$@" 2>&1 \
-  | grep -E "error:|warning: .*T2SReadium|Suite |Test run|Executed|TEST (SUCCEEDED|FAILED)|Testing failed"
+  | grep -E "error:|warning:|Suite |Test run|Executed|TEST (SUCCEEDED|FAILED)|Testing failed" \
+  | grep -Ev "/checkouts/.*: warning:"
 exit "${PIPESTATUS[0]}"

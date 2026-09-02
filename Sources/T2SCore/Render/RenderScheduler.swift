@@ -30,6 +30,7 @@ public struct RenderedUtterance: Hashable, Sendable {
 }
 
 public enum RenderEvent: Hashable, Sendable {
+    /// A cache hit (the store already held the key) also produces this, with empty word timings.
     case rendered(RenderedUtterance)
     /// Spec §6: logged; 200 ms of silence is stored under the key and a `.rendered` follows,
     /// unless storing the silence itself failed, in which case nothing follows.
@@ -96,7 +97,15 @@ public actor RenderScheduler {
     private func run() async {
         while !isPausedForStorage, !pending.isEmpty {
             let request = pending.removeFirst()
-            if await store.contains(request.key) { continue }
+            if await store.contains(request.key) {
+                if let clip = try? await store.read(request.key) {
+                    continuation.yield(.rendered(RenderedUtterance(
+                        documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, key: request.key,
+                        duration: clip.duration, wordTimings: [])))
+                    continue
+                }
+                // The read came back nil or threw: fall through and synthesize as if it were a miss.
+            }
             let t0 = timeSource.now()
             var result: SynthesisResult
             do {
@@ -109,7 +118,7 @@ public actor RenderScheduler {
             }
             do {
                 try await store.write(result.audio, for: request.key)
-            } catch AudioStoreError.capacityExceeded {
+            } catch AudioStoreError.capacityExceeded, AudioStoreError.diskFull {
                 isPausedForStorage = true
                 pending.removeAll()
                 continuation.yield(.storeFull)

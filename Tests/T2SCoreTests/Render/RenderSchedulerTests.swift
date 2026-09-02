@@ -49,7 +49,7 @@ import Testing
         #expect(has0 && has1)
     }
 
-    @Test func skipsKeysTheStoreAlreadyHolds() async throws {
+    @Test func cacheHitsAreReportedWithoutSynthesis() async throws {
         let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
         try await store.write(.silence(seconds: 1), for: key(0))
         let engine = FakeEngine()
@@ -57,7 +57,8 @@ import Testing
         async let events = collect(s)
         await s.setPlan([request(0, "already"), request(1, "new")])
         let got = await events
-        #expect(got.count == 2)                                  // one rendered + idle
+        #expect(got.count == 3)                                  // rendered(0 from cache), rendered(1), idle
+        #expect(got[0] == .rendered(RenderedUtterance(documentID: doc, utteranceIndex: 0, key: key(0), duration: 1.0, wordTimings: [])))
         #expect(await engine.requests.map(\.spoken) == ["new"])
     }
 

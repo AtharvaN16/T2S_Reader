@@ -5,14 +5,19 @@ import PDFKit
 
 enum PDFFixture {
     /// Writes a PDF whose pages carry the given lines, drawn top to bottom in 14 pt Helvetica.
-    /// An empty line list makes a blank page.
-    static func write(pages: [[String]], title: String? = nil) throws -> URL {
+    /// An empty line list makes a blank page. When `userPassword` is set, the PDF is encrypted
+    /// with that user password (and a derived owner password) so it opens locked.
+    static func write(pages: [[String]], title: String? = nil, userPassword: String? = nil) throws -> URL {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("t2s-pdf-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("fixture.pdf")
         var box = CGRect(x: 0, y: 0, width: 400, height: 600)
         var info: [CFString: Any] = [:]
         if let title { info[kCGPDFContextTitle] = title }
+        if let userPassword {
+            info[kCGPDFContextUserPassword] = userPassword
+            info[kCGPDFContextOwnerPassword] = "owner-" + userPassword
+        }
         guard let ctx = CGContext(url as CFURL, mediaBox: &box, info as CFDictionary) else {
             throw CocoaError(.fileWriteUnknown)
         }

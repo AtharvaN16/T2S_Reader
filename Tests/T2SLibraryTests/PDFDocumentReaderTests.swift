@@ -76,6 +76,13 @@ import T2SCore
         }
     }
 
+    @Test func lockedPDFIsRejectedAsProtected() async throws {
+        let url = try PDFFixture.write(pages: fourPages(), userPassword: "secret")
+        await #expect(throws: ImportError.drmProtected) {
+            _ = try await PDFDocumentReader().read(fileURL: url, sourceType: .pdf)
+        }
+    }
+
     @Test func coverIsAJPEG() async throws {
         let url = try PDFFixture.write(pages: fourPages())
         let read = try await PDFDocumentReader().read(fileURL: url, sourceType: .pdf)

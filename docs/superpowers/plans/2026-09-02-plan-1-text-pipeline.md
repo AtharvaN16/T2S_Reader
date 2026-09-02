@@ -1451,6 +1451,8 @@ import Testing
         ("at http://example.org", "at example.org"),
         ("visit www.apple.com/iphone now", "visit apple.com now"),
         ("email me at a@b.com", "email me at a@b.com"),
+        ("read https://x.com/y. Then go", "read x.com. Then go"),
+        ("at http://example.org/.", "at example.org."),
     ])
     func collapses(input: String, expected: String) {
         let t = rule.apply(NormalizedText(source: input))
@@ -1476,8 +1478,8 @@ Expected: FAIL to compile, `cannot find 'CollapseURLsRule' in scope`.
 // Sources/T2SCore/Normalize/Rules/CollapseURLsRule.swift
 /// Rule 5 (spec §4.1): a URL is spoken as its bare host.
 public struct CollapseURLsRule: NormalizerRule {
-    static let pattern = Pattern("\\b(?:https?://)?(?:www\\.)?([A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+)(?:/\\S*)?", [])
-    static let schemeOrWWW = Pattern("^(?:https?://|www\\.)")
+    // The optional path never ends in sentence punctuation, so "x.com/y." keeps its period.
+    static let pattern = Pattern("\\b(?:https?://)?(?:www\\.)?([A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+)(?:/(?:\\S*[^\\s.,;:!?)\\]])?)?")
 
     public init() {}
 
@@ -1497,7 +1499,7 @@ public struct CollapseURLsRule: NormalizerRule {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test --filter CollapseURLsTests`
-Expected: 5 tests passed.
+Expected: 7 cases passed (the runner reports 2 test functions).
 
 - [ ] **Step 5: Commit**
 

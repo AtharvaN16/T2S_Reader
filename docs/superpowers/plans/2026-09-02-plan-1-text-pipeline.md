@@ -1874,6 +1874,26 @@ import Testing
         #expect(DurationEstimator.estimate(spoken: "") == 0.5)
         #expect(DurationEstimator.estimate(spoken: String(repeating: "a", count: 150)) == 10)
     }
+
+    @Test func piecesLocateThemselvesInTheBlock() {
+        let text = "First clause here,\nsecond clause there; third clause, and a fourth one, then a fifth clause; the end."
+        let us = Segmenter(normalizer: TextNormalizer(), maxUtteranceLength: 40).segment(block(text, offset: 0))
+        #expect(us.count >= 3)
+        let units = Array(text.utf16)
+        for u in us {
+            let start = u.position.charOffset!
+            let located = String(decoding: units[start..<(start + u.source.utf16.count)], as: UTF16.self)
+            #expect(located == u.source, "piece at \(start)")
+            #expect(u.source.first.map { !$0.isWhitespace } == true)
+        }
+    }
+
+    @Test func hardCutNeverSplitsASurrogatePair() {
+        let text = String(repeating: "😀", count: 10)                       // 20 UTF-16 units, no spaces
+        let us = Segmenter(normalizer: TextNormalizer(), maxUtteranceLength: 7).segment(block(text, offset: 0))
+        #expect(us.map(\.source).joined() == text)
+        #expect(us.allSatisfy { $0.source.utf16.count % 2 == 0 })
+    }
 }
 ```
 
@@ -1937,6 +1957,7 @@ public struct Segmenter: Sendable {
     public var normalizer: TextNormalizer
 
     public init(normalizer: TextNormalizer, maxUtteranceLength: Int = 300) {
+        precondition(maxUtteranceLength >= 2, "maxUtteranceLength must be at least 2")
         self.normalizer = normalizer
         self.maxUtteranceLength = maxUtteranceLength
     }
@@ -1961,18 +1982,25 @@ public struct Segmenter: Sendable {
         return result
     }
 
+    /// Trims whitespace and newlines from both ends of `s`, returning the trimmed text and the
+    /// UTF-16 offset of its first character given that `s` starts at `offset`; nil when empty.
+    /// The one place leading whitespace is measured, so counting and trimming cannot disagree.
+    static func trimmed(_ s: String, at offset: Int) -> (String, Int)? {
+        let ws = CharacterSet.whitespacesAndNewlines
+        let t = s.trimmingCharacters(in: ws)
+        guard !t.isEmpty else { return nil }
+        let lead = s.unicodeScalars.prefix(while: { ws.contains($0) }).reduce(0) { $0 + $1.utf16.count }
+        return (t, offset + lead)
+    }
+
     /// Trimmed sentences with their UTF-16 offset in `text`.
     private func sentences(in text: String) -> [(String, Int)] {
         let tokenizer = NLTokenizer(unit: .sentence)
         tokenizer.string = text
         var out: [(String, Int)] = []
         tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
-            let raw = text[range]
-            let lead = raw.prefix(while: { $0.isWhitespace }).count
-            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                let leadUTF16 = String(raw.prefix(lead)).utf16.count
-                out.append((trimmed, range.lowerBound.utf16Offset(in: text) + leadUTF16))
+            if let piece = Self.trimmed(String(text[range]), at: range.lowerBound.utf16Offset(in: text)) {
+                out.append(piece)
             }
             return true
         }
@@ -1980,7 +2008,8 @@ public struct Segmenter: Sendable {
     }
 
     /// Splits `sentence` into pieces ≤ maxUtteranceLength at the last clause boundary before the limit,
-    /// falling back to the last space, then to a hard cut. Offsets are UTF-16 into the block.
+    /// falling back to the last whitespace, then to a hard cut that never divides a surrogate pair.
+    /// Offsets are UTF-16 into the block.
     private func split(_ sentence: String, at offset: Int) -> [(String, Int)] {
         let ns = sentence as NSString
         guard ns.length > maxUtteranceLength else { return [(sentence, offset)] }
@@ -1992,19 +2021,20 @@ public struct Segmenter: Sendable {
             var cut = ns.rangeOfCharacter(from: clause, options: .backwards, range: window).location
             if cut != NSNotFound && cut > start { cut += 1 }
             if cut == NSNotFound || cut <= start {
-                cut = ns.rangeOfCharacter(from: .whitespaces, options: .backwards, range: window).location
+                cut = ns.rangeOfCharacter(from: .whitespacesAndNewlines, options: .backwards, range: window).location
             }
-            if cut == NSNotFound || cut <= start { cut = start + maxUtteranceLength }
-            let piece = ns.substring(with: NSRange(location: start, length: cut - start))
-            let lead = piece.prefix(while: { $0.isWhitespace }).count
-            let trimmed = piece.trimmingCharacters(in: .whitespaces)
-            if !trimmed.isEmpty { pieces.append((trimmed, offset + start + String(piece.prefix(lead)).utf16.count)) }
+            if cut == NSNotFound || cut <= start {
+                cut = start + maxUtteranceLength
+                if cut - 1 > start && CFStringIsSurrogateHighCharacter(ns.character(at: cut - 1)) { cut -= 1 }
+            }
+            if let piece = Self.trimmed(ns.substring(with: NSRange(location: start, length: cut - start)), at: offset + start) {
+                pieces.append(piece)
+            }
             start = cut
         }
-        let tail = ns.substring(from: start)
-        let lead = tail.prefix(while: { $0.isWhitespace }).count
-        let trimmed = tail.trimmingCharacters(in: .whitespaces)
-        if !trimmed.isEmpty { pieces.append((trimmed, offset + start + String(tail.prefix(lead)).utf16.count)) }
+        if let piece = Self.trimmed(ns.substring(from: start), at: offset + start) {
+            pieces.append(piece)
+        }
         return pieces
     }
 }
@@ -2013,7 +2043,7 @@ public struct Segmenter: Sendable {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test --filter SegmenterTests`
-Expected: 6 tests passed. `splitsOverlongSentencesAtClauses` relies on every cut landing right after a clause mark followed by a single space, which the input guarantees; the invariant being tested is that no source text is lost or duplicated.
+Expected: 8 tests passed. `splitsOverlongSentencesAtClauses` relies on every cut landing right after a clause mark followed by a single space, which the input guarantees; the invariant being tested is that no source text is lost or duplicated. `piecesLocateThemselvesInTheBlock` is the offset-accuracy invariant of spec §3.1 and holds however `NLTokenizer` chooses to split the input.
 
 - [ ] **Step 5: Commit**
 

@@ -30,5 +30,5 @@ Tests/<Target>Tests/          Swift Testing suites; T2SCore runs with `swift tes
 App/                          Xcode project for the iOS app and extensions (Plan 4)
 spikes/                       throwaway harnesses (Plan 0); never imported by shipping code
 scripts/check-licenses.sh     copyleft guard, run in CI from Plan 1 Task 1
-docs/superpowers/spikes/      spike findings, one file per spike
+spikes/findings/      spike findings, one file per spike
 ```

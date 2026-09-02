@@ -15,7 +15,7 @@
 - All persisted ranges are **integer UTF-16 offsets**; `String.Index` is never stored (spec §3.1).
 - `Position` is the only persisted location type; `(utteranceIndex, offset)` is runtime-only (spec §3.2).
 - Everything persisted carries a version: `schemaVersion`, `segmenterVersion`, `normalizerVersion` (spec §3.7.4). Bump a version whenever the output of that stage changes.
-- Every normalizer rule consumes and produces `NormalizedText`; rules never touch strings directly (spec §4.1). Rule order is fixed: hyphenation, citations, abbreviations, numbers, URLs, whitespace, pronunciation dictionary.
+- Every normalizer rule consumes and produces `NormalizedText`; rules never touch strings directly (spec §4.1). Rule order is fixed: hyphenation, citations, abbreviations, URLs, numbers, whitespace, pronunciation dictionary (URLs before numbers, or a URL containing digits is destroyed; spec §4.1 rev 5).
 - **Every spoken word range must project back to a non-empty source range** except pure insertions (spec §8). Tests assert this for every rule.
 - Position resolution failure falls back to chapter start, never document start (spec §6).
 - No GPL, LGPL, or AGPL dependency; `scripts/check-licenses.sh` runs in CI from Task 1 (spec §3.7.5).
@@ -1581,6 +1581,17 @@ import Testing
         #expect(TextNormalizer.version == Versions.normalizer)
     }
 
+    @Test(arguments: [
+        ("see https://www.nytimes.com/2024/05/01/tech.html today", "see nytimes.com today"),
+        ("cite https://doi.org/10.1038/s41586-021-03819-2 now.", "cite doi.org now."),
+        ("[1] The opening citation.", "The opening citation."),
+    ])
+    func pipelineKeepsURLsAndTrimsLeadingCitations(input: String, expected: String) {
+        let t = TextNormalizer().normalize(input)
+        #expect(t.spoken == expected)
+        expectEveryWordMapsToSource(t)
+    }
+
     @Test func everyWordInCorpusMapsToSource() throws {
         let url = try #require(Bundle.module.url(forResource: "corpus", withExtension: "txt", subdirectory: "Fixtures"))
         let lines = try String(contentsOf: url, encoding: .utf8).split(separator: "\n").map(String.init)
@@ -1663,8 +1674,8 @@ public struct TextNormalizer: Sendable {
             RejoinHyphenationRule(),
             StripCitationsRule(),
             ExpandAbbreviationsRule(),
+            CollapseURLsRule(),          // before numbers: a URL with digits must survive intact
             ExpandNumbersRule(),
-            CollapseURLsRule(),
             CollapseWhitespaceRule(),
             PronunciationDictionaryRule(entries: dictionary),
         ]
@@ -2624,8 +2635,9 @@ git commit -m "Add Highlighter: playhead to source-range projection"
 | §5 per-chapter blob | 14 |
 | §6 fallback to chapter start | 15 |
 | §8 TextNormalizer table tests and projection invariant | 3–10 |
-| §8 Segmenter golden tests, Position round-trip | 12, 15 |
+| §8 Segmenter unit tests, Position round-trip | 12, 15 (golden tests over real EPUBs are owed to Plan 3 with the Readium adapter) |
 | §8 re-segmentation tolerance | 15 |
 | §8 Highlight: exact source range for a playhead | 16 |
+| §8 Timeline: replacing an estimate with an actual never moves the playhead | owed to Plan 2 (needs `FakeEngine`) |
 
 Not in this plan, by design: Readium ingest (`SourceBlock` producers) and SwiftData persistence are Plan 3; `SynthesisEngine`, `FakeEngine`, render keys, scheduler, and player are Plan 2.

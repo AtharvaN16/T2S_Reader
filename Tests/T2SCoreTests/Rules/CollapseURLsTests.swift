@@ -18,6 +18,6 @@ import Testing
 
     @Test func hostMapsToWholeURL() {
         let t = rule.apply(NormalizedText(source: "see https://www.nytimes.com/x today"))
-        #expect(t.sourceRange(forSpoken: 4..<15) == 4..<30)
+        #expect(t.sourceRange(forSpoken: 4..<15) == 4..<29)   // "https://www.nytimes.com/x" is 25 units
     }
 }

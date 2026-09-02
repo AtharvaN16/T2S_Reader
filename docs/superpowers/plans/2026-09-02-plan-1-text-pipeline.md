@@ -842,6 +842,12 @@ import Testing
         #expect(t.spoken == "well-known")
     }
 
+    @Test func rejoinsAcrossCRLF() {
+        let t = RejoinHyphenationRule().apply(NormalizedText(source: "con-\r\ntinent"))
+        #expect(t.spoken == "continent")
+        expectEveryWordMapsToSource(t)
+    }
+
     @Test func collapsesRunsAndTrims() {
         let t = CollapseWhitespaceRule().apply(NormalizedText(source: "  a  b\n\tc "))
         #expect(t.spoken == "a b c")
@@ -917,7 +923,7 @@ extension NormalizedText {
 // Sources/T2SCore/Normalize/Rules/RejoinHyphenationRule.swift
 /// Rule 1 (spec §4.1): "con-\ntinent" → "continent". Real hyphens have no line break and are kept.
 public struct RejoinHyphenationRule: NormalizerRule {
-    static let pattern = Pattern("(\\p{L})-[ \\t]*\\n[ \\t]*(\\p{L})")
+    static let pattern = Pattern("(\\p{L})-[ \\t]*\\r?\\n[ \\t]*(\\p{L})")
 
     public init() {}
 
@@ -952,7 +958,7 @@ public struct CollapseWhitespaceRule: NormalizerRule {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test --filter HyphenationAndWhitespaceTests`
-Expected: 4 tests passed.
+Expected: 5 tests passed.
 
 - [ ] **Step 5: Commit**
 

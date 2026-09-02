@@ -261,10 +261,15 @@ public struct TimeIndex: Hashable, Sendable {
         playhead(atTime: time(at: ph) + seconds)
     }
 
-    /// Keeps the index inside the timeline and the offset inside its utterance.
+    /// Keeps the index inside the timeline and the offset inside its utterance. An index past the
+    /// end snaps to the end of the timeline; a negative index snaps to its start.
     public func clamp(_ ph: Playhead) -> Playhead {
         guard utteranceCount > 0 else { return Playhead(utteranceIndex: 0, offset: 0) }
-        let i = max(0, min(ph.utteranceIndex, utteranceCount - 1))
+        if ph.utteranceIndex >= utteranceCount {
+            return Playhead(utteranceIndex: utteranceCount - 1, offset: duration(ofUtterance: utteranceCount - 1))
+        }
+        if ph.utteranceIndex < 0 { return Playhead(utteranceIndex: 0, offset: 0) }
+        let i = ph.utteranceIndex
         return Playhead(utteranceIndex: i, offset: max(0, min(ph.offset, duration(ofUtterance: i))))
     }
 }

@@ -71,16 +71,22 @@ public actor RenderScheduler {
     }
 
     /// Replaces all pending work. The request in flight, if any, finishes and is stored.
-    public func setPlan(_ requests: [RenderRequest]) {
+    /// Returns true when this call will produce its own `.idle` (a new run loop started, or the
+    /// immediate paused `.idle`), false when the plan was absorbed by a loop already running,
+    /// whose `.idle` is already owed. Callers that wait for idleness count on this.
+    @discardableResult
+    public func setPlan(_ requests: [RenderRequest]) -> Bool {
         if isPausedForStorage {
             continuation.yield(.idle)                              // never leave a waiter hanging while paused
-            return
+            return true
         }
         pending = requests
         if !running {
             running = true
             Task { await self.run() }
+            return true
         }
+        return false
     }
 
     public func cancel() { pending.removeAll() }

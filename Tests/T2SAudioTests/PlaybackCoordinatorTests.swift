@@ -128,4 +128,26 @@ import T2SCore
         #expect(c.device.storeFull)
         #expect(c.timeline?[utterance: 0].duration.isActual == false)
     }
+
+    @Test func waitCoversAPlanAbsorbedMidRun() async throws {
+        let (c, _, engine, _, _, doc, timeline) = fixture()
+        await engine.hold()                                        // the first plan parks on utterance 0
+        c.load(doc, timeline: timeline)
+        await c.settle()                                           // plan submitted, loop running
+        c.setRate(2.0)                                             // replan while the loop is running: absorbed
+        await c.settle()
+        await engine.release()
+        await c.waitForRenderIdle()
+        #expect(c.timeline?.isFullyRendered == true)               // nothing was released early
+        #expect(c.rate == 2.0)
+    }
+
+    @Test func waitCoversAnEmptyPlan() async throws {
+        let (c, _, _, _, _, doc, timeline) = fixture()
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        c.renderWholeDocument()                                    // already fully rendered: an empty plan
+        await c.waitForRenderIdle()                                // must return, not hang
+        #expect(c.timeline?.isFullyRendered == true)
+    }
 }

@@ -58,7 +58,11 @@ public final class PlaybackCoordinator {
     private var awaitingIndex: Int?
     private var pendingWork: Task<Void, Never>?
     private var idleWaiters: [CheckedContinuation<Void, Never>] = []
-    private var renderInFlight = false
+    /// Idle accounting for `waitForRenderIdle`: plans submitted but not yet acknowledged by the
+    /// scheduler, and `.idle` events the scheduler still owes us.
+    private var submitsInFlight = 0
+    private var expectedIdles = 0
+    private var isRenderInFlight: Bool { submitsInFlight > 0 || expectedIdles > 0 }
     private var eventTask: Task<Void, Never>?
 
     public init(engine: any SynthesisEngine, store: any AudioStore, player: any AudioPlaying,
@@ -172,7 +176,7 @@ public final class PlaybackCoordinator {
 
     /// Resolves once the scheduler has drained the current plan and the resulting work has settled.
     public func waitForRenderIdle() async {
-        if renderInFlight {
+        if isRenderInFlight {
             await withCheckedContinuation { idleWaiters.append($0) }
         }
         await settle()
@@ -265,9 +269,14 @@ public final class PlaybackCoordinator {
                                          segmenterVersion: timeline.segmenterVersion),
                           spoken: timeline[utterance: job.utteranceIndex].spoken, voiceID: voice)
         }
-        renderInFlight = true
+        submitsInFlight += 1
         let scheduler = self.scheduler
-        Task { await scheduler.setPlan(requests) }
+        chain {
+            let owesIdle = await scheduler.setPlan(requests)
+            self.submitsInFlight -= 1
+            if owesIdle { self.expectedIdles += 1 }
+            self.releaseIdleWaitersIfSettled()
+        }
     }
 
     private func apply(_ event: RenderEvent) {
@@ -296,16 +305,25 @@ public final class PlaybackCoordinator {
         case .storeFull:
             device.storeFull = true                                 // surfaces the storage manager (spec §6)
         case .idle:
-            renderInFlight = false
+            expectedIdles = max(0, expectedIdles - 1)
+            releaseIdleWaitersIfSettled()
             let scheduler = self.scheduler
             chain {
                 self.measuredRTF = await scheduler.measuredRTF
                 self.availableRates = RateLimits.availableRates(rtf: self.measuredRTF)
             }
-            let waiters = idleWaiters
-            idleWaiters.removeAll()
-            waiters.forEach { $0.resume() }
         }
+    }
+
+    /// Releases everyone waiting in `waitForRenderIdle()` once no plan submission and no owed
+    /// `.idle` remain outstanding — never on a single `.idle` that might be stale (buffered from a
+    /// run loop that already ended, arriving after a new plan has been submitted but not yet
+    /// acknowledged by the scheduler).
+    private func releaseIdleWaitersIfSettled() {
+        guard !isRenderInFlight else { return }
+        let waiters = idleWaiters
+        idleWaiters.removeAll()
+        waiters.forEach { $0.resume() }
     }
 
     // MARK: Helpers

@@ -13,3 +13,9 @@ jobs:
       - run: swift --version
       - run: swift test
       - run: scripts/check-licenses.sh
+  readium-ios:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcodebuild -version
+      - run: scripts/test-readium.sh

@@ -82,4 +82,33 @@ import Testing
         #expect(await second.contains(key(1)))
         #expect(await second.stats().bytes == 4_008)
     }
+
+    @Test func fileStoreNamespacesByCodec() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("t2s-store-\(UUID().uuidString)")
+        let s = FileAudioStore(directory: dir, codec: RawPCMCodec(), capacityBytes: 10_000)
+        try await s.write(pcm(1), for: key(1))
+        let expected = dir.appendingPathComponent("pcm-f32le", isDirectory: true).appendingPathComponent(key(1).fileName)
+        #expect(FileManager.default.fileExists(atPath: expected.path))
+    }
+
+    @Test func fileStoreIgnoresForeignFilesOnScan() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("t2s-store-\(UUID().uuidString)")
+        let codecDir = dir.appendingPathComponent("pcm-f32le", isDirectory: true)
+        try FileManager.default.createDirectory(at: codecDir, withIntermediateDirectories: true)
+        try Data("junk".utf8).write(to: codecDir.appendingPathComponent("not-a-key.audio"))
+        try Data("junk".utf8).write(to: codecDir.appendingPathComponent(String(repeating: "Z", count: 64) + ".audio"))
+        let s = FileAudioStore(directory: dir, codec: RawPCMCodec(), capacityBytes: 10_000)
+        #expect(await s.stats().entries == 0)
+    }
+
+    @Test func runningByteTotalMatchesEntries() async throws {
+        for (name, s) in stores() {
+            try await s.write(pcm(1), for: key(1))
+            try await s.write(pcm(1), for: key(1))      // overwrite must not double count
+            try await s.write(pcm(1), for: key(2))
+            #expect(await s.stats().bytes == 8_016, "\(name)")
+            try await s.remove(key(1))
+            #expect(await s.stats().bytes == 4_008, "\(name)")
+        }
+    }
 }

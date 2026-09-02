@@ -6,7 +6,7 @@ public protocol AudioCodec: Sendable {
     func decode(_ data: Data) throws -> PCMAudio
 }
 
-public enum AudioCodecError: Error, Equatable {
+public enum AudioCodecError: Error, Equatable, Sendable {
     case malformed
 }
 

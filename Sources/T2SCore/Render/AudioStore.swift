@@ -13,6 +13,7 @@ public struct AudioStoreStats: Hashable, Sendable {
 
 public enum AudioStoreError: Error, Equatable, Sendable {
     case capacityExceeded(needed: Int, capacity: Int)
+    case diskFull
 }
 
 /// Rendered audio is cache, never truth (spec §3.7.3). LRU against a user-configurable cap (spec §3.4).
@@ -32,19 +33,24 @@ public protocol AudioStore: Sendable {
 struct LRUIndex: Sendable {
     private(set) var order: [RenderKey] = []
     private(set) var sizes: [RenderKey: Int] = [:]
-    var bytes: Int { sizes.values.reduce(0, +) }
+    private(set) var bytes = 0
 
     mutating func touch(_ key: RenderKey) {
         if let i = order.firstIndex(of: key) { order.remove(at: i); order.append(key) }
     }
 
     mutating func insert(_ key: RenderKey, size: Int) {
-        if sizes[key] != nil { order.removeAll { $0 == key } }
+        if let old = sizes[key] {
+            order.removeAll { $0 == key }
+            bytes -= old
+        }
         sizes[key] = size
+        bytes += size
         order.append(key)
     }
 
     mutating func remove(_ key: RenderKey) {
+        if let old = sizes[key] { bytes -= old }
         sizes[key] = nil
         order.removeAll { $0 == key }
     }

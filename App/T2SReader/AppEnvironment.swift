@@ -42,12 +42,8 @@ final class AppEnvironment {
         let store = try LibraryStore.onDisk(at: paths.databaseURL)
         let capacity = UserDefaults.standard.object(forKey: AppPaths.audioCapacityKey) as? Int ?? AppPaths.defaultAudioCapacityBytes
         let audioStore = FileAudioStore(directory: paths.audioDirectory, codec: AACCodec(), capacityBytes: capacity)
-        // Deviation from the brief: `ReadiumDocumentReader` does not exist on this branch — Plan
-        // 3's Readium reader task lives on `plan-3-persistence-ingest`, which has not merged into
-        // `dev` (and so not into `plan-4a-app-shell`) yet. PDF-only until that lands; see
-        // task-6-report.md.
         let library = Library(paths: paths, store: store, audioStore: audioStore,
-                              readers: [PDFDocumentReader()])
+                              readers: [PDFDocumentReader(), ReadiumDocumentReader()])
         let coordinator = PlaybackCoordinator(engine: SystemSpeechEngine(), store: audioStore, player: try AudioPlayer(),
                                               playheadStore: store, timeSource: SystemTimeSource())
         return AppEnvironment(paths: paths, store: store, audioStore: audioStore, library: library, coordinator: coordinator)

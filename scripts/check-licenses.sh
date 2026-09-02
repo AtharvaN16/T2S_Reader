@@ -18,9 +18,13 @@ check_package() {
     if [[ ${#files[@]} -eq 0 ]]; then
       echo "NO LICENSE FILE: $name"; status=1; continue
     fi
-    if grep -qiE 'GNU (AFFERO |LESSER )?GENERAL PUBLIC LICENSE' "${files[0]}"; then
-      echo "COPYLEFT: $name (${files[0]})"; status=1
-    else
+    local copyleft=0
+    for f in "${files[@]}"; do
+      if grep -qiE 'GNU (AFFERO |LESSER )?GENERAL PUBLIC LICENSE' "$f"; then
+        echo "COPYLEFT: $name ($f)"; status=1; copyleft=1
+      fi
+    done
+    if [[ $copyleft -eq 0 ]]; then
       echo "ok: $name"
     fi
   done

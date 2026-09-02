@@ -1057,7 +1057,7 @@ git commit -m "Add LibraryStore: SwiftData documents, queue order, per-chapter t
 - Create: `Tests/T2SStoreTests/PlayheadStoreTests.swift`, `Tests/T2SStoreTests/BookmarkTests.swift`, `Tests/T2SStoreTests/PronunciationTests.swift`
 
 **Interfaces:**
-- Consumes: `PlayheadStore` (T2SCore, moved in Task 1), `PronunciationEntry` (T2SCore), `LibraryStore.existing(_:)`.
+- Consumes: `PlayheadStore` (T2SCore, moved in Task 1), `PronunciationEntry` (T2SCore), `LibraryStore.existing(_:)`, `LibraryStore.setResume(_:_:)` (internal helper from Task 2 that writes the four flattened resume columns).
 - Produces: `public struct Bookmark: Codable, Hashable, Sendable, Identifiable { id, documentID, position, note, createdAt }` in T2SCore; `extension LibraryStore: PlayheadStore` plus `savePosition(_:for:) throws`; `bookmarks(for:)`, `add(_ bookmark:)`, `deleteBookmark(id:)`; `pronunciations()`, `upsert(_ entry:)`, `deletePronunciation(id:)`.
 
 - [ ] **Step 1: The domain type**
@@ -1201,17 +1201,28 @@ Append to `Sources/T2SStore/Models.swift`:
 final class StoredBookmark {
     @Attribute(.unique) var id: UUID
     var documentID: UUID
-    /// JSON-encoded `Position`.
-    var position: Data
+    /// The `Position`, flattened like the document's resume position: no serialization, so no
+    /// decode path that can silently drop a bookmark.
+    var href: String
+    var progression: Double
+    var charOffset: Int?
+    var cssSelector: String?
     var note: String?
     var createdAt: Date
 
-    init(id: UUID, documentID: UUID, position: Data, note: String?, createdAt: Date) {
+    init(id: UUID, documentID: UUID, position: Position, note: String?, createdAt: Date) {
         self.id = id
         self.documentID = documentID
-        self.position = position
+        self.href = position.resourceHref
+        self.progression = position.progression
+        self.charOffset = position.charOffset
+        self.cssSelector = position.cssSelector
         self.note = note
         self.createdAt = createdAt
+    }
+
+    var position: Position {
+        Position(resourceHref: href, progression: progression, charOffset: charOffset, cssSelector: cssSelector)
     }
 }
 
@@ -1233,7 +1244,7 @@ final class StoredPronunciation {
 }
 ```
 
-In `LibraryStore.swift` change the schema line to
+`Models.swift` now needs `import T2SCore` (for `Position`). In `LibraryStore.swift` change the schema line to
 
 ```swift
     static let schema = Schema([StoredDocument.self, StoredChapter.self, StoredBookmark.self, StoredPronunciation.self])
@@ -1268,7 +1279,7 @@ extension LibraryStore: PlayheadStore {
     /// Records the resume position and the last-played time (spec §3.2, §5).
     public func savePosition(_ position: Position, for documentID: UUID) throws {
         let row = try existing(documentID)
-        row.resumePosition = try JSONEncoder().encode(position)
+        Self.setResume(row, position)
         let now = Date()
         row.lastPlayedAt = now
         row.updatedAt = now
@@ -1289,22 +1300,23 @@ extension LibraryStore {
         let descriptor = FetchDescriptor<StoredBookmark>(
             predicate: #Predicate { $0.documentID == documentID },
             sortBy: [SortDescriptor(\.createdAt)])
-        return try modelContext.fetch(descriptor).compactMap { row in
-            guard let position = try? JSONDecoder().decode(Position.self, from: row.position) else { return nil }
-            return Bookmark(id: row.id, documentID: row.documentID, position: position, note: row.note, createdAt: row.createdAt)
+        return try modelContext.fetch(descriptor).map { row in
+            Bookmark(id: row.id, documentID: row.documentID, position: row.position, note: row.note, createdAt: row.createdAt)
         }
     }
 
     /// Inserts, or replaces the bookmark with the same id.
     public func add(_ bookmark: Bookmark) throws {
-        let data = try JSONEncoder().encode(bookmark.position)
         if let row = try bookmarkRow(bookmark.id) {
             row.documentID = bookmark.documentID
-            row.position = data
+            row.href = bookmark.position.resourceHref
+            row.progression = bookmark.position.progression
+            row.charOffset = bookmark.position.charOffset
+            row.cssSelector = bookmark.position.cssSelector
             row.note = bookmark.note
             row.createdAt = bookmark.createdAt
         } else {
-            modelContext.insert(StoredBookmark(id: bookmark.id, documentID: bookmark.documentID, position: data,
+            modelContext.insert(StoredBookmark(id: bookmark.id, documentID: bookmark.documentID, position: bookmark.position,
                                                note: bookmark.note, createdAt: bookmark.createdAt))
         }
         try modelContext.save()

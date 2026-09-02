@@ -1,7 +1,7 @@
 /// Rule 5 (spec §4.1): a URL is spoken as its bare host.
 public struct CollapseURLsRule: NormalizerRule {
-    static let pattern = Pattern("\\b(?:https?://)?(?:www\\.)?([A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+)(?:/\\S*)?", [])
-    static let schemeOrWWW = Pattern("^(?:https?://|www\\.)")
+    // The optional path never ends in sentence punctuation, so "x.com/y." keeps its period.
+    static let pattern = Pattern("\\b(?:https?://)?(?:www\\.)?([A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+)(?:/(?:\\S*[^\\s.,;:!?)\\]])?)?", [])
 
     public init() {}
 

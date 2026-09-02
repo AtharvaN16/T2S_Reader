@@ -9,6 +9,8 @@ import Testing
         ("at http://example.org", "at example.org"),
         ("visit www.apple.com/iphone now", "visit apple.com now"),
         ("email me at a@b.com", "email me at a@b.com"),
+        ("read https://x.com/y. Then go", "read x.com. Then go"),
+        ("at http://example.org/.", "at example.org."),
     ])
     func collapses(input: String, expected: String) {
         let t = rule.apply(NormalizedText(source: input))

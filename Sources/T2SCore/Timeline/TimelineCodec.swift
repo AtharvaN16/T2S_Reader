@@ -20,7 +20,9 @@ public enum TimelineCodec {
         return out
     }
 
-    public static func decode(_ data: Data) throws -> Chapter {
+    public static func decode(_ input: Data) throws -> Chapter {
+        // Rebase: a slice keeps its parent's indices, so absolute subscripts below would trap.
+        let data = Data(input)
         guard data.count >= 6, data.prefix(4) == magic else { throw Error.badMagic }
         let version = UInt16(data[4]) | (UInt16(data[5]) << 8)
         guard version == formatVersion else { throw Error.unsupportedVersion(version) }

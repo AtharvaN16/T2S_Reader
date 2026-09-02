@@ -37,4 +37,18 @@ import Testing
         data[4] = 0xFF; data[5] = 0xFF
         #expect(throws: TimelineCodec.Error.unsupportedVersion(0xFFFF)) { try TimelineCodec.decode(data) }
     }
+
+    @Test func decodesASliceWithNonZeroStartIndex() throws {
+        let blob = try TimelineCodec.encode(chapter)
+        let packed = Data([0xAA, 0xBB, 0xCC]) + blob
+        let slice = packed[3...]
+        #expect(slice.startIndex == 3)
+        #expect(try TimelineCodec.decode(slice) == chapter)
+    }
+
+    @Test func rejectsCorruptPayload() throws {
+        var data = try TimelineCodec.encode(chapter)
+        data.replaceSubrange(6..., with: Data("not lzfse".utf8))
+        #expect(throws: TimelineCodec.Error.corrupt) { try TimelineCodec.decode(data) }
+    }
 }

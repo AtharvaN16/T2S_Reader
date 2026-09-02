@@ -29,8 +29,9 @@ public actor FileAudioStore: AudioStore {
 
     public func write(_ pcm: PCMAudio, for key: RenderKey) throws {
         let data = try codec.encode(pcm)
-        if lru.sizes[key] != nil { try? FileManager.default.removeItem(at: url(key)); lru.remove(key) }
+        // Guard before touching any state: a rejected overwrite must leave the old entry intact.
         guard data.count <= capacity else { throw AudioStoreError.capacityExceeded(needed: data.count, capacity: capacity) }
+        if lru.sizes[key] != nil { lru.remove(key) }              // the atomic write below replaces the file
         for victim in lru.victims(toFit: data.count, capacity: capacity) { evict(victim) }
         try data.write(to: url(key), options: .atomic)
         lru.insert(key, size: data.count)

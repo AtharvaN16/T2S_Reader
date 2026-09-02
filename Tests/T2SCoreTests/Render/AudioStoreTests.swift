@@ -53,6 +53,17 @@ import Testing
         }
     }
 
+    @Test func overwritingWithOversizedDataKeepsTheOldEntry() async throws {
+        for (name, s) in stores() {
+            try await s.write(pcm(1), for: key(1))
+            await #expect(throws: AudioStoreError.capacityExceeded(needed: 12_008, capacity: 10_000), "\(name)") {
+                try await s.write(pcm(3), for: key(1))
+            }
+            #expect(try await s.read(key(1)) == pcm(1), "\(name)")
+            #expect(await s.stats().entries == 1, "\(name)")
+        }
+    }
+
     @Test func loweringCapacityEvicts() async throws {
         for (name, s) in stores() {
             try await s.write(pcm(1), for: key(1))

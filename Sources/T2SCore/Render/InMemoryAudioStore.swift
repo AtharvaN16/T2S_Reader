@@ -15,8 +15,9 @@ public actor InMemoryAudioStore: AudioStore {
 
     public func write(_ pcm: PCMAudio, for key: RenderKey) throws {
         let data = try codec.encode(pcm)
-        if blobs[key] != nil { lru.remove(key); blobs[key] = nil }
+        // Guard before touching any state: a rejected overwrite must leave the old entry intact.
         guard data.count <= capacity else { throw AudioStoreError.capacityExceeded(needed: data.count, capacity: capacity) }
+        if blobs[key] != nil { lru.remove(key); blobs[key] = nil }
         for victim in lru.victims(toFit: data.count, capacity: capacity) { blobs[victim] = nil; lru.remove(victim) }
         blobs[key] = data
         lru.insert(key, size: data.count)

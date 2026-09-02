@@ -53,7 +53,7 @@ public enum LibraryStoreError: Error, Equatable, Sendable {
 /// see value types.
 @ModelActor
 public actor LibraryStore {
-    static let schema = Schema([StoredDocument.self, StoredChapter.self, StoredBookmark.self, StoredPronunciation.self])
+    static let schema = Schema(versionedSchema: LibrarySchemaV1.self)
 
     /// SwiftData crashes intermittently when several containers are created at once (Swift Testing
     /// runs suites in parallel and each test opens its own store). Creation is rare and cheap, so
@@ -63,19 +63,25 @@ public actor LibraryStore {
     /// A throwaway store for tests and previews.
     public static func inMemory() throws -> LibraryStore {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        return LibraryStore(modelContainer: try containerLock.withLock { try ModelContainer(for: schema, configurations: config) })
+        return LibraryStore(modelContainer: try containerLock.withLock {
+            try ModelContainer(for: schema, migrationPlan: LibraryMigrationPlan.self, configurations: config)
+        })
     }
 
     /// The app's store at `url` (`LibraryPaths.databaseURL`). Creates the parent directory.
     public static func onDisk(at url: URL) throws -> LibraryStore {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let config = ModelConfiguration(url: url)
-        return LibraryStore(modelContainer: try containerLock.withLock { try ModelContainer(for: schema, configurations: config) })
+        return LibraryStore(modelContainer: try containerLock.withLock {
+            try ModelContainer(for: schema, migrationPlan: LibraryMigrationPlan.self, configurations: config)
+        })
     }
 
     // MARK: Documents
 
-    public func insert(_ document: Document, timeline: Timeline) throws {
+    /// When `queued`, the document joins the end of the Queue in the same save, so an import can
+    /// never leave a row without its queue slot.
+    public func insert(_ document: Document, timeline: Timeline, queued: Bool = false) throws {
         guard try row(document.id) == nil else { throw LibraryStoreError.duplicateDocument(document.id) }
         let row = StoredDocument(id: document.id, title: document.title, author: document.author,
                                  sourceType: document.sourceType.rawValue,
@@ -88,7 +94,8 @@ public actor LibraryStore {
         Self.setResume(row, document.resumePosition)
         modelContext.insert(row)
         try replaceChapters(of: row, with: timeline)
-        try modelContext.save()
+        if queued { row.queueOrder = (try queueRows().last?.queueOrder ?? -1) + 1 }
+        try commit()
     }
 
     public func document(id: UUID) throws -> Document? { try row(id).map(Self.domain) }
@@ -129,14 +136,14 @@ public actor LibraryStore {
         row.coverImagePath = document.coverImagePath
         row.sourceURL = document.sourceURL?.absoluteString
         row.updatedAt = Date()
-        try modelContext.save()
+        try commit()
     }
 
     public func delete(id: UUID) throws {
         let row = try existing(id)
         try deleteBookmarks(for: id)
         modelContext.delete(row)
-        try modelContext.save()
+        try commit()
     }
 
     // MARK: Queue
@@ -153,7 +160,7 @@ public actor LibraryStore {
             try renumberQueue()
         }
         row.updatedAt = Date()
-        try modelContext.save()
+        try commit()
     }
 
     /// Moves a queued document to `index` (clamped) and renumbers the Queue 0…n-1.
@@ -171,14 +178,14 @@ public actor LibraryStore {
         }
         moving.updatedAt = Date()
         try renumberQueue()
-        try modelContext.save()
+        try commit()
     }
 
     public func setFinished(_ id: UUID, _ finished: Bool) throws {
         let row = try existing(id)
         row.isFinished = finished
         row.updatedAt = Date()
-        try modelContext.save()
+        try commit()
     }
 
     /// Finished leaves the Queue; un-finishing puts the document back at the end — one save, so the
@@ -193,10 +200,19 @@ public actor LibraryStore {
         }
         try renumberQueue()
         row.updatedAt = Date()
-        try modelContext.save()
+        try commit()
     }
 
     // MARK: Timelines
+
+    /// Whether the document's persisted versions differ from `Versions`, without decoding a single
+    /// chapter blob (spec §3.7.3). `nil` when the document does not exist.
+    public func isStale(id: UUID) throws -> Bool? {
+        guard let row = try row(id) else { return nil }
+        return row.schemaVersion != Versions.schema
+            || row.segmenterVersion != Versions.segmenter
+            || row.normalizerVersion != Versions.normalizer
+    }
 
     /// Decodes every chapter blob. `isStale` when the persisted versions differ from `Versions`.
     public func timeline(for id: UUID) throws -> StoredTimeline? {
@@ -224,7 +240,7 @@ public actor LibraryStore {
         }
         try Self.fill(c, with: chapter, segmenterVersion: row.segmenterVersion, normalizerVersion: row.normalizerVersion)
         row.updatedAt = Date()
-        try modelContext.save()
+        try commit()
     }
 
     /// Replaces every chapter and the versions: re-derivation after a version bump (spec §3.7.3).
@@ -233,10 +249,22 @@ public actor LibraryStore {
         let row = try existing(id)
         try replaceChapters(of: row, with: timeline)
         row.updatedAt = Date()
-        try modelContext.save()
+        try commit()
     }
 
     // MARK: Internals
+
+    /// SwiftData keeps pending changes after a failed save; without a rollback the next unrelated
+    /// write would retry them. Not `private`: `LibraryStore`'s other mutators live in extensions in
+    /// separate files within this module, and all of them funnel their save through this one helper.
+    func commit() throws {
+        do {
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            throw error
+        }
+    }
 
     func row(_ id: UUID) throws -> StoredDocument? {
         var descriptor = FetchDescriptor<StoredDocument>(predicate: #Predicate { $0.id == id })
@@ -252,6 +280,17 @@ public actor LibraryStore {
     /// Test hook.
     func chapterRowCount() throws -> Int {
         try modelContext.fetchCount(FetchDescriptor<StoredChapter>())
+    }
+
+    /// Test hook: corrupts a chapter's blob so `TimelineCodec.decode` throws, to exercise the paths
+    /// that must survive an undecodable blob (delete, reprocess).
+    func corruptChapterBlob(_ index: Int, of id: UUID) throws {
+        let row = try existing(id)
+        guard let c = row.chapters.first(where: { $0.index == index }) else {
+            throw LibraryStoreError.chapterOutOfRange(index)
+        }
+        c.blob = Data([0, 1, 2])
+        try commit()
     }
 
     private func queueRows() throws -> [StoredDocument] {

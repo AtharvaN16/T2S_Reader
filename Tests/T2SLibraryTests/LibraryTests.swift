@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import T2SCore
-import T2SStore
+@testable import T2SStore
 @testable import T2SLibrary
 
 @Suite struct LibraryTests {
@@ -199,5 +199,25 @@ import T2SStore
         let reprocessed = try await h.library.reprocess(doc.id)
         #expect(reprocessed[utterance: 2].spoken == "3rd sentence.")
         #expect(try await h.store.timeline(for: doc.id)?.timeline == reprocessed)
+    }
+
+    /// An undecodable chapter blob must never make a document unplayable *and* undeletable: the
+    /// staleness check reads only the row's version columns, and both `reprocess` and `delete`
+    /// tolerate a `timeline(for:)` that throws.
+    @Test func corruptBlobStillDeletesAndReprocesses() async throws {
+        let h = try makeHarness(readers: [FakeDocumentReader()])
+        let doc = try await importFake(h).document
+        try await h.store.corruptChapterBlob(0, of: doc.id)
+        await #expect(throws: (any Error).self) { _ = try await h.store.timeline(for: doc.id) }
+
+        let reprocessed = try await h.library.reprocess(doc.id)
+        #expect(reprocessed.utteranceCount == 3)
+        #expect(try await h.store.timeline(for: doc.id)?.timeline == reprocessed)
+
+        let other = try await importFake(h).document
+        try await h.store.corruptChapterBlob(0, of: other.id)
+        try await h.library.delete(other.id)
+        #expect(try await h.store.document(id: other.id) == nil)
+        #expect(!exists(h.paths.documentDirectory(other.id)))
     }
 }

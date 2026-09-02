@@ -79,6 +79,13 @@ import Testing
         #expect(throws: ImportError.self) { try ArticleEPUBWriter.epub(for: bad) }
     }
 
+    @Test func scriptsAndHandlersAreRejected() throws {
+        #expect(throws: ImportError.self) { try XHTML.validateFragment("<p onclick=\"x()\">a</p>") }
+        #expect(throws: ImportError.self) { try XHTML.validateFragment("<script>1</script>") }
+        #expect(throws: ImportError.self) { try XHTML.validateFragment("<a href=\"javascript:alert(1)\">x</a>") }
+        try XHTML.validateFragment("<section epub:type=\"chapter\"><p>ok</p></section>")
+    }
+
     @Test func emptyBodyIsRejected() {
         var empty = article
         empty.bodyXHTML = "<div> \n </div>"

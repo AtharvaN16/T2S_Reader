@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import Testing
 import T2SCore
 @testable import T2SStore
@@ -113,6 +114,18 @@ import T2SCore
         #expect(try await store.queue().map(\.id) == [b.id, c.id, a.id])
     }
 
+    @Test func insertQueuedJoinsTheEndOfTheQueueAtomically() async throws {
+        let store = try LibraryStore.inMemory()
+        let a = makeDocument("a"), b = makeDocument("b")
+        try await store.insert(a, timeline: makeTimeline([[makeUtterance("x")]]), queued: true)
+        try await store.insert(b, timeline: makeTimeline([[makeUtterance("x")]]), queued: true)
+        #expect(try await store.queue().map(\.id) == [a.id, b.id])
+        #expect(try await store.summary(id: b.id)?.queueOrder == 1)
+        let c = makeDocument("c")
+        try await store.insert(c, timeline: makeTimeline([[makeUtterance("x")]]))
+        #expect(try await store.summary(id: c.id)?.queueOrder == nil)
+    }
+
     @Test func collectionHoldsBooksOnly() async throws {
         let store = try LibraryStore.inMemory()
         let epub = makeDocument("e", type: .epub), pdf = makeDocument("p", type: .pdf)
@@ -183,6 +196,14 @@ import T2SCore
         let reopened = try LibraryStore.onDisk(at: url)
         #expect(try await reopened.document(id: doc.id) == doc)
         #expect(try await reopened.timeline(for: doc.id)?.timeline.utteranceCount == 1)
+    }
+
+    @Test func schemaIsVersioned() async throws {
+        #expect(LibrarySchemaV1.versionIdentifier == Schema.Version(1, 0, 0))
+        let store = try LibraryStore.inMemory()
+        let doc = makeDocument()
+        try await store.insert(doc, timeline: makeTimeline([[makeUtterance("One.")]]))
+        #expect(try await store.document(id: doc.id) == doc)
     }
 
     @Test func summariesNewestFirst() async throws {

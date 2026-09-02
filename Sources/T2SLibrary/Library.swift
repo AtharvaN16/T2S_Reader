@@ -67,23 +67,29 @@ public actor Library {
 
     // MARK: Lifecycle
 
-    /// Removes the document's cached audio, its rows, and its directory.
+    /// Removes the document's cached audio, its rows, and its directory. An undecodable chapter blob
+    /// must never make a document undeletable: the timeline fetch is tolerant, so a corrupt blob at
+    /// worst leaks its audio keys rather than blocking the one recovery action the user has.
     public func delete(_ id: UUID) async throws {
-        if let stored = try await store.timeline(for: id) { await removeAudio(of: stored.timeline) }
+        if let stored = try? await store.timeline(for: id) { await removeAudio(of: stored.timeline) }
         try await store.delete(id: id)
         try? FileManager.default.removeItem(at: paths.documentDirectory(id))
     }
 
-    /// The timeline to play. A stale timeline (version bump) is re-derived from the retained source
-    /// first (spec §3.7.3), so playback never sees a version mismatch.
+    /// The timeline to play. Staleness (version bump) is read from the row's version columns only,
+    /// with no chapter decode (spec §3.7.3); a stale document is re-derived from the retained source
+    /// before anything is decoded, so playback never sees a version mismatch and never pays for a
+    /// decode of a timeline it is about to discard.
     public func timelineForPlayback(_ id: UUID) async throws -> Timeline? {
-        guard let stored = try await store.timeline(for: id) else { return nil }
-        return stored.isStale ? try await reprocess(id) : stored.timeline
+        guard let stale = try await store.isStale(id: id) else { return nil }
+        return stale ? try await reprocess(id) : try await store.timeline(for: id)?.timeline
     }
 
     /// Re-reads the retained source with the current segmenter, normalizer, and dictionary and
     /// replaces the chapters. The resume position survives (spec §3.2). The old utterances' audio
-    /// keys are removed from the cache: they embed the old versions and would never be looked up again.
+    /// keys are removed from the cache: they embed the old versions and would never be looked up
+    /// again. The old-audio GC is tolerant of an undecodable blob (it just leaks those keys) rather
+    /// than blocking re-derivation, the very thing meant to recover from it.
     @discardableResult
     public func reprocess(_ id: UUID) async throws -> Timeline {
         guard let document = try await store.document(id: id) else { throw LibraryStoreError.documentNotFound(id) }
@@ -91,7 +97,7 @@ public actor Library {
         let read = try await reader.read(fileURL: paths.sourceURL(id, type: document.sourceType),
                                          sourceType: document.sourceType)
         let timeline = try await build(read)
-        if let old = try await store.timeline(for: id) { await removeAudio(of: old.timeline) }
+        if let old = try? await store.timeline(for: id) { await removeAudio(of: old.timeline) }
         try await store.replaceTimeline(timeline, for: id)
         return timeline
     }
@@ -140,8 +146,7 @@ public actor Library {
         }
         let document = Document(id: id, title: read.title, author: read.author, sourceType: sourceType,
                                 sourceURL: sourceURL, coverImagePath: coverPath, addedAt: Date())
-        try await store.insert(document, timeline: timeline)
-        try await store.setQueued(id, true)
+        try await store.insert(document, timeline: timeline, queued: true)
         return ImportResult(document: document, utteranceCount: timeline.utteranceCount, skippedResources: read.skippedResources)
     }
 

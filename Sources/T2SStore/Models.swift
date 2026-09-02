@@ -64,8 +64,9 @@ final class StoredChapter {
     var title: String
     /// JSON-encoded `Position` of the chapter start.
     var position: Data
-    /// `TimelineCodec` blob of the chapter's utterances (spec §5).
-    var blob: Data
+    /// `TimelineCodec` blob of the chapter's utterances (spec §5). Large; stored outside the row so
+    /// `summaries()` never faults it in.
+    @Attribute(.externalStorage) var blob: Data
     var utteranceCount: Int
     /// Sum of the chapter's current durations at 1x, kept in step with `blob` so list screens
     /// never decode a blob to show a remaining time.

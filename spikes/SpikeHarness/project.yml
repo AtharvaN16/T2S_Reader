@@ -1,0 +1,46 @@
+# Spike harness — throwaway. Regenerate the .xcodeproj with `xcodegen generate` (never hand-edit it).
+name: SpikeHarness
+options:
+  bundleIdPrefix: com.t2s.spike
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+packages:
+  KokoroSwift:
+    url: https://github.com/mlalma/kokoro-ios
+    exactVersion: 1.0.11
+  MLXUtilsLibrary:
+    url: https://github.com/mlalma/MLXUtilsLibrary.git
+    exactVersion: 0.0.6
+targets:
+  SpikeHarness:
+    type: application
+    platform: iOS
+    sources:
+      - path: SpikeHarness
+      - path: Resources
+        buildPhase: resources
+    dependencies:
+      - package: KokoroSwift
+        product: KokoroSwift
+      - package: MLXUtilsLibrary
+        product: MLXUtilsLibrary
+    info:
+      path: SpikeHarness/Info.plist
+      properties:
+        CFBundleDisplayName: Spike Harness
+        UILaunchScreen: {}
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UIBackgroundModes: [audio, processing]
+        BGTaskSchedulerPermittedIdentifiers: [com.t2s.spike.prepare]
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.t2s.spike.harness
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_USER_SCRIPT_SANDBOXING: false
+        MARKETING_VERSION: "0.1"
+        CURRENT_PROJECT_VERSION: "1"

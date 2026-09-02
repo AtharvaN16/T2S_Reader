@@ -7,10 +7,13 @@ shopt -s nullglob
 status=0
 for dir in .build/checkouts/*/; do
   name=$(basename "$dir")
-  file=$(ls "$dir"LICENSE* "$dir"COPYING* 2>/dev/null | head -n1 || true)
-  if [[ -z "$file" ]]; then
+  # Glob into an array: with nullglob an unmatched pattern yields an empty array.
+  # (A bare `ls` with no arguments would list the cwd and mask a missing file.)
+  files=( "$dir"LICENSE* "$dir"COPYING* )
+  if [[ ${#files[@]} -eq 0 ]]; then
     echo "NO LICENSE FILE: $name"; status=1; continue
   fi
+  file=${files[0]}
   if grep -qiE 'GNU (AFFERO |LESSER )?GENERAL PUBLIC LICENSE' "$file"; then
     echo "COPYLEFT: $name ($file)"; status=1
   else

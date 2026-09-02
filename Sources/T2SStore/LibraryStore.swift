@@ -53,7 +53,7 @@ public enum LibraryStoreError: Error, Equatable, Sendable {
 /// see value types.
 @ModelActor
 public actor LibraryStore {
-    static let schema = Schema([StoredDocument.self, StoredChapter.self])
+    static let schema = Schema([StoredDocument.self, StoredChapter.self, StoredBookmark.self, StoredPronunciation.self])
 
     /// SwiftData crashes intermittently when several containers are created at once (Swift Testing
     /// runs suites in parallel and each test opens its own store). Creation is rare and cheap, so
@@ -134,6 +134,7 @@ public actor LibraryStore {
 
     public func delete(id: UUID) throws {
         let row = try existing(id)
+        try deleteBookmarks(for: id)
         modelContext.delete(row)
         try modelContext.save()
     }

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import T2SCore
 
 /// SwiftData rows. Internal on purpose (spec §3.7.1): the store hands out `T2SCore` value types,
 /// so the persistence schema never shapes the domain model.
@@ -83,5 +84,51 @@ final class StoredChapter {
         self.durationSeconds = durationSeconds
         self.renderedCount = renderedCount
         self.document = nil
+    }
+}
+
+@Model
+final class StoredBookmark {
+    @Attribute(.unique) var id: UUID
+    var documentID: UUID
+    /// The `Position`, flattened like the document's resume position: no serialization, so no
+    /// decode path that can silently drop a bookmark.
+    var href: String
+    var progression: Double
+    var charOffset: Int?
+    var cssSelector: String?
+    var note: String?
+    var createdAt: Date
+
+    init(id: UUID, documentID: UUID, position: Position, note: String?, createdAt: Date) {
+        self.id = id
+        self.documentID = documentID
+        self.href = position.resourceHref
+        self.progression = position.progression
+        self.charOffset = position.charOffset
+        self.cssSelector = position.cssSelector
+        self.note = note
+        self.createdAt = createdAt
+    }
+
+    var position: Position {
+        Position(resourceHref: href, progression: progression, charOffset: charOffset, cssSelector: cssSelector)
+    }
+}
+
+@Model
+final class StoredPronunciation {
+    @Attribute(.unique) var id: UUID
+    var term: String
+    var replacement: String
+    var caseSensitive: Bool
+    var updatedAt: Date
+
+    init(id: UUID, term: String, replacement: String, caseSensitive: Bool, updatedAt: Date) {
+        self.id = id
+        self.term = term
+        self.replacement = replacement
+        self.caseSensitive = caseSensitive
+        self.updatedAt = updatedAt
     }
 }

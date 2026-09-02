@@ -14,6 +14,17 @@ import Testing
         #expect(TextNormalizer.version == Versions.normalizer)
     }
 
+    @Test(arguments: [
+        ("see https://www.nytimes.com/2024/05/01/tech.html today", "see nytimes.com today"),
+        ("cite https://doi.org/10.1038/s41586-021-03819-2 now.", "cite doi.org now."),
+        ("[1] The opening citation.", "The opening citation."),
+    ])
+    func pipelineKeepsURLsAndTrimsLeadingCitations(input: String, expected: String) {
+        let t = TextNormalizer().normalize(input)
+        #expect(t.spoken == expected)
+        expectEveryWordMapsToSource(t)
+    }
+
     @Test func everyWordInCorpusMapsToSource() throws {
         let url = try #require(Bundle.module.url(forResource: "corpus", withExtension: "txt", subdirectory: "Fixtures"))
         let lines = try String(contentsOf: url, encoding: .utf8).split(separator: "\n").map(String.init)

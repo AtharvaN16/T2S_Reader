@@ -22,6 +22,8 @@ import Testing
         ("version 2.0.1", "version 2.0.1"),
         ("born in 1999.", "born in nineteen ninety-nine."),
         ("count 3.", "count three."),
+        ("in the 1980s and 90s", "in the nineteen eighties and nineties"),
+        ("the 2000s", "the two thousands"),
     ])
     func expands(input: String, expected: String) {
         let t = rule.apply(NormalizedText(source: input))

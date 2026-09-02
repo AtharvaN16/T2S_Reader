@@ -9,6 +9,7 @@ public struct ExpandNumbersRule: NormalizerRule {
     // Lookarounds: never inside a longer number or a dotted version string, but a
     // sentence-ending period after the number is fine.
     static let decimal = Pattern("(?<![\\d.])(\\d+)\\.(\\d+)(?!\\d)(?!\\.\\d)")
+    static let decade = Pattern("(?<![\\d.,])(1\\d{3}|2\\d{3}|[1-9]0)'?s(?![\\p{L}\\d])")
     static let year = Pattern("(?<![\\d.,])(1\\d{3}|2\\d{3})(?!\\d)(?![.,]\\d)")
     static let cardinal = Pattern("(?<![\\d.])(\\d{1,3}(?:,\\d{3})+|\\d+)(?!\\d)(?![.,]\\d)")
 
@@ -52,6 +53,11 @@ public struct ExpandNumbersRule: NormalizerRule {
         t.replaceMatches(of: Self.decimal) { m, s in
             guard let whole = m.group(1, in: s).flatMap(Int.init), let frac = m.group(2, in: s) else { return nil }
             return "\(NumberWords.cardinal(whole)) point \(NumberWords.digits(frac))"
+        }
+        t.replaceMatches(of: Self.decade) { m, s in
+            guard let n = m.group(1, in: s).flatMap(Int.init) else { return nil }
+            let words = n >= 1000 ? NumberWords.year(n) : NumberWords.cardinal(n)
+            return words.hasSuffix("y") ? String(words.dropLast()) + "ies" : words + "s"
         }
         t.replaceMatches(of: Self.year) { m, s in
             m.group(1, in: s).flatMap(Int.init).map(NumberWords.year)

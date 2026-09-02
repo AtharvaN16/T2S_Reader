@@ -13,6 +13,18 @@ public struct ChapterEntry: Hashable, Sendable, Identifiable {
     /// How far the playhead is through this chapter, 0…1.
     public var fraction: Double
     public var id: Int { index }
+
+    /// One entry per chapter with its start on the (estimated) time axis and how far `elapsed` is through it.
+    public static func entries(timeline: Timeline, timeIndex: TimeIndex, elapsed: TimeInterval) -> [ChapterEntry] {
+        timeline.chapters.indices.map { c in
+            let range = timeline.utteranceRange(ofChapter: c)
+            let start = timeIndex.startTime(ofUtterance: range.lowerBound)
+            let end = timeIndex.startTime(ofUtterance: range.upperBound)
+            let duration = end - start
+            let fraction = duration > 0 ? min(1, max(0, (elapsed - start) / duration)) : 0
+            return ChapterEntry(index: c, title: timeline.chapters[c].title, startSeconds: start, durationSeconds: duration, fraction: fraction)
+        }
+    }
 }
 
 /// The UI's one view of playback (spec §3): a thin, observable bridge over `PlaybackCoordinator`
@@ -53,16 +65,7 @@ public final class PlayerModel {
 
     public var chapters: [ChapterEntry] {
         guard let timeline = coordinator.timeline else { return [] }
-        let index = coordinator.timeIndex
-        let now = elapsed
-        return timeline.chapters.indices.map { c in
-            let range = timeline.utteranceRange(ofChapter: c)
-            let start = index.startTime(ofUtterance: range.lowerBound)
-            let end = index.startTime(ofUtterance: range.upperBound)
-            let duration = end - start
-            let fraction = duration > 0 ? min(1, max(0, (now - start) / duration)) : 0
-            return ChapterEntry(index: c, title: timeline.chapters[c].title, startSeconds: start, durationSeconds: duration, fraction: fraction)
-        }
+        return ChapterEntry.entries(timeline: timeline, timeIndex: coordinator.timeIndex, elapsed: elapsed)
     }
 
     public var scrubber: ScrubberModel {

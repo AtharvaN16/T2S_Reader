@@ -29,6 +29,7 @@ import T2SStore
         #expect(player.chapterIndex == 0)
         #expect(player.scrubber.tickCount == 48 && player.scrubber.fraction == 0)
         #expect(player.chapters[1].startSeconds > 0)
+        #expect(player.renderError == nil)
     }
 
     @Test func transportAndSeeks() async throws {
@@ -81,5 +82,20 @@ import T2SStore
         await player.load(try #require(try await f.store.summary(id: b)), play: false)
         #expect(try await f.store.summary(id: a)?.isFullyRendered == true)
         #expect(player.current?.id == b)
+    }
+
+    @Test func localErrorClearsOnSuccessfulLoad() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let summary = try #require(try await f.store.summary(id: id))
+        let player = try makePlayer(f)
+        await player.load(summary, play: false)
+        let ghost = DocumentSummary(document: Document(title: "ghost", sourceType: .epub), chapterCount: 0,
+                                    utteranceCount: 0, totalSeconds: 0, renderedCount: 0, isFinished: false,
+                                    queueOrder: nil, lastPlayedAt: nil)
+        await player.load(ghost, play: false)
+        #expect(player.renderError == "Document is missing")
+        await player.load(summary, play: false)
+        #expect(player.renderError == nil)
     }
 }

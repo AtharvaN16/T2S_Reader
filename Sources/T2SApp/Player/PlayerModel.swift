@@ -24,7 +24,10 @@ public struct ChapterEntry: Hashable, Sendable, Identifiable {
 public final class PlayerModel {
     public let coordinator: PlaybackCoordinator
     public private(set) var current: DocumentSummary?
-    public private(set) var renderError: String?
+    /// Load or persistence failures from this model; cleared by the next successful load or persist.
+    public private(set) var localError: String?
+    /// The coordinator's last render error, else this model's own; the coordinator clears its error on load.
+    public var renderError: String? { coordinator.lastRenderError ?? localError }
 
     private let library: Library
     /// Hash of each chapter as last written, to skip unchanged chapters on the next persist.
@@ -75,16 +78,16 @@ public final class PlayerModel {
         await persistRenderedChapters()
         do {
             guard let timeline = try await library.timelineForPlayback(summary.id) else {
-                renderError = "Document is missing"
+                localError = "Document is missing"
                 return
             }
             coordinator.load(summary.document, timeline: timeline)
             current = summary
             persistedChapterHashes = timeline.chapters.map(\.hashValue)
-            renderError = nil
+            localError = nil
             if play { await coordinator.play() }
         } catch {
-            renderError = "\(error)"
+            localError = "\(error)"
         }
     }
 
@@ -115,7 +118,6 @@ public final class PlayerModel {
     /// Drive from a 10 Hz timer while playing (spec §3: the coordinator polls the player clock).
     public func tick() {
         coordinator.tick()
-        if let error = coordinator.lastRenderError { renderError = error }
     }
 
     // MARK: Persistence of phase 2
@@ -124,6 +126,7 @@ public final class PlayerModel {
     /// timings, audio refs from `.rendered` events). Cheap when nothing changed.
     public func persistRenderedChapters() async {
         guard let current, let timeline = coordinator.timeline else { return }
+        var failed = false
         for (c, chapter) in timeline.chapters.enumerated() {
             let hash = chapter.hashValue
             if c < persistedChapterHashes.count, persistedChapterHashes[c] == hash { continue }
@@ -131,8 +134,10 @@ public final class PlayerModel {
                 try await library.store.saveChapter(chapter, at: c, of: current.id)
                 if c < persistedChapterHashes.count { persistedChapterHashes[c] = hash } else { persistedChapterHashes.append(hash) }
             } catch {
-                renderError = "\(error)"
+                localError = "\(error)"
+                failed = true
             }
         }
+        if !failed { localError = nil }
     }
 }

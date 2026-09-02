@@ -14,7 +14,7 @@
 
 - **Reader page** (spec §2.4.5): a separate full-screen page entered from a Queue row title, a chapter in the book sheet, or `Read along →` in the player. Back chevron top-left, chapter title center (tap → chapter list), overflow right (bookmark, appearance). Body is the Readium navigator at 24pt margins on `ground`. The active word is decorated with `accentSoft`, 4pt radius; nothing else on the page uses accent. Auto-scroll keeps the active line in the middle third; a manual scroll suspends it and shows a `Back to current` pill until tapped. Tap a sentence → seek there. Bottom bar pinned over a `ground` fade: tick scrubber, then back 15 · play · forward 30 · speed. During underrun the play glyph becomes a ring and a caption reads `catching up…`. PDF uses the same page with page-level highlight.
 - **Reader body type** (spec §2.4.1): Inter 18 / Regular, 1.5 line height, normal tracking; size and line height user-adjustable independently of the system text size.
-- **Speed picker** (spec §2.4.5): vertical list 0.5x–4.0x in 0.1x steps; rates whose sustained demand exceeds the §3.6 threshold drawn in `ink3` with a one-line footnote; the current rate checked. Availability comes from `PlaybackCoordinator.availableRates`.
+- **Speed picker** (spec §2.4.5): vertical list 0.5x–4.0x in 0.1x steps; rates whose sustained demand exceeds the §3.6 threshold drawn in `ink3` with a one-line footnote; the current rate checked. A rate is available when it is at most the highest entry of `PlaybackCoordinator.availableRates`.
 - **Sleep timer** (spec §2.4.5): chips `10 · 20 · 30 · 45 · 60 min · End of chapter`, selected chip solid `ink`, accent "Start" pill, a grey caption that the timer ends early if the document does. It pauses playback when it fires.
 - **Context menu** (spec §2.4.5): Archive (`destructive`), Mark as finished (`positive`), Details, Sleep timer, Change voice, Render whole document.
 - **Preferences page** (spec §2.4.5): sections Voice (default voice → list with preview), Playback (skip intervals, default speed, autoplay next), Reading (text size, line height, theme System / Light / Dark), Pronunciation (→ dictionary list), Storage (prepare budget 1 h · 3 h · 8 h · Everything, prepared amount and last run, cache size and cap, evict), Cloud voices (BYO key — placeholder until Plan 5), iCloud sync toggle (disabled until Plan 6), links.
@@ -31,7 +31,7 @@
 - Plan 3 `Position` rules: EPUB `resourceHref` is the normalized resource key with `cssSelector` when known; PDF `resourceHref == "source.pdf"`, `progression == pageIndex / pageCount`. `LocatorMapping.locator(for: HighlightRange, in:)` yields a locator with `text.before/highlight/after` and the CSS selector; `LocatorMapping.position(for: Locator)` normalizes the href.
 - Plan 4a API: `AppEnvironment { paths, store, audioStore, library, coordinator, libraryModel, player, importModel, audioSession, deviceMonitor }`; `PlayerModel { current, state, isPlaying, isCatchingUp, elapsed, total, chapters, chapterIndex, scrubber, renderError, load(_:play:), togglePlay, skip(by:), seek(fraction:), seek(toChapter:), setRate, renderWholeDocument, tick, persistRenderedChapters, addBookmark }`; `LibraryModel { summaries, queue, finished, collection, progress(for:), archive, enqueue, move, markFinished, delete, refresh }`; `ImportModel`; views `QueuePage`, `QueueRow`, `BookSheet`, `PlayerSheet`, `ControlPill`, `ChapterList`, `TickScrubber`, `AddSheet(onImported:)`, `DetailsSheet`; design `Tokens`, `TypeRole`, `Spacing`, `Pill`, `PageTitle`, `Artwork`, `ProgressBar`, `PositiveCheck`.
 - `SystemSpeechEngine` resolves `request.voiceID` with `AVSpeechSynthesisVoice(identifier:)` and falls back to the language voice; the coordinator uses `document.voiceID ?? "default"` for both the request and the render key, so a per-document voice change changes every key (spec §5) and the default voice must be applied by the environment (`PlaybackCoordinator` has no default-voice input; Task 8 adds one through `Document.voiceID` at load).
-- `RateLimits.allRates` is 0.5…4.0 in 0.1 steps; `PlaybackCoordinator.availableRates` is the subset whose `measuredRTF × rate ≤ 0.8` (safety factor), all rates until an RTF is measured.
+- `RateLimits.allRates` is the coarse list `[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 3.5, 4.0]`; `PlaybackCoordinator.availableRates` is the subset whose `measuredRTF × rate ≤ 0.8` (safety factor), all of them until an RTF is measured; `setRate(_:)` clamps to `[0.5, maxSustainableRate]` without snapping, so 0.1-step rates from the picker are honoured. The spec's picker (0.1 steps) therefore builds its own row list and marks a row available when `rate ≤ availableRates.max()`.
 
 ## File structure
 
@@ -498,7 +498,7 @@ git commit -m "T2SApp: ReaderPreferences over UserDefaults; VoiceCatalog contrac
 
 **Interfaces:**
 - Consumes: `RateLimits.allRates`, `PlayerModel`, `LibraryModel`, `ReaderPreferences.autoplayNext`.
-- Produces: `public struct SpeedPickerModel { rows: [Row { rate, label, isAvailable, isCurrent }]; footnote: String?; static func make(current:available:) ; static func label(for:) }`; `public enum SleepOption { minutes(Int), endOfChapter }` with `static let all`; `@MainActor @Observable public final class SleepTimer { init(player:clock:); active; remainingSeconds; caption; start(_:); cancel(); tick() }`; `@MainActor @Observable public final class QueueContinuation { init(player:library:preferences:); advanceIfFinished() async -> Bool }`.
+- Produces: `public struct SpeedPickerModel { static let rates: [Double] (0.5…4.0 in 0.1 steps); rows: [Row { rate, label, isAvailable, isCurrent }]; footnote: String?; static func make(current:maxRate:) ; static func label(for:) }`; `public enum SleepOption { minutes(Int), endOfChapter }` with `static let all`; `@MainActor @Observable public final class SleepTimer { init(player:clock:); active; remainingSeconds; caption; start(_:); cancel(); tick() }`; `@MainActor @Observable public final class QueueContinuation { init(player:library:preferences:); advanceIfFinished() async -> Bool }`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -510,16 +510,16 @@ import T2SCore
 
 @Suite struct SpeedPickerModelTests {
     @Test func rowsCoverEveryRateAndMarkAvailability() {
-        let available = RateLimits.allRates.filter { $0 <= 2.0 }
-        let m = SpeedPickerModel.make(current: 1.5, available: available)
-        #expect(m.rows.count == RateLimits.allRates.count)
+        #expect(SpeedPickerModel.rates.count == 36 && SpeedPickerModel.rates.first == 0.5 && SpeedPickerModel.rates.last == 4.0)
+        let m = SpeedPickerModel.make(current: 1.5, maxRate: 2.0)
+        #expect(m.rows.count == 36)
         #expect(m.rows.first?.label == "0.5x" && m.rows.last?.label == "4x")
-        #expect(m.rows.first { $0.rate == 1.5 }?.isCurrent == true)
+        #expect(m.rows.first { abs($0.rate - 1.5) < 0.001 }?.isCurrent == true)
         #expect(m.rows.filter(\.isCurrent).count == 1)
-        #expect(m.rows.first { $0.rate == 2.0 }?.isAvailable == true)
-        #expect(m.rows.first { $0.rate == 2.1 }?.isAvailable == false)
+        #expect(m.rows.first { abs($0.rate - 2.0) < 0.001 }?.isAvailable == true)
+        #expect(m.rows.first { abs($0.rate - 2.1) < 0.001 }?.isAvailable == false)
         #expect(m.footnote == "Rates above 2x can't be sustained on this device right now.")
-        #expect(SpeedPickerModel.make(current: 1.0, available: RateLimits.allRates).footnote == nil)
+        #expect(SpeedPickerModel.make(current: 1.0, maxRate: 4.0).footnote == nil)
         #expect(SpeedPickerModel.label(for: 1.0) == "1x" && SpeedPickerModel.label(for: 1.25) == "1.3x" && SpeedPickerModel.label(for: 0.5) == "0.5x")
     }
 }
@@ -672,10 +672,13 @@ public struct SpeedPickerModel: Hashable, Sendable {
     public var rows: [Row]
     public var footnote: String?
 
-    public static func make(current: Double, available: [Double]) -> SpeedPickerModel {
-        let availableSet = Set(available.map { ($0 * 10).rounded() })
-        let rows = RateLimits.allRates.map { rate in
-            Row(rate: rate, label: label(for: rate), isAvailable: availableSet.contains((rate * 10).rounded()),
+    /// 0.5x…4.0x in 0.1x steps (spec §2.4.5), built once so 0.1-step arithmetic never drifts.
+    public static let rates: [Double] = (5...40).map { Double($0) / 10 }
+
+    /// `maxRate` is the coordinator's `availableRates.max()` (the highest sustainable rate, spec §3.6).
+    public static func make(current: Double, maxRate: Double) -> SpeedPickerModel {
+        let rows = rates.map { rate in
+            Row(rate: rate, label: label(for: rate), isAvailable: rate <= maxRate + 0.001,
                 isCurrent: abs(rate - current) < 0.001)
         }
         let highest = rows.filter(\.isAvailable).map(\.rate).max()
@@ -1490,7 +1493,7 @@ struct SpeedPicker: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        let model = SpeedPickerModel.make(current: env.player.coordinator.rate, available: env.player.coordinator.availableRates)
+        let model = SpeedPickerModel.make(current: env.player.coordinator.rate, maxRate: env.player.coordinator.availableRates.max() ?? 4.0)
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Speed").typeRole(.sectionHeader).foregroundStyle(Tokens.ink).padding(.top, Spacing.section).padding(.bottom, 20)
@@ -2076,7 +2079,7 @@ struct PreferencesPage: View {
                             Menu { ForEach(ReaderPreferences.skipForwardOptions, id: \.self) { s in Button("\(s) s") { prefs.skipForwardSeconds = s } } } label: { valuePill("\(prefs.skipForwardSeconds) s") }
                         }
                         row("Default speed", subtitle: "New documents start here") {
-                            Menu { ForEach([0.8, 1.0, 1.2, 1.5, 2.0], id: \.self) { r in Button(SpeedPickerModel.label(for: r)) { prefs.defaultRate = r } } } label: { valuePill(SpeedPickerModel.label(for: prefs.defaultRate)) }
+                            Menu { ForEach(SpeedPickerModel.rates.filter { $0 <= 3.0 }, id: \.self) { r in Button(SpeedPickerModel.label(for: r)) { prefs.defaultRate = r } } } label: { valuePill(SpeedPickerModel.label(for: prefs.defaultRate)) }
                         }
                         row("Autoplay next", subtitle: "Continue with the next queued item") {
                             Toggle("", isOn: $prefs.autoplayNext).labelsHidden().tint(Tokens.ink)

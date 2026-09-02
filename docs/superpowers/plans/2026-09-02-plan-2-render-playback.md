@@ -695,6 +695,17 @@ import Testing
         }
     }
 
+    @Test func overwritingWithOversizedDataKeepsTheOldEntry() async throws {
+        for (name, s) in stores() {
+            try await s.write(pcm(1), for: key(1))
+            await #expect(throws: AudioStoreError.capacityExceeded(needed: 12_008, capacity: 10_000), "\(name)") {
+                try await s.write(pcm(3), for: key(1))
+            }
+            #expect(try await s.read(key(1)) == pcm(1), "\(name)")
+            #expect(await s.stats().entries == 1, "\(name)")
+        }
+    }
+
     @Test func loweringCapacityEvicts() async throws {
         for (name, s) in stores() {
             try await s.write(pcm(1), for: key(1))
@@ -855,8 +866,9 @@ public actor InMemoryAudioStore: AudioStore {
 
     public func write(_ pcm: PCMAudio, for key: RenderKey) throws {
         let data = try codec.encode(pcm)
-        if blobs[key] != nil { lru.remove(key); blobs[key] = nil }
+        // Guard before touching any state: a rejected overwrite must leave the old entry intact.
         guard data.count <= capacity else { throw AudioStoreError.capacityExceeded(needed: data.count, capacity: capacity) }
+        if blobs[key] != nil { lru.remove(key); blobs[key] = nil }
         for victim in lru.victims(toFit: data.count, capacity: capacity) { blobs[victim] = nil; lru.remove(victim) }
         blobs[key] = data
         lru.insert(key, size: data.count)
@@ -917,8 +929,9 @@ public actor FileAudioStore: AudioStore {
 
     public func write(_ pcm: PCMAudio, for key: RenderKey) throws {
         let data = try codec.encode(pcm)
-        if lru.sizes[key] != nil { try? FileManager.default.removeItem(at: url(key)); lru.remove(key) }
+        // Guard before touching any state: a rejected overwrite must leave the old entry intact.
         guard data.count <= capacity else { throw AudioStoreError.capacityExceeded(needed: data.count, capacity: capacity) }
+        if lru.sizes[key] != nil { lru.remove(key) }              // the atomic write below replaces the file
         for victim in lru.victims(toFit: data.count, capacity: capacity) { evict(victim) }
         try data.write(to: url(key), options: .atomic)
         lru.insert(key, size: data.count)
@@ -953,7 +966,7 @@ public actor FileAudioStore: AudioStore {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test --filter AudioStoreTests`
-Expected: 6 tests passed. Sizes: 1 s at 1 kHz is 1,000 samples × 4 bytes + 8-byte header = 4,008 bytes.
+Expected: 7 tests passed. Sizes: 1 s at 1 kHz is 1,000 samples × 4 bytes + 8-byte header = 4,008 bytes.
 
 - [ ] **Step 5: Commit**
 

@@ -19,3 +19,9 @@ jobs:
       - uses: actions/checkout@v4
       - run: xcodebuild -version
       - run: scripts/test-readium.sh
+  app-ios:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: scripts/build-app.sh

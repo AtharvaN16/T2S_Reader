@@ -45,4 +45,24 @@ import Testing
         #expect(DurationEstimator.estimate(spoken: "") == 0.5)
         #expect(DurationEstimator.estimate(spoken: String(repeating: "a", count: 150)) == 10)
     }
+
+    @Test func piecesLocateThemselvesInTheBlock() {
+        let text = "First clause here,\nsecond clause there; third clause, and a fourth one, then a fifth clause; the end."
+        let us = Segmenter(normalizer: TextNormalizer(), maxUtteranceLength: 40).segment(block(text, offset: 0))
+        #expect(us.count >= 3)
+        let units = Array(text.utf16)
+        for u in us {
+            let start = u.position.charOffset!
+            let located = String(decoding: units[start..<(start + u.source.utf16.count)], as: UTF16.self)
+            #expect(located == u.source, "piece at \(start)")
+            #expect(u.source.first.map { !$0.isWhitespace } == true)
+        }
+    }
+
+    @Test func hardCutNeverSplitsASurrogatePair() {
+        let text = String(repeating: "😀", count: 10)                       // 20 UTF-16 units, no spaces
+        let us = Segmenter(normalizer: TextNormalizer(), maxUtteranceLength: 7).segment(block(text, offset: 0))
+        #expect(us.map(\.source).joined() == text)
+        #expect(us.allSatisfy { $0.source.utf16.count % 2 == 0 })
+    }
 }

@@ -1,7 +1,7 @@
 # t2s_reader — Design Spec
 
 **Date:** 2026-09-01
-**Revised:** 2026-09-02 (rev 5 — see §11 changelog)
+**Revised:** 2026-09-02 (rev 6 — see §11 changelog)
 **Status:** Draft for review
 **Working name:** t2s_reader (TBD)
 
@@ -66,10 +66,17 @@ conditions that keep it that way.
 |---|---|---|
 | **EPUB** (unencrypted) | Readium Streamer | Full — word-level |
 | **Web article** | Share sheet → Readability.js → minimal EPUB | Full — word-level |
-| **Text PDF** | Readium Streamer + normalizer | Reduced — see §6.1 |
+| **Text PDF** | PDFKit text extraction + normalizer; displayed in Readium's PDF navigator | Reduced — see §6.1 |
 
 Web articles are converted to a minimal EPUB at import so that everything
 downstream travels a single reflowable code path. PDFs remain PDFs.
+
+PDF text is extracted with PDFKit rather than the Readium streamer (rev 6).
+The Readium toolkit is iOS-only and cannot run under the macOS test suite,
+while PDFKit runs on both, so the PDF ingest path stays fully testable on a
+Mac and Readium is confined to EPUB reading and display (§7.6). Readium's
+PDF navigator still displays the pages; `Position.progression` carries the
+page.
 
 **The originally fetched HTML is retained alongside the generated EPUB.**
 Extraction is lossy and irreversible; keeping the source means a future
@@ -691,8 +698,9 @@ Ranked by how much of the architecture they invalidate.
 
 ### 7.1 espeak-ng is GPL-3 — RESOLVED, with a scope cost
 Kokoro's weights are Apache 2.0, but its fallback G2P, espeak-ng, is GPL-3
-and cannot ship on the App Store. **Mitigation:** use **Misaki** (MIT),
-Kokoro's default G2P, via **MisakiSwift**. `mlalma/kokoro-ios` is MIT and
+and cannot ship on the App Store. **Mitigation:** use **Misaki**,
+Kokoro's default G2P, via **MisakiSwift** (Apache-2.0; the Python Misaki
+is MIT — corrected rev 6). `mlalma/kokoro-ios` is MIT and
 bundles it. **Cost:** English only in v1, since Misaki's non-English
 coverage degrades to espeak. *Spike: verify MisakiSwift's coverage and
 quality against reference Misaki output.*
@@ -734,11 +742,14 @@ Published figures for Kokoro range from 80 MB (int8 on disk) to 833 MB
 quoted as if comparable. iOS jetsam does not care which. *Spike: measure
 resident memory on a non-Pro device.*
 
-### 7.6 Readium license and platform reach
-Believed BSD-3, compatible with both App Store distribution and
-open-sourcing — **verify before it is load-bearing** (§3.7.5).
-Catalyst/macOS support is unverified and deferred. §3.7.2 keeps this
-recoverable rather than terminal.
+### 7.6 Readium license and platform reach — RESOLVED (rev 6)
+**BSD-3-Clause**, verified against the swift-toolkit 3.11.0 `LICENSE` file;
+`scripts/check-licenses.sh` guards every package in the repository. The
+toolkit declares iOS only, and any package graph containing it fails
+deployment-target validation on macOS, so it lives in its own iOS-only
+package (`Packages/T2SReadium`) tested on the iOS simulator; everything
+else stays `swift test`-able on macOS. Catalyst/macOS reach stays
+deferred. §3.7.2 keeps this recoverable rather than terminal.
 
 ### 7.7 Idle-time inference under `BGProcessingTask`
 Tier 3 Prepare (§3.4.1) relies on `BGProcessingTask` with
@@ -810,6 +821,15 @@ against a pipeline that is already proven.
 ---
 
 ## 11. Changelog
+
+**rev 6 (2026-09-02)** — Plan 3 (persistence and ingest).
+
+- **§2.1** text PDFs are ingested with PDFKit, not the Readium streamer;
+  Readium is iOS-only and the PDF path must stay testable on macOS.
+  Display is unchanged (Readium's PDF navigator).
+- **§7.6** resolved: Readium is BSD-3-Clause (3.11.0) and confined to an
+  iOS-only package tested on the simulator.
+- **§7.1** MisakiSwift is Apache-2.0, not MIT.
 
 **rev 5 (2026-09-02)** — Plan 1 final review.
 

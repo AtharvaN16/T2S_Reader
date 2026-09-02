@@ -75,7 +75,9 @@ public actor LibraryStore {
 
     // MARK: Documents
 
-    public func insert(_ document: Document, timeline: Timeline) throws {
+    /// When `queued`, the document joins the end of the Queue in the same save, so an import can
+    /// never leave a row without its queue slot.
+    public func insert(_ document: Document, timeline: Timeline, queued: Bool = false) throws {
         guard try row(document.id) == nil else { throw LibraryStoreError.duplicateDocument(document.id) }
         let row = StoredDocument(id: document.id, title: document.title, author: document.author,
                                  sourceType: document.sourceType.rawValue,
@@ -88,6 +90,7 @@ public actor LibraryStore {
         Self.setResume(row, document.resumePosition)
         modelContext.insert(row)
         try replaceChapters(of: row, with: timeline)
+        if queued { row.queueOrder = (try queueRows().last?.queueOrder ?? -1) + 1 }
         try modelContext.save()
     }
 

@@ -2870,6 +2870,8 @@ public actor Library {
 }
 ```
 
+**Implementation note (recorded after execution).** `ingest` inserts and queues in one store call — `LibraryStore.insert(_:timeline:queued:)` assigns the queue rank inside the same save — because the review found that a failure between a separate `insert` and `setQueued` would leave a row with no files behind.
+
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `swift test --filter LibraryTests`

@@ -140,8 +140,7 @@ public actor Library {
         }
         let document = Document(id: id, title: read.title, author: read.author, sourceType: sourceType,
                                 sourceURL: sourceURL, coverImagePath: coverPath, addedAt: Date())
-        try await store.insert(document, timeline: timeline)
-        try await store.setQueued(id, true)
+        try await store.insert(document, timeline: timeline, queued: true)
         return ImportResult(document: document, utteranceCount: timeline.utteranceCount, skippedResources: read.skippedResources)
     }
 

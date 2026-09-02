@@ -93,6 +93,18 @@ import T2SCore
         #expect(try await store.summary(id: b.id)?.queueOrder == 0)
     }
 
+    @Test func insertQueuedJoinsTheEndOfTheQueueAtomically() async throws {
+        let store = try LibraryStore.inMemory()
+        let a = makeDocument("a"), b = makeDocument("b")
+        try await store.insert(a, timeline: makeTimeline([[makeUtterance("x")]]), queued: true)
+        try await store.insert(b, timeline: makeTimeline([[makeUtterance("x")]]), queued: true)
+        #expect(try await store.queue().map(\.id) == [a.id, b.id])
+        #expect(try await store.summary(id: b.id)?.queueOrder == 1)
+        let c = makeDocument("c")
+        try await store.insert(c, timeline: makeTimeline([[makeUtterance("x")]]))
+        #expect(try await store.summary(id: c.id)?.queueOrder == nil)
+    }
+
     @Test func collectionHoldsBooksOnly() async throws {
         let store = try LibraryStore.inMemory()
         let epub = makeDocument("e", type: .epub), pdf = makeDocument("p", type: .pdf)

@@ -1587,16 +1587,22 @@ public actor RenderScheduler {
     }
 
     /// Replaces all pending work. The request in flight, if any, finishes and is stored.
-    public func setPlan(_ requests: [RenderRequest]) {
+    /// Returns true when this call will produce its own `.idle` (a new run loop started, or the
+    /// immediate paused `.idle`), false when the plan was absorbed by a loop already running,
+    /// whose `.idle` is already owed. Callers that wait for idleness count on this.
+    @discardableResult
+    public func setPlan(_ requests: [RenderRequest]) -> Bool {
         if isPausedForStorage {
             continuation.yield(.idle)                              // never leave a waiter hanging while paused
-            return
+            return true
         }
         pending = requests
         if !running {
             running = true
             Task { await self.run() }
+            return true
         }
+        return false
     }
 
     public func cancel() { pending.removeAll() }
@@ -2564,7 +2570,7 @@ Notes for the implementer:
 - `save()` runs after `state` changes so a `.finished` save carries the clamped end position. Saved `charOffset`s in the tests reflect word timings from `FakeEngine` (the position is the start of the word being spoken), which is the same model `Highlighter` uses.
 - `apply` runs on the main actor because the coordinator is `@MainActor` and the event loop is a `Task` created inside it; do not mark `apply` `nonisolated`.
 
-**Implementation note (recorded after execution).** Two corrections to the code above shipped: `fill()` must re-read `self.timeline` on every loop iteration rather than binding it once before the `await store.read`, because `.rendered` events mutate the timeline while `fill` is suspended and a stale value-type copy misses them; and the finished playhead takes its offset from the last utterance's own `duration.seconds` instead of `timeIndex.clamp(…, offset: .infinity)`, whose prefix-sum subtraction can lose a ULP against the test's exact `1.2`.
+**Implementation note (recorded after execution).** Idle accounting: `replan` increments `submitsInFlight`, submits through `chain`, and on return increments `expectedIdles` only when `setPlan` reported it will produce its own `.idle`; `apply(.idle)` decrements `expectedIdles`; waiters are released only when both counters are zero, so a stale `.idle` from a finished plan cannot release a waiter early. Two corrections to the code above also shipped: `fill()` must re-read `self.timeline` on every loop iteration rather than binding it once before the `await store.read`, because `.rendered` events mutate the timeline while `fill` is suspended and a stale value-type copy misses them; and the finished playhead takes its offset from the last utterance's own `duration.seconds` instead of `timeIndex.clamp(…, offset: .infinity)`, whose prefix-sum subtraction can lose a ULP against the test's exact `1.2`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 

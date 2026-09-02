@@ -30,7 +30,9 @@ public struct Timeline: Codable, Hashable, Sendable {
 
     public var utteranceCount: Int { chapters.reduce(0) { $0 + $1.utterances.count } }
 
+    /// Precondition: `c` is a valid chapter index.
     public func utteranceRange(ofChapter c: Int) -> Range<Int> {
+        precondition(chapters.indices.contains(c), "chapter \(c) out of range (\(chapters.count))")
         let start = chapters[..<c].reduce(0) { $0 + $1.utterances.count }
         return start..<(start + chapters[c].utterances.count)
     }
@@ -58,7 +60,9 @@ public struct Timeline: Codable, Hashable, Sendable {
     }
 
     /// Derived, display-only (spec §3.2): sum of preceding durations at 1x.
+    /// `i == utteranceCount` is allowed and yields the total duration (the end of the timeline).
     public func startTime(ofUtterance i: Int) -> TimeInterval {
+        precondition(i >= 0 && i <= utteranceCount, "utterance \(i) out of range (\(utteranceCount))")
         var t: TimeInterval = 0
         var n = 0
         for ch in chapters {

@@ -34,6 +34,7 @@ import Testing
         #expect(t.startTime(ofUtterance: 0) == 0)
         #expect(t.startTime(ofUtterance: 2) == 3)
         #expect(t.startTime(ofUtterance: 5) == 15)
+        #expect(t.startTime(ofUtterance: 6) == 21)     // end of timeline
         #expect(t.totalDuration == 21)
         #expect(t.isFullyRendered == false)
     }

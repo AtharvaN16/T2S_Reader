@@ -35,7 +35,7 @@ public struct ReadiumDocumentReader: DocumentReader {
             if case .string(let selector)? = locator.locations.otherLocations["cssSelector"] { cssSelector = selector }
             blocksByHref[href, default: []].append(SourceBlock(
                 text: text,
-                position: Position(resourceHref: rawHref, progression: locator.locations.progression ?? 0,
+                position: Position(resourceHref: href, progression: locator.locations.progression ?? 0,
                                    charOffset: offset, cssSelector: cssSelector)))
             offsets[href] = offset + text.utf16.count + 1
         }
@@ -122,9 +122,12 @@ public struct ReadiumDocumentReader: DocumentReader {
 
     /// Identifies a resource for comparison across `locator.href.string` and `link.url().string`,
     /// which Readium can report with different percent-encoding: strip any `#fragment`, then run
-    /// through `AnyURL`'s normalization. `Position.resourceHref` stays the raw `locator.href.string`
-    /// (spec §3.7.2: persisted positions are exactly what Readium reports) — this key is only ever
-    /// used to test resource identity, never persisted.
+    /// through `AnyURL`'s normalization. `Position.resourceHref` *is* this normalized resource key
+    /// (the EPUB rule in the plan's Global Constraints), not the raw locator href: a position saved
+    /// from a navigator locator can arrive percent-encoded differently than the content-iterator
+    /// form used to build the timeline, and comparing un-normalized hrefs would silently fall back
+    /// to document start (spec §6 forbids that). `LocatorMapping.position(for:)` normalizes the same
+    /// way, so every persisted `resourceHref` — from either Readium API — is directly comparable.
     static func resourceKey(_ href: String) -> String {
         let stripped = withoutFragment(href)
         return AnyURL(string: stripped)?.normalized.string ?? stripped

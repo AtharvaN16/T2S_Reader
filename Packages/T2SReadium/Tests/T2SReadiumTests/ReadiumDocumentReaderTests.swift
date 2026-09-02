@@ -80,6 +80,15 @@ import T2SLibrary
         #expect(read.skippedResources.isEmpty)
         #expect(read.chapters.count == 2)
         #expect(!read.chapters[0].blocks.isEmpty)
+
+        // Every block's resourceHref agrees with its chapter's, and the persisted form is already
+        // the normalized key: re-normalizing it is a no-op, and mapping it through a Locator and
+        // back yields the same resourceHref (the two Readium APIs stay comparable).
+        let p = read.chapters[0].blocks[0].position
+        #expect(read.chapters[0].blocks.allSatisfy { $0.position.resourceHref == read.chapters[0].position.resourceHref })
+        #expect(p.resourceHref == ReadiumDocumentReader.resourceKey(read.chapters[0].blocks[0].position.resourceHref))
+        let locator = try #require(LocatorMapping.locator(for: p))
+        #expect(LocatorMapping.position(for: locator).resourceHref == p.resourceHref)
     }
 
     @Test func nestedTOCAndFragmentsGroupByResource() async throws {

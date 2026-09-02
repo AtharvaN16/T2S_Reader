@@ -18,11 +18,13 @@ public enum LocatorMapping {
 
     /// The persisted form of a navigator locator (a tapped sentence, the visible page). `charOffset`
     /// is unknown here; `PositionResolver` falls back to progression within the resource.
+    /// `resourceHref` is normalized through `ReadiumDocumentReader.resourceKey` — the same key the
+    /// content iterator persists — so a position from either Readium API compares equal by resource.
     public static func position(for locator: Locator) -> Position {
         var selector: String?
         if case .string(let s)? = locator.locations.otherLocations["cssSelector"] { selector = s }
-        return Position(resourceHref: locator.href.string, progression: locator.locations.progression ?? 0,
-                        charOffset: nil, cssSelector: selector)
+        return Position(resourceHref: ReadiumDocumentReader.resourceKey(locator.href.string),
+                        progression: locator.locations.progression ?? 0, charOffset: nil, cssSelector: selector)
     }
 
     /// The active word: the utterance's source slice as the quote, with up to `contextLength` UTF-16

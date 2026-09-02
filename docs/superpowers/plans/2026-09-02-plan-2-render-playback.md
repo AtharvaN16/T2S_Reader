@@ -1402,7 +1402,9 @@ import Testing
             .rendered(RenderedUtterance(documentID: doc, utteranceIndex: 1, key: key(1), duration: 0.5, wordTimings: [WordTiming(spokenRange: 0..<5, start: 0, end: 0.5)])),
             .idle,
         ])
-        #expect(await store.contains(key(0)) && store.contains(key(1)))
+        let has0 = await store.contains(key(0))
+        let has1 = await store.contains(key(1))
+        #expect(has0 && has1)
     }
 
     @Test func skipsKeysTheStoreAlreadyHolds() async throws {

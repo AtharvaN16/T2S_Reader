@@ -16,6 +16,7 @@ struct BookSheet: View {
 
     private var live: DocumentSummary { env.libraryModel.summaries.first { $0.id == summary.id } ?? summary }
     private var isQueued: Bool { live.queueOrder != nil && !live.isFinished }
+    private var isCurrent: Bool { env.player.current?.id == live.id }
 
     var body: some View {
         ScrollView {
@@ -37,7 +38,14 @@ struct BookSheet: View {
                 .typeRole(.meta).foregroundStyle(Tokens.ink2)
                 HStack(spacing: 8) {
                     Pill(label: "Play", glyph: "play.fill", style: .accent) {
-                        Task { await env.player.load(live, play: true); showPlayer = true }
+                        Task {
+                            if isCurrent {
+                                if !env.player.isPlaying { await env.player.togglePlay() }
+                            } else {
+                                await env.player.load(live, play: true)
+                            }
+                            showPlayer = true
+                        }
                     }
                     if isQueued {
                         Pill(label: "In Queue", glyph: "checkmark", style: .selected) { Task { await env.libraryModel.archive(live.id) } }
@@ -51,9 +59,9 @@ struct BookSheet: View {
                         HStack(spacing: 12) {
                             Button {
                                 Task {
-                                    await env.player.load(live, play: false)
+                                    if !isCurrent { await env.player.load(live, play: false) }
                                     await env.player.seek(toChapter: chapter.index)
-                                    await env.player.togglePlay()
+                                    if !env.player.isPlaying { await env.player.togglePlay() }
                                     showPlayer = true
                                 }
                             } label: {
@@ -77,10 +85,18 @@ struct BookSheet: View {
         }
         .background(Tokens.raised)
         .presentationCornerRadius(Spacing.sheetCorner)
-        .task(id: live.document.resumePosition) { await loadChapters() }
+        .task { await reload() }
+        .onChange(of: showPlayer) { _, shown in if !shown { Task { await reload() } } }
         .sheet(isPresented: $showPlayer) {
             PlayerSheet().presentationCornerRadius(Spacing.sheetCorner).presentationBackground(Tokens.raised)
         }
+    }
+
+    /// Positions are saved by the coordinator straight to the store, so the library model is
+    /// refreshed here before the chapters are rebuilt.
+    private func reload() async {
+        await env.libraryModel.refresh()
+        await loadChapters()
     }
 
     private func loadChapters() async {

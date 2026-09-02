@@ -14,7 +14,8 @@ public final class AudioPlayer: AudioPlaying {
     private let manual: Bool
     /// Frames scheduled since the last reset, used to freeze `consumedSeconds` when the queue drains.
     private var scheduledFrames: AVAudioFramePosition = 0
-    /// `engine.manualRenderingSampleTime` at the last reset — manual mode's `consumedSeconds` baseline.
+    /// `engine.manualRenderingSampleTime` at the last fold point (reset or rate change) — manual
+    /// mode's `consumedSeconds` baseline for the *current* rate interval.
     /// `player.lastRenderTime`/`playerTime(forNodeTime:)` is unusable for this: with `AVAudioUnitTimePitch`
     /// in the chain it reports the player's own *pull* position, which the time-pitch unit's internal
     /// look-ahead buffer pulls ahead of the true rendered-output position by a fixed amount (confirmed
@@ -22,6 +23,10 @@ public final class AudioPlayer: AudioPlaying {
     /// `engine.manualRenderingSampleTime` exactly; with it present, it consistently reads ~1824 frames high
     /// at 24 kHz, even at rate 1.0). `engine.manualRenderingSampleTime` tracks true rendered output frames.
     private var manualBaseline: AVAudioFramePosition = 0
+    /// Source seconds (at 1x) folded in from prior rate intervals since the last reset. Needed
+    /// because `consumedSeconds` must integrate progress per rate interval, not apply the
+    /// *current* rate retroactively to the whole span since reset — see `foldManualProgress()`.
+    private var manualAccumulatedSourceFrames: Double = 0
     private var generation = 0
     /// Completions collected on `AVAudioEngine`'s background completion thread and drained on the
     /// main actor by `renderOffline`. In manual-rendering mode there is no real run loop / app event
@@ -42,7 +47,10 @@ public final class AudioPlayer: AudioPlaying {
 
     public var rate: Double {
         get { Double(timePitch.rate) }
-        set { timePitch.rate = Float(max(0.5, min(4.0, newValue))) }
+        set {
+            foldManualProgress()
+            timePitch.rate = Float(max(0.5, min(4.0, newValue)))
+        }
     }
 
     public init(sampleRate: Double = PCMAudio.defaultSampleRate, manualRendering: Bool = false) throws {
@@ -59,14 +67,24 @@ public final class AudioPlayer: AudioPlaying {
         try engine.start()
     }
 
+    /// Manual mode: folds the output rendered so far at the current rate into the accumulator and
+    /// restarts the baseline, so a later rate change cannot retroactively rescale it.
+    private func foldManualProgress() {
+        guard manual else { return }
+        let out = engine.manualRenderingSampleTime - manualBaseline
+        manualAccumulatedSourceFrames += Double(max(0, out)) * rate
+        manualBaseline = engine.manualRenderingSampleTime
+    }
+
     public var consumedSeconds: TimeInterval {
         let rawFrames: Double
         if manual {
             // `engine.manualRenderingSampleTime` is exact rendered-output time, but it's in the
             // engine's fixed processing-rate domain, not source-domain — it doesn't reflect the
-            // time-pitch rate multiplier, so scale by `rate` to get source seconds at 1x.
-            let outputFrames = engine.manualRenderingSampleTime - manualBaseline
-            rawFrames = Double(max(0, outputFrames)) * rate
+            // time-pitch rate multiplier, so scale by `rate` to get source seconds at 1x. Progress
+            // from earlier rate intervals is already folded into `manualAccumulatedSourceFrames`
+            // (see `foldManualProgress()`), so only the current interval needs scaling here.
+            rawFrames = manualAccumulatedSourceFrames + Double(max(0, engine.manualRenderingSampleTime - manualBaseline)) * rate
         } else {
             guard let nodeTime = player.lastRenderTime, let t = player.playerTime(forNodeTime: nodeTime) else { return 0 }
             rawFrames = Double(t.sampleTime)
@@ -119,6 +137,7 @@ public final class AudioPlayer: AudioPlaying {
         player.stop()
         scheduledFrames = 0
         if manual { manualBaseline = engine.manualRenderingSampleTime }
+        manualAccumulatedSourceFrames = 0
         manualCompletions.removeAll()
         isPlaying = false
     }

@@ -23,6 +23,17 @@ import T2SCore
         #expect(throws: (any Error).self) { try AACCodec().decode(Data("not audio".utf8)) }
     }
 
+    @Test func strippingIsANoOpOnUnknownLayouts() {
+        func box(_ type: String, _ payload: [UInt8]) -> [UInt8] {
+            let size = UInt32(8 + payload.count)
+            return [UInt8(size >> 24), UInt8((size >> 16) & 0xFF), UInt8((size >> 8) & 0xFF), UInt8(size & 0xFF)] + Array(type.utf8) + payload
+        }
+        // ftyp, free, moov{ meta (empty, 8 bytes) } — a free box but no chunk-offset table, and a meta too short to recurse into.
+        let bytes = box("ftyp", [0, 0, 0, 0]) + box("free", [0, 0, 0, 0]) + box("moov", box("meta", []))
+        let data = Data(bytes)
+        #expect(AACCodec.strippingReservedPadding(data) == data)
+    }
+
     /// A minimal top-level MP4/M4A box walker: reads `size`/`type` pairs and returns the `type`
     /// four-char codes found at the top level, without descending into any box's contents.
     private static func topLevelBoxTypes(of data: Data) -> [String] {

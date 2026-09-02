@@ -41,7 +41,7 @@ public struct AACCodec: T2SCore.AudioCodec {
     /// `stco`/`co64` chunk-offset tables in `moov` to point at the new (smaller) `mdat` position.
     /// If the box layout doesn't match what `AVAudioFile` produces, this is a no-op — correctness
     /// (round-tripping through `decode`) matters more than shaving bytes.
-    private static func strippingReservedPadding(_ data: Data) -> Data {
+    static func strippingReservedPadding(_ data: Data) -> Data {
         var bytes = [UInt8](data)
 
         struct Box { var offset: Int; var size: Int; var type: String; var headerSize: Int }
@@ -110,7 +110,7 @@ public struct AACCodec: T2SCore.AudioCodec {
                     offsetBoxes.append(box)
                 } else if containerTypes.contains(box.type) {
                     walk((box.offset + box.headerSize)..<(box.offset + box.size))
-                } else if box.type == "meta" {
+                } else if box.type == "meta", box.size >= box.headerSize + 4 {
                     walk((box.offset + box.headerSize + 4)..<(box.offset + box.size))  // meta has a 4-byte version/flags header
                 }
             }

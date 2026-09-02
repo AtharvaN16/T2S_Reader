@@ -59,4 +59,15 @@ import T2SCore
         p.rate = 0.1
         #expect(p.rate == 0.5)
     }
+
+    @Test func rateChangeMidStreamIntegrates() throws {
+        let p = try AudioPlayer(manualRendering: true)
+        p.enqueue(.silence(seconds: 6), tag: 1)
+        p.play()
+        try p.renderOffline(seconds: 1.0)                          // 1.0 s of source at 1x
+        #expect(abs(p.consumedSeconds - 1.0) < 0.05)
+        p.rate = 2.0
+        try p.renderOffline(seconds: 1.0)                          // 2.0 s more of source at 2x
+        #expect(abs(p.consumedSeconds - 3.0) < 0.15)
+    }
 }

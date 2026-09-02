@@ -1,7 +1,7 @@
 # t2s_reader — Design Spec
 
 **Date:** 2026-09-01
-**Revised:** 2026-09-02 (rev 6 — see §11 changelog)
+**Revised:** 2026-09-02 (rev 7 — see §11 changelog)
 **Status:** Draft for review
 **Working name:** t2s_reader (TBD)
 
@@ -95,6 +95,8 @@ pages change and die. See §3.7.
 - Lock screen / Control Center / AirPlay via Now Playing
 - Offline by default — no network needed for any core function
 - Share Extension: send a URL or file from any app
+- In-app import (rev 7): one Add sheet — paste a link, open an EPUB or
+  PDF from Files, or paste text — so nothing depends on the share sheet
 - Voice picker (Kokoro's preset voices), settable globally and per document
 - Pronunciation dictionary — user-editable overrides for names and jargon
 - Prepare on charge — automatic rendering while charging, so later
@@ -210,17 +212,49 @@ between *Queue* and *Finished*.
 
 #### 2.4.5 Screens
 
-**Queue page.** Title with dropdown, "Search" pill top-right. Subtitle:
+**Queue page.** Title with dropdown, a `+` (Add sheet, rev 7) and a
+"Search" pill top-right. Subtitle:
 item count and remaining time (`14 items · ~6h 20m`). Each row: 16pt
 source mark, source name, added-age, and a `positive` check once fully
 rendered; row title; then a pill row — `▶ Play  ~12m` (remaining time;
 becomes `❚❚ Pause` on the playing row), archive pill, overflow. Tap the
 title → Reader page. Tap Play → plays in place. Swipe → Archive. Books
 show `Chapter 4 of 12` in the meta line. Empty state: title, a grey
-paragraph explaining the share sheet, an "Import" pill.
+paragraph explaining the share sheet, an "Import" pill (opens the Add sheet, rev 7).
 
-**Collection page.** Title, `N books` subtitle, `+` button (Files
-import). 3-up cover grid, 16pt radius, thin progress bar under each
+**Add sheet (rev 7).** One sheet, opened from a `+` beside the Queue
+title, the `+` on Collection, and the empty-state "Import" pill. Three
+soft pills stacked full-width, glyph left, label in Row title style:
+**Paste a link**, **Open a file**, **Paste text**. Nothing else on the
+sheet until an option is chosen. Reference: ElevenReader's Import
+screen, reduced to the three source types v1 supports (§2.1); no "Scan
+text" in v1.
+
+*Paste a link* replaces the sheet's body with a URL field, prefilled
+when the clipboard holds a link, and one `accent` "Listen" pill. The
+page is fetched in a hidden web view, Readability.js extracts the
+article, and a preview appears in place — title, site, the first lines
+in Meta style, word count — with "Listen" and "Cancel". This is where
+the §6 "little text" rule lives: a thin extraction is shown, never
+silently imported.
+
+*Open a file* presents the system document picker filtered to EPUB and
+PDF, multiple selection allowed; each file imports in turn with a row
+in the sheet showing its title and state.
+
+*Paste text* shows an optional title field, a text editor, and
+"Listen"; the text becomes an article with no source URL.
+
+**Import outcome.** The document joins the end of the Queue and the
+Reader opens on it with playback started; the prime tier (§3.4.1) has
+its first ~30 s rendering before the Reader has finished appearing.
+When several files import at once only the first opens. Import errors
+(§6: DRM, unreadable, no text, thin extraction) show inline on the
+sheet in `destructive`, never as a system alert. The Share Extension
+(§2.2) reuses the same link and file paths.
+
+**Collection page.** Title, `N books` subtitle, `+` button (opens the
+Add sheet). 3-up cover grid, 16pt radius, thin progress bar under each
 cover. Tap → **book sheet**: large floating cover, title in Player
 style, author, stat row (Chapters · Length `~5h 10m` · Rendered `42%`),
 accent "Play" pill, `+ Add to Queue` / `✓ In Queue` pill, then the
@@ -821,6 +855,14 @@ against a pipeline that is already proven.
 ---
 
 ## 11. Changelog
+
+**rev 7 (2026-09-02)** — in-app import.
+
+- **§2.2, §2.4.5** added the Add sheet: paste a link (hidden web view +
+  Readability.js with an extraction preview), open a file (EPUB/PDF
+  picker), paste text; every import joins the Queue and opens the
+  Reader with playback started. Queue gains a `+`; Collection's `+`
+  and the empty-state pill open the same sheet. Reference: ElevenReader.
 
 **rev 6 (2026-09-02)** — Plan 3 (persistence and ingest).
 

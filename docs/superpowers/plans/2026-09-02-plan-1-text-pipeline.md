@@ -2200,6 +2200,20 @@ import Testing
         data[4] = 0xFF; data[5] = 0xFF
         #expect(throws: TimelineCodec.Error.unsupportedVersion(0xFFFF)) { try TimelineCodec.decode(data) }
     }
+
+    @Test func decodesASliceWithNonZeroStartIndex() throws {
+        let blob = try TimelineCodec.encode(chapter)
+        let packed = Data([0xAA, 0xBB, 0xCC]) + blob
+        let slice = packed[3...]
+        #expect(slice.startIndex == 3)
+        #expect(try TimelineCodec.decode(slice) == chapter)
+    }
+
+    @Test func rejectsCorruptPayload() throws {
+        var data = try TimelineCodec.encode(chapter)
+        data.replaceSubrange(6..., with: Data("not lzfse".utf8))
+        #expect(throws: TimelineCodec.Error.corrupt) { try TimelineCodec.decode(data) }
+    }
 }
 ```
 
@@ -2234,7 +2248,9 @@ public enum TimelineCodec {
         return out
     }
 
-    public static func decode(_ data: Data) throws -> Chapter {
+    public static func decode(_ input: Data) throws -> Chapter {
+        // Rebase: a slice keeps its parent's indices, so absolute subscripts below would trap.
+        let data = Data(input)
         guard data.count >= 6, data.prefix(4) == magic else { throw Error.badMagic }
         let version = UInt16(data[4]) | (UInt16(data[5]) << 8)
         guard version == formatVersion else { throw Error.unsupportedVersion(version) }
@@ -2249,7 +2265,7 @@ public enum TimelineCodec {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test --filter TimelineCodecTests`
-Expected: 4 tests passed.
+Expected: 6 tests passed.
 
 - [ ] **Step 5: Commit**
 

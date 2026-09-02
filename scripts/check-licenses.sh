@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # scripts/check-licenses.sh — fails if any checked-out SPM dependency is copyleft.
+# Scope: SPM checkouts only; a binaryTarget or vendored source must be audited by hand (docs/licenses.md).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 swift package resolve >/dev/null

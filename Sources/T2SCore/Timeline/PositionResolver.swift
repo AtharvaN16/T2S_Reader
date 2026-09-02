@@ -1,8 +1,7 @@
-// Sources/T2SCore/Timeline/PositionResolver.swift
 import Foundation
 
 extension Utterance {
-    var normalized: NormalizedText {
+    public var normalized: NormalizedText {
         NormalizedText(source: source, spoken: spoken, spans: spans)
     }
 
@@ -18,15 +17,20 @@ extension Utterance {
         return duration.seconds * Double(spokenAt) / Double(n)
     }
 
+    /// Spoken UTF-16 offset being spoken at `time` seconds at 1x: the start of the current
+    /// word when timings exist, otherwise character-proportional. The single model shared by
+    /// PositionResolver and Highlighter so a saved position re-highlights the same word.
+    func spokenOffset(atTime time: TimeInterval) -> Int {
+        if let timings = wordTimings, !timings.isEmpty {
+            return timings.last(where: { $0.start <= time })?.spokenRange.lowerBound ?? 0
+        }
+        let fraction = duration.seconds > 0 ? max(0, min(1, time / duration.seconds)) : 0
+        return Int((Double(spoken.utf16.count) * fraction).rounded(.down))
+    }
+
     /// Source UTF-16 offset being spoken at `time` seconds at 1x.
     public func sourceOffset(atTime time: TimeInterval) -> Int {
-        let spokenAt: Int
-        if let timings = wordTimings, !timings.isEmpty {
-            spokenAt = timings.last(where: { $0.start <= time })?.spokenRange.lowerBound ?? 0
-        } else {
-            let fraction = duration.seconds > 0 ? max(0, min(1, time / duration.seconds)) : 0
-            spokenAt = Int((Double(spoken.utf16.count) * fraction).rounded(.down))
-        }
+        let spokenAt = spokenOffset(atTime: time)
         return normalized.sourceRange(forSpoken: spokenAt..<min(spokenAt + 1, spoken.utf16.count)).lowerBound
     }
 }
@@ -56,7 +60,9 @@ public enum PositionResolver {
                 }
                 return Playhead(utteranceIndex: candidates[0].0, offset: 0)
             }
-            let (i, _) = candidates.last(where: { $0.1.position.progression <= p.progression }) ?? candidates[0]
+            let best = candidates.filter { $0.1.position.progression <= p.progression }
+                .map { $0.1.position.progression }.max()
+            let (i, _) = best.flatMap { b in candidates.first(where: { $0.1.position.progression == b }) } ?? candidates[0]
             return Playhead(utteranceIndex: i, offset: 0)
         }
 
@@ -68,6 +74,9 @@ public enum PositionResolver {
     }
 
     public static func position(for ph: Playhead, in t: Timeline) -> Position {
+        guard ph.utteranceIndex >= 0, ph.utteranceIndex < t.utteranceCount else {
+            return t.chapters.first?.position ?? Position(resourceHref: "", progression: 0)
+        }
         let u = t[utterance: ph.utteranceIndex]
         var p = u.position
         p.charOffset = u.position.charOffset.map { $0 + u.sourceOffset(atTime: ph.offset) }

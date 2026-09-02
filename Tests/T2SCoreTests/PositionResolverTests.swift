@@ -1,4 +1,3 @@
-// Tests/T2SCoreTests/PositionResolverTests.swift
 import Testing
 @testable import T2SCore
 
@@ -26,11 +25,41 @@ import Testing
         #expect(ph == Playhead(utteranceIndex: 1, offset: 0))
     }
 
-    @Test func unknownHrefFallsBackToChapterStartNeverDocumentStart() {
+    @Test func knownHrefWithOutOfRangeOffsetSnapsWithinThatChapter() {
         let ph = PositionResolver.resolve(Position(resourceHref: "ch2.xhtml", progression: 0.5, charOffset: 9_999), in: t)
         #expect(ph.utteranceIndex == 2)
+    }
+
+    @Test func unknownHrefFallsBackToFirstChapter() {
         let ph2 = PositionResolver.resolve(Position(resourceHref: "missing.xhtml", progression: 0.5), in: t)
         #expect(ph2 == Playhead(utteranceIndex: 0, offset: 0))
+    }
+
+    @Test func progressionOnlyPicksTheFirstUtteranceOfAParagraph() {
+        let t = makeTimeline([(0..<5).map { makeUtterance("Sentence \($0).", seconds: 1, charOffset: $0 * 12, progression: 0.5) }])
+        #expect(PositionResolver.resolve(Position(resourceHref: "ch1.xhtml", progression: 0.5), in: t) == Playhead(utteranceIndex: 0, offset: 0))
+        #expect(PositionResolver.resolve(Position(resourceHref: "ch1.xhtml", progression: 0.9), in: t) == Playhead(utteranceIndex: 0, offset: 0))
+    }
+
+    @Test func emptyTimelineNeverTraps() {
+        let empty = Timeline(chapters: [Chapter(title: "Blank", position: Position(resourceHref: "x.xhtml", progression: 0), utterances: [])])
+        let ph = PositionResolver.resolve(Position(resourceHref: "x.xhtml", progression: 0.3, charOffset: 5), in: empty)
+        #expect(ph == Playhead(utteranceIndex: 0, offset: 0))
+        #expect(PositionResolver.position(for: ph, in: empty).resourceHref == "x.xhtml")
+        #expect(PositionResolver.position(for: Playhead(utteranceIndex: 99, offset: 0), in: makeTimeline([[makeUtterance("a")]])).resourceHref == "ch1.xhtml")
+    }
+
+    @Test func savedHighlightRestoresToTheSameWordWithoutTimings() {
+        let block = SourceBlock(text: "I understand extraordinarily complicated things.", position: Position(resourceHref: "c.xhtml", progression: 0, charOffset: 0))
+        let t = TimelineBuilder.build(chapters: [ChapterInput(title: "C", position: block.position, blocks: [block])], segmenter: Segmenter(normalizer: TextNormalizer()))
+        let d = t[utterance: 0].duration.seconds
+        for k in 1..<10 {
+            let ph = Playhead(utteranceIndex: 0, offset: d * Double(k) / 10)
+            let before = Highlighter.highlight(at: ph, in: t)?.sourceRange
+            let restored = PositionResolver.resolve(PositionResolver.position(for: ph, in: t), in: t)
+            let after = Highlighter.highlight(at: restored, in: t)?.sourceRange
+            #expect(before == after, "k=\(k)")
+        }
     }
 
     @Test func roundTripsThroughPosition() {

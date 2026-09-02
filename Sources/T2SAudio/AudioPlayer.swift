@@ -28,20 +28,17 @@ public final class AudioPlayer: AudioPlaying {
     /// *current* rate retroactively to the whole span since reset — see `foldManualProgress()`.
     private var manualAccumulatedSourceFrames: Double = 0
     private var generation = 0
-    /// Completions collected on `AVAudioEngine`'s background completion thread and drained on the
-    /// main actor by `renderOffline`. In manual-rendering mode there is no real run loop / app event
-    /// cycle to hop back onto the main actor with (`renderOffline` is the only pump available, and it
-    /// was confirmed empirically to not reliably drain a `Task { @MainActor in ... }` or
-    /// `DispatchQueue.main.async` hop within its drain window in this environment), so `renderOffline`
-    /// drains this queue directly and synchronously, from the main actor, after each render.
-    private final class CompletionQueue: @unchecked Sendable {
-        private let lock = NSLock()
-        private var entries: [(generation: Int, tag: Int)] = []
-        func append(generation: Int, tag: Int) { lock.withLock { entries.append((generation, tag)) } }
-        func drain() -> [(generation: Int, tag: Int)] { lock.withLock { let e = entries; entries.removeAll(); return e } }
-        func removeAll() { lock.withLock { entries.removeAll() } }
-    }
-    private let manualCompletions = CompletionQueue()
+    /// Manual mode only: segments in schedule order with the cumulative source-frame count at
+    /// which each one ends. `deliverManualCompletions()` walks this from the front and fires
+    /// `onSegmentFinished` for every segment whose end has been consumed so far — computed
+    /// directly from the render clock (`manualAccumulatedSourceFrames` /
+    /// `engine.manualRenderingSampleTime`), not observed from AVAudioEngine's completion
+    /// callbacks. The player already knows exactly how many source frames it has consumed, so
+    /// there's no need to wait on a background-thread callback whose delivery relative to
+    /// `renderOffline`'s return is not guaranteed — that race is what made completions land late
+    /// under CPU contention (confirmed empirically: intermittent under concurrent test-suite load,
+    /// never under an isolated run).
+    private var manualSegments: [(tag: Int, endSourceFrames: Double)] = []
     public private(set) var isPlaying = false
     public var onSegmentFinished: ((Int) -> Void)?
 
@@ -102,20 +99,20 @@ public final class AudioPlayer: AudioPlaying {
             }
         }
         scheduledFrames += AVAudioFramePosition(audio.samples.count)
-        let gen = generation
-        // `.dataPlayedBack` fires when the buffer has reached real hardware presentation, which
-        // doesn't exist in offline manual-rendering mode — it never fires there (confirmed
-        // empirically). `.dataRendered` fires once the engine has produced the buffer's output
-        // frames, which is the correct analog of "played" for manual rendering.
-        let completionType: AVAudioPlayerNodeCompletionCallbackType = manual ? .dataRendered : .dataPlayedBack
-        let isManual = manual
-        player.scheduleBuffer(buffer, at: nil, options: [], completionCallbackType: completionType) { [weak self] _ in
-            guard let self else { return }
-            if isManual {
-                self.manualCompletions.append(generation: gen, tag: tag)
-            } else {
+        if manual {
+            // Manual mode computes completions from the render clock in `deliverManualCompletions()`
+            // rather than observing AVAudioEngine's completion callback — see `manualSegments`'s doc
+            // comment. No completion handler is scheduled at all.
+            manualSegments.append((tag: tag, endSourceFrames: Double(scheduledFrames)))
+            player.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)
+        } else {
+            let gen = generation
+            // `.dataPlayedBack` fires when the buffer has reached real hardware presentation — the
+            // correct "played" signal for real playback, where a functioning run loop / app event
+            // cycle services the `Task { @MainActor in ... }` hop below.
+            player.scheduleBuffer(buffer, at: nil, options: [], completionCallbackType: .dataPlayedBack) { [weak self] _ in
                 Task { @MainActor in
-                    guard self.generation == gen else { return }
+                    guard let self, self.generation == gen else { return }
                     self.onSegmentFinished?(tag)
                 }
             }
@@ -138,7 +135,7 @@ public final class AudioPlayer: AudioPlaying {
         scheduledFrames = 0
         if manual { manualBaseline = engine.manualRenderingSampleTime }
         manualAccumulatedSourceFrames = 0
-        manualCompletions.removeAll()
+        manualSegments.removeAll()
         isPlaying = false
     }
 
@@ -153,15 +150,16 @@ public final class AudioPlayer: AudioPlaying {
             guard status == .success || status == .insufficientDataFromInputNode else { break }
             remaining -= n
         }
-        // The completion callback fires asynchronously on a background thread shortly after the
-        // render call returns; give it a moment to land before draining.
-        RunLoop.main.run(until: Date().addingTimeInterval(0.02))
-        drainManualCompletions()
+        deliverManualCompletions()
     }
 
-    private func drainManualCompletions() {
-        for entry in manualCompletions.drain() where entry.generation == generation {
-            onSegmentFinished?(entry.tag)
+    /// Manual mode: fires completions for every leading segment whose end lies at or before the
+    /// source frames consumed so far. Deterministic — no dependency on AVFoundation's callbacks.
+    private func deliverManualCompletions() {
+        let consumed = manualAccumulatedSourceFrames + Double(max(0, engine.manualRenderingSampleTime - manualBaseline)) * rate
+        while let first = manualSegments.first, first.endSourceFrames <= consumed + 0.5 {
+            manualSegments.removeFirst()
+            onSegmentFinished?(first.tag)
         }
     }
 }

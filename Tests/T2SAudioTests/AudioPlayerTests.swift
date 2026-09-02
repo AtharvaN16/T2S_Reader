@@ -70,4 +70,15 @@ import T2SCore
         try p.renderOffline(seconds: 1.0)                          // 2.0 s more of source at 2x
         #expect(abs(p.consumedSeconds - 3.0) < 0.15)
     }
+
+    @Test func completionsAreDeterministicUnderManyTinyRenders() throws {
+        let p = try AudioPlayer(manualRendering: true)
+        var finished: [Int] = []
+        p.onSegmentFinished = { finished.append($0) }
+        for tag in 0..<20 { p.enqueue(.silence(seconds: 0.05), tag: tag) }
+        p.play()
+        for _ in 0..<120 { try p.renderOffline(seconds: 0.01) }    // 1.2 s of output for 1.0 s of audio
+        #expect(finished == Array(0..<20))
+        #expect(abs(p.consumedSeconds - 1.0) < 0.02)
+    }
 }

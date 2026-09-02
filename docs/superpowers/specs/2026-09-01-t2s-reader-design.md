@@ -1,6 +1,7 @@
 # t2s_reader — Design Spec
 
 **Date:** 2026-09-01
+**Revised:** 2026-09-01 (rev 2 — see §11 changelog)
 **Status:** Draft for review
 **Working name:** t2s_reader (TBD)
 
@@ -37,6 +38,9 @@ required for CloudKit, non-expiring builds, and any distribution. A free
 Apple ID cannot ship this app: builds expire after 7 days and iCloud,
 Push, App Groups, and Sign in with Apple are all withheld.
 
+Deferring accounts and a backend is **reversible** — see §3.7.1 for the
+conditions that keep it that way.
+
 ### 1.2 Non-goals
 
 - Licensed audiobook catalog (ElevenReader bundles 200K titles — a
@@ -60,10 +64,16 @@ Push, App Groups, and Sign in with Apple are all withheld.
 |---|---|---|
 | **EPUB** (unencrypted) | Readium Streamer | Full — word-level |
 | **Web article** | Share sheet → Readability.js → minimal EPUB | Full — word-level |
-| **Text PDF** | Readium Streamer + normalizer | Reduced — see §6.4 |
+| **Text PDF** | Readium Streamer + normalizer | Reduced — see §6.1 |
 
 Web articles are converted to a minimal EPUB at import so that everything
 downstream travels a single reflowable code path. PDFs remain PDFs.
+
+**The originally fetched HTML is retained alongside the generated EPUB.**
+Extraction is lossy and irreversible; keeping the source means a future
+Readability upgrade, a decision to preserve images and tables, or a
+conversion bug can all be reprocessed. Source URLs are not a substitute —
+pages change and die. See §3.7.
 
 ### 2.2 Features
 
@@ -101,8 +111,8 @@ downstream travels a single reflowable code path. PDFs remain PDFs.
 want a cover grid with progress rings; saved articles want a dense,
 reorderable queue with auto-advance. Options: two tabs, one filtered list,
 or one primary with the other second-class. Current lean is two tabs. To
-be settled from reference flows before UI work begins; it does not affect
-anything below §5.
+be settled from reference flows before UI work begins; it is confined to
+the UI layer and constrains nothing in §3–§5.
 
 ---
 
@@ -128,7 +138,7 @@ anything below §5.
               │ SynthesisEngine  │  ← protocol
               ├──────────────────┤
               │ KokoroEngine     │  built-in, on-device
-              │ HTTPEngine       │  BYO-key, later
+              │ HTTPEngine       │  BYO-key
               │ FakeEngine       │  tests
               └──────────────────┘
 
@@ -146,74 +156,109 @@ belonging to layers below it.
 
 ```swift
 Document
-  id, title, author, sourceType, sourceURL, coverImage, addedAt
+  id: UUID                      // client-generated, never a backend key
+  title, author, sourceType, sourceURL, coverImage, addedAt
   voiceID?                      // per-document override
-  playhead: Playhead
+  resumePosition: Position      // PERSISTED anchor — see §3.2
 
-Timeline                        // one per Document
+Position                        // our own type; Readium never persisted
+  resourceHref: String
+  progression: Double           // 0…1 within the resource
+  charOffset: Int?              // UTF-16 offset, when known
+  cssSelector: String?
+
+Timeline                        // one per Document, stored per chapter
+  schemaVersion: Int
+  segmenterVersion: Int
   chapters: [Chapter]
-  utterances: [Utterance]       // flat, globally ordered
 
 Chapter
-  title, startUtteranceIndex, locator
+  title, position: Position
+  utterances: [Utterance]       // encoded as one compact blob — see §5
 
 Utterance
-  index: Int                    // stable, global
-  text: String                  // normalized, ready to speak
-  locator: Locator              // Readium position, for highlight + resume
+  index: Int                    // RUNTIME ordinal, not a persisted anchor
+  position: Position            // maps back into the source document
+  source: String                // original text, verbatim
+  spoken: String                // normalized text handed to the engine
+  spans: [SpanMap]              // spoken ↔ source mapping — see §4.1
   audioRef: URL?                // nil until rendered
-  duration: Duration            // .estimated(TimeInterval)
-                                // .actual(TimeInterval)
+  duration: Duration            // .estimated(Double) | .actual(Double)
+                                // ALWAYS at 1x; scaled for display
   wordTimings: [WordTiming]?    // nil until rendered
 
 WordTiming
-  textRange: Range<String.Index>   // into Utterance.text
-  start, end: TimeInterval         // relative to utterance start
+  spokenRange: Range<Int>       // UTF-16 offsets into `spoken`
+  start, end: TimeInterval      // relative to utterance start, at 1x
 
-Playhead
-  utteranceIndex: Int
-  offset: TimeInterval          // within that utterance
+SpanMap
+  sourceRange: Range<Int>       // UTF-16 offsets into `source`
+  spokenRange: Range<Int>       // UTF-16 offsets into `spoken`
 ```
 
-### 3.2 Two decisions that carry the design
+`Range<String.Index>` is deliberately absent — `String.Index` is not
+stable across serialization and cannot be persisted. All ranges are
+integer UTF-16 offsets.
 
-**Decision 1 — the canonical playhead is `(utteranceIndex, offset)`, never
-absolute seconds.**
+### 3.2 Positions: persisted vs runtime
 
-Absolute time is a *derived, display-only* value computed by summing
-preceding durations. Because durations start as estimates and are replaced
-by actuals as audio renders, any absolute-time playhead would silently
-drift as the document renders. Anchoring to utterance index makes drift
-mathematically impossible — resume, seek, and highlight all stay exact,
-and only the scrubber's cosmetic position shifts as estimates firm up.
+**At rest, positions are `Position`. At runtime, positions are
+`(utteranceIndex, offset)`.**
 
-**Decision 2 — the timeline is built in two phases.**
+These serve different jobs and conflating them is a data-corruption
+hazard:
+
+- **`utteranceIndex` is an output of the segmenter.** Improve sentence
+  splitting, fix a normalizer rule, or change chunk size, and every index
+  shifts. If playheads and bookmarks were persisted as indices, a routine
+  app update would silently relocate every user's position mid-book, with
+  the original information unrecoverable.
+- **`Position` is anchored in the document**, so it survives
+  re-segmentation, re-normalization, and engine changes.
+
+On load, the persisted `Position` resolves to `(utteranceIndex, offset)`.
+On save, the runtime pair projects back to a `Position`. A
+`segmenterVersion` mismatch simply forces re-resolution, which is cheap.
+
+**Why the runtime form is still index-anchored:** absolute seconds are a
+*derived, display-only* value computed by summing preceding durations.
+Because durations begin as estimates and are replaced by actuals as audio
+renders, an absolute-time runtime playhead would drift as the document
+renders. Anchoring to the utterance makes that drift impossible.
+
+### 3.3 Two-phase timeline
 
 | Phase | When | Produces | Cost |
 |---|---|---|---|
-| **1. Segment** | At import, whole document | Every utterance, with locator and a *character-count estimate* of duration | ~1–2s for a novel |
+| **1. Segment** | At import, whole document | Every utterance, with `Position` and a *character-count estimate* of duration | ~1–2s for a novel |
 | **2. Render** | Lazily, ahead of playhead | Audio + word timings; estimate → actual | ~0.3s per sentence |
 
 Phase 1 gives a scrubbable timeline and a total duration **before a single
 sample of audio exists**. Phase 2 fills it in. Seeking to an unrendered
 position re-prioritizes the render queue there and begins playback in
-roughly a second, because Kokoro runs ~12x realtime.
+roughly a second, at Kokoro's measured throughput.
 
-This is what lets the app feel like streaming while behaving like a file.
+**Estimates are not cosmetic.** A 10% error on a 12-hour book is 72
+minutes. Until a document is fully rendered, total duration and remaining
+time are displayed as approximate (`~12h`), and the scrubber is drawn with
+an uncertainty treatment past the render frontier.
 
-### 3.3 Render-ahead scheduler
+### 3.4 Render-ahead scheduler
 
-- Maintains a window of **~3 minutes of audio ahead of the playhead**
-- Serial, on a background actor; ANE/GPU-bound work never touches main
+- Maintains a window measured in **playback-seconds at the current rate**,
+  not wall-clock audio seconds — see §3.6
+- Serial, on a background actor; inference never touches main
 - Seek flushes the queue and re-prioritizes at the new position
-- Backpressure: idles when the window is full — ANE duty cycle lands
-  around **8%**, making battery impact negligible next to the screen
+- Backpressure: idles when the window is full
 - Explicit "render whole document" action for flights, best run on charge
-- Output encoded to **AAC ~32kbps mono 24kHz ≈ 14 MB/hour**; raw PCM would
-  be 172 MB/hour and is never persisted
+- Output encoded to **AAC ~32kbps mono 24kHz ≈ 14 MB/hour**; raw PCM
+  (172 MB/hour) is never persisted
 - LRU eviction against a user-configurable cache cap
+- Concurrency: **one document renders at a time.** Starting playback of a
+  second document preempts the first; the first's completed utterances are
+  retained.
 
-### 3.4 Playback
+### 3.5 Playback
 
 `AVAudioEngine → AVAudioPlayerNode → AVAudioUnitTimePitch → mainMixer`
 
@@ -225,18 +270,66 @@ rate handling across items is awkward. Playhead precision comes from
 with `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter` wired for lock
 screen, Control Center, AirPlay, and later CarPlay.
 
-### 3.5 Highlighting
+### 3.6 Render rate coupling and underrun
 
-Playhead → current utterance → binary search its `wordTimings` → text range
-→ `Locator` → Readium **Decoration**.
+**Playback rate multiplies synthesis load.** At rate `r`, the app consumes
+`r` seconds of audio per wall-clock second, so required throughput is
+`RTF × r`. At the CoreML/ANE figure of `RTF ≈ 0.08`, 1x costs an 8% duty
+cycle but **4x costs 32%**. If the real figure on the shipping runtime is
+`RTF ≈ 0.3` — plausible for the MLX/GPU path in §7.3 on a non-Pro device —
+then **4x demands 120% of realtime and cannot be sustained**.
 
-- Throttled to ~10 Hz; the navigator is a `WKWebView` and will not thank
-  us for more
-- Auto-scroll fires only when the active word leaves the viewport
-- Manual scroll suppresses auto-scroll for ~5s, then a "jump to playing"
-  affordance appears
-- If `wordTimings` are absent (unrendered, or PDF), fall back to
-  utterance-level highlight
+Therefore:
+
+- The render window is denominated in playback-seconds; **changing rate
+  resizes it**, so 3x keeps three times the audio buffered.
+- The engine reports **measured RTF**, updated as a rolling average.
+- Rates whose sustained demand exceeds a safety threshold are **disabled
+  in the UI**, with an explanation, rather than offered and then stuttering.
+- **Underrun policy:** if the playhead reaches the render frontier,
+  playback pauses with a visible "catching up…" state. It does not
+  silently drop rate, and it does not stutter.
+
+**Battery is a measured quantity, not an assumed one.** During background
+listening the screen is off, so synthesis is the *dominant* power draw,
+not a rounding error. §7.3 must produce a real mAh/hour figure at 1x and
+at 3x for each candidate runtime before the runtime is chosen.
+
+### 3.7 Reversibility contract
+
+Decisions here are cheap now and unfixable once user data exists. They are
+requirements, not preferences.
+
+#### 3.7.1 Backend and accounts stay addable
+- **Client-generated `UUID` primary keys.** Never CloudKit record names,
+  never autoincrement. A CloudKit identifier must never *be* a domain ID.
+- **A real `SyncProvider` protocol**, with CloudKit as one implementation.
+  No CloudKit calls outside it.
+- **CloudKit's schema must not shape the domain model.** Domain types plus
+  a mapping layer, so a future server implements the same protocol.
+
+#### 3.7.2 Readium stays swappable
+Readium types — `Locator` above all — are **never persisted and never
+synced**. `Position` (§3.1) is our own, converted at the Readium boundary.
+Readium's `Locator` is already close to this shape, so the adapter is
+thin — but only if written before a year of bookmarks exist in the other
+format. This keeps §7.6 (license, Catalyst reach) a recoverable risk.
+
+#### 3.7.3 Derived data stays re-derivable
+Rendered audio is cache, never truth. Original article HTML is retained
+(§2.1). Source files are never mutated in place. Consequence: changing
+engine, voice, normalizer, or segmenter is always a reprocess, never a
+migration.
+
+#### 3.7.4 Everything persisted carries a version
+`schemaVersion` and `segmenterVersion` on every timeline; a `renderKey`
+on every audio file (§5). Free to add now, painful to retrofit.
+
+#### 3.7.5 License hygiene is a ratchet
+A GPL dependency that becomes load-bearing forecloses **both** App Store
+distribution and the open-source option in §11. Verify Readium and
+MisakiSwift terms before they are load-bearing, and add a dependency
+license check to CI from the first commit.
 
 ---
 
@@ -247,16 +340,16 @@ Share sheet / Files / URL
         │
         ▼
    Importer  ──────────────► EPUB in app container
-        │                    (articles synthesized from Readability output)
+        │                    (+ original HTML retained for articles)
         ▼
    Readium Streamer ───────► Publication
         │
         ▼
-   Segmenter               uses Readium ContentTokenizer + NLTokenizer
-        │                  → [text, locator] per sentence
+   Segmenter               Readium ContentTokenizer + NLTokenizer
+        │                  → [source text, Position] per sentence
         ▼
-   TextNormalizer          numbers, abbreviations, citations, URLs,
-        │                  footnote markers, pronunciation dictionary
+   TextNormalizer          → spoken text + SpanMap[]  (§4.1)
+        │
         ▼
    Timeline (phase 1)      estimated durations · persisted
         │
@@ -266,25 +359,56 @@ Share sheet / Files / URL
         │                                        ▼
         │                                   AAC on disk
         ▼
-   Timeline (phase 2)      actual durations · word timings
+   Timeline (phase 2)      actual durations · word timings on `spoken`
         │
         ▼
-   AudioPlayer ──► playhead ──► Decoration highlight + auto-scroll
+   AudioPlayer ──► playhead ──► project spoken→source ──► highlight
 ```
 
-### 4.1 TextNormalizer
+### 4.1 TextNormalizer and the span mapping
 
-A pipeline of small, independently testable rules applied *before*
-synthesis. Without it the app is unusable; with it, it sounds edited.
+Normalization is what makes the audio listenable, and it is also what
+makes read-along hard. **The engine speaks normalized text; Readium
+highlights the original document.** When `"Dr. Smith"` becomes
+`"Doctor Smith"`, a word timing for "Doctor" has no range in the source —
+and this happens in most sentences of a real book.
 
-- Rejoin words hyphenated across line breaks
-- Strip repeated headers/footers and page numbers (PDF: detect lines
-  recurring at the same Y across many pages)
-- Drop or defer footnote markers and inline citations — `[14]` must not
-  become "bracket fourteen"
-- Expand abbreviations, ordinals, numerals, units, currency
-- Collapse URLs to a readable form
-- Apply the user's pronunciation dictionary last, immediately before G2P
+So normalizer rules are **not** independent string transforms. Each rule
+consumes and produces a text-plus-mapping value:
+
+```swift
+struct NormalizedText {
+  let source: String        // never mutated
+  var spoken: String        // current normalized form
+  var spans: [SpanMap]      // spoken ranges ↔ source ranges
+}
+
+protocol NormalizerRule {
+  func apply(_ input: NormalizedText) -> NormalizedText
+}
+```
+
+Rules compose left to right, each updating `spans`. Projection at playback
+time is a binary search: a word timing's `spokenRange` maps to a
+`sourceRange`, which combines with the utterance's `Position` to produce
+the highlight.
+
+Mapping conventions:
+- **Expansion** (`Dr.` → `Doctor`): the whole expanded span maps to the
+  whole source token.
+- **Deletion** (citations, footnote markers): source range maps to an
+  empty spoken range and is skipped during highlighting.
+- **Insertion** with no source (rare): maps to a zero-width source point.
+
+Rules, applied in order:
+1. Rejoin words hyphenated across line breaks
+2. Strip repeated headers/footers and page numbers (PDF: lines recurring
+   at the same Y across many pages)
+3. Drop footnote markers and inline citations — `[14]` must never become
+   "bracket fourteen"
+4. Expand abbreviations, ordinals, numerals, units, currency
+5. Collapse URLs to a readable form
+6. Apply the user's pronunciation dictionary, last, immediately before G2P
 
 ---
 
@@ -292,17 +416,40 @@ synthesis. Without it the app is unusable; with it, it sounds edited.
 
 **Local is the source of truth.**
 
-- `SwiftData` — documents, timelines, playheads, bookmarks, dictionary
-- App container — source files and rendered AAC
-- Rendered audio is **cache, never truth**: evictable and always
-  re-derivable from the source
+- `SwiftData` — documents, chapters, playheads, bookmarks, dictionary
+- App container — source files, retained article HTML, rendered AAC
 
-**Sync is an optional module behind a protocol.** `CloudKit` private
-database syncs documents, playheads, bookmarks, and the pronunciation
-dictionary — **never rendered audio**, which is large, device-specific,
-and cheap to regenerate. The protocol boundary means the app is fully
-functional with sync disabled, and stays buildable on a free Apple ID
-during development.
+**Utterances are stored as one compact encoded blob per chapter**, not as
+individual rows. A 1,000-page book is ~50K utterances; a 100-document
+library would otherwise be millions of rows. Blobs are loaded on demand
+and decoded per chapter.
+
+**Rendered audio is cache, never truth** — evictable and re-derivable. Its
+filename is a `renderKey` hash over:
+
+```
+documentID · utteranceIndex · voiceID · engineID
+           · normalizerVersion · segmenterVersion
+```
+
+This makes staleness structural: **changing voice automatically
+invalidates that document's audio** rather than silently serving the old
+voice. The UI must warn before a voice change discards a large rendered
+cache.
+
+**Sync is an optional module behind `SyncProvider` (§3.7.1).** CloudKit's
+private database syncs documents, positions, bookmarks, and the
+pronunciation dictionary — **never rendered audio**, which is large,
+device-specific, and cheap to regenerate.
+
+**Conflict policy: furthest-position-wins for playheads**, not
+last-write-wins. Two devices listening to the same book must converge on
+the further point; last-write-wins rewinds the user, which reads as data
+loss. Bookmarks and dictionary entries merge as unioned sets keyed by
+UUID. Deletions are tombstoned.
+
+The protocol boundary means the app is fully functional with sync
+disabled, and stays buildable on a free Apple ID during development.
 
 ---
 
@@ -315,7 +462,9 @@ during development.
 | Article extraction yields little text | Show the extraction and let the user accept or cancel before it enters the library. |
 | Synthesis fails for one utterance | Log, insert 200ms silence, continue. One bad sentence must never halt a book. |
 | Model load fails | Fall back to `AVSpeechSynthesizer` with a clear quality notice. |
+| Render frontier reached | Pause with "catching up…" (§3.6). Never stutter. |
 | Disk full | Pause rendering, evict LRU, surface the storage manager. |
+| Position fails to resolve after re-segmentation | Fall back to chapter start; never to document start. |
 | Playhead past end of timeline | Clamp; mark document finished. |
 
 ### 6.1 PDF read-along caveat
@@ -341,18 +490,27 @@ coverage degrades to espeak. *Spike: verify MisakiSwift's coverage and
 quality against reference Misaki output.*
 
 ### 7.2 Background compute under the `audio` background mode — BLOCKING
-The whole render-ahead design assumes iOS permits sustained ANE/GPU
-inference while backgrounded under the `audio` capability. Believed true —
-the app is legitimately playing audio — but unverified, and if false the
-architecture must change to render-whole-document-on-import.
+The render-ahead design assumes iOS permits sustained ANE/GPU inference
+while backgrounded under the `audio` capability. Believed true — the app
+is legitimately playing audio — but unverified.
 **Spike this first: ~2 hours, before any other code.**
+
+**If it is false, this is not a tweak — it is a different product.**
+Screen-off listening would only work from *already rendered* audio, so:
+- Import would have to render the whole document up front — roughly an
+  hour of compute and ~170 MB for a 12-hour book — before first listen
+- Render-ahead would run only while the app is foregrounded
+- The library would need an explicit, visible "prepared for offline" state
+- The two-phase timeline (§3.3) survives; the scheduler (§3.4) does not
+
+That fallback must be costed before committing, not discovered later.
 
 ### 7.3 Kokoro runtime: MLX (GPU) vs CoreML (ANE)
 `kokoro-ios` uses **MLX Swift**, which runs on the Metal **GPU**, not the
-**ANE**. The 0.08 RTF figure quoted for iPhone 16 Pro is a CoreML/ANE
+**ANE**. The `0.08` RTF figure quoted for iPhone 16 Pro is a CoreML/ANE
 number. GPU inference draws more power and competes with UI rendering.
-*Spike: benchmark both paths on device for RTF, sustained thermals, and
-resident memory.*
+*Spike: benchmark both paths on device for RTF, sustained thermals,
+resident memory, and **mAh/hour at 1x and 3x** (§3.6).*
 
 ### 7.4 Word timings must survive the chosen runtime
 Alignments come from Kokoro's `duration_proj`. The
@@ -369,9 +527,10 @@ quoted as if comparable. iOS jetsam does not care which. *Spike: measure
 resident memory on a non-Pro device.*
 
 ### 7.6 Readium license and platform reach
-Believed BSD-3, which is compatible with both App Store distribution and
-open-sourcing — **verify before committing**, as the whole reader shell
-rests on it. Catalyst/macOS support is unverified and deferred.
+Believed BSD-3, compatible with both App Store distribution and
+open-sourcing — **verify before it is load-bearing** (§3.7.5).
+Catalyst/macOS support is unverified and deferred. §3.7.2 keeps this
+recoverable rather than terminal.
 
 ---
 
@@ -384,12 +543,14 @@ deterministic and fast to test, with no model and no audio hardware.
 
 | Layer | Approach |
 |---|---|
-| TextNormalizer | Table-driven: input → expected spoken form. Every rule isolated. |
-| Segmenter | Golden tests over real EPUBs; assert locator round-trip stability |
+| TextNormalizer | Table-driven: input → expected spoken form, every rule isolated. **Plus: every spoken range projects back to a non-empty source range** |
+| Segmenter | Golden tests over real EPUBs; `Position` round-trip stability |
+| Re-segmentation | Change `segmenterVersion`, assert every persisted `Position` still resolves within tolerance |
 | Timeline | Property tests: seek round-trips; replacing an estimate with an actual never moves the playhead |
-| RenderScheduler | Fake engine + virtual clock: window invariants, seek flush, backpressure |
+| RenderScheduler | Fake engine + virtual clock: window invariants, seek flush, backpressure, **rate-change resizing and underrun** |
 | Player | Fake engine: verify playhead against known silence durations |
-| Highlight | Given a playhead, assert the exact decorated range |
+| Highlight | Given a playhead, assert the exact decorated **source** range |
+| Sync | Two simulated devices: assert furthest-position-wins, tombstones, merges |
 | Kokoro | Snapshot **phonemes**, not audio — audio is not bit-reproducible |
 | End-to-end | A short real EPUB through the full pipeline on device |
 
@@ -397,17 +558,18 @@ deterministic and fast to test, with no model and no audio hardware.
 
 ## 9. Build order
 
-1. **Spike §7.2** (background compute) — blocks everything
-2. **Spikes §7.3–7.5** (runtime, timings, memory) — picks the engine
-3. Ingest + Segmenter + TextNormalizer, with golden tests
-4. Timeline + TimelineStore, with `FakeEngine`
+1. **Spike §7.2** (background compute) — blocks everything, incl. whether
+   §3.4 exists at all
+2. **Spikes §7.3–7.5** (runtime, timings, memory, battery) — picks the engine
+3. Ingest + Segmenter + TextNormalizer **with span mapping**, golden tests
+4. Timeline + TimelineStore + `Position` resolution, with `FakeEngine`
 5. RenderScheduler + AudioPlayer — audio-only, no UI polish
 6. Readium reader view + Decoration highlighting + auto-scroll
 7. KokoroEngine, replacing `FakeEngine`
 8. Library UI (**resolve §2.3 first**), Share Extension, player chrome
-9. Now Playing, sleep timer, speed, pronunciation dictionary, BYO-key
-   HTTP engine
-10. CloudKit sync
+9. Now Playing, sleep timer, speed + rate coupling, pronunciation
+   dictionary, BYO-key HTTP engine
+10. CloudKit sync behind `SyncProvider`
 11. Live Activity, App Intents, Spotlight
 12. v1.1: CarPlay, Mac
 
@@ -421,6 +583,31 @@ against a pipeline that is already proven.
 1. **Library organization** (§2.3) — two tabs, or one list? Deferred to
    reference-flow review.
 2. **App name.**
-3. **Distribution** — App Store one-time fee, open source, or both.
-   Affects nothing above, but the license choice must be compatible with
-   Readium, Kokoro, and MisakiSwift.
+3. **Distribution** — App Store one-time fee, open source, or both. The
+   license choice must be compatible with Readium, Kokoro, and MisakiSwift
+   (§3.7.5).
+
+---
+
+## 11. Changelog
+
+**rev 2 (2026-09-01)** — review pass. Substantive changes:
+
+- **§4.1** rewritten: normalizer now carries a `SpanMap` so word timings on
+  normalized text project back to source ranges. As previously specified,
+  read-along would have broken on most sentences.
+- **§3.2** split: `Position` is persisted, `(utteranceIndex, offset)` is
+  runtime-only. Previously a segmenter improvement would have silently
+  relocated every user's playhead.
+- **§3.6** added: playback rate multiplies synthesis load; window is
+  denominated in playback-seconds; explicit underrun policy; battery
+  reclassified from assumed-negligible to measured.
+- **§3.7** added: reversibility contract (backend addable, Readium
+  swappable, derived data re-derivable, versioning, license hygiene).
+- **§3.1** ranges changed to integer UTF-16 offsets — `String.Index` is
+  not persistable.
+- **§5** added: per-chapter utterance blobs, `renderKey` cache
+  invalidation on voice change, furthest-position-wins conflict policy.
+- **§7.2** fallback architecture spelled out rather than hand-waved.
+- **§2.1** original article HTML now retained; dead cross-reference in the content table fixed.
+- **§3.3** duration estimates reclassified as user-visible, not cosmetic.

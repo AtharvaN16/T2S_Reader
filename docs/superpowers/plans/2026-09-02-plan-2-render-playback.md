@@ -1380,6 +1380,19 @@ import Testing
         RenderRequest(job: RenderJob(documentID: doc, utteranceIndex: i, tier: .playAhead), key: key(i), spoken: spoken, voiceID: "v")
     }
 
+    /// Encodes successfully except for the very first call, which throws.
+    final class ThrowOnceCodec: AudioCodec, @unchecked Sendable {
+        let identifier = "throw-once"
+        private var calls = 0
+        private let inner = RawPCMCodec()
+        func encode(_ pcm: PCMAudio) throws -> Data {
+            calls += 1
+            if calls == 1 { throw AudioCodecError.malformed }
+            return try inner.encode(pcm)
+        }
+        func decode(_ data: Data) throws -> PCMAudio { try inner.decode(data) }
+    }
+
     /// Collects events until `.idle` has been seen `idles` times.
     func collect(_ s: RenderScheduler, idles: Int = 1) async -> [RenderEvent] {
         var out: [RenderEvent] = []
@@ -1446,6 +1459,18 @@ import Testing
         #expect(got[0] == .failed(documentID: doc, utteranceIndex: 0, message: "failed(\"boom\")"))
         #expect(got[1] == .rendered(RenderedUtterance(documentID: doc, utteranceIndex: 0, key: key(0), duration: 0.2, wordTimings: [])))
         if case .rendered(let r) = got[2] { #expect(r.utteranceIndex == 1 && r.duration == 0.2) } else { Issue.record("expected rendered 1") }
+        #expect(try await store.read(key(0))?.duration == 0.2)
+    }
+
+    @Test func writeFailureFallsBackToSilence() async throws {
+        let store = InMemoryAudioStore(codec: ThrowOnceCodec(), capacityBytes: 10_000_000)
+        let s = RenderScheduler(engine: FakeEngine(secondsPerCharacter: 0.1), store: store, timeSource: ManualTimeSource())
+        async let events = collect(s)
+        await s.setPlan([request(0, "abc")])
+        let got = await events
+        #expect(got.count == 3)
+        if case .failed(_, let i, _) = got[0] { #expect(i == 0) } else { Issue.record("expected .failed first") }
+        #expect(got[1] == .rendered(RenderedUtterance(documentID: doc, utteranceIndex: 0, key: key(0), duration: 0.2, wordTimings: [])))
         #expect(try await store.read(key(0))?.duration == 0.2)
     }
 
@@ -1522,7 +1547,8 @@ public struct RenderedUtterance: Hashable, Sendable {
 
 public enum RenderEvent: Hashable, Sendable {
     case rendered(RenderedUtterance)
-    /// Spec §6: logged; 200 ms of silence was stored under the key and a `.rendered` follows.
+    /// Spec §6: logged; 200 ms of silence is stored under the key and a `.rendered` follows,
+    /// unless storing the silence itself failed, in which case nothing follows.
     case failed(documentID: UUID, utteranceIndex: Int, message: String)
     /// Spec §6: the store refused the entry; rendering pauses until `resume()`.
     case storeFull
@@ -1562,12 +1588,11 @@ public actor RenderScheduler {
 
     /// Replaces all pending work. The request in flight, if any, finishes and is stored.
     public func setPlan(_ requests: [RenderRequest]) {
-        pending = requests
         if isPausedForStorage {
-            pending.removeAll()
             continuation.yield(.idle)                              // never leave a waiter hanging while paused
             return
         }
+        pending = requests
         if !running {
             running = true
             Task { await self.run() }
@@ -1600,8 +1625,16 @@ public actor RenderScheduler {
                 continuation.yield(.storeFull)
                 break
             } catch {
+                // Encoding or I/O failed for this clip: log it and fall back to the failure silence
+                // so the utterance still arrives (spec §6). Only if that write fails too does a
+                // bare `.failed` go out with no `.rendered` behind it.
                 continuation.yield(.failed(documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, message: "\(error)"))
-                continue
+                result = SynthesisResult(audio: .silence(seconds: Self.failureSilenceSeconds), wordTimings: [])
+                do {
+                    try await store.write(result.audio, for: request.key)
+                } catch {
+                    continue
+                }
             }
             continuation.yield(.rendered(RenderedUtterance(
                 documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, key: request.key,
@@ -1621,7 +1654,7 @@ public actor RenderScheduler {
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `swift test --filter RenderSchedulerTests`
-Expected: 6 tests passed. The `.idle` after `.storeFull` comes from the loop exiting. `hold()` on the engine is what makes `setPlanFlushesPendingWork` deterministic: the first request is parked inside `synthesize` when the second plan arrives. Note `while held { await ... }` in `FakeEngine` parks before `requests.append`, so the test waits for `requests` to be non-empty only after `release()`… which would deadlock — so the scheduler test instead waits on `s.pending.count == 2` (the scheduler removed request 0 from `pending` before calling the engine). Use that condition: `while await s.pending.count != 2 { await Task.yield() }`.
+Expected: 7 tests passed. The `.idle` after `.storeFull` comes from the loop exiting. `hold()` on the engine is what makes `setPlanFlushesPendingWork` deterministic: the first request is parked inside `synthesize` when the second plan arrives. Note `while held { await ... }` in `FakeEngine` parks before `requests.append`, so the test waits for `requests` to be non-empty only after `release()`… which would deadlock — so the scheduler test instead waits on `s.pending.count == 2` (the scheduler removed request 0 from `pending` before calling the engine). Use that condition: `while await s.pending.count != 2 { await Task.yield() }`.
 
 - [ ] **Step 5: Commit**
 

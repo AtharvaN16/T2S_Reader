@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import Testing
 import T2SCore
 @testable import T2SStore
@@ -175,6 +176,14 @@ import T2SCore
         let reopened = try LibraryStore.onDisk(at: url)
         #expect(try await reopened.document(id: doc.id) == doc)
         #expect(try await reopened.timeline(for: doc.id)?.timeline.utteranceCount == 1)
+    }
+
+    @Test func schemaIsVersioned() async throws {
+        #expect(LibrarySchemaV1.versionIdentifier == Schema.Version(1, 0, 0))
+        let store = try LibraryStore.inMemory()
+        let doc = makeDocument()
+        try await store.insert(doc, timeline: makeTimeline([[makeUtterance("One.")]]))
+        #expect(try await store.document(id: doc.id) == doc)
     }
 
     @Test func summariesNewestFirst() async throws {

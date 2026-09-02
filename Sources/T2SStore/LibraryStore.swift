@@ -53,7 +53,7 @@ public enum LibraryStoreError: Error, Equatable, Sendable {
 /// see value types.
 @ModelActor
 public actor LibraryStore {
-    static let schema = Schema([StoredDocument.self, StoredChapter.self, StoredBookmark.self, StoredPronunciation.self])
+    static let schema = Schema(versionedSchema: LibrarySchemaV1.self)
 
     /// SwiftData crashes intermittently when several containers are created at once (Swift Testing
     /// runs suites in parallel and each test opens its own store). Creation is rare and cheap, so
@@ -63,14 +63,18 @@ public actor LibraryStore {
     /// A throwaway store for tests and previews.
     public static func inMemory() throws -> LibraryStore {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        return LibraryStore(modelContainer: try containerLock.withLock { try ModelContainer(for: schema, configurations: config) })
+        return LibraryStore(modelContainer: try containerLock.withLock {
+            try ModelContainer(for: schema, migrationPlan: LibraryMigrationPlan.self, configurations: config)
+        })
     }
 
     /// The app's store at `url` (`LibraryPaths.databaseURL`). Creates the parent directory.
     public static func onDisk(at url: URL) throws -> LibraryStore {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let config = ModelConfiguration(url: url)
-        return LibraryStore(modelContainer: try containerLock.withLock { try ModelContainer(for: schema, configurations: config) })
+        return LibraryStore(modelContainer: try containerLock.withLock {
+            try ModelContainer(for: schema, migrationPlan: LibraryMigrationPlan.self, configurations: config)
+        })
     }
 
     // MARK: Documents

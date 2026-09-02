@@ -191,6 +191,7 @@ public actor LibraryStore {
         } else if row.queueOrder == nil {
             row.queueOrder = (try queueRows().last?.queueOrder ?? -1) + 1
         }
+        try renumberQueue()
         row.updatedAt = Date()
         try modelContext.save()
     }

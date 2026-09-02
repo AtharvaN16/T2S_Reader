@@ -95,19 +95,22 @@ import T2SCore
 
     @Test func finishLeavesTheQueueAndUnfinishReturnsToTheEnd() async throws {
         let store = try LibraryStore.inMemory()
-        let a = makeDocument("a"), b = makeDocument("b")
-        for d in [a, b] {
+        let a = makeDocument("a"), b = makeDocument("b"), c = makeDocument("c")
+        for d in [a, b, c] {
             try await store.insert(d, timeline: makeTimeline([[makeUtterance("x")]]))
             try await store.setQueued(d.id, true)
         }
         try await store.finish(a.id, true)
-        #expect(try await store.queue().map(\.id) == [b.id])
+        #expect(try await store.queue().map(\.id) == [b.id, c.id])
         #expect(try await store.summary(id: a.id)?.isFinished == true)
+        #expect(try await store.summary(id: b.id)?.queueOrder == 0)
+        #expect(try await store.summary(id: c.id)?.queueOrder == 1)
         try await store.finish(a.id, false)
-        #expect(try await store.queue().map(\.id) == [b.id, a.id])
+        #expect(try await store.queue().map(\.id) == [b.id, c.id, a.id])
         #expect(try await store.summary(id: a.id)?.isFinished == false)
+        #expect(try await store.summary(id: a.id)?.queueOrder == 2)
         try await store.finish(a.id, false)                                   // idempotent
-        #expect(try await store.queue().map(\.id) == [b.id, a.id])
+        #expect(try await store.queue().map(\.id) == [b.id, c.id, a.id])
     }
 
     @Test func collectionHoldsBooksOnly() async throws {

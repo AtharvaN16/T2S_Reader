@@ -1,7 +1,7 @@
 # t2s_reader — Design Spec
 
 **Date:** 2026-09-01
-**Revised:** 2026-09-02 (rev 4 — see §11 changelog)
+**Revised:** 2026-09-02 (rev 5 — see §11 changelog)
 **Status:** Draft for review
 **Working name:** t2s_reader (TBD)
 
@@ -613,8 +613,9 @@ Rules, applied in order:
    at the same Y across many pages)
 3. Drop footnote markers and inline citations — `[14]` must never become
    "bracket fourteen"
-4. Expand abbreviations, ordinals, numerals, units, currency
-5. Collapse URLs to a readable form
+4. Collapse URLs to a readable form — before any numeral expansion, or a
+   URL containing digits (`/2024/05/…`, a DOI) is destroyed
+5. Expand abbreviations, ordinals, numerals, units, currency
 6. Apply the user's pronunciation dictionary, last, immediately before G2P
 
 ---
@@ -809,6 +810,12 @@ against a pipeline that is already proven.
 ---
 
 ## 11. Changelog
+
+**rev 5 (2026-09-02)** — Plan 1 final review.
+
+- **§4.1** rule order: URLs collapse before numerals expand. Found by the
+  whole-branch review of Plan 1: with numbers first, any URL containing
+  digits was mangled.
 
 **rev 4 (2026-09-02)** — render policy pass.
 

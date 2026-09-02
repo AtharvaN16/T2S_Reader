@@ -35,4 +35,17 @@ import Testing
         let out = RepeatedLineFilter.filter(pages: [["  12  ", "text", "Page 3 of 9", "page 4"]])
         #expect(out == [["text"]])
     }
+
+    @Test func masksDigitsSoVaryingHeadersAndFootersRecur() {
+        let pages = (1...5).map { n in ["Chapter \(n) — A Study", "Body \(words[n - 1]).", "More \(words[n - 1]).", "Page \(n) of 5"] }
+        let out = RepeatedLineFilter.filter(pages: pages)
+        #expect(out[2] == ["Body gamma.", "More gamma."])
+    }
+
+    @Test func edgeWindowShrinksOnShortPages() {
+        // 6-line pages: e = min(2, max(1, 6 / 4)) = 1, so only indices 0 and 5 are edges.
+        let pages = (1...4).map { n in ["Header", "Once upon a time.", "Body \(words[n - 1]).", "More \(words[n - 1]).", "End \(words[n - 1]).", "Footer"] }
+        let out = RepeatedLineFilter.filter(pages: pages)
+        #expect(out[0] == ["Once upon a time.", "Body alpha.", "More alpha.", "End alpha."])
+    }
 }

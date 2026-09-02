@@ -9,17 +9,19 @@ public enum RepeatedLineFilter {
     public static func filter(pages: [[String]], minPages: Int = 3, edge: Int = 2) -> [[String]] {
         var pagesSeen: [String: Set<Int>] = [:]
         for (p, lines) in pages.enumerated() {
-            let edgeLines = Array(lines.prefix(edge)) + Array(lines.suffix(edge))
+            let e = min(edge, max(1, lines.count / 4))
+            let edgeLines = Array(lines.prefix(e)) + Array(lines.suffix(e))
             for line in edgeLines {
                 pagesSeen[mask(line), default: []].insert(p)
             }
         }
         let recurring = Set(pagesSeen.filter { $0.value.count >= minPages }.keys)
 
-        return pages.enumerated().map { p, lines in
-            lines.enumerated().compactMap { i, line in
+        return pages.map { lines in
+            let e = min(edge, max(1, lines.count / 4))
+            return lines.enumerated().compactMap { i, line in
                 if isPageNumber(line) { return nil }
-                let atEdge = i < edge || i >= lines.count - edge
+                let atEdge = i < e || i >= lines.count - e
                 if atEdge && recurring.contains(mask(line)) { return nil }
                 return line
             }

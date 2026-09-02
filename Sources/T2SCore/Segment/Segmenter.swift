@@ -4,7 +4,7 @@ import NaturalLanguage
 public struct Segmenter: Sendable {
     public static let version = Versions.segmenter
     /// Sentences longer than this (UTF-16 units of source) split at clause boundaries.
-    public var maxUtteranceLength: Int
+    public private(set) var maxUtteranceLength: Int
     public var normalizer: TextNormalizer
 
     public init(normalizer: TextNormalizer, maxUtteranceLength: Int = 300) {

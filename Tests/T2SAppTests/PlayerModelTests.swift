@@ -98,4 +98,17 @@ import T2SStore
         await player.load(summary, play: false)
         #expect(player.renderError == nil)
     }
+
+    @Test func addBookmarkStoresTheCurrentPosition() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let player = try makePlayer(f)
+        #expect(await player.addBookmark() == false)                       // nothing loaded
+        await player.load(try #require(try await f.store.summary(id: id)), play: false)
+        await player.seek(toChapter: 1)
+        #expect(await player.addBookmark())
+        let bookmarks = try await f.store.bookmarks(for: id)
+        #expect(bookmarks.count == 1)
+        #expect(bookmarks[0].position.resourceHref == "OEBPS/ch2.xhtml")
+    }
 }

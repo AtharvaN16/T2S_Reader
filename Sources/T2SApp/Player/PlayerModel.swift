@@ -118,6 +118,19 @@ public final class PlayerModel {
 
     public func renderWholeDocument() { coordinator.renderWholeDocument() }
 
+    /// A bookmark at the playhead, persisted as a `Position` (spec §3.2). False when nothing is loaded.
+    public func addBookmark() async -> Bool {
+        guard let current, let timeline = coordinator.timeline, timeline.utteranceCount > 0 else { return false }
+        let position = PositionResolver.position(for: coordinator.playhead, in: timeline)
+        do {
+            try await library.store.add(Bookmark(documentID: current.id, position: position))
+            return true
+        } catch {
+            localError = "\(error)"
+            return false
+        }
+    }
+
     /// Drive from a 10 Hz timer while playing (spec §3: the coordinator polls the player clock).
     public func tick() {
         coordinator.tick()

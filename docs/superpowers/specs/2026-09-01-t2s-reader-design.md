@@ -1,7 +1,7 @@
 # t2s_reader — Design Spec
 
 **Date:** 2026-09-01
-**Revised:** 2026-09-02 (rev 3 — see §11 changelog)
+**Revised:** 2026-09-02 (rev 4 — see §11 changelog)
 **Status:** Draft for review
 **Working name:** t2s_reader (TBD)
 
@@ -19,10 +19,12 @@ synthesizes **on-device, unlimited, offline, for free** — permanently.
 
 ### 1.1 The defining constraint
 
-**The app must cost its author nothing to run, at any number of users.**
+**For v1, the app must cost its author nothing to run.**
 
-This is not a preference; it is the axis the entire architecture turns on.
-Its consequences:
+This is an MVP built to validate the concept. Accounts and a backend may
+follow, and §3.7.1 exists so that adding them later is an addition, not
+a rewrite. Until then the constraint is not a preference; it is the axis
+the v1 architecture turns on. Its consequences:
 
 - **No backend.** No servers, no accounts, no queue workers, no object store.
 - **No hosted inference on the author's dime.** Synthesis runs on the
@@ -88,6 +90,8 @@ pages change and die. See §3.7.
 - Share Extension: send a URL or file from any app
 - Voice picker (Kokoro's preset voices), settable globally and per document
 - Pronunciation dictionary — user-editable overrides for names and jargon
+- Prepare on charge — automatic rendering while charging, so later
+  listening costs no battery (§3.4.1)
 
 **Should have**
 - Bookmarks and highlights (Readium supports these cheaply)
@@ -254,7 +258,8 @@ grey subtitle, and a right-aligned control: **Voice** (default voice →
 voice list with preview), **Playback** (skip intervals, default speed,
 autoplay next), **Reading** (text size, line height, theme
 System / Light / Dark), **Pronunciation** (→ dictionary list),
-**Storage** (cache size, cap, "Render on charge" toggle, evict),
+**Storage** (prepare-on-charge budget 1 h · 3 h · 8 h · Everything,
+prepared amount and last run, cache size and cap, evict),
 **Cloud voices** (BYO key), **iCloud sync** toggle, links.
 
 **Voice-change warning** (§5): a sheet stating how much rendered audio
@@ -395,14 +400,70 @@ an uncertainty treatment past the render frontier.
   not wall-clock audio seconds — see §3.6
 - Serial, on a background actor; inference never touches main
 - Seek flushes the queue and re-prioritizes at the new position
-- Backpressure: idles when the window is full
-- Explicit "render whole document" action for flights, best run on charge
+- Backpressure: idles when no job is eligible (§3.4.1)
 - Output encoded to **AAC ~32kbps mono 24kHz ≈ 14 MB/hour**; raw PCM
   (172 MB/hour) is never persisted
 - LRU eviction against a user-configurable cache cap
 - Concurrency: **one document renders at a time.** Starting playback of a
   second document preempts the first; the first's completed utterances are
   retained.
+
+#### 3.4.1 Render policy: tiers
+
+The scheduler executes jobs; a `RenderPolicy` decides which jobs exist
+and in what order. It is a pure function of library state, playback
+state, and device state (charging, thermal, Low Power Mode, cache
+headroom), so it is table-testable (§8). Jobs are addressed at utterance
+granularity, so a job interrupted at any point loses nothing — every
+finished utterance is already on disk under its `renderKey` (§5).
+
+**Nothing is ever gated on rendering.** Import runs phase 1 only (§3.3).
+Every document is playable at any position the moment it appears in the
+Queue. Tiers exist to make that instant, and to move synthesis onto the
+charger.
+
+| Tier | Job | When | Order |
+|---|---|---|---|
+| 1 **Play-ahead** | The playing document, a window ahead of the playhead sized per §3.6 | Whenever playing | Always first |
+| 2 **Prime** | The first ~30 s of audio of a newly imported document | Immediately on import | After play-ahead |
+| 3 **Prepare** | Continue-document, then queue order, each from its resume position, until the budget is spent | Only while charging | After prime |
+| 4 **Manual** | "Render whole document" | User-initiated, any power state, with a battery note | A prepare job whose budget is the whole document |
+
+Prime costs 3–10 s of inference at the RTFs in §3.6 and makes the first
+tap play with no spin-up at all.
+
+**Prepare priority order.**
+1. *Continue:* the last-played document, from its resume position.
+2. *Queue order:* each queued document, from its resume position.
+3. Nothing else. New imports already join the queue, so there is no
+   separate "recently added" axis, and there are no favorites.
+
+**Prepare budget.** Denominated in **playback-minutes**, not wall-clock,
+consistent with §3.6. Default **3 hours**. Articles render whole; books
+render chapter by chapter until the budget is spent. User-settable under
+Preferences → Storage: 1 h · 3 h · 8 h · Everything. The cache cap (§3.4)
+is a second, independent ceiling.
+
+**Charging is detected in three situations,** and Prepare runs in all
+of them:
+- App in the foreground on external power — unrestricted.
+- App playing in the background under the `audio` mode on external
+  power — the play-ahead window simply extends to the budget.
+- App idle or not running — a `BGProcessingTask` with
+  `requiresExternalPower`. iOS runs it at its own discretion, typically
+  overnight while charging and idle, and may end it at any moment.
+  Runtime is neither guaranteed nor documented. See §7.7.
+
+**Guards.** Prepare stops on unplug, at thermal state `.serious` or
+above, while Low Power Mode is on, and at the cache cap. Play-ahead is
+never preempted by Prepare; the one-document-at-a-time rule in §3.4
+means Prepare yields to playback of any document.
+
+**Visible state.** A row's `positive` check (§2.4.5) means *ready*: the
+document plays with no synthesis and no network — safe for a flight and
+free on battery. Preferences → Storage shows how much of the budget is
+prepared and when Prepare last ran. There is no "processing…" state on
+import.
 
 ### 3.5 Playback
 
@@ -678,6 +739,15 @@ open-sourcing — **verify before it is load-bearing** (§3.7.5).
 Catalyst/macOS support is unverified and deferred. §3.7.2 keeps this
 recoverable rather than terminal.
 
+### 7.7 Idle-time inference under `BGProcessingTask`
+Tier 3 Prepare (§3.4.1) relies on `BGProcessingTask` with
+`requiresExternalPower` to render while the app is idle or not running.
+Unknowns: whether ANE/GPU inference is practical inside the task, how
+long the system typically grants (undocumented), and how reliably it
+runs nightly. *Spike alongside §7.2.* If it proves unusable, Prepare
+still runs in the foreground and during background playback on charge;
+only the idle case is lost, and the product is unchanged.
+
 ---
 
 ## 8. Testing strategy
@@ -694,6 +764,7 @@ deterministic and fast to test, with no model and no audio hardware.
 | Re-segmentation | Change `segmenterVersion`, assert every persisted `Position` still resolves within tolerance |
 | Timeline | Property tests: seek round-trips; replacing an estimate with an actual never moves the playhead |
 | RenderScheduler | Fake engine + virtual clock: window invariants, seek flush, backpressure, **rate-change resizing and underrun** |
+| RenderPolicy | Table-driven: (library, playback, device state) → ordered job list. Charging on/off, thermal, Low Power Mode, budget exhaustion, prime after import, play-ahead never preempted |
 | Player | Fake engine: verify playhead against known silence durations |
 | Highlight | Given a playhead, assert the exact decorated **source** range |
 | Sync | Two simulated devices: assert furthest-position-wins, tombstones, merges |
@@ -704,18 +775,19 @@ deterministic and fast to test, with no model and no audio hardware.
 
 ## 9. Build order
 
-1. **Spike §7.2** (background compute) — blocks everything, incl. whether
-   §3.4 exists at all
+1. **Spike §7.2 and §7.7** (background and idle-time compute) — §7.2
+   blocks everything, incl. whether §3.4 exists at all
 2. **Spikes §7.3–7.5** (runtime, timings, memory, battery) — picks the engine
 3. Ingest + Segmenter + TextNormalizer **with span mapping**, golden tests
 4. Timeline + TimelineStore + `Position` resolution, with `FakeEngine`
-5. RenderScheduler + AudioPlayer — audio-only, no UI polish
+5. RenderScheduler + RenderPolicy tiers (§3.4.1) + AudioPlayer —
+   audio-only, no UI polish
 6. Readium reader view + Decoration highlighting + auto-scroll
 7. KokoroEngine, replacing `FakeEngine`
 8. Queue, Collection, Player, and Reader pages per §2.3–§2.4; Share
    Extension
 9. Now Playing, sleep timer, speed + rate coupling, pronunciation
-   dictionary, BYO-key HTTP engine
+   dictionary, BYO-key HTTP engine, `BGProcessingTask` wiring for Prepare
 10. CloudKit sync behind `SyncProvider`
 11. Live Activity, App Intents, Spotlight
 12. v1.1: CarPlay, Mac
@@ -737,6 +809,15 @@ against a pipeline that is already proven.
 ---
 
 ## 11. Changelog
+
+**rev 4 (2026-09-02)** — render policy pass.
+
+- **§1.1** reframed: the zero-cost constraint is a v1/MVP constraint;
+  accounts and a backend may follow via §3.7.1.
+- **§3.4.1** added: tiered `RenderPolicy` — play-ahead, prime on import,
+  prepare on charge (continue-document then queue order, 3 h default
+  budget in playback-minutes), manual. Nothing is gated on rendering.
+- **§2.2**, **§2.4.5**, **§7.7**, **§8**, **§9** updated to match.
 
 **rev 3 (2026-09-02)** — UI resolution pass.
 

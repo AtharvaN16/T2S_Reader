@@ -25,6 +25,18 @@ struct DetailsSheet: View {
                 row("Rendered", summary.utteranceCount > 0 ? "\(summary.renderedCount * 100 / summary.utteranceCount)%" : "—")
             }
             Spacer()
+            Pill(label: "Reprocess", glyph: "arrow.clockwise", style: .soft) {
+                Task {
+                    _ = try? await env.library.reprocess(summary.id)
+                    if env.player.current?.id == summary.id, let fresh = try? await env.store.summary(id: summary.id) {
+                        await env.player.load(fresh, play: false)
+                    }
+                    await env.libraryModel.refresh()
+                }
+            }
+            Text("Re-reads the file with the current pronunciation dictionary. Rendered audio is discarded.")
+                .typeRole(.meta)
+                .foregroundStyle(Tokens.ink2)
             Pill(label: "Delete from library", glyph: "trash", style: .destructiveSoft) {
                 Task { await env.libraryModel.delete(summary.id); dismiss() }
             }

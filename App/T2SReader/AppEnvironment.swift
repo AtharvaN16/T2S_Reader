@@ -23,6 +23,9 @@ final class AppEnvironment {
     let importModel: ImportModel
     let publications = PublicationCache()
     let preferences: ReaderPreferences
+    let voices: any VoiceCatalog
+    let pronunciation: PronunciationModel
+    let storage: StorageModel
     let readerModel: ReaderModel
     let sleepTimer: SleepTimer
     let continuation: QueueContinuation
@@ -38,6 +41,9 @@ final class AppEnvironment {
         libraryModel = LibraryModel(library: library)
         player = PlayerModel(coordinator: coordinator, library: library)
         preferences = ReaderPreferences()
+        voices = SystemVoiceCatalog()
+        pronunciation = PronunciationModel(store: store)
+        storage = StorageModel(library: library, audioStore: audioStore, player: player, libraryModel: libraryModel)
         readerModel = ReaderModel(player: player)
         sleepTimer = SleepTimer(player: player)
         continuation = QueueContinuation(player: player, library: libraryModel, preferences: preferences)

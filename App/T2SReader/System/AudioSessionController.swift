@@ -11,6 +11,9 @@ import os
 final class AudioSessionController {
     private static let log = Logger(subsystem: "com.t2s.reader", category: "audio")
     private var observers: [NSObjectProtocol] = []
+    /// Voice previews use the same process-owned spoken-audio session as the player, rather than a
+    /// short-lived synthesizer retained by a SwiftUI view.
+    private let previewSynthesizer = AVSpeechSynthesizer()
     /// `.onAppear` can fire more than once for a `WindowGroup`'s root; registering twice would
     /// deliver every notification twice.
     private var started = false
@@ -44,6 +47,15 @@ final class AudioSessionController {
             let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
             if raw == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { MainActor.assumeIsolated { _ = pause() } }
         })
+    }
+
+    func preview(_ utterance: AVSpeechUtterance) {
+        previewSynthesizer.stopSpeaking(at: .immediate)
+        previewSynthesizer.speak(utterance)
+    }
+
+    func stopPreview() {
+        previewSynthesizer.stopSpeaking(at: .immediate)
     }
 
     /// `pause()` is idempotent, so it runs unconditionally; it reports whether it actually stopped

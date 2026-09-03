@@ -80,6 +80,22 @@ import T2SStore
         #expect(player.renderError == nil)
     }
 
+    @Test func destructiveChangePersistsThenReloadsTheCurrentDocument() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let player = try makePlayer(f)
+        await player.load(try #require(try await f.store.summary(id: id)), play: false)
+        await player.coordinator.waitForRenderIdle()
+
+        #expect(await player.performDestructiveChange(for: id) {
+            try await f.library.evictAudio(for: id)
+        })
+
+        #expect(try await f.store.summary(id: id)?.renderedCount == 0)
+        #expect(try await f.store.timeline(for: id)?.timeline[utterance: 0].audioRef == nil)
+        #expect(player.current?.id == id && player.state == .paused)
+    }
+
     @Test func loadingAnotherDocumentPersistsTheFirst() async throws {
         let f = try AppFixtures()
         let a = try await f.importFake(), b = try await f.importFake()

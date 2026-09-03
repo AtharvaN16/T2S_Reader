@@ -1,4 +1,3 @@
-import AVFoundation
 import SwiftUI
 import T2SApp
 
@@ -8,7 +7,6 @@ struct VoiceListPage: View {
     @Environment(AppEnvironment.self) private var env
     var selection: String?
     var onSelect: (VoiceOption) -> Void
-    @State private var synthesizer = AVSpeechSynthesizer()
 
     var body: some View {
         let options = env.voices.voices()
@@ -34,7 +32,7 @@ struct VoiceListPage: View {
                         }
                         .buttonStyle(.plain)
 
-                        Button { SystemVoiceCatalog.preview(option, synthesizer: synthesizer) } label: {
+                        Button { SystemVoiceCatalog.preview(option, through: env.audioSession) } label: {
                             Image(systemName: "play.circle")
                                 .font(.system(size: 20))
                                 .foregroundStyle(Tokens.ink2)
@@ -50,5 +48,6 @@ struct VoiceListPage: View {
         }
         .background(Tokens.ground)
         .navigationBarBackButtonHidden(false)
+        .onDisappear { env.audioSession.stopPreview() }
     }
 }

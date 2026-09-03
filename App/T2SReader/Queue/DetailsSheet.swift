@@ -27,11 +27,11 @@ struct DetailsSheet: View {
             Spacer()
             Pill(label: "Reprocess", glyph: "arrow.clockwise", style: .soft) {
                 Task {
-                    _ = try? await env.library.reprocess(summary.id)
-                    if env.player.current?.id == summary.id, let fresh = try? await env.store.summary(id: summary.id) {
-                        await env.player.load(fresh, play: false)
+                    if await env.player.performDestructiveChange(for: summary.id, {
+                        _ = try await env.library.reprocess(summary.id)
+                    }) {
+                        await env.libraryModel.refresh()
                     }
-                    await env.libraryModel.refresh()
                 }
             }
             Text("Re-reads the file with the current pronunciation dictionary. Rendered audio is discarded.")

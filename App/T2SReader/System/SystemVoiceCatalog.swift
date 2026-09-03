@@ -13,10 +13,9 @@ struct SystemVoiceCatalog: VoiceCatalog {
 
     /// Speaks a short sample through the system synthesizer (the voice list's preview).
     @MainActor
-    static func preview(_ option: VoiceOption, synthesizer: AVSpeechSynthesizer) {
+    static func preview(_ option: VoiceOption, through audioSession: AudioSessionController) {
         let utterance = AVSpeechUtterance(string: "This is how I sound reading your book.")
         utterance.voice = AVSpeechSynthesisVoice(identifier: option.id) ?? AVSpeechSynthesisVoice(language: "en-US")
-        synthesizer.stopSpeaking(at: .immediate)
-        synthesizer.speak(utterance)
+        audioSession.preview(utterance)
     }
 }

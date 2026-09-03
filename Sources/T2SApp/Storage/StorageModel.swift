@@ -79,23 +79,16 @@ public final class StorageModel {
         await refresh()
     }
 
-    /// Plan 3 hand-off: after an eviction, a loaded document is reloaded paused so the player
-    /// never writes stale audio references back to the store.
+    /// A loaded document is reloaded paused after eviction by `PlayerModel`, so it can never write
+    /// stale audio references back to the store.
     public func evict(_ id: UUID) async {
-        let wasCurrent = player.current?.id == id
-        if wasCurrent { await player.persistRenderedChapters() }
-
-        do {
-            try await library.evictAudio(for: id)
+        if await player.performDestructiveChange(for: id, {
+            try await self.library.evictAudio(for: id)
+        }) {
             lastError = nil
-        } catch {
-            lastError = "\(error)"
-            return
+            await refresh()
+        } else {
+            lastError = player.localError
         }
-
-        if wasCurrent, let summary = try? await library.store.summary(id: id) {
-            await player.load(summary, play: false)
-        }
-        await refresh()
     }
 }

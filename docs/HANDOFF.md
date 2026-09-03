@@ -1,6 +1,6 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-03 (after Plan 4b and Plan 5 Tasks 1, 3, and 4 merged). Written for whoever picks up the coding next._
+_Last updated 2026-09-03, evening (playback crash fixed; Plan 0 spikes §7.1 and §7.3/§7.5 recorded; Kokoro direction decided). Written for whoever picks up the coding next._
 
 ## What this is
 
@@ -16,7 +16,7 @@ and commit message per task. The roadmap is
 
 | Branch | State | Notes |
 |---|---|---|
-| `dev` | integration branch, everything below is merged here | Plans 1–4a, Plan 4b Tasks 1–8, and Plan 5 Tasks 1–4 are merged. The latest root-package verification was 291 tests in 66 suites (PR #13); the app builds and launches on the simulator. |
+| `dev` | integration branch, everything below is merged here | Plans 1–4a, Plan 4b Tasks 1–8, Plan 5 Tasks 1–4, the playback crash fix, and the Plan 0 spike findings so far are merged (`499d3fa`). Root package: 293 tests in 68 suites; the app builds, launches, imports an EPUB, and plays it on the simulator and on an iPhone 11 Pro. |
 | `main` | stale: only the initial spec commit | Not used for integration yet; fast-forward it to `dev` when you want a release point. |
 
 Plan branches are short-lived: each plan runs on its own branch off `dev` (locally in a git
@@ -44,7 +44,7 @@ Never commit generated files (`*.xcodeproj`, `App/T2SReader/Info.plist`, `.build
 
 ## Where things are right now
 
-The integration branch is at merge commit `e878767` (PR #12). The completed work is:
+The integration branch is at `499d3fa` (spike findings on top of the PR #14/#15 merges). The completed work is:
 
 - **Plan 4a** is complete.
 - **Plan 4b Tasks 1–8** are merged: PR #2 (Reader models and preferences), PR #3 (pronunciation,
@@ -78,32 +78,41 @@ played in the Reader for 45 s+ on the simulator without incident.
 
 ## What comes after
 
-1. **Finish Plan 4b Task 9 first.** It has not been done: run the manual read-along pass on real
-   hardware, add an EPUB/PDF fixture, and add the planned UI test. Do not call Plan 4b complete
-   until those three deliverables are recorded.
-2. **Verify the Share Extension on a physical device.** Task 2 merged in PR #15; it still needs
-   hardware verification of the share sheet for URL, text, EPUB, and PDF input and the hand-off
-   into the host app.
-3. **Plan 0 spikes (device work) — started 2026-09-03 evening.** The user decided Kokoro is the
-   app's main engine and the spikes are being run to open the Plan 5 Task 5 gate. Done: §7.1
-   (`spikes/findings/2026-09-03-g2p-coverage.md`: licenses permissive, MisakiSwift accepted
-   English-only with two mitigations). Measured on the iPhone 11 Pro
-   (`2026-09-03-runtime-benchmark.md`): **kokoro-ios/MLX cannot run on the A13** — MLX's steel
-   GEMM needs `simdgroup_matrix` (Apple GPU family 7, A14+), so the first `generateAudio` traps;
-   the MLX route therefore has an A14 floor and `KokoroEngine` must probe
-   `supportsFamily(.apple7)` before it is selected. RTF/memory/thermal (§7.3/§7.5) and word
-   timings (§7.4) are pending on Harsh's iPhone 17 Pro, as are §7.2 and §7.7. Decision taken:
-   Kokoro via MLX ships for A14+ once those numbers pass, older phones keep the system voice, and
-   Plan 0 Task 8 (new) spikes an ONNX/CoreML runtime for pre-A14 devices. The harness now runs
-   a fixed-length bench from a `devicectl` launch with no taps (`spikes/README.md` has the exact
-   commands and the signing / free-team / debug-dylib gotchas).
-   [2026-09-02-plan-0-spikes.md](superpowers/plans/2026-09-02-plan-0-spikes.md): the harness under
-   `spikes/SpikeHarness/` (xcodegen) with Kokoro via `kokoro-ios`. Spec §7.2 background compute,
-   §7.7 `BGProcessingTask`, §7.3/§7.5 runtime and memory, §7.4 word-timing accuracy, §7.1 MisakiSwift
-   coverage + the license audit. Findings go in `spikes/findings/`. Kokoro (Plan 5 Task 5) remains
-   gated on accepted findings from every required spike.
-4. **Plan 5 Task 6 and Plan 6** follow the remaining Plan 5 work. Plan 6 is unchanged: CloudKit
-   sync behind `SyncProvider`, Live Activity, App Intents, and Spotlight.
+The product owner decided on 2026-09-03 that Kokoro is the app's main engine (the system voice is
+a placeholder), so the order is now driven by opening the Plan 5 Task 5 gate.
+
+1. **Plan 0 measurements on the iPhone 17 Pro (Harsh).** The plan is
+   [2026-09-02-plan-0-spikes.md](superpowers/plans/2026-09-02-plan-0-spikes.md); the exact no-taps
+   command-line protocol and every tooling gotcha are in `spikes/README.md`. Done so far:
+   - §7.1 (`spikes/findings/2026-09-03-g2p-coverage.md`): all Kokoro-path licences permissive
+     (MisakiSwift is Apache-2.0, not MIT); MisakiSwift accepted as the only G2P, English-only, with
+     two mitigations (join compound numbers with a space in `NumberWords`; heteronyms lack POS).
+   - §7.3/§7.5 on the iPhone 11 Pro (`2026-09-03-runtime-benchmark.md`): **kokoro-ios/MLX cannot
+     run on the A13** — MLX's steel GEMM needs `simdgroup_matrix` (Apple GPU family 7, A14+), so
+     the first `generateAudio` traps. The MLX route has an A14 floor.
+   Pending, all on the 17 Pro: §7.3/§7.5 (one 5-minute run + a 20-minute 3x run), §7.4 (the three
+   WAVs from that run against the CSV `timing` rows), §7.2 (15 minutes screen-off with
+   `SPIKE_BACKGROUND_AUDIO=1`), §7.7 (three overnight runs). Findings go in `spikes/findings/`
+   and a `RESOLVED` line under each spec §7 subsection.
+2. **Plan 5 Task 5 — Kokoro for A14+ devices** (plan section in
+   [2026-09-03-plan-5-engine-share-nowplaying.md](superpowers/plans/2026-09-03-plan-5-engine-share-nowplaying.md)).
+   The parts that do not need the 17 Pro numbers can start now: the package pins (kokoro-ios
+   1.0.11, mlx-swift 0.30.2, MisakiSwift 1.0.6), model/voice acquisition with SHA-256 checks,
+   `KokoroEngine` with the `supportsFamily(.apple7)` probe and the whole-document fallback to
+   `system:<voice>`, the route and voice catalog, and the `NumberWords` spacing fix. The
+   `KokoroRuntimeDecision` constants (measured RTF, the derived rate threshold, memory limits) and
+   the timing-mapper fixture must come from the 17 Pro CSV; do not guess them. Note that MLX needs
+   its Metal library, which `swift test` and the iOS simulator cannot provide: Kokoro code has to
+   live where it can be built and tested with `xcodebuild` on macOS (a separate package like
+   `Packages/T2SReadium`), not in the root package that CI runs with `swift test`.
+3. **Plan 0 Task 8 — a runtime for pre-A14 phones** (the owner's own iPhone 11 Pro): a one-day
+   timeboxed spike on an ONNX Runtime / CoreML Kokoro (sherpa-onnx first), same pass bar as §7.3.
+4. **Plan 4b Task 9 leftovers and hardware checks.** The read-along has passed on the simulator and
+   on the 11 Pro; the EPUB/PDF fixture and the UI test are still not written. Hardware
+   verification of the Share Extension (URL, text, EPUB, PDF), call interruption and AirPods route
+   changes, Lock Screen / Control Center, and `BGProcessingTask` scheduling remain open.
+5. **Plan 5 Task 6 and Plan 6** follow. Plan 6 is unchanged: CloudKit sync behind `SyncProvider`,
+   Live Activity, App Intents, and Spotlight.
 
 ## Known issues and parked items
 
@@ -117,16 +126,19 @@ played in the Reader for 45 s+ on the simulator without incident.
    returns nil, and the app shows "The library could not be opened." Build with ad-hoc signing
    instead (`CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=-`) or run from
    Xcode until the script is updated.
-2. **Physical-device validation remains open:** audio through phone-call interruption and AirPods
+3. **Physical-device validation remains open:** audio through phone-call interruption and AirPods
    route changes; Lock Screen and Control Center controls; and debugger-forced
    `mediaServicesWereReset` recovery. PR #9 verified the software seams, not these hardware paths.
-3. **Background processing remains device-only:** PR #12 verified the runner and visible state on a
+4. **Background processing remains device-only:** PR #12 verified the runner and visible state on a
    simulator, but the simulator rejects the opportunistic request. Validate `BGProcessingTask`
    scheduling and simulated launch while the device is on charge.
-4. **Share Extension remains unverified on hardware:** Task 2 merged in PR #15. Verify the share
+5. **Share Extension remains unverified on hardware:** Task 2 merged in PR #15. Verify the share
    sheet on a physical device for URL, text, EPUB, and PDF input and the hand-off into the host.
-5. **Kokoro is deliberately blocked** until the Plan 0 device spikes establish a viable runtime,
-   timing, memory, G2P, background-compute, and license result.
+6. **Kokoro's gate is half open.** §7.1 is resolved and the MLX route is known to need A14+; the
+   17 Pro numbers (§7.2–§7.5, §7.7) still decide the rate threshold, memory limits, background
+   policy, and whether word timings can drive the highlight. Plan 5 Task 5 may build the engine,
+   probe, route, and fallback now but must not ship guessed constants. The iPhone 11 Pro cannot run
+   this route at all (Plan 0 Task 8).
 
 Other retained review items:
 - Same bug class as the artwork crash, unproven: `MainActor.assumeIsolated` inside the

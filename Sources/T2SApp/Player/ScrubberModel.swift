@@ -18,22 +18,39 @@ public struct ScrubberModel: Hashable, Sendable {
 
     public static func make(timeline: Timeline, timeIndex: TimeIndex, playhead: Playhead, tickCount: Int = 48) -> ScrubberModel {
         let total = timeIndex.totalDuration
-        guard tickCount > 0, total > 0, timeline.utteranceCount > 0 else {
-            return ScrubberModel(tickCount: tickCount, renderedTicks: Array(repeating: false, count: max(0, tickCount)), fraction: 0)
+        let fraction = total > 0 ? min(1, max(0, timeIndex.time(at: playhead) / total)) : 0
+        return ScrubberModel(tickCount: tickCount,
+                             renderedTicks: renderedTicks(timeline: timeline, timeIndex: timeIndex, tickCount: tickCount),
+                             fraction: fraction)
+    }
+
+    /// One flat pass over the chapters in order, with a running start time built from the same
+    /// per-utterance durations `TimeIndex` uses. Deliberately never touches `timeline[utterance:]`
+    /// or `chapterIndex(forUtterance:)`: both are O(chapters) *and* copy the utterance by value, so
+    /// a per-tick lookup costs O(utterances × chapters) with a struct copy each — on the player
+    /// sheet, whose body runs at 10 Hz while playing, that is the whole book ten times a second.
+    /// An utterance with no `audioRef` marks every tick its `[start, end)` overlaps unrendered.
+    public static func renderedTicks(timeline: Timeline, timeIndex: TimeIndex, tickCount: Int = 48) -> [Bool] {
+        let count = max(0, tickCount)
+        let total = timeIndex.totalDuration
+        guard count > 0, total > 0 else { return Array(repeating: false, count: count) }
+        var ticks = Array(repeating: true, count: count)
+        let width = total / Double(count)
+        var start: TimeInterval = 0
+        var index = 0
+        for chapter in timeline.chapters {
+            for u in chapter.utterances.indices {
+                let seconds = index < timeIndex.durations.count ? timeIndex.durations[index] : chapter.utterances[u].duration.seconds
+                let end = start + seconds
+                if chapter.utterances[u].audioRef == nil {
+                    let first = min(count - 1, max(0, Int((start / width).rounded(.down))))
+                    let last = min(count - 1, max(first, Int((end / width).rounded(.up)) - 1))
+                    for t in first...last { ticks[t] = false }
+                }
+                start = end
+                index += 1
+            }
         }
-        var rendered: [Bool] = []
-        rendered.reserveCapacity(tickCount)
-        for i in 0..<tickCount {
-            let start = total * Double(i) / Double(tickCount)
-            let end = total * Double(i + 1) / Double(tickCount)
-            let first = timeIndex.playhead(atTime: start).utteranceIndex
-            // The utterance containing `end` (exclusive): step back from the boundary by a hair.
-            let last = timeIndex.playhead(atTime: max(start, end - 1e-9)).utteranceIndex
-            var ok = true
-            for u in first...max(first, last) where timeline[utterance: u].audioRef == nil { ok = false; break }
-            rendered.append(ok)
-        }
-        let fraction = min(1, max(0, timeIndex.time(at: playhead) / total))
-        return ScrubberModel(tickCount: tickCount, renderedTicks: rendered, fraction: fraction)
+        return ticks
     }
 }

@@ -72,6 +72,18 @@ import T2SCore
         #expect(player.enqueuedTags.prefix(2) == [0, 1])
     }
 
+    @Test func timelineRevisionMovesOnLoadAndOnRender() async throws {
+        let (c, _, engine, _, _, doc, timeline) = fixture()
+        await engine.hold()                             // nothing renders until release
+        let atStart = c.timelineRevision
+        c.load(doc, timeline: timeline)
+        let afterLoad = c.timelineRevision
+        #expect(afterLoad != atStart)
+        await engine.release()
+        await c.waitForRenderIdle()
+        #expect(c.timelineRevision != afterLoad)        // `.rendered` events rewrote the utterances
+    }
+
     @Test func seekResetsPlayerTrimsHeadAndSaves() async throws {
         let (c, player, _, _, saves, doc, timeline) = fixture()
         c.load(doc, timeline: timeline)

@@ -44,6 +44,11 @@ public final class PlayerModel {
     private let library: Library
     /// Hash of each chapter as last written, to skip unchanged chapters on the next persist.
     private var persistedChapterHashes: [Int] = []
+    /// The tick array is O(timeline) and the player sheet's body runs at 10 Hz while playing, so it
+    /// is a cache invalidated by `coordinator.timelineRevision`, not a computed property.
+    /// `@ObservationIgnored`: filling it from `scrubber`'s getter must not invalidate the body that
+    /// is reading it.
+    @ObservationIgnored private var tickCache: (revision: Int, ticks: [Bool])?
 
     public init(coordinator: PlaybackCoordinator, library: Library) {
         self.coordinator = coordinator
@@ -69,8 +74,21 @@ public final class PlayerModel {
     }
 
     public var scrubber: ScrubberModel {
-        guard let timeline = coordinator.timeline else { return ScrubberModel(tickCount: 48, renderedTicks: Array(repeating: false, count: 48), fraction: 0) }
-        return ScrubberModel.make(timeline: timeline, timeIndex: coordinator.timeIndex, playhead: coordinator.playhead)
+        let tickCount = 48
+        guard let timeline = coordinator.timeline else {
+            return ScrubberModel(tickCount: tickCount, renderedTicks: Array(repeating: false, count: tickCount), fraction: 0)
+        }
+        let revision = coordinator.timelineRevision
+        let ticks: [Bool]
+        if let cache = tickCache, cache.revision == revision {
+            ticks = cache.ticks
+        } else {
+            ticks = ScrubberModel.renderedTicks(timeline: timeline, timeIndex: coordinator.timeIndex, tickCount: tickCount)
+            tickCache = (revision, ticks)
+        }
+        let total = coordinator.timeIndex.totalDuration
+        let fraction = total > 0 ? min(1, max(0, coordinator.timeIndex.time(at: coordinator.playhead) / total)) : 0
+        return ScrubberModel(tickCount: tickCount, renderedTicks: ticks, fraction: fraction)
     }
 
     // MARK: Loading

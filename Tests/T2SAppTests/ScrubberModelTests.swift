@@ -32,6 +32,25 @@ import T2SCore
         #expect(m3.renderedTicks == [false, false, false])                  // a 13.3 s tick spans an unrendered utterance
     }
 
+    /// Two chapters, so the one-pass computation has to carry its running start time across a
+    /// chapter boundary rather than restarting it.
+    @Test func renderedTicksMarkAnyTickAnUnrenderedUtteranceOverlaps() {
+        func utterance(_ i: Int, rendered: Bool) -> Utterance {
+            let text = "Utterance \(i)."
+            let n = text.utf16.count
+            return Utterance(position: Position(resourceHref: "a", progression: 0, charOffset: i * 20), source: text, spoken: text,
+                             spans: [SpanMap(sourceRange: 0..<n, spokenRange: 0..<n)], audioRef: rendered ? "k\(i)" : nil,
+                             duration: rendered ? .actual(10) : .estimated(10))
+        }
+        // 40 s over two chapters of two utterances; utterance 2 (20…30 s) has no audio.
+        let first = [utterance(0, rendered: true), utterance(1, rendered: true)]
+        let second = [utterance(2, rendered: false), utterance(3, rendered: true)]
+        let t = Timeline(chapters: [Chapter(title: "1", position: first[0].position, utterances: first),
+                                    Chapter(title: "2", position: second[0].position, utterances: second)])
+        let ticks = ScrubberModel.renderedTicks(timeline: t, timeIndex: TimeIndex(t), tickCount: 8)
+        #expect(ticks == [true, true, true, true, false, false, true, true])
+    }
+
     @Test func emptyTimeline() {
         let t = Timeline(chapters: [])
         let m = ScrubberModel.make(timeline: t, timeIndex: TimeIndex(t), playhead: Playhead(utteranceIndex: 0), tickCount: 5)

@@ -1,5 +1,6 @@
 // App/T2SReader/Root/RootPager.swift
 import SwiftUI
+import UIKit
 
 enum RootPage: Hashable, CaseIterable {
     case collection, queue, preferences
@@ -58,7 +59,21 @@ struct RootPager: View {
         .onChange(of: env.deviceMonitor.deviceState, initial: true) { _, state in env.coordinator.device = state }
         .onChange(of: env.libraryModel.queue.map(\.id), initial: true) { _, ids in env.coordinator.queue = ids }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background { Task { await env.player.persistRenderedChapters() } }
+            if phase == .background { persistUnderBackgroundTask() }
+        }
+    }
+
+    /// iOS can suspend the app as soon as the scene-phase handler returns, which would abandon the
+    /// chapter write mid-flight; a background task buys the time to finish it.
+    private func persistUnderBackgroundTask() {
+        var id = UIBackgroundTaskIdentifier.invalid
+        id = UIApplication.shared.beginBackgroundTask(withName: "persist-chapters") {
+            UIApplication.shared.endBackgroundTask(id)
+            id = .invalid
+        }
+        Task {
+            await env.player.persistRenderedChapters()
+            if id != .invalid { UIApplication.shared.endBackgroundTask(id); id = .invalid }
         }
     }
 }

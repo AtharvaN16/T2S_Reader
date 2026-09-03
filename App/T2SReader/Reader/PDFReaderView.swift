@@ -21,6 +21,7 @@ struct PDFReaderView: UIViewControllerRepresentable {
                 publication: publication, initialLocation: nil, delegate: context.coordinator
             )
             context.coordinator.navigator = navigator
+            context.coordinator.beginFollowingNavigation()
             return navigator
         } catch {
             context.coordinator.report(error)
@@ -41,11 +42,11 @@ struct PDFReaderView: UIViewControllerRepresentable {
                     progression: Double(page) / Double(max(1, count)), position: page + 1
                 )
             )
-            Task { _ = await navigator.go(to: locator, options: NavigatorGoOptions(animated: true)) }
+            context.coordinator.go(navigator, to: locator)
         }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(onTap: onTap, onError: onError) }
+    func makeCoordinator() -> Coordinator { Coordinator(reader: reader, onTap: onTap, onError: onError) }
 
     static func pageCount(in timeline: Timeline) -> Int {
         var progressions: Set<Double> = []
@@ -66,17 +67,29 @@ struct PDFReaderView: UIViewControllerRepresentable {
 
     @MainActor
     final class Coordinator: NSObject, PDFNavigatorDelegate {
+        let reader: ReaderModel
         let onTap: (SourceHit?) -> Void
         let onError: (String) -> Void
         weak var navigator: PDFNavigatorViewController?
         var lastPage: Int?
+        private var programmaticNavigationUntil = Date.distantPast
 
-        init(onTap: @escaping (SourceHit?) -> Void, onError: @escaping (String) -> Void) {
+        init(reader: ReaderModel, onTap: @escaping (SourceHit?) -> Void, onError: @escaping (String) -> Void) {
+            self.reader = reader
             self.onTap = onTap
             self.onError = onError
         }
 
         func report(_ error: Error) { onError("This document can't be displayed: \(error)") }
+
+        func beginFollowingNavigation() {
+            programmaticNavigationUntil = Date().addingTimeInterval(1)
+        }
+
+        func go(_ navigator: PDFNavigatorViewController, to locator: Locator) {
+            beginFollowingNavigation()
+            Task { _ = await navigator.go(to: locator, options: NavigatorGoOptions(animated: true)) }
+        }
 
         func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
             guard let position = self.navigator?.currentLocation?.locations.position else {
@@ -91,7 +104,15 @@ struct PDFReaderView: UIViewControllerRepresentable {
             ))
         }
 
-        func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {}
+        /// A page turn outside the automatic-following window is user navigation. Clearing the
+        /// cached target lets Back to current re-send the active audio page even when it is the
+        /// same page we previously followed.
+        func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
+            if Date() > programmaticNavigationUntil, reader.isFollowing {
+                reader.suspendFollowing()
+                lastPage = nil
+            }
+        }
         func navigator(_ navigator: Navigator, presentError error: NavigatorError) {}
     }
 }

@@ -12,9 +12,6 @@ struct T2SReaderApp: App {
             if let environment {
                 RootPager()
                     .environment(environment)
-                    .onOpenURL { url in
-                        Task { await environment.importModel.importFiles([url]) }
-                    }
                     .onAppear {
                         environment.audioSession.activate(pausing: { environment.coordinator.pause() },
                                                           resuming: { Task { await environment.coordinator.play() } })

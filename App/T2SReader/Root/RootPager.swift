@@ -1,5 +1,6 @@
 // App/T2SReader/Root/RootPager.swift
 import SwiftUI
+import T2SStore
 import UIKit
 
 enum RootPage: Hashable, CaseIterable {
@@ -29,6 +30,11 @@ struct RootPager: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var page: RootPage = .queue
     @State private var showPlayer = false
+    /// A file handed to us by another app (`onOpenURL`), shown through the Add sheet like any other
+    /// import rather than imported invisibly.
+    @State private var openedFiles: [URL]?
+    /// Set by that sheet; opened once it has actually gone.
+    @State private var pendingOpen: DocumentSummary?
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -54,6 +60,11 @@ struct RootPager: View {
                 .presentationCornerRadius(Spacing.sheetCorner)
                 .presentationBackground(Tokens.raised)
         }
+        .onOpenURL { url in openedFiles = [url] }
+        .sheet(isPresented: Binding(get: { openedFiles != nil }, set: { if !$0 { openedFiles = nil } }),
+               onDismiss: openPending) {
+            AddSheet(imported: $pendingOpen, initialFiles: openedFiles ?? [])
+        }
         .playbackTicking(env.player)
         .task { await env.libraryModel.refresh() }
         .onChange(of: env.deviceMonitor.deviceState, initial: true) { _, state in env.coordinator.device = state }
@@ -61,6 +72,12 @@ struct RootPager: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { persistUnderBackgroundTask() }
         }
+    }
+
+    private func openPending() {
+        guard let doc = pendingOpen else { return }
+        pendingOpen = nil
+        Task { await env.player.load(doc, play: true); showPlayer = true }
     }
 
     /// iOS can suspend the app as soon as the scene-phase handler returns, which would abandon the

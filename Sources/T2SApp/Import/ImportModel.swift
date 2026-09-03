@@ -44,6 +44,16 @@ public final class ImportModel {
         self.extractor = extractor
     }
 
+    /// True while a fetch or an import is running. Every entry point refuses to start while it is
+    /// set: there is one `ImportModel` for the whole app, so a file arriving from another app must
+    /// not yank the Add sheet's state machine out from under the user mid-flight.
+    public var isBusy: Bool {
+        switch phase {
+        case .fetching, .importing: return true
+        case .idle, .preview, .done, .failed: return false
+        }
+    }
+
     public var isThinPreview: Bool {
         if case .preview(let article) = phase { return article.wordCount < Self.thinArticleWordCount }
         return false
@@ -57,6 +67,7 @@ public final class ImportModel {
     // MARK: Paste a link
 
     public func fetch(link: URL) async {
+        guard !isBusy else { return }
         guard let scheme = link.scheme?.lowercased(), scheme == "http" || scheme == "https", link.host() != nil else {
             phase = .failed("That doesn't look like a web address.")
             return
@@ -72,7 +83,7 @@ public final class ImportModel {
     }
 
     public func confirmPreview() async {
-        guard case .preview(let article) = phase else { return }
+        guard !isBusy, case .preview(let article) = phase else { return }
         phase = .importing
         await finish { try await self.library.importArticle(article.content, originalHTML: article.originalHTML) }
     }
@@ -80,6 +91,7 @@ public final class ImportModel {
     // MARK: Paste text
 
     public func importText(title: String, body: String) async {
+        guard !isBusy else { return }
         guard !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             phase = .failed("There's no text to read.")
             return
@@ -94,6 +106,7 @@ public final class ImportModel {
     /// Imports each file in turn with a row per file; `phase` ends `.done` with every success, or
     /// `.failed` when none succeeded.
     public func importFiles(_ urls: [URL]) async {
+        guard !isBusy else { return }
         fileRows = urls.map { FileRow(id: $0, name: $0.lastPathComponent, state: .pending) }
         phase = .importing
         var imported: [DocumentSummary] = []
@@ -110,6 +123,11 @@ public final class ImportModel {
                 guard let summary else { throw ImportError.unreadable("imported document vanished") }
                 fileRows[i].state = .done(summary)
                 imported.append(summary)
+                // A document opened from another app is copied by iOS into Documents/Inbox and we
+                // are handed that copy; `Library.importFile` has now copied it again into the
+                // container, so leaving the Inbox copy doubles the disk cost of every share-to-app
+                // permanently (spec §5).
+                if url.path.contains("/Inbox/") { try? FileManager.default.removeItem(at: url) }
             } catch {
                 fileRows[i].state = .failed(Self.message(for: error))
             }

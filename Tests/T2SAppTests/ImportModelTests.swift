@@ -53,6 +53,24 @@ import T2SStore
         #expect(model.phase == .failed("There's no text to read."))
     }
 
+    /// One `ImportModel` serves the Add sheet and files opened from other apps; a second request
+    /// while one is in flight must be refused rather than overwrite the live state machine.
+    @Test func aSecondRequestIsRefusedWhileOneIsInFlight() async throws {
+        let f = try AppFixtures()
+        let gate = ExtractorGate()
+        let model = ImportModel(library: f.library, extractor: FakeExtractor(gate: gate))
+        let url = URL(string: "https://example.com/post")!
+        let fetching = Task { await model.fetch(link: url) }
+        while !model.isBusy { await Task.yield() }                            // parked on the gate
+        await model.importText(title: "", body: "A pasted note.")
+        #expect(model.phase == .fetching(url))                                // untouched
+        await model.importFiles([URL(fileURLWithPath: "/tmp/none.epub")])
+        #expect(model.phase == .fetching(url) && model.fileRows.isEmpty)
+        await gate.open()
+        await fetching.value
+        guard case .preview = model.phase else { Issue.record("expected preview, got \(model.phase)"); return }
+    }
+
     @Test func filesImportOneByOneWithRows() async throws {
         let f = try AppFixtures()
         let model = ImportModel(library: f.library, extractor: FakeExtractor())

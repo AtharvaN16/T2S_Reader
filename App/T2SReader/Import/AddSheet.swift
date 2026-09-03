@@ -12,6 +12,9 @@ struct AddSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     @Binding var imported: DocumentSummary?
+    /// Files handed to the app from elsewhere (`onOpenURL`): the sheet opens straight on the file
+    /// path with the import already running, so the result and any failure are visible (spec §6).
+    var initialFiles: [URL] = []
 
     enum Path { case link, text, files }
     @State private var path: Path?
@@ -52,6 +55,12 @@ struct AddSheet: View {
             if case .done(let docs) = phase, let first = docs.first {
                 imported = first
                 dismiss()
+            }
+        }
+        .task {
+            if !initialFiles.isEmpty {
+                path = .files
+                await model.importFiles(initialFiles)
             }
         }
         .onDisappear { model.reset() }

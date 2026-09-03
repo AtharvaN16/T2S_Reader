@@ -41,6 +41,9 @@ final class PublicationCache {
         }
         switch await opener.open(asset: asset, allowUserInteraction: false) {
         case .success(let publication):
+            guard !publication.isRestricted else {
+                throw ReaderError.cannotOpen("This publication is protected.")
+            }
             return publication
         case .failure(let error):
             throw ReaderError.cannotOpen("\(error)")

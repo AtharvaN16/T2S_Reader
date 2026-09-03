@@ -718,10 +718,9 @@ disabled, and stays buildable on a free Apple ID during development.
 
 ### 6.1 PDF read-along caveat
 
-Readium's decoration support on the PDF navigator is unverified. If
-word-level highlighting on PDF proves unavailable, **v1 ships PDF as
-audio-first with page-level sync** and full read-along lands on EPUB and
-web articles only. Given PDFs are the third-ranked format, this is an
+**v1 ships PDF as audio-first with page-level sync.** Readium's PDF navigator
+does not support word decorations, so full word-level read-along is limited to
+EPUBs and web articles. Given PDFs are the third-ranked format, this is an
 acceptable v1 outcome and is called out here rather than discovered later.
 
 ---

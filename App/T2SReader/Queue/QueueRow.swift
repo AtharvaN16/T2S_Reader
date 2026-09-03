@@ -11,6 +11,7 @@ struct QueueRow: View {
     var onOpen: () -> Void
     var onDetails: () -> Void
     @State private var showSleepTimer = false
+    @State private var showVoiceChange = false
 
     private var progress: DocumentProgress? { env.libraryModel.progress(for: summary.id) }
     private var isCurrent: Bool { env.player.current?.id == summary.id }
@@ -66,6 +67,7 @@ struct QueueRow: View {
         }
         .contextMenu { contextItems }
         .sheet(isPresented: $showSleepTimer) { SleepTimerSheet() }
+        .sheet(isPresented: $showVoiceChange) { VoiceChangeSheet(summary: summary) }
     }
 
     @ViewBuilder private var contextItems: some View {
@@ -76,6 +78,7 @@ struct QueueRow: View {
         Button { Task { await env.libraryModel.move(summary.id, to: 0) } } label: { Label("Move to top", systemImage: "arrow.up.to.line") }
         Button(action: onDetails) { Label("Details", systemImage: "info.circle") }
         Button { showSleepTimer = true } label: { Label("Sleep timer", systemImage: "moon.zzz") }
+        Button { showVoiceChange = true } label: { Label("Change voice", systemImage: "person.wave.2") }
         Button {
             Task {
                 if !isCurrent { await env.player.load(summary, play: false) }

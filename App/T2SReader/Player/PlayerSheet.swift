@@ -12,6 +12,7 @@ struct PlayerSheet: View {
     @State private var bookmarkSaved = false
     @State private var showSpeed = false
     @State private var showSleepTimer = false
+    @State private var showVoiceChange = false
 
     var body: some View {
         let player = env.player
@@ -27,6 +28,7 @@ struct PlayerSheet: View {
                         showSleepTimer = true
                     }
                     Menu {
+                        Button { showVoiceChange = true } label: { Label("Change voice", systemImage: "person.wave.2") }
                         Button { player.renderWholeDocument() } label: { Label("Render whole document", systemImage: "waveform") }
                         Button { showDetails = true } label: { Label("Details", systemImage: "info.circle") }
                     } label: {
@@ -105,6 +107,9 @@ struct PlayerSheet: View {
         }
         .sheet(isPresented: $showSpeed) { SpeedPicker() }
         .sheet(isPresented: $showSleepTimer) { SleepTimerSheet() }
+        .sheet(isPresented: $showVoiceChange) {
+            if let current = player.current { VoiceChangeSheet(summary: current) }
+        }
         .onChange(of: player.coordinator.playhead) { _, _ in bookmarkSaved = false }
     }
 

@@ -11,9 +11,11 @@ App/T2SReader.xcodeproj/
 App/T2SReader/Info.plist
 App/T2SReaderShare/Info.plist
 
-# Model files — see spikes/README.md
+# Model files — see spikes/README.md; scripts/fetch-kokoro-model.sh installs the app's copies
 spikes/SpikeHarness/Resources/*.safetensors
 spikes/SpikeHarness/Resources/*.npz
+App/Resources/Kokoro/*.safetensors
+App/Resources/Kokoro/*.npz
 
 # macOS
 .DS_Store

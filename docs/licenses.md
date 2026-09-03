@@ -5,7 +5,8 @@ hand here (`scripts/check-licenses.sh` only sees SPM checkouts); the script fail
 SPM dependency is copyleft. Nothing below is copyleft.
 
 Each row was read from the LICENSE file at the path given; versions for SPM packages are the
-resolved tags in `Packages/T2SReadium/.build/checkouts` (the app resolves the same graph).
+resolved tags in `Packages/T2SReadium/.build/checkouts` and `Packages/T2SKokoro/.build/checkouts`
+(the app resolves the same graph).
 
 ## Vendored into the repository
 
@@ -35,12 +36,13 @@ Pulled in transitively by the Readium toolkit (the set `scripts/check-licenses.s
 | ZIPFoundation | 3.0.1 | MIT | `ZIPFoundation/LICENSE` |
 | Zip | 2.1.2 | MIT | `Zip/LICENSE` |
 
-## Kokoro path (Plan 0 spike harness pins; not linked into the app until Plan 5 Task 5)
+## Kokoro path (linked by the app target from Plan 5 Task 5)
 
-Audited 2026-09-03 from the LICENSE files under `spikes/SpikeHarness/.build/dd/SourcePackages/checkouts/`.
-The spec's §7.1 note that MisakiSwift is MIT is wrong; it is Apache-2.0.
+Declared by `Packages/T2SKokoro/Package.swift` — `kokoro-ios` and `MLXUtilsLibrary` directly, the
+rest transitively — at the same pins the Plan 0 spike harness measured. Audited 2026-09-03 from the
+LICENSE files. The spec's §7.1 note that MisakiSwift is MIT is wrong; it is Apache-2.0.
 
-| Component | Version | Licence | LICENSE file (under that `checkouts/`) |
+| Component | Version | Licence | LICENSE file (under `Packages/T2SKokoro/.build/checkouts/`) |
 | --- | --- | --- | --- |
 | kokoro-ios (`KokoroSwift`) | 1.0.11 | MIT | `kokoro-ios/LICENSE` |
 | mlx-swift | 0.30.2 | MIT | `mlx-swift/LICENSE` |
@@ -48,7 +50,7 @@ The spec's §7.1 note that MisakiSwift is MIT is wrong; it is Apache-2.0.
 | MLXUtilsLibrary | 0.0.6 | Apache-2.0 | `MLXUtilsLibrary/LICENSE` |
 | swift-numerics | 1.1.1 | Apache-2.0 | `swift-numerics/LICENSE.txt` |
 | ZIPFoundation (via MLX) | 0.9.20 | MIT | `ZIPFoundation/LICENSE` |
-| Kokoro-82M weights (`kokoro-v1_0.safetensors`) | KokoroTestApp packaging | Apache-2.0 | see `spikes/README.md` |
+| Kokoro-82M weights (`kokoro-v1_0.safetensors`) | KokoroTestApp packaging | Apache-2.0 | see `spikes/README.md` and `scripts/fetch-kokoro-model.sh` |
 
 No copyleft on this path. Apache-2.0 entries carry the same notice-retention obligation as
 Readability.js below; the weights' licence must ship alongside them if they are bundled.
@@ -57,7 +59,10 @@ Readability.js below; the weights' licence must ship alongside them if they are 
 
 - **Inter** (OFL 1.1): the font files may be embedded; the reserved font name must not be reused for
   a modified build, and the licence text ships with the app.
-- **Readability.js**, **DifferenceKit** (Apache-2.0): retain the copyright and licence notices.
+- **Readability.js**, **DifferenceKit**, **MisakiSwift**, **MLXUtilsLibrary**, **swift-numerics**
+  (Apache-2.0): retain the copyright and licence notices.
+- **Kokoro-82M weights** (Apache-2.0): retain the notice, and ship the licence text alongside the
+  weights if the app bundles them.
 - **CryptoSwift**: its licence asks for an acknowledgment of the author in product documentation.
 - **Readium**, **GCDWebServer** (BSD-3): retain the copyright notice; do not use the names to
   endorse a derived product.

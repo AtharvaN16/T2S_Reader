@@ -37,7 +37,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .build
-          key: ${{ runner.os }}-xcode-26.6-swiftpm-root-${{ hashFiles('Package.resolved', 'Packages/T2SReadium/Package.resolved', 'App/T2SReader.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          key: ${{ runner.os }}-xcode-26.6-swiftpm-root-${{ hashFiles('Package.resolved', 'Packages/T2SReadium/Package.resolved', 'Packages/T2SKokoro/Package.resolved', 'App/T2SReader.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-xcode-26.6-swiftpm-root-
       - run: swift test
@@ -74,7 +74,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .build/SourcePackages
-          key: ${{ runner.os }}-xcode-26.6-source-packages-${{ hashFiles('Package.resolved', 'Packages/T2SReadium/Package.resolved', 'App/T2SReader.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          key: ${{ runner.os }}-xcode-26.6-source-packages-${{ hashFiles('Package.resolved', 'Packages/T2SReadium/Package.resolved', 'Packages/T2SKokoro/Package.resolved', 'App/T2SReader.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-xcode-26.6-source-packages-
       - name: Resolve Readium package dependencies
@@ -92,6 +92,59 @@ jobs:
           done
           exit 1
       - run: scripts/test-readium.sh -clonedSourcePackagesDirPath "$SPM_CLONED_PACKAGES_DIR"
+  kokoro-macos:
+    runs-on: macos-26
+    # A cold build compiles mlx-swift's C++ and Metal sources: 10-20 minutes on an M-series Mac.
+    timeout-minutes: 45
+    env:
+      SPM_CLONED_PACKAGES_DIR: ${{ github.workspace }}/.build/SourcePackages
+    steps:
+      - uses: actions/checkout@v4
+      - name: List Xcode apps
+        run: ls -ld /Applications/Xcode*.app || true
+      - name: Verify and select Xcode 26.6
+        shell: bash
+        run: |
+          selected=""
+          for candidate in /Applications/Xcode*.app; do
+            [[ -d "$candidate" ]] || continue
+            version="$("$candidate/Contents/Developer/usr/bin/xcodebuild" -version)"
+            if [[ "$version" == "Xcode 26.6"* ]]; then
+              selected="$candidate"
+              break
+            fi
+          done
+          if [[ -z "$selected" ]]; then
+            echo "Xcode 26.6 is required but was not found under /Applications." >&2
+            exit 1
+          fi
+          sudo xcode-select -s "$selected/Contents/Developer"
+          xcodebuild -version
+          swift --version
+      - name: Restore Xcode source packages
+        uses: actions/cache@v4
+        with:
+          path: .build/SourcePackages
+          key: ${{ runner.os }}-xcode-26.6-source-packages-${{ hashFiles('Package.resolved', 'Packages/T2SReadium/Package.resolved', 'Packages/T2SKokoro/Package.resolved', 'App/T2SReader.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-xcode-26.6-source-packages-
+      - name: Resolve Kokoro package dependencies
+        working-directory: Packages/T2SKokoro
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            echo "Resolving package dependencies (attempt $attempt/3)"
+            if xcodebuild -resolvePackageDependencies -scheme T2SKokoro \
+              -derivedDataPath .build/DerivedData \
+              -clonedSourcePackagesDirPath "$SPM_CLONED_PACKAGES_DIR"; then
+              exit 0
+            fi
+            if [[ "$attempt" -lt 3 ]]; then sleep 5; fi
+          done
+          exit 1
+      # The model files are not in the repository, so the tests that need them report as skipped.
+      # This job proves the package builds against MLX and that the pure resource tests pass.
+      - run: scripts/test-kokoro.sh -clonedSourcePackagesDirPath "$SPM_CLONED_PACKAGES_DIR"
   app-ios:
     runs-on: macos-26
     timeout-minutes: 30
@@ -124,7 +177,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .build/SourcePackages
-          key: ${{ runner.os }}-xcode-26.6-source-packages-${{ hashFiles('Package.resolved', 'Packages/T2SReadium/Package.resolved', 'App/T2SReader.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          key: ${{ runner.os }}-xcode-26.6-source-packages-${{ hashFiles('Package.resolved', 'Packages/T2SReadium/Package.resolved', 'Packages/T2SKokoro/Package.resolved', 'App/T2SReader.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-xcode-26.6-source-packages-
       - run: brew install xcodegen

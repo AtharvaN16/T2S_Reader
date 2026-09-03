@@ -8,6 +8,7 @@ struct SpikeHarnessApp: App {
         GPU.set(cacheLimit: 50 * 1024 * 1024)
         GPU.set(memoryLimit: 900 * 1024 * 1024)
         UIDevice.current.isBatteryMonitoringEnabled = true
+        PrepareTask.register()                       // §7.7: must happen before launch completes
         SpikeLog.shared.record("app.launch", [
             "device": UIDevice.current.model,
             "system": UIDevice.current.systemVersion,

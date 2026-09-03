@@ -829,6 +829,39 @@ git commit -m "Spike 7.1: MisakiSwift coverage and license audit"
 
 ---
 
+### Task 8: Spike §7.3 (addendum) — a Kokoro runtime for pre-A14 devices
+
+Added 2026-09-03 after Task 4 found that kokoro-ios/MLX cannot run on the A13 (its steel GEMM
+kernels need `simdgroup_matrix`, Apple GPU family 7). The product owner's own iPhone 11 Pro is
+therefore outside the MLX route; this task asks whether another runtime covers it.
+
+**Timebox:** 1 day. If nothing runs the 50-sentence corpus on the iPhone 11 Pro within it, record
+"MLX only, A14+ floor" and stop.
+
+**Files:**
+- Create: `spikes/OnnxHarness/` (or a second mode of `SpikeHarness` if the runtime is a Swift package)
+- Create: `spikes/findings/2026-09-XX-pre-a14-runtime.md`
+
+**Candidates, in order:**
+1. sherpa-onnx (Apache-2.0) — ships a Kokoro TTS recipe and an iOS build on ONNX Runtime; check
+   whether it exposes per-token timing, its model size, and its licence chain (ONNX Runtime MIT).
+2. A kokoro-onnx export run directly on ONNX Runtime's iOS package with the CoreML execution
+   provider; same three checks.
+3. A CoreML conversion with duration outputs, only if one already exists with a permissive licence
+   (do not convert here).
+
+**Measure** with the same protocol as Task 4 on the iPhone 11 Pro: median RTF flat out for 5
+minutes, peak footprint, thermal at 3x. Pass bar unchanged: RTF ≤ 0.35, footprint ≤ 400 MB, no
+thermal state 2 in 20 minutes at 3x. Also record whether word timings are available; if they are
+not, the read-along highlight on pre-A14 devices needs the estimated-timeline path and that must
+be stated in the findings.
+
+**Decision shape:** either a second `SynthesisEngine` behind `RoutedEngine` selected by GPU family
+(with its own `engineID`, so render keys separate the two runtimes), or "MLX only" with the A14
+floor recorded in spec §7.3.
+
+---
+
 ### Task 7: Consolidate decisions into the spec
 
 **Files:**

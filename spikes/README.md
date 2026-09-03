@@ -15,6 +15,56 @@ open SpikeHarness.xcodeproj                # set your team under Signing & Capab
 
 The app does not run in the simulator: MLX needs a real GPU.
 
+### Running a protocol from the command line (no taps)
+
+Set the team once in Xcode (Signing & Capabilities on the SpikeHarness target) so the
+`com.t2s.spike.harness` profile exists; `-allowProvisioningUpdates` cannot log in from a shell.
+Then, with the phone on USB and **unlocked** (launches are refused while locked):
+
+```bash
+cd spikes/SpikeHarness
+xcodebuild build -project SpikeHarness.xcodeproj -scheme SpikeHarness -configuration Release \
+  -destination 'generic/platform=iOS' -derivedDataPath .build/dd \
+  CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM=<team id> ENABLE_DEBUG_DYLIB=NO
+APP=.build/dd/Build/Products/Release-iphoneos/SpikeHarness.app
+xcrun devicectl device install app --device <id> "$APP"
+xcrun devicectl device process launch --device <id> --terminate-existing \
+  -e '{"SPIKE_AUTORUN_SECONDS":"300","SPIKE_AUTORUN_RATE":"0"}' com.t2s.spike.harness
+# … wait SECONDS + ~60 s …
+xcrun devicectl device copy from --device <id> --domain-type appDataContainer \
+  --domain-identifier com.t2s.spike.harness --source Documents --destination <dir>
+python3 ../analyze.py <dir>/Documents/spike-*.csv
+python3 ../timing_check.py <dir>/Documents/spike-*.csv <dir>/Documents
+```
+
+`SPIKE_AUTORUN_SECONDS` starts the bench on launch and stops it on time; `SPIKE_AUTORUN_RATE` is
+`0` (flat out), `1`, or `3`. The idle timer is off while a bench runs. The first three sentences
+are also written as `sentence-N.wav` next to the CSV for the §7.4 listening check.
+
+Protocol runs per spec section, all on a device that passes §7.3 (A14 or newer — see the
+runtime-benchmark findings):
+- **§7.3/§7.5** — `SPIKE_AUTORUN_SECONDS=300`, rate `0`, screen on. Then `SPIKE_AUTORUN_SECONDS=1200`,
+  rate `3`, for thermals.
+- **§7.4** — the three WAVs from any run; open in Audacity with the `timing` rows from the CSV.
+- **§7.2** — add `"SPIKE_BACKGROUND_AUDIO":"1"` to the launch environment, `SPIKE_AUTORUN_SECONDS=900`,
+  then lock the screen for the 15 minutes. Repeat once with Low Power Mode on.
+- **§7.7** — open the app, tap "Schedule prepare task", plug in overnight; from Xcode you can force it
+  with `e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"com.t2s.spike.prepare"]`.
+  Look for `bg.begin` / `bg.expired` rows in the morning's CSV.
+
+Gotchas seen on 2026-09-03:
+- A Debug `xcodebuild build` produces Xcode's debug-dylib layout: package frameworks stay in
+  DerivedData and the installed app aborts at launch with `Library not loaded:
+  @rpath/KokoroSwift.framework`. Build Release with `ENABLE_DEBUG_DYLIB=NO` for `devicectl` installs.
+- Even the Release build embeds the transitive package frameworks but not `KokoroSwift.framework`
+  itself (`otool -L SpikeHarness.app/SpikeHarness` shows the `@rpath` reference; `Frameworks/`
+  lacks it). Copy `Release-iphoneos/PackageFrameworks/KokoroSwift.framework` into
+  `SpikeHarness.app/Frameworks/`, `codesign --force --sign <identity>` the framework, then re-sign
+  the app with `--preserve-metadata=entitlements,flags` and `codesign --verify --deep --strict`.
+- A free personal team may have only three of its apps on a device, and an app with an extension
+  counts twice. `MIFreeProfileValidatedAppTracker … ApplicationVerificationFailed` means remove one.
+- `xcodebuild -destination id=…` wants the UDID (`00008030-…`), `devicectl` the CoreDevice UUID.
+
 ### Model files (not committed)
 
 Two files go in `spikes/SpikeHarness/Resources/` and are gitignored:

@@ -84,7 +84,19 @@ played in the Reader for 45 s+ on the simulator without incident.
 2. **Verify the Share Extension on a physical device.** Task 2 merged in PR #15; it still needs
    hardware verification of the share sheet for URL, text, EPUB, and PDF input and the hand-off
    into the host app.
-3. **Plan 0 spikes (device work)** —
+3. **Plan 0 spikes (device work) — started 2026-09-03 evening.** The user decided Kokoro is the
+   app's main engine and the spikes are being run to open the Plan 5 Task 5 gate. Done: §7.1
+   (`spikes/findings/2026-09-03-g2p-coverage.md`: licenses permissive, MisakiSwift accepted
+   English-only with two mitigations). Measured on the iPhone 11 Pro
+   (`2026-09-03-runtime-benchmark.md`): **kokoro-ios/MLX cannot run on the A13** — MLX's steel
+   GEMM needs `simdgroup_matrix` (Apple GPU family 7, A14+), so the first `generateAudio` traps;
+   the MLX route therefore has an A14 floor and `KokoroEngine` must probe
+   `supportsFamily(.apple7)` before it is selected. RTF/memory/thermal (§7.3/§7.5) and word
+   timings (§7.4) are pending on Harsh's iPhone 17 Pro, as are §7.2 and §7.7. Decision taken:
+   Kokoro via MLX ships for A14+ once those numbers pass, older phones keep the system voice, and
+   Plan 0 Task 8 (new) spikes an ONNX/CoreML runtime for pre-A14 devices. The harness now runs
+   a fixed-length bench from a `devicectl` launch with no taps (`spikes/README.md` has the exact
+   commands and the signing / free-team / debug-dylib gotchas).
    [2026-09-02-plan-0-spikes.md](superpowers/plans/2026-09-02-plan-0-spikes.md): the harness under
    `spikes/SpikeHarness/` (xcodegen) with Kokoro via `kokoro-ios`. Spec §7.2 background compute,
    §7.7 `BGProcessingTask`, §7.3/§7.5 runtime and memory, §7.4 word-timing accuracy, §7.1 MisakiSwift

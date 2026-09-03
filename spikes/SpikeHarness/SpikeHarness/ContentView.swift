@@ -7,6 +7,8 @@ struct ContentView: View {
     @State private var rate = 0.0
     @State private var progress = BenchProgress()
     @State private var status = "Model not loaded"
+    @State private var backgroundAudio = false
+    @State private var silentPlayer: SilentPlayer?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -20,9 +22,15 @@ struct ContentView: View {
             .pickerStyle(.segmented)
             .disabled(running)
 
+            Toggle("Background audio (§7.2)", isOn: $backgroundAudio)
+                .disabled(running || silentPlayer != nil)
+
             Button(running ? "Stop" : "Start bench") { running ? stop() : start() }
                 .buttonStyle(.borderedProminent)
                 .disabled(loading)
+
+            Button("Schedule prepare task (§7.7)") { PrepareTask.schedule(); status = "Prepare task scheduled — plug in and leave overnight" }
+                .disabled(running)
 
             Group {
                 Text(status)
@@ -52,7 +60,8 @@ struct ContentView: View {
         guard let seconds = env["SPIKE_AUTORUN_SECONDS"].flatMap(Double.init), seconds > 0,
               !running, !loading else { return }
         rate = env["SPIKE_AUTORUN_RATE"].flatMap(Double.init) ?? 0
-        SpikeLog.shared.record("autorun", ["seconds": "\(seconds)", "rate": "\(rate)"])
+        backgroundAudio = env["SPIKE_BACKGROUND_AUDIO"] == "1"     // §7.2: then lock the screen
+        SpikeLog.shared.record("autorun", ["seconds": "\(seconds)", "rate": "\(rate)", "backgroundAudio": "\(backgroundAudio)"])
         start()
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
             if running { stop() }
@@ -60,6 +69,17 @@ struct ContentView: View {
     }
 
     private func start() {
+        if backgroundAudio, silentPlayer == nil {
+            do {
+                let player = SilentPlayer()
+                try player.start()
+                silentPlayer = player
+                SpikeLog.shared.record("bg.audio.started")
+            } catch {
+                SpikeLog.shared.record("bg.audio.failed", ["error": "\(error)"])
+                status = "Background audio failed: \(error.localizedDescription)"
+            }
+        }
         loading = true
         status = "Loading model…"
         let cycle = BenchCycle(playbackRate: rate)

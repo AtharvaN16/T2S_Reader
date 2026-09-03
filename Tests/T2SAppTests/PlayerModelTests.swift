@@ -7,8 +7,8 @@ import T2SStore
 
 @MainActor
 @Suite struct PlayerModelTests {
-    func makePlayer(_ f: AppFixtures) throws -> PlayerModel {
-        let coordinator = PlaybackCoordinator(engine: FakeEngine(secondsPerCharacter: 0.05), store: f.audio,
+    func makePlayer(_ f: AppFixtures, engine: FakeEngine = FakeEngine(secondsPerCharacter: 0.05)) throws -> PlayerModel {
+        let coordinator = PlaybackCoordinator(engine: engine, store: f.audio,
                                               player: try AudioPlayer(manualRendering: true), playheadStore: f.store,
                                               timeSource: SystemTimeSource())
         return PlayerModel(coordinator: coordinator, library: f.library)
@@ -36,9 +36,14 @@ import T2SStore
         let f = try AppFixtures()
         let id = try await f.importFake()
         let summary = try #require(try await f.store.summary(id: id))
-        let player = try makePlayer(f)
+        // Held engine: nothing renders while the transport assertions run, so the time axis stays
+        // the estimated one they were written against (a landing `.rendered` swaps an estimated
+        // duration for an actual one and moves every time after it).
+        let engine = FakeEngine(secondsPerCharacter: 0.05)
+        await engine.hold()
+        let player = try makePlayer(f, engine: engine)
         await player.load(summary, play: true)
-        #expect(player.isPlaying)
+        #expect(player.isPlaying)                                           // .catchingUp until the head renders
         await player.togglePlay()
         #expect(player.state == .paused)
         await player.seek(toChapter: 1)
@@ -50,6 +55,8 @@ import T2SStore
         #expect(abs(player.elapsed - 1) < 1e-6)
         await player.skip(by: -30)
         #expect(player.elapsed == 0)
+        await engine.release()
+        await player.coordinator.waitForRenderIdle()                        // the axis may move now; the end of it is still the end
         await player.skip(by: 10_000)
         #expect(player.state == .finished)
         player.setRate(1.5)

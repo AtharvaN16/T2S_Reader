@@ -8,12 +8,12 @@ working, tested software on its own. Order follows spec §9.
 | # | Plan | Spec §9 steps | File | Status |
 |---|---|---|---|---|
 | 0 | Spikes: background compute, idle compute, runtime benchmark, word timings, memory, G2P coverage, license audit | 1–2 | `2026-09-02-plan-0-spikes.md` | written |
-| 1 | Text pipeline (`T2SCore`): domain model, normalizer with span mapping, segmenter, timeline, codec, position resolution, highlight projection | 3–4 | `2026-09-02-plan-1-text-pipeline.md` | written |
-| 2 | Render and playback: `SynthesisEngine`, `FakeEngine`, `RenderKey`, audio cache, `RenderPolicy` tiers, `RenderScheduler`, `AudioPlayer` (`T2SAudio`), `PlaybackCoordinator` | 5 | `2026-09-02-plan-2-render-playback.md` | written |
-| 3 | Persistence and ingest: SwiftData store (`T2SStore`), Readium adapter for EPUB and PDF (`T2SReadium`), article-to-EPUB writer | 3 (Readium part), spec §5 | `2026-09-02-plan-3-persistence-ingest.md` | written |
+| 1 | Text pipeline (`T2SCore`): domain model, normalizer with span mapping, segmenter, timeline, codec, position resolution, highlight projection | 3–4 | `2026-09-02-plan-1-text-pipeline.md` | done |
+| 2 | Render and playback: `SynthesisEngine`, `FakeEngine`, `RenderKey`, audio cache, `RenderPolicy` tiers, `RenderScheduler`, `AudioPlayer` (`T2SAudio`), `PlaybackCoordinator` | 5 | `2026-09-02-plan-2-render-playback.md` | done |
+| 3 | Persistence and ingest: SwiftData store (`T2SStore`), Readium adapter for EPUB and PDF (`T2SReadium`), article-to-EPUB writer | 3 (Readium part), spec §5 | `2026-09-02-plan-3-persistence-ingest.md` | done |
 | 4a | App shell, import, player: T2SApp models, design tokens, pager, Queue, Collection, mini-player, player sheet, Add sheet (link/file/text), system-voice fallback engine | 6, 8 | `2026-09-02-plan-4a-app-shell.md` | done (merged to `dev` 2026-09-02) |
-| 4b | Reader page with decorations and auto-scroll, speed picker, sleep timer, Preferences, storage manager | 6, 8, 9 (part) | `2026-09-02-plan-4b-reader-controls.md` | written — next |
-| 5 | Kokoro engine, Share Extension and Readability import, Now Playing, pronunciation dictionary UI, BYO-key HTTP engine, `BGProcessingTask` wiring | 7, 9 | — | after Plan 4 and Plan 0 |
+| 4b | Reader page with decorations and auto-scroll, speed picker, sleep timer, Preferences, storage manager | 6, 8, 9 (part) | `2026-09-02-plan-4b-reader-controls.md` | done except Task 9: hardware read-along pass, EPUB/PDF fixture, and UI test |
+| 5 | Kokoro engine, Share Extension and Readability import, Now Playing, pronunciation dictionary UI, BYO-key HTTP engine, `BGProcessingTask` wiring | 7, 9 | `2026-09-03-plan-5-engine-share-nowplaying.md` | in progress — Tasks 1, 3, and 4 done; Task 2 open as PR #15; Task 5 gated on Plan 0; Task 6 pending |
 | 6 | CloudKit sync behind `SyncProvider`, Live Activity, App Intents, Spotlight | 10–11 | — | after Plan 5 |
 
 **Dependencies.** Plans 0 and 1 are independent; run them in parallel.

@@ -106,6 +106,15 @@ final class SynthBench: @unchecked Sendable {
                         "end": t.end_ts.map { String(format: "%.3f", $0) } ?? "",
                     ])
                 }
+                // §7.4: the same three sentences as WAVs, next to the CSV, for the listening check.
+                let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                let wav = docs.appendingPathComponent("sentence-\(i).wav")
+                do {
+                    try WavWriter.write(samples: samples, sampleRate: KokoroTTS.Constants.samplingRate, to: wav)
+                    SpikeLog.shared.record("wav.written", ["i": "\(i)", "file": wav.lastPathComponent, "text": text])
+                } catch {
+                    SpikeLog.shared.record("wav.failed", ["i": "\(i)", "error": "\(error)"])
+                }
             }
 
             progress.iterations = i + 1

@@ -35,6 +35,24 @@ Pulled in transitively by the Readium toolkit (the set `scripts/check-licenses.s
 | ZIPFoundation | 3.0.1 | MIT | `ZIPFoundation/LICENSE` |
 | Zip | 2.1.2 | MIT | `Zip/LICENSE` |
 
+## Kokoro path (Plan 0 spike harness pins; not linked into the app until Plan 5 Task 5)
+
+Audited 2026-09-03 from the LICENSE files under `spikes/SpikeHarness/.build/dd/SourcePackages/checkouts/`.
+The spec's §7.1 note that MisakiSwift is MIT is wrong; it is Apache-2.0.
+
+| Component | Version | Licence | LICENSE file (under that `checkouts/`) |
+| --- | --- | --- | --- |
+| kokoro-ios (`KokoroSwift`) | 1.0.11 | MIT | `kokoro-ios/LICENSE` |
+| mlx-swift | 0.30.2 | MIT | `mlx-swift/LICENSE` |
+| MisakiSwift | 1.0.6 | Apache-2.0 | `MisakiSwift/LICENSE` |
+| MLXUtilsLibrary | 0.0.6 | Apache-2.0 | `MLXUtilsLibrary/LICENSE` |
+| swift-numerics | 1.1.1 | Apache-2.0 | `swift-numerics/LICENSE.txt` |
+| ZIPFoundation (via MLX) | 0.9.20 | MIT | `ZIPFoundation/LICENSE` |
+| Kokoro-82M weights (`kokoro-v1_0.safetensors`) | KokoroTestApp packaging | Apache-2.0 | see `spikes/README.md` |
+
+No copyleft on this path. Apache-2.0 entries carry the same notice-retention obligation as
+Readability.js below; the weights' licence must ship alongside them if they are bundled.
+
 ## Attribution obligations to honour before shipping
 
 - **Inter** (OFL 1.1): the font files may be embedded; the reserved font name must not be reused for

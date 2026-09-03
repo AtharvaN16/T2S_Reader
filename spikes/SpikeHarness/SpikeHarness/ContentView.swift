@@ -41,6 +41,22 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
         }
         .padding()
+        .onAppear(perform: autorunIfRequested)
+    }
+
+    /// Hands-off protocol runs: launch with `SPIKE_AUTORUN_SECONDS=300` (and optionally
+    /// `SPIKE_AUTORUN_RATE=0|1|3`) and the bench starts on appear and stops itself on time, so a
+    /// measurement is the same on every device and needs no taps.
+    private func autorunIfRequested() {
+        let env = ProcessInfo.processInfo.environment
+        guard let seconds = env["SPIKE_AUTORUN_SECONDS"].flatMap(Double.init), seconds > 0,
+              !running, !loading else { return }
+        rate = env["SPIKE_AUTORUN_RATE"].flatMap(Double.init) ?? 0
+        SpikeLog.shared.record("autorun", ["seconds": "\(seconds)", "rate": "\(rate)"])
+        start()
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+            if running { stop() }
+        }
     }
 
     private func start() {
@@ -63,6 +79,7 @@ struct ContentView: View {
                 loading = false
                 running = true
                 status = "Running (\(bench.voiceName))"
+                UIApplication.shared.isIdleTimerDisabled = true      // Auto-Lock would suspend a foreground run
             }
             bench.run(sentences: Corpus.sentences, cycle: cycle) { p in
                 DispatchQueue.main.async { progress = p }
@@ -70,6 +87,7 @@ struct ContentView: View {
             DispatchQueue.main.async {
                 running = false
                 status = "Stopped"
+                UIApplication.shared.isIdleTimerDisabled = false
             }
         }
     }

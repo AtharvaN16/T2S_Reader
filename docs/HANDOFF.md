@@ -69,8 +69,9 @@ first Now Playing dictionary: the `MPMediaItemArtwork` request handlers were for
 `@MainActor` `NowPlayingController`, so Swift 6 inferred main-actor isolation and inserted an
 executor check that MediaPlayer's queue fails. Nobody had played a document on an iOS runtime
 before (Task 9 was never run), which is how it survived. Reproduced on the iPhone 16 Pro
-simulator and, from its symptoms, the same crash was reported on an iPhone 11 Pro (that device
-log has not been retrieved yet). Fixed on `fix/nowplaying-artwork-isolation`:
+simulator; the five crash reports later pulled off the iPhone 11 Pro (iOS 26.6.1) with
+`xcrun devicectl device copy from --domain-type systemCrashLogs` carry the identical frames. Fixed
+(merged to `dev` as 2540e1c, confirmed on the phone):
 `NowPlayingArtwork.make(_:)` in `T2SApp` forms the handler in a nonisolated context, with a test
 that calls it from a global queue. After the fix an EPUB was imported through `onOpenURL` and
 played in the Reader for 45 s+ on the simulator without incident.

@@ -17,9 +17,11 @@ final class NowPlayingController {
     private let commands = MPRemoteCommandCenter.shared()
     private var commandTargets: [(command: MPRemoteCommand, token: Any)] = []
     private var artworkCache: [UUID: MPMediaItemArtwork] = [:]
+    /// Artwork handlers are formed off the main actor (`NowPlayingArtwork`): MediaPlayer calls them
+    /// on its own queue, and a main-actor-isolated handler traps there.
     private lazy var fallbackArtwork: MPMediaItemArtwork = {
         let image = UIImage(systemName: "book.closed.fill")!
-        return MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+        return NowPlayingArtwork.make(image)
     }()
     /// MediaPlayer extrapolates elapsed time from the value and playback rate, so only a new
     /// playing second merits a ticker-driven update.
@@ -242,7 +244,7 @@ final class NowPlayingController {
         if let cached = artworkCache[document.id] { return cached }
         let path = document.coverImagePath.map(paths.url(forRelativePath:)) ?? paths.coverURL(document.id)
         guard let image = UIImage(contentsOfFile: path.path) else { return fallbackArtwork }
-        let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+        let artwork = NowPlayingArtwork.make(image)
         artworkCache[document.id] = artwork
         return artwork
     }

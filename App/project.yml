@@ -22,6 +22,7 @@ targets:
       - path: Resources
         buildPhase: resources
     dependencies:
+      - sdk: MediaPlayer.framework
       - package: T2S
         product: T2SCore
       - package: T2S

@@ -52,6 +52,22 @@ import T2SCore
         #expect(abs(p.consumedSeconds - 0.25) < 0.05)
     }
 
+    @Test func mediaServicesResetBuildsFreshStoppedGraph() throws {
+        let p = try AudioPlayer(manualRendering: true)
+        p.enqueue(.silence(seconds: 2), tag: 1)
+        p.play()
+        try p.renderOffline(seconds: 0.5)
+
+        p.rebuildAfterMediaServicesReset()
+
+        #expect(!p.isPlaying)
+        #expect(p.consumedSeconds == 0)
+        p.enqueue(.silence(seconds: 1), tag: 2)
+        p.play()
+        try p.renderOffline(seconds: 0.25)
+        #expect(abs(p.consumedSeconds - 0.25) < 0.05)
+    }
+
     @Test func rateIsClampedToSpecRange() throws {
         let p = try AudioPlayer(manualRendering: true)
         p.rate = 9

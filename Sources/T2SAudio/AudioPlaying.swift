@@ -17,4 +17,7 @@ public protocol AudioPlaying: AnyObject {
     func pause()
     /// Stops, drops every queued segment, and zeroes `consumedSeconds`.
     func reset()
+    /// The only destructive hardware recovery operation. The coordinator immediately resets and
+    /// refills from its persisted Position, so implementations must not retain scheduled buffers.
+    func rebuildAfterMediaServicesReset()
 }

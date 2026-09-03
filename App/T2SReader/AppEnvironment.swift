@@ -31,6 +31,7 @@ final class AppEnvironment {
     let sleepTimer: SleepTimer
     let continuation: QueueContinuation
     let audioSession = AudioSessionController()
+    let nowPlaying: NowPlayingController
     let deviceMonitor: DeviceMonitor
 
     init(paths: LibraryPaths, store: LibraryStore, audioStore: FileAudioStore, library: Library, coordinator: PlaybackCoordinator) {
@@ -49,6 +50,7 @@ final class AppEnvironment {
         readerModel = ReaderModel(player: player)
         sleepTimer = SleepTimer(player: player)
         continuation = QueueContinuation(player: player, library: libraryModel, preferences: preferences)
+        nowPlaying = NowPlayingController(player: player, libraryModel: libraryModel, preferences: preferences, paths: paths)
         player.defaultVoiceID = preferences.defaultVoiceID
         coordinator.setRate(preferences.defaultRate)
         importModel = ImportModel(library: library, extractor: ArticleExtractor())

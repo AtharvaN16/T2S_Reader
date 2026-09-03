@@ -26,7 +26,9 @@ struct T2SReaderApp: App {
                                                               environment.coordinator.pause()
                                                               return wasPlaying
                                                           },
-                                                          resuming: { Task { await environment.coordinator.play() } })
+                                                          resuming: { Task { await environment.coordinator.play() } },
+                                                          recovering: { Task { await environment.coordinator.recoverAfterMediaServicesReset() } })
+                        environment.nowPlaying.start()
                         environment.deviceMonitor.start()
                     }
             } else {

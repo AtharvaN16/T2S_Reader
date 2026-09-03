@@ -10,6 +10,7 @@ private struct PlaybackTicking: ViewModifier {
     let player: PlayerModel
     let sleepTimer: SleepTimer
     let continuation: QueueContinuation
+    let nowPlaying: NowPlayingController
     @State private var handledFinish = false
 
     func body(content: Content) -> some View {
@@ -17,6 +18,7 @@ private struct PlaybackTicking: ViewModifier {
             while !Task.isCancelled {
                 let playing = player.isPlaying
                 if playing { player.tick() }
+                nowPlaying.update()
                 sleepTimer.tick()
                 if player.state == .finished {
                     if !handledFinish {
@@ -33,7 +35,8 @@ private struct PlaybackTicking: ViewModifier {
 }
 
 extension View {
-    func playbackTicking(_ player: PlayerModel, sleepTimer: SleepTimer, continuation: QueueContinuation) -> some View {
-        modifier(PlaybackTicking(player: player, sleepTimer: sleepTimer, continuation: continuation))
+    func playbackTicking(_ player: PlayerModel, sleepTimer: SleepTimer, continuation: QueueContinuation,
+                         nowPlaying: NowPlayingController) -> some View {
+        modifier(PlaybackTicking(player: player, sleepTimer: sleepTimer, continuation: continuation, nowPlaying: nowPlaying))
     }
 }

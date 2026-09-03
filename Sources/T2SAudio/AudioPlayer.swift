@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import os
 import T2SCore
 
 /// Spec §3.5: AVAudioEngine → AVAudioPlayerNode → AVAudioUnitTimePitch → mainMixer.
@@ -7,10 +8,11 @@ import T2SCore
 public final class AudioPlayer: AudioPlaying {
     public enum Error: Swift.Error { case badFormat }
 
-    private let engine = AVAudioEngine()
-    private let player = AVAudioPlayerNode()
-    private let timePitch = AVAudioUnitTimePitch()
-    private let format: AVAudioFormat
+    private static let log = Logger(subsystem: "com.t2s.reader", category: "audio")
+    private var engine: AVAudioEngine
+    private var player: AVAudioPlayerNode
+    private var timePitch: AVAudioUnitTimePitch
+    private var format: AVAudioFormat
     private let manual: Bool
     /// Frames scheduled since the last reset, used to freeze `consumedSeconds` when the queue drains.
     private var scheduledFrames: AVAudioFramePosition = 0
@@ -61,24 +63,45 @@ public final class AudioPlayer: AudioPlaying {
         guard let f = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else { throw Error.badFormat }
         format = f
         manual = manualRendering
-        engine.attach(player)
-        engine.attach(timePitch)
-        engine.connect(player, to: timePitch, format: format)
-        engine.connect(timePitch, to: engine.mainMixerNode, format: format)
-        if manualRendering {
-            try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: 4096)
+        engine = AVAudioEngine()
+        player = AVAudioPlayerNode()
+        timePitch = AVAudioUnitTimePitch()
+        try makeGraph()
+    }
+
+    deinit {
+        MainActor.assumeIsolated {
+            if let configurationObserver { NotificationCenter.default.removeObserver(configurationObserver) }
         }
-        try engine.start()
-        if !manualRendering {
-            // Spec §3.5: plugging AirPods in or out (and a media-services reset) tears the graph
-            // down and stops the engine. Without this, `play()` runs on a stopped engine and
-            // produces silence forever, with no error anywhere. Manual rendering has no hardware
-            // graph to reconfigure, so it never posts this.
-            configurationObserver = NotificationCenter.default.addObserver(
-                forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.restartEngineIfNeeded() }
-            }
+    }
+
+    /// Builds a graph from new nodes. AVAudioPlayerNode instances are invalid after an
+    /// AVAudioSession media-services reset, so this intentionally never reuses one.
+    private func makeGraph() throws {
+        let freshEngine = AVAudioEngine()
+        let freshPlayer = AVAudioPlayerNode()
+        let freshTimePitch = AVAudioUnitTimePitch()
+        freshTimePitch.rate = timePitch.rate
+        freshEngine.attach(freshPlayer)
+        freshEngine.attach(freshTimePitch)
+        freshEngine.connect(freshPlayer, to: freshTimePitch, format: format)
+        freshEngine.connect(freshTimePitch, to: freshEngine.mainMixerNode, format: format)
+        if manual {
+            try freshEngine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: 4096)
+        }
+        try freshEngine.start()
+        engine = freshEngine
+        player = freshPlayer
+        timePitch = freshTimePitch
+        installConfigurationObserver()
+    }
+
+    private func installConfigurationObserver() {
+        guard !manual else { return }
+        configurationObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.restartEngineIfNeeded() }
         }
     }
 
@@ -163,6 +186,26 @@ public final class AudioPlayer: AudioPlaying {
         manualAccumulatedSourceFrames = 0
         manualSegments.removeAll()
         isPlaying = false
+    }
+
+    /// Media-services reset invalidates the complete AVAudioEngine graph. Drop the old nodes and
+    /// observer before recreating it at the existing format; the coordinator will seek/refill from
+    /// its semantic persisted position immediately afterward.
+    public func rebuildAfterMediaServicesReset() {
+        player.stop()
+        if let configurationObserver { NotificationCenter.default.removeObserver(configurationObserver) }
+        configurationObserver = nil
+        generation += 1
+        scheduledFrames = 0
+        manualAccumulatedSourceFrames = 0
+        manualSegments.removeAll()
+        isPlaying = false
+        do {
+            try makeGraph()
+            if manual { manualBaseline = engine.manualRenderingSampleTime }
+        } catch {
+            Self.log.error("Audio graph recovery failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// Manual rendering only: advances the offline engine by `seconds` of output.

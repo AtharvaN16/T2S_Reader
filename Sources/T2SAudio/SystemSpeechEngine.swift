@@ -131,7 +131,10 @@ public final class SystemSpeechEngine: SynthesisEngine {
         private(set) var synthesizer: AVSpeechSynthesizer?
         var sampleRate: Double = 0
         var samples: [Float] = []
-        var markers: [Marker] = []
+        /// Word markers as delivered: byte offsets, resolved to sample offsets once the buffer format is known.
+        var rawMarkers: [(range: Range<Int>, byteOffset: Int)] = []
+        /// Bytes per sample of the delivered buffers (0 until the first one); markers may arrive first.
+        var bytesPerSample = 0
         var continuation: CheckedContinuation<Captured, any Error>?
         /// `write` can deliver nothing at all — a voice whose assets are not downloaded, an
         /// unauthorized Personal Voice — and the awaiting render job would then never complete, the
@@ -157,7 +160,7 @@ public final class SystemSpeechEngine: SynthesisEngine {
                 if samples.isEmpty {
                     finish(.failure(SynthesisError.failed("the voice produced no audio")))
                 } else {
-                    finish(.success(Captured(sampleRate: sampleRate, samples: samples, markers: markers)))
+                    finish(.success(Captured(sampleRate: sampleRate, samples: samples, markers: resolvedMarkers())))
                 }
                 return
             }
@@ -169,16 +172,22 @@ public final class SystemSpeechEngine: SynthesisEngine {
                 return
             }
             if sampleRate == 0 { sampleRate = pcm.format.sampleRate }
+            if bytesPerSample == 0 { bytesPerSample = Int(pcm.format.streamDescription.pointee.mBitsPerChannel / 8) }
             samples.append(contentsOf: converted)
         }
 
         func receive(_ speechMarkers: [AVSpeechSynthesisMarker]) {
-            let bytesPerSample = MemoryLayout<Float>.size
             for marker in speechMarkers where marker.mark == .word {
                 let range = marker.textRange
-                markers.append(Marker(range: range.location..<(range.location + range.length),
-                                      sampleOffset: max(0, Int(marker.byteSampleOffset) / bytesPerSample)))
+                rawMarkers.append((range: range.location..<(range.location + range.length), byteOffset: Int(marker.byteSampleOffset)))
             }
+        }
+
+        /// `byteSampleOffset` is a byte offset into the voice's own buffers, so the divisor is the
+        /// voice's sample size (Float32 or Int16), not ours; 4 only if no buffer ever told us.
+        private func resolvedMarkers() -> [Marker] {
+            let divisor = bytesPerSample > 0 ? bytesPerSample : MemoryLayout<Float>.size
+            return rawMarkers.map { Marker(range: $0.range, sampleOffset: max(0, $0.byteOffset / divisor)) }
         }
 
         private func finish(_ result: Result<Captured, any Error>) {
@@ -188,7 +197,7 @@ public final class SystemSpeechEngine: SynthesisEngine {
             watchdog = nil
             continuation.resume(with: result)
             samples = []
-            markers = []
+            rawMarkers = []
             // Not synchronously: `AVSpeechSynthesizer` may still be inside the callback that got us here.
             Task { @MainActor in self.synthesizer = nil }
         }

@@ -14,7 +14,7 @@ private struct PlaybackTicking: ViewModifier {
             while !Task.isCancelled {
                 let playing = player.isPlaying
                 if playing { player.tick() }
-                try? await Task.sleep(for: playing ? .milliseconds(100) : .seconds(1))
+                try? await Task.sleep(for: .milliseconds(playing ? 100 : 250))
             }
         }
     }

@@ -9,7 +9,7 @@ public enum PlainTextArticle {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         let xhtml = paragraphs.map { "<p>\(escape($0))</p>" }.joined()
-        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedTitle = stripControls(title).trimmingCharacters(in: .whitespacesAndNewlines)
         return ArticleContent(title: trimmedTitle.isEmpty ? defaultTitle(for: body) : trimmedTitle, bodyXHTML: xhtml)
     }
 
@@ -23,14 +23,18 @@ public enum PlainTextArticle {
     /// Drops the C0 controls (and DEL) that XML 1.0 forbids before escaping. Text pasted out of a
     /// PDF commonly carries `\u{0C}`; leaving it in makes `ArticleEPUBWriter` throw and the user
     /// sees "The article text couldn't be converted." for text that looked perfectly ordinary.
-    static func escape(_ s: String) -> String {
-        let cleaned = String(s.unicodeScalars.filter { scalar in
+    static func stripControls(_ s: String) -> String {
+        String(s.unicodeScalars.filter { scalar in
             switch scalar.value {
             case 0x09, 0x0A, 0x0D: return true                       // tab, newline, carriage return
             case 0x00...0x1F, 0x7F: return false
             default: return true
             }
         })
+    }
+
+    static func escape(_ s: String) -> String {
+        let cleaned = stripControls(s)
         return cleaned.replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")

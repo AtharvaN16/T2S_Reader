@@ -17,7 +17,9 @@ final class AudioSessionController {
     /// Set when an interruption paused us, so `.ended` resumes only after an interruption.
     private var pausedByInterruption = false
 
-    func activate(pausing pause: @escaping @MainActor () -> Void, resuming resume: @escaping @MainActor () -> Void) {
+    /// `pausing` returns whether playback was active when it paused; only that pause is undone by
+    /// a `.shouldResume` ending — a book the listener paused themselves stays paused.
+    func activate(pausing pause: @escaping @MainActor () -> Bool, resuming resume: @escaping @MainActor () -> Void) {
         guard !started else { return }
         started = true
         let session = AVAudioSession.sharedInstance()
@@ -40,15 +42,14 @@ final class AudioSessionController {
         })
         observers.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: session, queue: .main) { note in
             let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
-            if raw == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { MainActor.assumeIsolated { pause() } }
+            if raw == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { MainActor.assumeIsolated { _ = pause() } }
         })
     }
 
-    /// `pause()` is idempotent, so it runs unconditionally; `.shouldResume` on the matching `.ended`
-    /// is what decides whether anything is actually resumed.
-    private func interruptionBegan(_ pause: @MainActor () -> Void) {
-        pause()
-        pausedByInterruption = true
+    /// `pause()` is idempotent, so it runs unconditionally; it reports whether it actually stopped
+    /// playback, and only then does `.shouldResume` on the matching `.ended` resume anything.
+    private func interruptionBegan(_ pause: @MainActor () -> Bool) {
+        pausedByInterruption = pause()
     }
 
     /// The session is deactivated for us during an interruption: without this `setActive(true)`

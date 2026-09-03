@@ -127,7 +127,7 @@ public final class ImportModel {
                 // are handed that copy; `Library.importFile` has now copied it again into the
                 // container, so leaving the Inbox copy doubles the disk cost of every share-to-app
                 // permanently (spec §5).
-                if url.path.contains("/Inbox/") { try? FileManager.default.removeItem(at: url) }
+                if url.deletingLastPathComponent().lastPathComponent == "Inbox" { try? FileManager.default.removeItem(at: url) }
             } catch {
                 fileRows[i].state = .failed(Self.message(for: error))
             }

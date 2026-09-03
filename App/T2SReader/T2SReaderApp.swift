@@ -21,7 +21,11 @@ struct T2SReaderApp: App {
                 RootPager()
                     .environment(environment)
                     .onAppear {
-                        environment.audioSession.activate(pausing: { environment.coordinator.pause() },
+                        environment.audioSession.activate(pausing: {
+                                                              let wasPlaying = environment.coordinator.state == .playing || environment.coordinator.state == .catchingUp
+                                                              environment.coordinator.pause()
+                                                              return wasPlaying
+                                                          },
                                                           resuming: { Task { await environment.coordinator.play() } })
                         environment.deviceMonitor.start()
                     }

@@ -23,4 +23,9 @@ import Testing
         #expect(PlainTextArticle.defaultTitle(for: " \n ") == "Pasted text")
         #expect(PlainTextArticle.content(title: "", body: "Hello there.").title == "Hello there.")
     }
+
+    @Test func titleControlCharactersAreDropped() {
+        let content = PlainTextArticle.content(title: "A\u{0C}B", body: "some text")
+        #expect(content.title == "AB")
+    }
 }

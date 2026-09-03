@@ -7,6 +7,8 @@ struct QueuePage: View {
     @Environment(AppEnvironment.self) private var env
     @State private var showAdd = false
     @State private var showPlayer = false
+    /// Set by the Add sheet; opened from its `onDismiss`, once it has actually gone.
+    @State private var pendingOpen: DocumentSummary?
     @State private var details: DocumentSummary?
     @State private var searchText = ""
     @State private var isSearching = false
@@ -61,15 +63,17 @@ struct QueuePage: View {
         .scrollContentBackground(.hidden)
         .background(Tokens.ground)
         .refreshable { await env.libraryModel.refresh() }
-        .sheet(isPresented: $showAdd) {
-            AddSheet { imported in
-                Task { await env.player.load(imported, play: true); showPlayer = true }
-            }
-        }
+        .sheet(isPresented: $showAdd, onDismiss: openPending) { AddSheet(imported: $pendingOpen) }
         .sheet(isPresented: $showPlayer) {
             PlayerSheet().presentationCornerRadius(Spacing.sheetCorner).presentationBackground(Tokens.raised)
         }
         .sheet(item: $details) { DetailsSheet(summary: $0) }
+    }
+
+    private func openPending() {
+        guard let doc = pendingOpen else { return }
+        pendingOpen = nil
+        Task { await env.player.load(doc, play: true); showPlayer = true }
     }
 
     private var header: some View {

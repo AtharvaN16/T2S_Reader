@@ -4,12 +4,14 @@ import T2SApp
 import T2SStore
 import UniformTypeIdentifiers
 
-/// Spec §2.4.5 rev 7: three soft pills, then the chosen path in place. `onImported` receives the
-/// first imported document; the owner opens it with playback started.
+/// Spec §2.4.5 rev 7: three soft pills, then the chosen path in place. The first imported document
+/// is written back through `imported`; the owner opens it from the sheet's `onDismiss`, never from
+/// here — presenting the player while this sheet is still animating out is the classic SwiftUI case
+/// where the second sheet simply never appears.
 struct AddSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
-    var onImported: (DocumentSummary) -> Void
+    @Binding var imported: DocumentSummary?
 
     enum Path { case link, text, files }
     @State private var path: Path?
@@ -48,8 +50,8 @@ struct AddSheet: View {
         }
         .onChange(of: model.phase) { _, phase in
             if case .done(let docs) = phase, let first = docs.first {
+                imported = first
                 dismiss()
-                onImported(first)
             }
         }
         .onDisappear { model.reset() }

@@ -858,6 +858,48 @@ git add Package.swift Sources/T2SAudio Sources/T2SApp Tests App scripts docs spi
 git commit -m "Audio: add Kokoro engine after device spike decisions"
 ```
 
+#### Task 5 adjustments approved 2026-09-03 (supersede the file list above where they differ)
+
+Findings so far: §7.1 accepted (`spikes/findings/2026-09-03-g2p-coverage.md`); §7.3/§7.5 on the
+iPhone 11 Pro show kokoro-ios/MLX cannot run below Apple GPU family 7 (A14)
+(`2026-09-03-runtime-benchmark.md`). The 17 Pro numbers (§7.2–§7.5, §7.7) are still pending, so
+this task ships the engine, probe, route, and fallback now and takes its constants later.
+
+1. **Location.** Kokoro lives in a new `Packages/T2SKokoro` (platforms iOS 18 and macOS 15),
+   mirroring `Packages/T2SReadium`: depends on the root `T2S` (`T2SCore`), `kokoro-ios` 1.0.11,
+   `MLXUtilsLibrary` 0.0.6; wired into `App/project.yml` like T2SReadium. Reason: MLX needs its
+   compiled Metal library, which `swift test` and the iOS simulator cannot provide; the root
+   package stays `swift test`-clean for CI. Tests run with `scripts/test-kokoro.sh`
+   (`xcodebuild test -destination 'platform=macOS'`) — MLX runs on Apple-silicon Macs, so
+   `KokoroEngine` is exercised end to end with the real model on the Mac. Tests that need the
+   model files are `.enabled(if:)` their presence, like the voice tests.
+2. **Engine.** `KokoroEngine: SynthesisEngine` is an actor holding one loaded model and the
+   selected voice embedding; `generateAudio` → `PCMAudio` at 24 kHz (verify
+   `KokoroTTS.Constants.samplingRate`). `engineID = "kokoro-<checksum8>-mlx-misaki1.0.6"`; voice
+   IDs `kokoro:<engineID>:<voice>`.
+3. **Availability gate at configuration time.** `KokoroAvailability` requires
+   `MTLCreateSystemDefaultDevice()?.supportsFamily(.apple7)`, model + voices present with the
+   recorded SHA-256, and a complete `KokoroRuntimeDecision`. Any failure routes the whole
+   document to `system:<voice>` before planning (never mid-utterance).
+4. **Route and catalog.** `RoutedEngine` gains the `kokoro:` prefix beside `system:` and the cloud
+   IDs; `KokoroVoiceCatalog` lists the bundled English voices under "Kokoro (beta)" in
+   Preferences → Voices. The default voice stays `system` until §7.2 passes on the 17 Pro.
+5. **Timings.** `KokoroTokenTimingMapper` maps `MToken.start_ts/end_ts` but returns `[]` until its
+   fixture test exists; the fixture is the 17 Pro CSV `timing` rows. Until then Kokoro documents
+   use the estimated timeline.
+6. **Constants.** `KokoroRuntimeDecision` rejects missing values (measured non-Pro RTF, derived
+   rate threshold, memory limits); a `DEBUG`-only override enables the route for development on
+   the 17 Pro before the numbers land.
+7. **Resources.** `scripts/fetch-kokoro-model.sh` downloads the weights and `voices.npz` with the
+   SHA-256 from `spikes/README.md` into a git-ignored resource directory; bundle-vs-download for
+   shipping stays deferred.
+8. **From §7.1.** `NumberWords` joins compound numbers with a space, with a test.
+
+Order of work on branch `plan-5-task-5-kokoro`, tests first and one commit each: package skeleton
+and fetch script → `KokoroEngine` synthesizing one sentence on the Mac → availability probe and
+decision type → route, catalog, Preferences → normalizer fix → app wiring and a simulator run
+proving the fallback → a build for the 17 Pro.
+
 ---
 
 ### Task 6: Documentation, roadmap, and final manual pass

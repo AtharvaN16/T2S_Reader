@@ -101,10 +101,15 @@ a placeholder), so the order is now driven by opening the Plan 5 Task 5 gate.
    `KokoroEngine` with the `supportsFamily(.apple7)` probe and the whole-document fallback to
    `system:<voice>`, the route and voice catalog, and the `NumberWords` spacing fix. The
    `KokoroRuntimeDecision` constants (measured RTF, the derived rate threshold, memory limits) and
-   the timing-mapper fixture must come from the 17 Pro CSV; do not guess them. Note that MLX needs
-   its Metal library, which `swift test` and the iOS simulator cannot provide: Kokoro code has to
-   live where it can be built and tested with `xcodebuild` on macOS (a separate package like
-   `Packages/T2SReadium`), not in the root package that CI runs with `swift test`.
+   the timing-mapper fixture must come from the 17 Pro CSV; do not guess them. **The design was
+   approved on 2026-09-03 and is written into the plan as "Task 5 adjustments"**: a new
+   `Packages/T2SKokoro` (MLX needs its Metal library, which `swift test` and the simulator cannot
+   provide, so it is tested with `xcodebuild` on macOS, where MLX runs), `KokoroEngine` as an
+   actor, `KokoroAvailability` gating on `supportsFamily(.apple7)` + checksums + a complete
+   `KokoroRuntimeDecision`, a `kokoro:` route in `RoutedEngine`, "Kokoro (beta)" voices, timings
+   held at `[]` until the 17 Pro fixture, and a `DEBUG` override for development. Start it on
+   branch `plan-5-task-5-kokoro` with the executing-plans workflow; the order of work is in the
+   plan.
 3. **Plan 0 Task 8 — a runtime for pre-A14 phones** (the owner's own iPhone 11 Pro): a one-day
    timeboxed spike on an ONNX Runtime / CoreML Kokoro (sherpa-onnx first), same pass bar as §7.3.
 4. **Plan 4b Task 9 leftovers and hardware checks.** The read-along has passed on the simulator and

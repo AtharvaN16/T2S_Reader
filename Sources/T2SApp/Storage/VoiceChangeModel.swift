@@ -30,23 +30,23 @@ public final class VoiceChangeModel {
     /// Evicts the audio, persists the override (nil = back to the default voice), reloads the
     /// document if it is the one playing. True on success.
     public func apply(voiceID: String?, to summary: DocumentSummary) async -> Bool {
-        let wasCurrent = player.current?.id == summary.id
-        if wasCurrent { await player.persistRenderedChapters() }
+        guard summary.document.voiceID != voiceID else {
+            lastError = nil
+            return true
+        }
 
-        do {
+        let changed = await player.performDestructiveChange(for: summary.id) {
             try await library.evictAudio(for: summary.id)
             var document = summary.document
             document.voiceID = voiceID
             try await library.store.update(document)
-            lastError = nil
-        } catch {
-            lastError = "\(error)"
+        }
+        guard changed else {
+            lastError = player.localError
             return false
         }
 
-        if wasCurrent, let fresh = try? await library.store.summary(id: summary.id) {
-            await player.load(fresh, play: false)
-        }
+        lastError = nil
         await libraryModel.refresh()
         return true
     }

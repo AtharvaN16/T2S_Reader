@@ -99,7 +99,44 @@ public final class PlayerModel {
     /// Loads a document (re-deriving a stale timeline on the way) and optionally starts playing.
     /// Whatever was loaded before is persisted first.
     public func load(_ summary: DocumentSummary, play: Bool) async {
-        await persistRenderedChapters()
+        await load(summary, play: play, persistingCurrent: true)
+    }
+
+    /// Performs a mutation that invalidates a document's timeline or rendered audio. The currently
+    /// loaded document is persisted before the mutation, then reloaded from the store afterwards.
+    /// Keeping that sequence here prevents callers from accidentally writing stale audio references
+    /// back after an eviction or reprocess.
+    @discardableResult
+    public func performDestructiveChange(
+        for documentID: UUID,
+        _ change: @MainActor () async throws -> Void
+    ) async -> Bool {
+        let reloadCurrent = current?.id == documentID
+        if reloadCurrent {
+            coordinator.pause()
+            await persistRenderedChapters()
+        }
+
+        do {
+            try await change()
+            guard reloadCurrent else {
+                localError = nil
+                return true
+            }
+            guard let fresh = try await library.store.summary(id: documentID) else {
+                localError = "Document is missing"
+                return false
+            }
+            await load(fresh, play: false, persistingCurrent: false)
+            return localError == nil
+        } catch {
+            localError = "\(error)"
+            return false
+        }
+    }
+
+    private func load(_ summary: DocumentSummary, play: Bool, persistingCurrent: Bool) async {
+        if persistingCurrent { await persistRenderedChapters() }
         do {
             guard let timeline = try await library.timelineForPlayback(summary.id) else {
                 localError = "Document is missing"

@@ -62,6 +62,10 @@ struct VoiceChangeSheet: View {
     }
 
     private func select(_ voice: VoiceOption) {
+        guard (voice.isDefault ? nil : voice.id) != summary.document.voiceID else {
+            dismiss()
+            return
+        }
         if discardedSeconds > 0 {
             pendingVoice = voice
         } else {

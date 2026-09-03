@@ -5,8 +5,8 @@ import T2SStore
 
 struct CollectionPage: View {
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.readerRoute) private var readerRoute
     @State private var showAdd = false
-    @State private var showPlayer = false
     /// Set by the Add sheet; opened from its `onDismiss`, once it has actually gone.
     @State private var pendingOpen: DocumentSummary?
     @State private var selected: DocumentSummary?
@@ -55,15 +55,12 @@ struct CollectionPage: View {
         }
         .background(Tokens.ground)
         .sheet(isPresented: $showAdd, onDismiss: openPending) { AddSheet(imported: $pendingOpen) }
-        .sheet(isPresented: $showPlayer) {
-            PlayerSheet().presentationCornerRadius(Spacing.sheetCorner).presentationBackground(Tokens.raised)
-        }
         .sheet(item: $selected) { BookSheet(summary: $0) }
     }
 
     private func openPending() {
         guard let doc = pendingOpen else { return }
         pendingOpen = nil
-        Task { await env.player.load(doc, play: true); showPlayer = true }
+        readerRoute.open(doc)
     }
 }

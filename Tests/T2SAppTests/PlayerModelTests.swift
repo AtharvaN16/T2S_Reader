@@ -118,4 +118,20 @@ import T2SStore
         #expect(bookmarks.count == 1)
         #expect(bookmarks[0].position.resourceHref == "OEBPS/ch2.xhtml")
     }
+
+    @Test func defaultVoiceAppliesOnlyWithoutAnOverride() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let player = try makePlayer(f)
+        player.defaultVoiceID = "com.apple.voice.compact.en-US.Samantha"
+        let summary = try #require(try await f.store.summary(id: id))
+        await player.load(summary, play: false)
+        #expect(player.coordinator.document?.voiceID == "com.apple.voice.compact.en-US.Samantha")
+        var overridden = summary.document
+        overridden.voiceID = "custom"
+        try await f.store.update(overridden)
+        await player.load(try #require(try await f.store.summary(id: id)), play: false)
+        #expect(player.coordinator.document?.voiceID == "custom")
+        #expect(try await f.store.document(id: id)?.voiceID == "custom")
+    }
 }

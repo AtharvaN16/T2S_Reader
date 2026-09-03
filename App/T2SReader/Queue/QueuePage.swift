@@ -5,8 +5,8 @@ import T2SStore
 
 struct QueuePage: View {
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.readerRoute) private var readerRoute
     @State private var showAdd = false
-    @State private var showPlayer = false
     /// Set by the Add sheet; opened from its `onDismiss`, once it has actually gone.
     @State private var pendingOpen: DocumentSummary?
     @State private var details: DocumentSummary?
@@ -44,8 +44,7 @@ struct QueuePage: View {
                 }
                 ForEach(rows) { summary in
                     QueueRow(summary: summary, onOpen: {
-                        // Plan 4b routes this to the Reader page; until then the player sheet stands in.
-                        Task { await env.player.load(summary, play: true); showPlayer = true }
+                        readerRoute.open(summary)
                     }, onDetails: { details = summary })
                     .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -64,16 +63,13 @@ struct QueuePage: View {
         .background(Tokens.ground)
         .refreshable { await env.libraryModel.refresh() }
         .sheet(isPresented: $showAdd, onDismiss: openPending) { AddSheet(imported: $pendingOpen) }
-        .sheet(isPresented: $showPlayer) {
-            PlayerSheet().presentationCornerRadius(Spacing.sheetCorner).presentationBackground(Tokens.raised)
-        }
         .sheet(item: $details) { DetailsSheet(summary: $0) }
     }
 
     private func openPending() {
         guard let doc = pendingOpen else { return }
         pendingOpen = nil
-        Task { await env.player.load(doc, play: true); showPlayer = true }
+        readerRoute.open(doc)
     }
 
     private var header: some View {

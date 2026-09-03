@@ -35,7 +35,11 @@ public final class PlaybackCoordinator {
     /// Set from the most recent `.failed` render event; cleared on `load`.
     public private(set) var lastRenderError: String?
     public private(set) var document: Document?
-    public private(set) var timeline: Timeline?
+    public private(set) var timeline: Timeline? { didSet { timelineRevision &+= 1 } }
+    /// Bumped on every write to `timeline` — a load, and every `.rendered` event that swaps an
+    /// estimate for an actual. Anything O(timeline) a view derives can be cached against it
+    /// instead of recomputed per body evaluation.
+    public private(set) var timelineRevision = 0
     public private(set) var timeIndex = TimeIndex(Timeline(chapters: []))
     /// Set by the app from battery, thermal, and Low Power Mode notifications.
     public var device = DeviceState.unplugged { didSet { replan() } }

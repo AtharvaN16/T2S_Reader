@@ -1,0 +1,76 @@
+# App/project.yml — the iOS app. Regenerate the .xcodeproj with `xcodegen generate` (never hand-edit it).
+name: T2SReader
+options:
+  bundleIdPrefix: com.t2s
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+packages:
+  T2S:
+    path: ..
+  T2SReadium:
+    path: ../Packages/T2SReadium
+  Readium:
+    url: https://github.com/readium/swift-toolkit.git
+    exactVersion: 3.11.0
+targets:
+  T2SReader:
+    type: application
+    platform: iOS
+    sources:
+      - path: T2SReader
+      - path: Resources
+        buildPhase: resources
+    dependencies:
+      - package: T2S
+        product: T2SCore
+      - package: T2S
+        product: T2SAudio
+      - package: T2S
+        product: T2SStore
+      - package: T2S
+        product: T2SLibrary
+      - package: T2S
+        product: T2SApp
+      - package: T2SReadium
+        product: T2SReadium
+      - package: Readium
+        product: ReadiumShared
+      - package: Readium
+        product: ReadiumStreamer
+      - package: Readium
+        product: ReadiumNavigator
+      - package: Readium
+        product: ReadiumAdapterGCDWebServer
+    info:
+      path: T2SReader/Info.plist
+      properties:
+        CFBundleDisplayName: t2s
+        UILaunchScreen: {}
+        UIBackgroundModes: [audio]
+        UIAppFonts:
+          - Inter-Regular.ttf
+          - Inter-Medium.ttf
+          - Inter-SemiBold.ttf
+          - InterDisplay-ExtraBold.ttf
+          - InterDisplay-Black.ttf
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        LSSupportsOpeningDocumentsInPlace: false
+        # The link path loads arbitrary article pages in a WKWebView; plenty are still http.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoadsInWebContent: true
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: EPUB
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [org.idpf.epub-container]
+          - CFBundleTypeName: PDF
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [com.adobe.pdf]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.t2s.reader
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        INFOPLIST_KEY_UIUserInterfaceStyle: Automatic

@@ -60,14 +60,28 @@ import T2SCore
     @Test func catchesUpWhenTheFrontierIsReached() async throws {
         let (c, player, engine, _, _, doc, timeline) = fixture()
         await engine.fail(on: "Gamma three.")          // will be rendered as 0.2 s silence, still "rendered"
+        await engine.hold()                             // nothing can render until release: catching-up is deterministic
         c.load(doc, timeline: timeline)
         await c.play()                                  // nothing rendered yet
         #expect(c.state == .catchingUp)
         #expect(!player.isPlaying)
+        await engine.release()
         await c.waitForRenderIdle()
         #expect(c.state == .playing)
         #expect(player.isPlaying)
         #expect(player.enqueuedTags.prefix(2) == [0, 1])
+    }
+
+    @Test func timelineRevisionMovesOnLoadAndOnRender() async throws {
+        let (c, _, engine, _, _, doc, timeline) = fixture()
+        await engine.hold()                             // nothing renders until release
+        let atStart = c.timelineRevision
+        c.load(doc, timeline: timeline)
+        let afterLoad = c.timelineRevision
+        #expect(afterLoad != atStart)
+        await engine.release()
+        await c.waitForRenderIdle()
+        #expect(c.timelineRevision != afterLoad)        // `.rendered` events rewrote the utterances
     }
 
     @Test func seekResetsPlayerTrimsHeadAndSaves() async throws {

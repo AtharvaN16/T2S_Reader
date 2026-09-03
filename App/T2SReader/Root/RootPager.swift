@@ -86,16 +86,26 @@ struct RootPager: View {
             AddSheet(imported: $pendingOpen, initialFiles: openedFiles ?? [])
         }
         .fullScreenCover(item: $readerDocument) { ReaderPage(summary: $0) }
-        .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation)
+        .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation, nowPlaying: env.nowPlaying)
         .task { await env.libraryModel.refresh() }
         .onChange(of: env.deviceMonitor.deviceState, initial: true) { _, state in env.coordinator.device = state }
-        .onChange(of: env.libraryModel.queue.map(\.id), initial: true) { _, ids in env.coordinator.queue = ids }
+        .onChange(of: env.libraryModel.queue.map(\.id), initial: true) { _, ids in
+            env.coordinator.queue = ids
+        }
+        .onChange(of: env.libraryModel.summaries.map(\.id)) { _, ids in
+            if let current = env.player.current, !ids.contains(current.id) { env.nowPlaying.clear() }
+        }
         .onChange(of: env.preferences.defaultVoiceID) { _, voiceID in
             env.player.defaultVoiceID = voiceID
         }
         .onChange(of: env.preferences.defaultRate) { _, rate in
             env.player.setRate(rate)
         }
+        .onChange(of: env.player.current?.id, initial: true) { _, _ in env.nowPlaying.update() }
+        .onChange(of: env.player.state) { _, _ in env.nowPlaying.update() }
+        .onChange(of: env.player.elapsed) { _, _ in env.nowPlaying.update() }
+        .onChange(of: env.player.chapterIndex) { _, _ in env.nowPlaying.update() }
+        .onChange(of: env.coordinator.rate) { _, _ in env.nowPlaying.update() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { persistUnderBackgroundTask() }
         }

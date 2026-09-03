@@ -124,6 +124,41 @@ import T2SCore
         #expect(await saves.last?.charOffset == 6)                                               // "one." starts at 6 and is timed 0.6…1.0
     }
 
+    @Test func mediaServicesResetRestoresPersistedPositionAndPlayingIntent() async throws {
+        let (c, player, _, _, _, doc, timeline) = fixture()
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        await c.play()
+        player.advance(seconds: 0.7); c.tick()
+        let resume = PositionResolver.position(for: c.playhead, in: c.timeline!)
+
+        await c.recoverAfterMediaServicesReset()
+
+        #expect(c.state == .playing)
+        #expect(PositionResolver.position(for: c.playhead, in: c.timeline!) == resume)
+        #expect(player.resets == 3) // load, reset recovery, and the persisted-position seek
+    }
+
+    @Test func staleAudioReferenceDoesNotCountAsRendered() async throws {
+        let (c, _, engine, store, _, doc, timeline) = fixture()
+        let staleKey = RenderKey(documentID: doc.id, utteranceIndex: 0, voiceID: "obsolete-voice",
+                                 engineID: engine.engineID, normalizerVersion: timeline.normalizerVersion,
+                                 segmenterVersion: timeline.segmenterVersion)
+        try await store.write(.silence(seconds: 1), for: staleKey)
+        var staleTimeline = timeline
+        var first = staleTimeline[utterance: 0]
+        first.audioRef = staleKey.rawValue
+        staleTimeline[utterance: 0] = first
+
+        c.load(doc, timeline: staleTimeline)
+        await c.waitForRenderIdle()
+
+        let expected = RenderKey(documentID: doc.id, utteranceIndex: 0, voiceID: "default",
+                                 engineID: engine.engineID, normalizerVersion: timeline.normalizerVersion,
+                                 segmenterVersion: timeline.segmenterVersion)
+        #expect(c.timeline?[utterance: 0].audioRef == expected.rawValue)
+    }
+
     @Test func renderWholeDocumentPlansManualTier() async throws {
         let (c, _, engine, _, _, doc, timeline) = fixture(window: 1)                            // play-ahead covers only utterance 0
         c.load(doc, timeline: timeline)

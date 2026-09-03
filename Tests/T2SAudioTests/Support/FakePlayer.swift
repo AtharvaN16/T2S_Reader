@@ -22,6 +22,7 @@ final class FakePlayer: AudioPlaying {
     func play() { isPlaying = true }
     func pause() { isPlaying = false }
     func reset() { queue.removeAll(); consumedSeconds = 0; isPlaying = false; resets += 1 }
+    func rebuildAfterMediaServicesReset() {}
 
     func advance(seconds: TimeInterval) {
         guard isPlaying else { return }

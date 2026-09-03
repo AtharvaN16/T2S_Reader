@@ -19,17 +19,12 @@ final class AudioSessionController {
 
     /// `pausing` returns whether playback was active when it paused; only that pause is undone by
     /// a `.shouldResume` ending — a book the listener paused themselves stays paused.
-    func activate(pausing pause: @escaping @MainActor () -> Bool, resuming resume: @escaping @MainActor () -> Void) {
+    func activate(pausing pause: @escaping @MainActor () -> Bool, resuming resume: @escaping @MainActor () -> Void,
+                  recovering recover: @escaping @MainActor () -> Void) {
         guard !started else { return }
         started = true
         let session = AVAudioSession.sharedInstance()
-        do {
-            try session.setCategory(.playback, mode: .spokenAudio, policy: .longFormAudio)
-            try session.setActive(true)
-        } catch {
-            // Playback still works through the default session; the loss is background continuation.
-            Self.log.error("Audio session activation failed: \(error.localizedDescription, privacy: .public)")
-        }
+        configureAndActivate(session)
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: session, queue: .main) { note in
             let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
@@ -44,6 +39,19 @@ final class AudioSessionController {
             let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
             if raw == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { MainActor.assumeIsolated { _ = pause() } }
         })
+        observers.append(center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: session, queue: .main) { _ in
+            MainActor.assumeIsolated { self.mediaServicesWereReset(session, recovering: recover) }
+        })
+    }
+
+    private func configureAndActivate(_ session: AVAudioSession) {
+        do {
+            try session.setCategory(.playback, mode: .spokenAudio, policy: .longFormAudio)
+            try session.setActive(true)
+        } catch {
+            // Playback still works through the default session; the loss is background continuation.
+            Self.log.error("Audio session activation failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// `pause()` is idempotent, so it runs unconditionally; it reports whether it actually stopped
@@ -62,5 +70,12 @@ final class AudioSessionController {
         }
         if AVAudioSession.InterruptionOptions(rawValue: optionsRaw).contains(.shouldResume), pausedByInterruption { resume() }
         pausedByInterruption = false
+    }
+
+    /// Unlike an interruption, this invalidates AVAudioEngine nodes. Re-establish the audio
+    /// session first, then hand recovery to the coordinator, its sole playback owner.
+    private func mediaServicesWereReset(_ session: AVAudioSession, recovering recover: @MainActor () -> Void) {
+        configureAndActivate(session)
+        recover()
     }
 }

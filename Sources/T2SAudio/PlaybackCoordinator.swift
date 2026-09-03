@@ -100,7 +100,13 @@ public final class PlaybackCoordinator {
         timeIndex = TimeIndex(timeline)
         rendered = []
         rendered.reserveCapacity(timeline.utteranceCount)
-        for ch in timeline.chapters { for u in ch.utterances { rendered.append(u.audioRef != nil) } }
+        let voice = document.voiceID ?? "default"
+        for i in 0..<timeline.utteranceCount {
+            let expected = RenderKey(documentID: document.id, utteranceIndex: i, voiceID: voice,
+                                     engineID: engine.engineID, normalizerVersion: timeline.normalizerVersion,
+                                     segmenterVersion: timeline.segmenterVersion)
+            rendered.append(timeline[utterance: i].audioRef == expected.rawValue)
+        }
         manualRequested = false
         lastPlayed = document.id
         lastRenderError = nil
@@ -186,6 +192,20 @@ public final class PlaybackCoordinator {
     }
 
     public func seek(toTime t: TimeInterval) async { await seek(to: timeIndex.playhead(atTime: t)) }
+
+    /// Recreates hardware after AVAudioSession reports a media-services reset. The saved anchor is
+    /// semantic source position rather than a timeline index, so a rebuilt timeline can still
+    /// resume at the same sentence/word.
+    public func recoverAfterMediaServicesReset() async {
+        guard let timeline, timeline.utteranceCount > 0 else { return }
+        let resume = PositionResolver.position(for: playhead, in: timeline)
+        let shouldPlay = state == .playing || state == .catchingUp
+        player.rebuildAfterMediaServicesReset()
+        player.reset()
+        let target = PositionResolver.resolve(resume, in: timeline)
+        await seek(to: target)
+        if shouldPlay { await play() }
+    }
 
     public func setRate(_ r: Double) {
         guard r.isFinite else { return }

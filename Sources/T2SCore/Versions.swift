@@ -3,5 +3,5 @@
 public enum Versions {
     public static let schema = 1
     public static let segmenter = 1
-    public static let normalizer = 1
+    public static let normalizer = 2
 }

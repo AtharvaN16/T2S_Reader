@@ -6,7 +6,7 @@ import Testing
     @Test func appliesRulesInSpecOrder() {
         let n = TextNormalizer(dictionary: [PronunciationEntry(term: "Doctor", replacement: "Dokter")])
         let t = n.normalize("Dr. Smith [1] paid $5 on\nhttps://x.com/a  in 1999.")
-        #expect(t.spoken == "Dokter Smith paid five dollars on x.com in nineteen ninety-nine.")
+        #expect(t.spoken == "Dokter Smith paid five dollars on x.com in nineteen ninety nine.")
         expectEveryWordMapsToSource(t)
     }
 

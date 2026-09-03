@@ -7,13 +7,17 @@ enum NumberWords {
         (1_000_000_000_000, "trillion"), (1_000_000_000, "billion"), (1_000_000, "million"), (1_000, "thousand"),
     ]
 
+    /// Joins the tens and ones of a compound number with a space, not a hyphen
+    /// ("twenty three", not "twenty-three"). Finding 2026-09-03-g2p-coverage.md,
+    /// Decision → mitigation 1: MisakiSwift keeps the hyphen as a `—` token, which
+    /// Kokoro may render as a pause.
     static func cardinal(_ n: Int) -> String {
         if n < 0 { return "minus " + cardinal(-n) }
         if n < 20 { return ones[n] }
         if n < 100 {
             let t = tens[n / 10]
             let o = n % 10
-            return o == 0 ? t : "\(t)-\(ones[o])"
+            return o == 0 ? t : "\(t) \(ones[o])"
         }
         if n < 1000 {
             let h = "\(ones[n / 100]) hundred"
@@ -52,7 +56,7 @@ enum NumberWords {
         if y % 1000 == 0 { return cardinal(y) }
         if y >= 2000 && y < 2010 { return "two thousand \(cardinal(lo))" }
         if lo == 0 { return "\(cardinal(hi)) hundred" }
-        if lo < 10 { return "\(cardinal(hi)) oh-\(cardinal(lo))" }
+        if lo < 10 { return "\(cardinal(hi)) oh \(cardinal(lo))" }
         return "\(cardinal(hi)) \(cardinal(lo))"
     }
 

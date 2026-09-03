@@ -112,7 +112,7 @@ struct EPUBReaderView: UIViewControllerRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, EPUBNavigatorDelegate {
+    final class Coordinator: NSObject, EPUBNavigatorDelegate, WKScriptMessageHandler {
         let reader: ReaderModel
         let onTap: (SourceHit?) -> Void
         let onError: (String) -> Void
@@ -121,6 +121,14 @@ struct EPUBReaderView: UIViewControllerRepresentable {
         var lastHighlight: HighlightRange?
         var wasFollowing = true
         private var programmaticScrollUntil = Date.distantPast
+        private var capturedTap: CapturedTap?
+
+        private static let tapMessageName = "t2sReaderTap"
+
+        private struct CapturedTap {
+            let hit: SourceHit?
+            let date: Date
+        }
 
         init(reader: ReaderModel, onTap: @escaping (SourceHit?) -> Void, onError: @escaping (String) -> Void) {
             self.reader = reader
@@ -158,29 +166,51 @@ struct EPUBReaderView: UIViewControllerRepresentable {
         }
 
         func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
-            guard let navigator = self.navigator, let href = navigator.currentLocation?.href.string else {
-                onTap(nil)
-                return
-            }
-            Task {
-                let result = await navigator.evaluateJavaScript(ReaderScripts.hitTest(x: point.x, y: point.y))
-                guard case .success(let value) = result,
-                      let dictionary = value as? [String: Any],
-                      let text = dictionary["text"] as? String,
-                      let offset = dictionary["offset"] as? Int
+            Task { [weak self] in
+                // WebKit delivers the resource document's message on the same tap. Yielding gives
+                // that message a turn before consuming it without ever treating navigator-space
+                // coordinates as resource-local coordinates.
+                await Task.yield()
+                guard let self else { return }
+                guard let capturedTap = self.capturedTap,
+                      Date().timeIntervalSince(capturedTap.date) < 0.5
                 else {
-                    onTap(nil)
+                    self.onTap(nil)
                     return
                 }
-                onTap(SourceHit(
-                    resourceHref: ReadiumDocumentReader.resourceKey(href),
-                    blockText: text,
-                    offsetInBlock: offset
-                ))
+                self.capturedTap = nil
+                self.onTap(capturedTap.hit)
             }
         }
 
         func navigator(_ navigator: Navigator, presentError error: NavigatorError) {}
-        func navigator(_ navigator: EPUBNavigatorViewController, setupUserScripts userContentController: WKUserContentController) {}
+
+        func navigator(_ navigator: EPUBNavigatorViewController, setupUserScripts userContentController: WKUserContentController) {
+            userContentController.addUserScript(WKUserScript(
+                source: ReaderScripts.captureTap,
+                injectionTime: .atDocumentEnd,
+                forMainFrameOnly: false
+            ))
+            userContentController.add(self, name: Self.tapMessageName)
+        }
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == Self.tapMessageName,
+                  let body = message.body as? [String: Any],
+                  let href = body["href"] as? String
+            else { return }
+
+            let hit: SourceHit?
+            if let text = body["text"] as? String, let offset = body["offset"] as? Int {
+                hit = SourceHit(
+                    resourceHref: ReadiumDocumentReader.resourceKey(href),
+                    blockText: text,
+                    offsetInBlock: offset
+                )
+            } else {
+                hit = nil
+            }
+            capturedTap = CapturedTap(hit: hit, date: Date())
+        }
     }
 }

@@ -2,8 +2,55 @@ import Foundation
 
 /// Scripts the EPUB reader runs through the navigator's `evaluateJavaScript`.
 enum ReaderScripts {
-    /// Reports the block under a viewport point: its text and the caret offset inside it
-    /// (both UTF-16, as JavaScript counts), or null when the point is not on text.
+    /// Captures a tap inside each HTML resource. The coordinates are the resource's own client
+    /// coordinates, which is especially important for fixed-layout pages hosted in an iframe.
+    static let captureTap = """
+        (function () {
+          if (window.__t2sReaderTapCaptureInstalled) { return; }
+          window.__t2sReaderTapCaptureInstalled = true;
+
+          document.addEventListener('click', function (event) {
+            var handler = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.t2sReaderTap;
+            var href = window.readium && window.readium.link && window.readium.link.href;
+            if (!handler || !href || !document.caretRangeFromPoint) { return; }
+
+            var range = document.caretRangeFromPoint(event.clientX, event.clientY);
+            if (!range) {
+              handler.postMessage({ href: href });
+              return;
+            }
+            var node = range.startContainer;
+            var blocks = ['P','H1','H2','H3','H4','H5','H6','LI','BLOCKQUOTE','DIV','SECTION','TD','DD','DT','PRE','FIGCAPTION','ARTICLE'];
+            var block = node.nodeType === 1 ? node : node.parentElement;
+            while (block && blocks.indexOf(block.tagName) < 0) { block = block.parentElement; }
+            if (!block) {
+              handler.postMessage({ href: href });
+              return;
+            }
+            var offset = 0;
+            var found = false;
+            var walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, null);
+            while (walker.nextNode()) {
+              var text = walker.currentNode;
+              if (text === node) {
+                offset += range.startOffset;
+                found = true;
+                break;
+              }
+              offset += text.textContent.length;
+            }
+            if (!found && node.nodeType === 1) { offset = 0; }
+            handler.postMessage({
+              href: href,
+              text: block.textContent,
+              offset: offset
+            });
+          }, true);
+        })();
+        """
+
+    /// Reports the block under a resource-local viewport point: its text and the caret offset
+    /// inside it (both UTF-16, as JavaScript counts), or null when the point is not on text.
     static func hitTest(x: Double, y: Double) -> String {
         """
         (function () {

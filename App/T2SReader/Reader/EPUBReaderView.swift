@@ -17,10 +17,11 @@ struct EPUBReaderView: UIViewControllerRepresentable {
     let timeline: Timeline
     let httpServer: GCDHTTPServer
     let onTap: (SourceHit?) -> Void
+    let onError: (String) -> Void
 
     static let decorationGroup: DecorationGroup = "t2s"
 
-    func makeUIViewController(context: Context) -> EPUBNavigatorViewController {
+    func makeUIViewController(context: Context) -> UIViewController {
         let initial = reader.activeHighlight.flatMap { LocatorMapping.locator(for: $0, in: timeline) }
         let templates = HTMLDecorationTemplate.defaultTemplates(
             defaultTint: UIColor(Tokens.accentSoft), cornerRadius: 4
@@ -31,16 +32,21 @@ struct EPUBReaderView: UIViewControllerRepresentable {
             decorationTemplates: templates,
             fontFamilyDeclarations: [Self.interDeclaration()]
         )
-        // The ReaderPage presents an error if opening the publication itself fails.
-        let navigator = try! EPUBNavigatorViewController(
-            publication: publication, initialLocation: initial, config: config, httpServer: httpServer
-        )
-        navigator.delegate = context.coordinator
-        context.coordinator.navigator = navigator
-        return navigator
+        do {
+            let navigator = try EPUBNavigatorViewController(
+                publication: publication, initialLocation: initial, config: config, httpServer: httpServer
+            )
+            navigator.delegate = context.coordinator
+            context.coordinator.navigator = navigator
+            return navigator
+        } catch {
+            context.coordinator.report(error)
+            return UIViewController()
+        }
     }
 
-    func updateUIViewController(_ navigator: EPUBNavigatorViewController, context: Context) {
+    func updateUIViewController(_ viewController: UIViewController, context: Context) {
+        guard let navigator = viewController as? EPUBNavigatorViewController else { return }
         let coordinator = context.coordinator
         let updatedPreferences = Self.preferences(from: preferences, colorScheme: context.environment.colorScheme)
         if updatedPreferences != coordinator.lastPreferences {
@@ -70,7 +76,7 @@ struct EPUBReaderView: UIViewControllerRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(reader: reader, onTap: onTap)
+        Coordinator(reader: reader, onTap: onTap, onError: onError)
     }
 
     /// Reader body: Inter 18 × scale, line height 1.5 by default (spec §2.4.1); theme from
@@ -109,16 +115,20 @@ struct EPUBReaderView: UIViewControllerRepresentable {
     final class Coordinator: NSObject, EPUBNavigatorDelegate {
         let reader: ReaderModel
         let onTap: (SourceHit?) -> Void
+        let onError: (String) -> Void
         weak var navigator: EPUBNavigatorViewController?
         var lastPreferences: EPUBPreferences?
         var lastHighlight: HighlightRange?
         var wasFollowing = true
         private var programmaticScrollUntil = Date.distantPast
 
-        init(reader: ReaderModel, onTap: @escaping (SourceHit?) -> Void) {
+        init(reader: ReaderModel, onTap: @escaping (SourceHit?) -> Void, onError: @escaping (String) -> Void) {
             self.reader = reader
             self.onTap = onTap
+            self.onError = onError
         }
+
+        func report(_ error: Error) { onError("This document can't be displayed: \(error)") }
 
         func scrollToBlock(_ selector: String) {
             guard let navigator else { return }

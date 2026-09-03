@@ -27,7 +27,10 @@ struct ReaderPage: View {
             if let publication, let timeline {
                 Group {
                     if summary.document.sourceType == .pdf {
-                        PDFReaderView(publication: publication, reader: reader, timeline: timeline, onTap: handleTap)
+                        PDFReaderView(
+                            publication: publication, reader: reader, timeline: timeline,
+                            onTap: handleTap, onError: handleReaderError
+                        )
                     } else {
                         EPUBReaderView(
                             publication: publication,
@@ -35,7 +38,8 @@ struct ReaderPage: View {
                             preferences: env.preferences,
                             timeline: timeline,
                             httpServer: env.publications.httpServer,
-                            onTap: handleTap
+                            onTap: handleTap,
+                            onError: handleReaderError
                         )
                     }
                 }
@@ -144,6 +148,15 @@ struct ReaderPage: View {
             if let hit, await env.readerModel.seek(to: hit) { return }
             withAnimation { chromeVisible.toggle() }
         }
+    }
+
+    /// Readium rejects restricted publications at navigator construction. Keep the failure in the
+    /// SwiftUI page instead of allowing an initializer failure to terminate the app.
+    private func handleReaderError(_ message: String) {
+        env.publications.release(summary.id)
+        publication = nil
+        timeline = nil
+        error = message
     }
 
     /// Loads and starts the requested document when necessary, then opens its cached Readium

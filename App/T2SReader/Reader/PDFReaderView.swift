@@ -13,16 +13,23 @@ struct PDFReaderView: UIViewControllerRepresentable {
     let reader: ReaderModel
     let timeline: Timeline
     let onTap: (SourceHit?) -> Void
+    let onError: (String) -> Void
 
-    func makeUIViewController(context: Context) -> PDFNavigatorViewController {
-        let navigator = try! PDFNavigatorViewController(
-            publication: publication, initialLocation: nil, delegate: context.coordinator
-        )
-        context.coordinator.navigator = navigator
-        return navigator
+    func makeUIViewController(context: Context) -> UIViewController {
+        do {
+            let navigator = try PDFNavigatorViewController(
+                publication: publication, initialLocation: nil, delegate: context.coordinator
+            )
+            context.coordinator.navigator = navigator
+            return navigator
+        } catch {
+            context.coordinator.report(error)
+            return UIViewController()
+        }
     }
 
-    func updateUIViewController(_ navigator: PDFNavigatorViewController, context: Context) {
+    func updateUIViewController(_ viewController: UIViewController, context: Context) {
+        guard let navigator = viewController as? PDFNavigatorViewController else { return }
         let page = reader.activeHighlight.map { Self.pageIndex(for: $0.position.progression, in: timeline) }
         if reader.isFollowing, let page, page != context.coordinator.lastPage,
            let link = publication.readingOrder.first {
@@ -38,7 +45,7 @@ struct PDFReaderView: UIViewControllerRepresentable {
         }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(onTap: onTap) }
+    func makeCoordinator() -> Coordinator { Coordinator(onTap: onTap, onError: onError) }
 
     static func pageCount(in timeline: Timeline) -> Int {
         var progressions: Set<Double> = []
@@ -60,10 +67,16 @@ struct PDFReaderView: UIViewControllerRepresentable {
     @MainActor
     final class Coordinator: NSObject, PDFNavigatorDelegate {
         let onTap: (SourceHit?) -> Void
+        let onError: (String) -> Void
         weak var navigator: PDFNavigatorViewController?
         var lastPage: Int?
 
-        init(onTap: @escaping (SourceHit?) -> Void) { self.onTap = onTap }
+        init(onTap: @escaping (SourceHit?) -> Void, onError: @escaping (String) -> Void) {
+            self.onTap = onTap
+            self.onError = onError
+        }
+
+        func report(_ error: Error) { onError("This document can't be displayed: \(error)") }
 
         func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
             guard let position = self.navigator?.currentLocation?.locations.position else {

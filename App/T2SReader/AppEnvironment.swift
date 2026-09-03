@@ -26,6 +26,7 @@ final class AppEnvironment {
     let voices: any VoiceCatalog
     let pronunciation: PronunciationModel
     let storage: StorageModel
+    let voiceChange: VoiceChangeModel
     let readerModel: ReaderModel
     let sleepTimer: SleepTimer
     let continuation: QueueContinuation
@@ -44,6 +45,7 @@ final class AppEnvironment {
         voices = SystemVoiceCatalog()
         pronunciation = PronunciationModel(store: store)
         storage = StorageModel(library: library, audioStore: audioStore, player: player, libraryModel: libraryModel)
+        voiceChange = VoiceChangeModel(library: library, player: player, libraryModel: libraryModel)
         readerModel = ReaderModel(player: player)
         sleepTimer = SleepTimer(player: player)
         continuation = QueueContinuation(player: player, library: libraryModel, preferences: preferences)

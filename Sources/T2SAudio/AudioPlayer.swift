@@ -28,6 +28,8 @@ public final class AudioPlayer: AudioPlaying {
     /// *current* rate retroactively to the whole span since reset — see `foldManualProgress()`.
     private var manualAccumulatedSourceFrames: Double = 0
     private var generation = 0
+    /// Kept only so the observer is registered once; the app owns the player for its lifetime.
+    private var configurationObserver: NSObjectProtocol?
     /// Manual mode only: segments in schedule order with the cumulative source-frame count at
     /// which each one ends. `deliverManualCompletions()` walks this from the front and fires
     /// `onSegmentFinished` for every segment whose end has been consumed so far — computed
@@ -67,6 +69,24 @@ public final class AudioPlayer: AudioPlaying {
             try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: 4096)
         }
         try engine.start()
+        if !manualRendering {
+            // Spec §3.5: plugging AirPods in or out (and a media-services reset) tears the graph
+            // down and stops the engine. Without this, `play()` runs on a stopped engine and
+            // produces silence forever, with no error anywhere. Manual rendering has no hardware
+            // graph to reconfigure, so it never posts this.
+            configurationObserver = NotificationCenter.default.addObserver(
+                forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.restartEngineIfNeeded() }
+            }
+        }
+    }
+
+    /// Restarts the engine if the graph was torn down, and resumes the player if we were playing.
+    private func restartEngineIfNeeded() {
+        guard !manual else { return }
+        if !engine.isRunning { try? engine.start() }
+        if isPlaying { player.play() }
     }
 
     /// Manual mode: folds the output rendered so far at the current rate into the accumulator and
@@ -125,6 +145,7 @@ public final class AudioPlayer: AudioPlaying {
     }
 
     public func play() {
+        restartEngineIfNeeded()
         player.play()
         isPlaying = true
     }

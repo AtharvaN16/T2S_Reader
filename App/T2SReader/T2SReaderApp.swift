@@ -16,7 +16,8 @@ struct T2SReaderApp: App {
                         Task { await environment.importModel.importFiles([url]) }
                     }
                     .onAppear {
-                        environment.audioSession.activate(pausing: { environment.coordinator.pause() })
+                        environment.audioSession.activate(pausing: { environment.coordinator.pause() },
+                                                          resuming: { Task { await environment.coordinator.play() } })
                         environment.deviceMonitor.start()
                     }
             } else {

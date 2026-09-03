@@ -16,7 +16,7 @@ and commit message per task. The roadmap is
 
 | Branch | State | Notes |
 |---|---|---|
-| `dev` | integration branch, everything below is merged here | Plans 1–4a, Plan 4b Tasks 1–8, and Plan 5 Tasks 1, 3, and 4 are merged. The latest root-package verification was 291 tests in 66 suites (PR #13); the app builds and launches on the simulator. |
+| `dev` | integration branch, everything below is merged here | Plans 1–4a, Plan 4b Tasks 1–8, and Plan 5 Tasks 1–4 are merged. The latest root-package verification was 291 tests in 66 suites (PR #13); the app builds and launches on the simulator. |
 | `main` | stale: only the initial spec commit | Not used for integration yet; fast-forward it to `dev` when you want a release point. |
 
 Plan branches are short-lived: each plan runs on its own branch off `dev` (locally in a git
@@ -55,23 +55,34 @@ The integration branch is at merge commit `e878767` (PR #12). The completed work
 - **Documentation and CI**: PR #5 documented the Reader controls; PR #6 made CI deterministic on a
   single Xcode 26.6 toolchain and added SPM/Xcode package caches plus package-resolution retries.
 - **Plan 5** is written in PR #8. Task 1 (Now Playing, remote controls, and media-services recovery)
-  merged in PR #9, Task 3 (multi-document Prepare and `BGProcessingTask`) in PR #12, and Task 4
-  (BYO-key cloud engine) in PR #13. Task 2 (Share Extension) is now open as
-  [PR #15](https://github.com/AtharvaN16/T2S_Reader/pull/15) on
-  `plan-5-task-2-share-extension`.
+  merged in PR #9, Task 3 (multi-document Prepare and `BGProcessingTask`) in PR #12, Task 4
+  (BYO-key cloud engine) in PR #13, and Task 2 (Share Extension) in
+  [PR #15](https://github.com/AtharvaN16/T2S_Reader/pull/15).
 
 The app has been built and launched on the simulator. The latest full root-package test result is
-291 tests in 66 suites (reported by PR #13); PR #12 independently passed 280 tests before it
-merged. CI is the authority for the iOS-only Readium coverage.
+293 tests in 68 suites (on `fix/nowplaying-artwork-isolation`, see below); PR #13 reported 291 in
+66 before it. CI is the authority for the iOS-only Readium coverage.
+
+**Playback crash, found and fixed 2026-09-03 (afternoon).** Playing any document crashed the app
+(`EXC_BREAKPOINT` on MediaPlayer's `accessQueue`) the moment `MPNowPlayingInfoCenter` pushed the
+first Now Playing dictionary: the `MPMediaItemArtwork` request handlers were formed inside the
+`@MainActor` `NowPlayingController`, so Swift 6 inferred main-actor isolation and inserted an
+executor check that MediaPlayer's queue fails. Nobody had played a document on an iOS runtime
+before (Task 9 was never run), which is how it survived. Reproduced on the iPhone 16 Pro
+simulator and, from its symptoms, the same crash was reported on an iPhone 11 Pro (that device
+log has not been retrieved yet). Fixed on `fix/nowplaying-artwork-isolation`:
+`NowPlayingArtwork.make(_:)` in `T2SApp` forms the handler in a nonisolated context, with a test
+that calls it from a global queue. After the fix an EPUB was imported through `onOpenURL` and
+played in the Reader for 45 s+ on the simulator without incident.
 
 ## What comes after
 
 1. **Finish Plan 4b Task 9 first.** It has not been done: run the manual read-along pass on real
    hardware, add an EPUB/PDF fixture, and add the planned UI test. Do not call Plan 4b complete
    until those three deliverables are recorded.
-2. **Finish Plan 5 Task 2.** The Share Extension is open as PR #15; review, verify, and merge it.
-   Task 4 is already merged and provides the BYO-key HTTP route, Keychain storage, Cloud voices
-   preferences, rate limiting, and render-key isolation between engines/voices.
+2. **Verify the Share Extension on a physical device.** Task 2 merged in PR #15; it still needs
+   hardware verification of the share sheet for URL, text, EPUB, and PDF input and the hand-off
+   into the host app.
 3. **Plan 0 spikes (device work)** —
    [2026-09-02-plan-0-spikes.md](superpowers/plans/2026-09-02-plan-0-spikes.md): the harness under
    `spikes/SpikeHarness/` (xcodegen) with Kokoro via `kokoro-ios`. Spec §7.2 background compute,
@@ -83,20 +94,33 @@ merged. CI is the authority for the iOS-only Readium coverage.
 
 ## Known issues and parked items
 
-1. **Plan 4b Task 9 is open:** no manual read-along pass on hardware, no EPUB/PDF fixture, and no
-   UI test have been completed.
+1. **Plan 4b Task 9 is open:** the EPUB read-along has now passed once on the simulator (see
+   above), but the pass on hardware, the EPUB/PDF fixture, and the UI test are still not done.
+   A usable fixture already sits in Readium's checkout
+   (`Tests/Publications/Publications/childrens-literature.epub` under `swift-toolkit`).
+2. **`scripts/build-app.sh` produces an app that cannot open its library.** It builds with
+   `CODE_SIGNING_ALLOWED=NO`, so since PR #15 moved the library into the app group the simulator
+   app has no `application-groups` entitlement, `containerURL(forSecurityApplicationGroupIdentifier:)`
+   returns nil, and the app shows "The library could not be opened." Build with ad-hoc signing
+   instead (`CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=-`) or run from
+   Xcode until the script is updated.
 2. **Physical-device validation remains open:** audio through phone-call interruption and AirPods
    route changes; Lock Screen and Control Center controls; and debugger-forced
    `mediaServicesWereReset` recovery. PR #9 verified the software seams, not these hardware paths.
 3. **Background processing remains device-only:** PR #12 verified the runner and visible state on a
    simulator, but the simulator rejects the opportunistic request. Validate `BGProcessingTask`
    scheduling and simulated launch while the device is on charge.
-4. **Share Extension remains unverified:** Task 2 is open as PR #15. Verify the share sheet on a
-   physical device for URL, text, EPUB, and PDF input and the hand-off into the host.
+4. **Share Extension remains unverified on hardware:** Task 2 merged in PR #15. Verify the share
+   sheet on a physical device for URL, text, EPUB, and PDF input and the hand-off into the host.
 5. **Kokoro is deliberately blocked** until the Plan 0 device spikes establish a viable runtime,
    timing, memory, G2P, background-compute, and license result.
 
 Other retained review items:
+- Same bug class as the artwork crash, unproven: `MainActor.assumeIsolated` inside the
+  `MPRemoteCommand` handlers in `NowPlayingController.start()` and in the `deinit`s of
+  `NowPlayingController` and `AudioPlayer`. They hold as long as MediaPlayer delivers commands on
+  the main thread and those objects are only ever released on it; the Lock Screen / AirPods pass on
+  hardware is where they would show.
 - No app icon / asset catalog yet — blocking for TestFlight, fine for development.
 - `LibraryModel` progress is still computed per queued document on refresh (cached per summary);
   lazy per-row computation and an explicit, cancellable stale-timeline migration are the next step

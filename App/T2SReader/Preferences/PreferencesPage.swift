@@ -87,7 +87,11 @@ struct PreferencesPage: View {
                         }
                     }
                     section("Cloud voices") {
-                        row("Bring your own key", subtitle: "Coming soon").opacity(0.5)
+                        NavigationLink {
+                            CloudVoicesPage()
+                        } label: {
+                            row("Bring your own key", subtitle: "Your provider, your API key")
+                        }
                     }
                     section("iCloud sync") {
                         row("Sync positions and bookmarks", subtitle: "Coming later") {

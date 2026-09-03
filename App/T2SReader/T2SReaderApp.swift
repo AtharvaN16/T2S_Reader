@@ -1,10 +1,18 @@
 // App/T2SReader/T2SReaderApp.swift
+import os
 import SwiftUI
 
 @main
 struct T2SReaderApp: App {
     @State private var environment: AppEnvironment? = {
-        do { return try AppEnvironment.live() } catch { return nil }
+        do {
+            return try AppEnvironment.live()
+        } catch {
+            // The user only sees "The library could not be opened."; the reason has to go somewhere.
+            Logger(subsystem: "com.t2s.reader", category: "launch")
+                .error("AppEnvironment.live() failed: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }()
 
     var body: some Scene {

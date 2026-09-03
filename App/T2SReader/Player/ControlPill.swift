@@ -15,6 +15,7 @@ struct ControlPill: View {
             Menu {
                 Button { player.renderWholeDocument() } label: { Label("Render whole document", systemImage: "waveform") }
                 Button(action: onDetails) { Label("Details", systemImage: "info.circle") }
+                    .disabled(player.current == nil)                    // nothing loaded: the sheet would be empty
             } label: {
                 Image(systemName: "ellipsis").frame(width: 44, height: 44).contentShape(Rectangle())
             }

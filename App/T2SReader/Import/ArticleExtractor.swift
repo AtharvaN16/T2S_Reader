@@ -37,6 +37,9 @@ final class ArticleExtractor: NSObject, ArticleExtracting, WKNavigationDelegate 
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { throw ExtractionError.invalidURL }
         self.url = url
         let config = WKWebViewConfiguration()
+        // Cookies, localStorage and caches from every page the user extracts would otherwise live
+        // in the app container indefinitely; this is a one-shot read, not a browser.
+        config.websiteDataStore = .nonPersistent()
         config.mediaTypesRequiringUserActionForPlayback = .all
         config.suppressesIncrementalRendering = true
         let webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), configuration: config)

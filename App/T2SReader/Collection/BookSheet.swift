@@ -22,7 +22,7 @@ struct BookSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 HStack { Spacer(); Artwork(relativePath: live.document.coverImagePath, paths: env.paths, size: 180, radius: Spacing.artworkLarge)
-                    .shadow(color: .black.opacity(0.18), radius: 24, y: 12); Spacer() }
+                    .shadow(color: Tokens.ink.opacity(0.18), radius: 24, y: 12); Spacer() }
                     .padding(.top, Spacing.section)
                 VStack(alignment: .leading, spacing: 8) {
                     Text(live.document.title).typeRole(.playerTitle).foregroundStyle(Tokens.ink)

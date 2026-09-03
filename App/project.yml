@@ -56,6 +56,9 @@ targets:
           - InterDisplay-Black.ttf
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         LSSupportsOpeningDocumentsInPlace: false
+        # The link path loads arbitrary article pages in a WKWebView; plenty are still http.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoadsInWebContent: true
         CFBundleDocumentTypes:
           - CFBundleTypeName: EPUB
             LSHandlerRank: Alternate
@@ -68,6 +71,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.t2s.reader
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
-        TARGETED_DEVICE_FAMILY: "1,2"
+        TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
         INFOPLIST_KEY_UIUserInterfaceStyle: Automatic

@@ -5,7 +5,7 @@ import Testing
 @Suite struct DurationFormatterTests {
     @Test func longForm() {
         #expect(DurationFormatter.long(0) == "0m")
-        #expect(DurationFormatter.long(59) == "1m")                          // rounds up below a minute
+        #expect(DurationFormatter.long(59) == "1m")                          // rounds to the nearest minute
         #expect(DurationFormatter.long(42 * 60) == "42m")
         #expect(DurationFormatter.long(6 * 3600 + 20 * 60) == "6h 20m")
         #expect(DurationFormatter.long(2 * 3600) == "2h")

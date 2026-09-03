@@ -74,14 +74,26 @@ extension PageTitle where Menu == EmptyView {
 
 /// Cover artwork from a container-relative path; a `surface` block when there is none.
 struct Artwork: View {
+    /// SwiftUI re-evaluates a `LazyVGrid` cell's body on every scroll pass, so without this the
+    /// Collection grid re-reads and re-decodes each visible cover from disk while scrolling.
+    private static let cache = NSCache<NSString, UIImage>()
+
     var relativePath: String?
     var paths: LibraryPaths
     var size: CGFloat
     var radius: CGFloat
 
+    private static func image(at path: String) -> UIImage? {
+        let key = path as NSString
+        if let hit = cache.object(forKey: key) { return hit }
+        guard let image = UIImage(contentsOfFile: path) else { return nil }
+        cache.setObject(image, forKey: key)
+        return image
+    }
+
     var body: some View {
         Group {
-            if let relativePath, let image = UIImage(contentsOfFile: paths.url(forRelativePath: relativePath).path) {
+            if let relativePath, let image = Self.image(at: paths.url(forRelativePath: relativePath).path) {
                 Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
             } else {
                 Tokens.surface

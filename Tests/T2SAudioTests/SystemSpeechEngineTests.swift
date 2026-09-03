@@ -32,6 +32,26 @@ import T2SCore
         #expect(same.samples == sine)
     }
 
+    /// A voice that delivers Int16 must be converted, not rejected: rejecting would fail every
+    /// utterance and render a whole book as 200 ms silences.
+    @Test func int16BuffersAreConvertedRatherThanRejected() throws {
+        let rate = 22_050.0
+        let format = try #require(AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: rate, channels: 1, interleaved: false))
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1_000))
+        buffer.frameLength = 1_000
+        let channel = try #require(buffer.int16ChannelData?[0])
+        for i in 0..<1_000 { channel[i] = Int16(Double(Int16.max) * 0.5 * sin(Double(i) * 2 * .pi * 440 / rate)) }
+        let samples = try SystemSpeechEngine.float32Samples(from: buffer)
+        #expect(samples.count == 1_000)
+        #expect(abs((samples.map(abs).max() ?? 0) - 0.5) < 0.02)              // full-scale Int16 → ±1.0 Float32
+
+        let float = try #require(AVAudioFormat(standardFormatWithSampleRate: rate, channels: 1))
+        let passthrough = try #require(AVAudioPCMBuffer(pcmFormat: float, frameCapacity: 4))
+        passthrough.frameLength = 4
+        for i in 0..<4 { passthrough.floatChannelData![0][i] = Float(i) / 4 }
+        #expect(try SystemSpeechEngine.float32Samples(from: passthrough) == [0, 0.25, 0.5, 0.75])
+    }
+
     @Test func synthesizesAudibleAudioAtThePipelineRate() async throws {
         guard !AVSpeechSynthesisVoice.speechVoices().isEmpty else { return }   // no voices installed: nothing to test
         let engine = SystemSpeechEngine()

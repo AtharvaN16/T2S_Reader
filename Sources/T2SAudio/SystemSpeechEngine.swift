@@ -84,6 +84,35 @@ public final class SystemSpeechEngine: SynthesisEngine {
         return PCMAudio(sampleRate: to, samples: out)
     }
 
+    /// A voice that does not deliver Float32 — Int16 is plausible for the compact iOS voices — used
+    /// to fail every utterance, which would render a whole book as 200 ms silences. Convert instead,
+    /// at the voice's own sample rate (`resample` still moves it to the pipeline rate afterwards),
+    /// and fail only when the conversion itself fails.
+    static func float32Samples(from pcm: AVAudioPCMBuffer) throws -> [Float] {
+        if pcm.format.commonFormat == .pcmFormatFloat32, let channel = pcm.floatChannelData?[0] {
+            return Array(UnsafeBufferPointer(start: channel, count: Int(pcm.frameLength)))
+        }
+        guard pcm.frameLength > 0 else { return [] }
+        guard let outFormat = AVAudioFormat(standardFormatWithSampleRate: pcm.format.sampleRate, channels: 1),
+              let converter = AVAudioConverter(from: pcm.format, to: outFormat),
+              let output = AVAudioPCMBuffer(pcmFormat: outFormat, frameCapacity: pcm.frameLength + 64)
+        else { throw SynthesisError.failed("no converter for voice format \(pcm.format)") }
+        // Same one-shot feed as `resample`: `convert` calls this synchronously on this thread only.
+        final class Feed: @unchecked Sendable { var served = false }
+        let feed = Feed()
+        var conversionError: NSError?
+        let status = converter.convert(to: output, error: &conversionError) { _, outStatus in
+            if feed.served { outStatus.pointee = .endOfStream; return nil }
+            feed.served = true
+            outStatus.pointee = .haveData
+            return pcm
+        }
+        guard status != .error, let channel = output.floatChannelData?[0] else {
+            throw SynthesisError.failed(conversionError?.localizedDescription ?? "voice format conversion failed")
+        }
+        return Array(UnsafeBufferPointer(start: channel, count: Int(output.frameLength)))
+    }
+
     // MARK: Speaking
 
     struct Captured: Sendable {
@@ -132,12 +161,15 @@ public final class SystemSpeechEngine: SynthesisEngine {
                 }
                 return
             }
-            guard pcm.format.commonFormat == .pcmFormatFloat32, let channel = pcm.floatChannelData?[0] else {
-                finish(.failure(SynthesisError.failed("unsupported voice format \(pcm.format)")))
+            let converted: [Float]
+            do {
+                converted = try SystemSpeechEngine.float32Samples(from: pcm)
+            } catch {
+                finish(.failure(error))
                 return
             }
             if sampleRate == 0 { sampleRate = pcm.format.sampleRate }
-            samples.append(contentsOf: UnsafeBufferPointer(start: channel, count: Int(pcm.frameLength)))
+            samples.append(contentsOf: converted)
         }
 
         func receive(_ speechMarkers: [AVSpeechSynthesisMarker]) {

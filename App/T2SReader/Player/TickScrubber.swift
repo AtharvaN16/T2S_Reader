@@ -27,7 +27,8 @@ struct TickScrubber: View {
                     .frame(width: 3, height: 22)
                     .offset(x: max(0, min(width - 3, width * fraction - 1.5)))
             }
-            .frame(height: 22)
+            .frame(height: 22)                                          // the visuals stay 22pt…
+            .frame(maxWidth: .infinity, maxHeight: .infinity)            // …centred in a 44pt hit area
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
@@ -38,7 +39,7 @@ struct TickScrubber: View {
                     }
             )
         }
-        .frame(height: 22)
+        .frame(height: 44)
         .accessibilityElement()
         .accessibilityLabel("Scrubber")
         .accessibilityValue("\(Int((model.fraction * 100).rounded())) percent")

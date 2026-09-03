@@ -32,7 +32,7 @@ struct DetailsSheet: View {
         .padding(Spacing.margin)
         .padding(.top, Spacing.grid)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Tokens.raised)
+        .presentationBackground(Tokens.raised)
         .presentationDetents([.medium, .large])
         .presentationCornerRadius(Spacing.sheetCorner)
     }

@@ -40,7 +40,11 @@ struct ControlPill: View {
             Menu {
                 ForEach(RateLimits.allRates, id: \.self) { rate in
                     Button { player.setRate(rate) } label: {
-                        Label(Self.rateText(rate), systemImage: Self.matches(player.coordinator.rate, rate) ? "checkmark" : "")
+                        if Self.matches(player.coordinator.rate, rate) {
+                            Label(Self.rateText(rate), systemImage: "checkmark")
+                        } else {
+                            Text(Self.rateText(rate))
+                        }
                     }
                     .disabled(!player.coordinator.availableRates.contains { Self.matches($0, rate) })
                 }

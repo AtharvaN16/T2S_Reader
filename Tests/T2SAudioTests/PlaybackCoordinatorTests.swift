@@ -288,4 +288,22 @@ import T2SCore
         await c.waitForRenderIdle()
         #expect(c.lastRenderError?.hasPrefix("utterance 1:") == true)
     }
+
+    @Test func cloudKeyRejectionIsSurfacedForThePlayer() async throws {
+        let (_, player, _, store, saves, doc, timeline) = fixture()
+        let coordinator = PlaybackCoordinator(engine: KeyRejectedEngine(), store: store, player: player, playheadStore: saves,
+                                              timeSource: ManualTimeSource())
+        coordinator.load(doc, timeline: timeline)
+        await coordinator.waitForRenderIdle()
+
+        #expect(coordinator.lastRenderError?.contains("key was rejected") == true)
+    }
+}
+
+private struct KeyRejectedEngine: SynthesisEngine {
+    let engineID = "routed-v1"
+
+    func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
+        throw HTTPVoiceError.server(status: 401, message: "key rejected")
+    }
 }

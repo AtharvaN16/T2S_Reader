@@ -25,6 +25,9 @@ final class AppEnvironment {
     let importModel: ImportModel
     let publications = PublicationCache()
     let preferences: ReaderPreferences
+    let cloudVoiceSettings: CloudVoiceSettings
+    let cloudVoiceSecrets: any SecretStoring
+    let cloudRouter: RoutedEngine
     let voices: any VoiceCatalog
     let pronunciation: PronunciationModel
     let storage: StorageModel
@@ -38,7 +41,9 @@ final class AppEnvironment {
     let deviceMonitor: DeviceMonitor
 
     init(paths: LibraryPaths, store: LibraryStore, audioStore: FileAudioStore, library: Library,
-         coordinator: PlaybackCoordinator, engine: any SynthesisEngine, renderArbiter: RenderArbiter) {
+         coordinator: PlaybackCoordinator, engine: any SynthesisEngine, renderArbiter: RenderArbiter,
+         cloudVoiceSettings: CloudVoiceSettings, cloudVoiceSecrets: any SecretStoring,
+         cloudRouter: RoutedEngine) {
         self.paths = paths
         self.store = store
         self.audioStore = audioStore
@@ -48,7 +53,10 @@ final class AppEnvironment {
         libraryModel = LibraryModel(library: library)
         player = PlayerModel(coordinator: coordinator, library: library)
         preferences = ReaderPreferences()
-        voices = SystemVoiceCatalog()
+        self.cloudVoiceSettings = cloudVoiceSettings
+        self.cloudVoiceSecrets = cloudVoiceSecrets
+        self.cloudRouter = cloudRouter
+        voices = CloudVoiceCatalog(base: SystemVoiceCatalog(), configurationStore: cloudVoiceSettings.configurationStore)
         pronunciation = PronunciationModel(store: store)
         storage = StorageModel(library: library, audioStore: audioStore, player: player, libraryModel: libraryModel)
         prepareRunner = PrepareRunner(library: library, store: store, audioStore: audioStore,
@@ -80,13 +88,23 @@ final class AppEnvironment {
                               readers: [PDFDocumentReader(), ReadiumDocumentReader()])
         let storedBudget = UserDefaults.standard.object(forKey: AppPaths.prepareBudgetKey) as? Double ?? 3 * 3600
         let prepareBudget = storedBudget.isFinite ? storedBudget : 365 * 24 * 3600
-        let engine = SystemSpeechEngine()
+        let cloudVoiceSettings = CloudVoiceSettings()
+        let cloudVoiceSecrets = KeychainSecretStore()
+        let configurationStore = cloudVoiceSettings.configurationStore
+        let systemEngine = SystemSpeechEngine()
+        let cloudRouter = RoutedEngine(
+            system: systemEngine,
+            configuration: { configurationStore.current() },
+            key: { try cloudVoiceSecrets.load() }
+        )
         let renderArbiter = RenderArbiter()
-        let coordinator = PlaybackCoordinator(engine: engine, store: audioStore, player: try AudioPlayer(),
+        let coordinator = PlaybackCoordinator(engine: cloudRouter, store: audioStore, player: try AudioPlayer(),
                                               playheadStore: store, timeSource: SystemTimeSource(),
                                               configuration: CoordinatorConfiguration(prepareBudgetSeconds: prepareBudget),
                                               arbiter: renderArbiter)
         return AppEnvironment(paths: paths, store: store, audioStore: audioStore, library: library,
-                              coordinator: coordinator, engine: engine, renderArbiter: renderArbiter)
+                              coordinator: coordinator, engine: cloudRouter, renderArbiter: renderArbiter,
+                              cloudVoiceSettings: cloudVoiceSettings,
+                              cloudVoiceSecrets: cloudVoiceSecrets, cloudRouter: cloudRouter)
     }
 }

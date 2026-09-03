@@ -32,13 +32,20 @@ struct VoiceListPage: View {
                         }
                         .buttonStyle(.plain)
 
-                        Button { SystemVoiceCatalog.preview(option, through: env.audioSession) } label: {
-                            Image(systemName: "play.circle")
-                                .font(.system(size: 20))
+                        if option.id.hasPrefix("cloud:") {
+                            Image(systemName: "cloud")
+                                .font(.system(size: 18, weight: .medium))
                                 .foregroundStyle(Tokens.ink2)
+                                .accessibilityLabel("Preview this voice from Cloud voices")
+                        } else {
+                            Button { SystemVoiceCatalog.preview(option, through: env.audioSession) } label: {
+                                Image(systemName: "play.circle")
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(Tokens.ink2)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Preview")
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Preview")
                     }
                     .frame(height: 44)
                 }

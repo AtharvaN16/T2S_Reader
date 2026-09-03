@@ -20,8 +20,18 @@ public enum PlainTextArticle {
         return line.count > 80 ? String(line.prefix(80)) + "…" : line
     }
 
+    /// Drops the C0 controls (and DEL) that XML 1.0 forbids before escaping. Text pasted out of a
+    /// PDF commonly carries `\u{0C}`; leaving it in makes `ArticleEPUBWriter` throw and the user
+    /// sees "The article text couldn't be converted." for text that looked perfectly ordinary.
     static func escape(_ s: String) -> String {
-        s.replacingOccurrences(of: "&", with: "&amp;")
+        let cleaned = String(s.unicodeScalars.filter { scalar in
+            switch scalar.value {
+            case 0x09, 0x0A, 0x0D: return true                       // tab, newline, carriage return
+            case 0x00...0x1F, 0x7F: return false
+            default: return true
+            }
+        })
+        return cleaned.replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
     }

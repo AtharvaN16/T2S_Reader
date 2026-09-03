@@ -86,10 +86,16 @@ struct RootPager: View {
             AddSheet(imported: $pendingOpen, initialFiles: openedFiles ?? [])
         }
         .fullScreenCover(item: $readerDocument) { ReaderPage(summary: $0) }
-        .playbackTicking(env.player)
+        .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation)
         .task { await env.libraryModel.refresh() }
         .onChange(of: env.deviceMonitor.deviceState, initial: true) { _, state in env.coordinator.device = state }
         .onChange(of: env.libraryModel.queue.map(\.id), initial: true) { _, ids in env.coordinator.queue = ids }
+        .onChange(of: env.preferences.defaultVoiceID) { _, voiceID in
+            env.player.defaultVoiceID = voiceID
+        }
+        .onChange(of: env.preferences.defaultRate) { _, rate in
+            env.player.setRate(rate)
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { persistUnderBackgroundTask() }
         }

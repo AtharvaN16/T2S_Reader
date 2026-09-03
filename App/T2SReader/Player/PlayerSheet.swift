@@ -10,6 +10,8 @@ struct PlayerSheet: View {
     @State private var showChapters = false
     @State private var showDetails = false
     @State private var bookmarkSaved = false
+    @State private var showSpeed = false
+    @State private var showSleepTimer = false
 
     var body: some View {
         let player = env.player
@@ -21,9 +23,9 @@ struct PlayerSheet: View {
                     icon(bookmarkSaved ? "bookmark.fill" : "bookmark", "Bookmark") {
                         Task { bookmarkSaved = await player.addBookmark() }
                     }
-                    icon("moon.zzz", "Sleep timer (arrives with the Reader)") {}
-                        .disabled(true)
-                        .opacity(0.4)
+                    icon(env.sleepTimer.active == nil ? "moon.zzz" : "moon.zzz.fill", "Sleep timer") {
+                        showSleepTimer = true
+                    }
                     Menu {
                         Button { player.renderWholeDocument() } label: { Label("Render whole document", systemImage: "waveform") }
                         Button { showDetails = true } label: { Label("Details", systemImage: "info.circle") }
@@ -72,7 +74,7 @@ struct PlayerSheet: View {
                 .typeRole(.mono).foregroundStyle(Tokens.ink2)
             }
 
-            ControlPill { showDetails = true }
+            ControlPill(onDetails: { showDetails = true }, onSpeed: { showSpeed = true })
 
             if let current = player.current {
                 Button {
@@ -101,6 +103,8 @@ struct PlayerSheet: View {
         .sheet(isPresented: $showDetails) {
             if let current = player.current { DetailsSheet(summary: current) }
         }
+        .sheet(isPresented: $showSpeed) { SpeedPicker() }
+        .sheet(isPresented: $showSleepTimer) { SleepTimerSheet() }
         .onChange(of: player.coordinator.playhead) { _, _ in bookmarkSaved = false }
     }
 

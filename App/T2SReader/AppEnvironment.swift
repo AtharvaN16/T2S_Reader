@@ -24,6 +24,8 @@ final class AppEnvironment {
     let publications = PublicationCache()
     let preferences: ReaderPreferences
     let readerModel: ReaderModel
+    let sleepTimer: SleepTimer
+    let continuation: QueueContinuation
     let audioSession = AudioSessionController()
     let deviceMonitor: DeviceMonitor
 
@@ -37,6 +39,10 @@ final class AppEnvironment {
         player = PlayerModel(coordinator: coordinator, library: library)
         preferences = ReaderPreferences()
         readerModel = ReaderModel(player: player)
+        sleepTimer = SleepTimer(player: player)
+        continuation = QueueContinuation(player: player, library: libraryModel, preferences: preferences)
+        player.defaultVoiceID = preferences.defaultVoiceID
+        coordinator.setRate(preferences.defaultRate)
         importModel = ImportModel(library: library, extractor: ArticleExtractor())
         deviceMonitor = DeviceMonitor(audioStore: audioStore)
     }
@@ -54,8 +60,11 @@ final class AppEnvironment {
         let audioStore = FileAudioStore(directory: paths.audioDirectory, codec: AACCodec(), capacityBytes: capacity)
         let library = Library(paths: paths, store: store, audioStore: audioStore,
                               readers: [PDFDocumentReader(), ReadiumDocumentReader()])
+        let storedBudget = UserDefaults.standard.object(forKey: AppPaths.prepareBudgetKey) as? Double ?? 3 * 3600
+        let prepareBudget = storedBudget.isFinite ? storedBudget : 365 * 24 * 3600
         let coordinator = PlaybackCoordinator(engine: SystemSpeechEngine(), store: audioStore, player: try AudioPlayer(),
-                                              playheadStore: store, timeSource: SystemTimeSource())
+                                              playheadStore: store, timeSource: SystemTimeSource(),
+                                              configuration: CoordinatorConfiguration(prepareBudgetSeconds: prepareBudget))
         return AppEnvironment(paths: paths, store: store, audioStore: audioStore, library: library, coordinator: coordinator)
     }
 }

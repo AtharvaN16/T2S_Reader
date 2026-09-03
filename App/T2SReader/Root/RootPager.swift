@@ -1,6 +1,7 @@
 // App/T2SReader/Root/RootPager.swift
 import SwiftUI
 import T2SCore
+import T2SApp
 import T2SStore
 import UIKit
 
@@ -81,7 +82,13 @@ struct RootPager: View {
                 .presentationCornerRadius(Spacing.sheetCorner)
                 .presentationBackground(Tokens.raised)
         }
-        .onOpenURL { url in openedFiles = [url] }
+        .onOpenURL { url in
+            if let id = LibraryHandoff.documentID(from: url) {
+                Task { @MainActor in await openSharedDocument(id) }
+            } else {
+                openedFiles = [url]
+            }
+        }
         .sheet(isPresented: Binding(get: { openedFiles != nil }, set: { if !$0 { openedFiles = nil } }),
                onDismiss: openPending) {
             AddSheet(imported: $pendingOpen, initialFiles: openedFiles ?? [])
@@ -123,6 +130,7 @@ struct RootPager: View {
             case .active:
                 PrepareTask.schedule()
                 startForegroundPrepareIfNeeded()
+                Task { await env.libraryModel.refresh() }
             case .background:
                 env.prepareRunner.cancel()
                 persistUnderBackgroundTask()
@@ -161,6 +169,13 @@ struct RootPager: View {
         } else {
             env.prepareRunner.cancel()
         }
+    }
+
+    /// The extension's URL contains only a durable ID. The app reads the shared store itself
+    /// rather than accepting an arbitrary file URL from another process.
+    private func openSharedDocument(_ id: UUID) async {
+        await env.libraryModel.refresh()
+        if let summary = try? await env.store.summary(id: id) { readerDocument = summary }
     }
 
     /// iOS can suspend the app as soon as the scene-phase handler returns, which would abandon the

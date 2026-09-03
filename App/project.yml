@@ -22,6 +22,8 @@ targets:
       - path: Resources
         buildPhase: resources
     dependencies:
+      - target: T2SReaderShare
+        embed: true
       - sdk: MediaPlayer.framework
       - package: T2S
         product: T2SCore
@@ -43,6 +45,10 @@ targets:
         product: ReadiumNavigator
       - package: Readium
         product: ReadiumAdapterGCDWebServer
+    entitlements:
+      path: T2SReader/T2SReader.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.t2s.reader]
     info:
       path: T2SReader/Info.plist
       properties:
@@ -61,6 +67,9 @@ targets:
         # The link path loads arbitrary article pages in a WKWebView; plenty are still http.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoadsInWebContent: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.t2s.reader.import
+            CFBundleURLSchemes: [t2s]
         CFBundleDocumentTypes:
           - CFBundleTypeName: EPUB
             LSHandlerRank: Alternate
@@ -76,3 +85,47 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
         INFOPLIST_KEY_UIUserInterfaceStyle: Automatic
+  T2SReaderShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: T2SReaderShare
+      - path: T2SReader/Shared
+      - path: Resources/Readability
+        buildPhase: resources
+    dependencies:
+      - package: T2S
+        product: T2SCore
+      - package: T2S
+        product: T2SAudio
+      - package: T2S
+        product: T2SStore
+      - package: T2S
+        product: T2SLibrary
+      - package: T2S
+        product: T2SApp
+      - package: T2SReadium
+        product: T2SReadium
+    entitlements:
+      path: T2SReaderShare/ShareExtension.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.t2s.reader]
+    info:
+      path: T2SReaderShare/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsFileWithMaxCount: 8
+        CFBundleDisplayName: Add to t2s
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.t2s.reader.share
+        SWIFT_VERSION: "6.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic

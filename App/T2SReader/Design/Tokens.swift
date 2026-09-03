@@ -13,6 +13,8 @@ enum Tokens {
     static let ink3 = dynamic(light: 0xC9C9C7, dark: 0x3A3A3A)
     static let accent = dynamic(light: 0xFF7A1A, dark: 0xFF8C3A)
     static let accentSoft = dynamic(light: 0xFF7A1A, dark: 0xFF8C3A, lightAlpha: 0.18, darkAlpha: 0.22)
+    /// text on `accent`
+    static let onAccent = dynamic(light: 0xFFFFFF, dark: 0xFFFFFF)
     static let positive = dynamic(light: 0x22A559, dark: 0x34C070)
     static let destructive = dynamic(light: 0xE5453B, dark: 0xFF5A50)
 

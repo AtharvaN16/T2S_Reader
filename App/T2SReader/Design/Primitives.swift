@@ -30,7 +30,7 @@ struct Pill: View {
         switch style {
         case .soft: return Tokens.ink
         case .selected: return Tokens.ground
-        case .accent: return .white
+        case .accent: return Tokens.onAccent
         case .destructiveSoft: return Tokens.destructive
         }
     }

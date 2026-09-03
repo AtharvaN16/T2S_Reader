@@ -46,7 +46,7 @@ struct MiniPlayer: View {
             .padding(.trailing, 8)
             .padding(.vertical, 8)
             .background(Tokens.raised, in: Capsule())
-            .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
+            .shadow(color: Tokens.ink.opacity(0.08), radius: 12, y: 4)
             .padding(.horizontal, Spacing.margin)
             .contentShape(Capsule())
             .onTapGesture(perform: onExpand)

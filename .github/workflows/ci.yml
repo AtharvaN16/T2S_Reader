@@ -2,6 +2,7 @@ name: ci
 on: [push, pull_request]
 permissions:
   contents: read
+# Cache keys intentionally depend on package resolution inputs, not workflow-only edits.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true

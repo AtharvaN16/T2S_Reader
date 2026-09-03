@@ -1,6 +1,6 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-03 (after Plan 4b and Plan 5 Tasks 1 and 3 merged). Written for whoever picks up the coding next._
+_Last updated 2026-09-03 (after Plan 4b and Plan 5 Tasks 1, 3, and 4 merged). Written for whoever picks up the coding next._
 
 ## What this is
 
@@ -16,7 +16,7 @@ and commit message per task. The roadmap is
 
 | Branch | State | Notes |
 |---|---|---|
-| `dev` | integration branch, everything below is merged here | Plans 1–4a, Plan 4b Tasks 1–8, and Plan 5 Tasks 1 and 3 are merged. The latest root-package verification was 291 tests in 66 suites (PR #13); the app builds and launches on the simulator. |
+| `dev` | integration branch, everything below is merged here | Plans 1–4a, Plan 4b Tasks 1–8, and Plan 5 Tasks 1, 3, and 4 are merged. The latest root-package verification was 291 tests in 66 suites (PR #13); the app builds and launches on the simulator. |
 | `main` | stale: only the initial spec commit | Not used for integration yet; fast-forward it to `dev` when you want a release point. |
 
 Plan branches are short-lived: each plan runs on its own branch off `dev` (locally in a git
@@ -55,9 +55,9 @@ The integration branch is at merge commit `e878767` (PR #12). The completed work
 - **Documentation and CI**: PR #5 documented the Reader controls; PR #6 made CI deterministic on a
   single Xcode 26.6 toolchain and added SPM/Xcode package caches plus package-resolution retries.
 - **Plan 5** is written in PR #8. Task 1 (Now Playing, remote controls, and media-services recovery)
-  merged in PR #9. Task 3 (multi-document Prepare and `BGProcessingTask`) merged in PR #12. Task 4
-  (BYO-key cloud engine) is currently open as [PR #13](https://github.com/AtharvaN16/T2S_Reader/pull/13).
-  Task 2 (Share Extension) has no GitHub PR or remote branch yet; its planned branch name is
+  merged in PR #9, Task 3 (multi-document Prepare and `BGProcessingTask`) in PR #12, and Task 4
+  (BYO-key cloud engine) in PR #13. Task 2 (Share Extension) is now open as
+  [PR #15](https://github.com/AtharvaN16/T2S_Reader/pull/15) on
   `plan-5-task-2-share-extension`.
 
 The app has been built and launched on the simulator. The latest full root-package test result is
@@ -69,10 +69,9 @@ merged. CI is the authority for the iOS-only Readium coverage.
 1. **Finish Plan 4b Task 9 first.** It has not been done: run the manual read-along pass on real
    hardware, add an EPUB/PDF fixture, and add the planned UI test. Do not call Plan 4b complete
    until those three deliverables are recorded.
-2. **Finish Plan 5 Tasks 2 and 4.** Task 2 (Share Extension) remains pending with no GitHub PR or
-   remote branch at this hand-off. Review/merge Task 4 from PR #13 after its checks and review are
-   clean; it adds the BYO-key HTTP route, Keychain storage, Cloud voices preferences, rate limiting,
-   and render-key isolation between engines/voices.
+2. **Finish Plan 5 Task 2.** The Share Extension is open as PR #15; review, verify, and merge it.
+   Task 4 is already merged and provides the BYO-key HTTP route, Keychain storage, Cloud voices
+   preferences, rate limiting, and render-key isolation between engines/voices.
 3. **Plan 0 spikes (device work)** —
    [2026-09-02-plan-0-spikes.md](superpowers/plans/2026-09-02-plan-0-spikes.md): the harness under
    `spikes/SpikeHarness/` (xcodegen) with Kokoro via `kokoro-ios`. Spec §7.2 background compute,
@@ -92,8 +91,8 @@ merged. CI is the authority for the iOS-only Readium coverage.
 3. **Background processing remains device-only:** PR #12 verified the runner and visible state on a
    simulator, but the simulator rejects the opportunistic request. Validate `BGProcessingTask`
    scheduling and simulated launch while the device is on charge.
-4. **Share Extension remains unverified:** Task 2 has not opened a PR. Once implemented, verify the
-   share sheet on a physical device for URL, text, EPUB, and PDF input and the hand-off into the host.
+4. **Share Extension remains unverified:** Task 2 is open as PR #15. Verify the share sheet on a
+   physical device for URL, text, EPUB, and PDF input and the hand-off into the host.
 5. **Kokoro is deliberately blocked** until the Plan 0 device spikes establish a viable runtime,
    timing, memory, G2P, background-compute, and license result.
 

@@ -52,8 +52,9 @@ import T2SCore
         #expect(try SystemSpeechEngine.float32Samples(from: passthrough) == [0, 0.25, 0.5, 0.75])
     }
 
-    @Test func synthesizesAudibleAudioAtThePipelineRate() async throws {
-        guard !AVSpeechSynthesisVoice.speechVoices().isEmpty else { return }   // no voices installed: nothing to test
+    /// A voiceless environment must report a *skip*, not a green test that ran no assertions.
+    @Test(.enabled(if: !AVSpeechSynthesisVoice.speechVoices().isEmpty))
+    func synthesizesAudibleAudioAtThePipelineRate() async throws {
         let engine = SystemSpeechEngine()
         let result = try await engine.synthesize(SynthesisRequest(spoken: "Hello world, this is a test.", voiceID: "default"))
         #expect(result.audio.sampleRate == PCMAudio.defaultSampleRate)
@@ -65,8 +66,8 @@ import T2SCore
         #expect(engine.engineID == "system-speech")
     }
 
-    @Test func emptyTextFails() async throws {
-        guard !AVSpeechSynthesisVoice.speechVoices().isEmpty else { return }
+    @Test(.enabled(if: !AVSpeechSynthesisVoice.speechVoices().isEmpty))
+    func emptyTextFails() async throws {
         await #expect(throws: SynthesisError.self) {
             _ = try await SystemSpeechEngine().synthesize(SynthesisRequest(spoken: "   ", voiceID: "default"))
         }

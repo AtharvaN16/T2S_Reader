@@ -23,6 +23,24 @@ enum RootPage: Hashable, CaseIterable {
     }
 }
 
+/// Every Reader entry point goes through this closure (spec §2.4.5 lists Queue, book chapters,
+/// PlayerSheet, and imports). It keeps page presentation owned by the root rather than duplicated
+/// in each source view.
+struct ReaderRoute: Sendable {
+    var open: @MainActor @Sendable (DocumentSummary) -> Void
+}
+
+private struct ReaderRouteKey: EnvironmentKey {
+    static let defaultValue = ReaderRoute(open: { _ in })
+}
+
+extension EnvironmentValues {
+    var readerRoute: ReaderRoute {
+        get { self[ReaderRouteKey.self] }
+        set { self[ReaderRouteKey.self] = newValue }
+    }
+}
+
 /// Spec §2.4.4: no tab bar; a three-page pager opening on Queue, a tappable three-glyph indicator,
 /// and the floating mini-player above it on every page.
 struct RootPager: View {
@@ -35,6 +53,7 @@ struct RootPager: View {
     @State private var openedFiles: [URL]?
     /// Set by that sheet; opened once it has actually gone.
     @State private var pendingOpen: DocumentSummary?
+    @State private var readerDocument: DocumentSummary?
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -45,6 +64,7 @@ struct RootPager: View {
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea(edges: .bottom)
+            .environment(\.readerRoute, ReaderRoute(open: { readerDocument = $0 }))
 
             VStack(spacing: 12) {
                 if !env.libraryModel.isQueueEmpty || env.player.current != nil {
@@ -65,10 +85,17 @@ struct RootPager: View {
                onDismiss: openPending) {
             AddSheet(imported: $pendingOpen, initialFiles: openedFiles ?? [])
         }
-        .playbackTicking(env.player)
+        .fullScreenCover(item: $readerDocument) { ReaderPage(summary: $0) }
+        .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation)
         .task { await env.libraryModel.refresh() }
         .onChange(of: env.deviceMonitor.deviceState, initial: true) { _, state in env.coordinator.device = state }
         .onChange(of: env.libraryModel.queue.map(\.id), initial: true) { _, ids in env.coordinator.queue = ids }
+        .onChange(of: env.preferences.defaultVoiceID) { _, voiceID in
+            env.player.defaultVoiceID = voiceID
+        }
+        .onChange(of: env.preferences.defaultRate) { _, rate in
+            env.player.setRate(rate)
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { persistUnderBackgroundTask() }
         }
@@ -77,7 +104,7 @@ struct RootPager: View {
     private func openPending() {
         guard let doc = pendingOpen else { return }
         pendingOpen = nil
-        Task { await env.player.load(doc, play: true); showPlayer = true }
+        readerDocument = doc
     }
 
     /// iOS can suspend the app as soon as the scene-phase handler returns, which would abandon the

@@ -128,7 +128,7 @@ public struct ReadiumDocumentReader: DocumentReader {
     /// form used to build the timeline, and comparing un-normalized hrefs would silently fall back
     /// to document start (spec §6 forbids that). `LocatorMapping.position(for:)` normalizes the same
     /// way, so every persisted `resourceHref` — from either Readium API — is directly comparable.
-    static func resourceKey(_ href: String) -> String {
+    public static func resourceKey(_ href: String) -> String {
         let stripped = withoutFragment(href)
         return AnyURL(string: stripped)?.normalized.string ?? stripped
     }

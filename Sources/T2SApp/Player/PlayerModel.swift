@@ -35,6 +35,9 @@ public struct ChapterEntry: Hashable, Sendable, Identifiable {
 @Observable
 public final class PlayerModel {
     public let coordinator: PlaybackCoordinator
+    /// The Preferences default voice. Applied at load to documents without a per-document override
+    /// and never persisted (spec §2.2).
+    public var defaultVoiceID: String?
     public private(set) var current: DocumentSummary?
     /// Load or persistence failures from this model; cleared by the next successful load or persist.
     public private(set) var localError: String?
@@ -102,7 +105,11 @@ public final class PlayerModel {
                 localError = "Document is missing"
                 return
             }
-            coordinator.load(summary.document, timeline: timeline)
+            var document = summary.document
+            if document.voiceID == nil {
+                document.voiceID = defaultVoiceID
+            }
+            coordinator.load(document, timeline: timeline)
             current = summary
             persistedChapterHashes = timeline.chapters.map(\.hashValue)
             localError = nil

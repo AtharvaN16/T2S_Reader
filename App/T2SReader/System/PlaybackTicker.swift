@@ -8,12 +8,24 @@ import T2SApp
 /// still needs the ticks, because the coordinator schedules from them.
 private struct PlaybackTicking: ViewModifier {
     let player: PlayerModel
+    let sleepTimer: SleepTimer
+    let continuation: QueueContinuation
+    @State private var handledFinish = false
 
     func body(content: Content) -> some View {
         content.task {
             while !Task.isCancelled {
                 let playing = player.isPlaying
                 if playing { player.tick() }
+                sleepTimer.tick()
+                if player.state == .finished {
+                    if !handledFinish {
+                        handledFinish = true
+                        _ = await continuation.advanceIfFinished()
+                    }
+                } else {
+                    handledFinish = false
+                }
                 try? await Task.sleep(for: .milliseconds(playing ? 100 : 250))
             }
         }
@@ -21,5 +33,7 @@ private struct PlaybackTicking: ViewModifier {
 }
 
 extension View {
-    func playbackTicking(_ player: PlayerModel) -> some View { modifier(PlaybackTicking(player: player)) }
+    func playbackTicking(_ player: PlayerModel, sleepTimer: SleepTimer, continuation: QueueContinuation) -> some View {
+        modifier(PlaybackTicking(player: player, sleepTimer: sleepTimer, continuation: continuation))
+    }
 }

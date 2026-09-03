@@ -9,6 +9,7 @@ DerivedData/
 spikes/SpikeHarness/SpikeHarness.xcodeproj/
 App/T2SReader.xcodeproj/
 App/T2SReader/Info.plist
+App/T2SReaderShare/Info.plist
 
 # Model files — see spikes/README.md
 spikes/SpikeHarness/Resources/*.safetensors

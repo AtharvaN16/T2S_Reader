@@ -96,11 +96,27 @@ public final class SystemSpeechEngine: SynthesisEngine {
     /// session lives on the main actor and is retained by the callbacks until the final empty buffer.
     @MainActor
     private final class Session {
-        let synthesizer = AVSpeechSynthesizer()
+        /// Owned as an optional and cleared in `finish`: the synthesizer holds the two callbacks and
+        /// the callbacks hold the session, so leaving it set would retain an `AVSpeechSynthesizer`
+        /// and the utterance's PCM for every utterance in the book.
+        private(set) var synthesizer: AVSpeechSynthesizer?
         var sampleRate: Double = 0
         var samples: [Float] = []
         var markers: [Marker] = []
         var continuation: CheckedContinuation<Captured, any Error>?
+        /// `write` can deliver nothing at all — a voice whose assets are not downloaded, an
+        /// unauthorized Personal Voice — and the awaiting render job would then never complete, the
+        /// serial scheduler would never advance, and playback would sit in `.catchingUp` forever.
+        /// Spec §6 wants one failed utterance logged and filled with silence; this makes that reachable.
+        var watchdog: Task<Void, Never>?
+
+        init() { synthesizer = AVSpeechSynthesizer() }
+
+        /// The watchdog fired: stop the synthesizer and fail this utterance.
+        func timeOut() {
+            synthesizer?.stopSpeaking(at: .immediate)
+            finish(.failure(SynthesisError.failed("the voice did not finish within 60 s")))
+        }
 
         func receive(_ buffer: AVAudioBuffer) {
             guard continuation != nil else { return }
@@ -136,7 +152,13 @@ public final class SystemSpeechEngine: SynthesisEngine {
         private func finish(_ result: Result<Captured, any Error>) {
             guard let continuation else { return }
             self.continuation = nil
+            watchdog?.cancel()
+            watchdog = nil
             continuation.resume(with: result)
+            samples = []
+            markers = []
+            // Not synchronously: `AVSpeechSynthesizer` may still be inside the callback that got us here.
+            Task { @MainActor in self.synthesizer = nil }
         }
     }
 
@@ -152,11 +174,17 @@ public final class SystemSpeechEngine: SynthesisEngine {
                     continuation.resume(throwing: SynthesisError.failed("no system voice for \(fallbackLanguage)"))
                     return
                 }
-                session.synthesizer.write(utterance, toBufferCallback: { buffer in
+                session.synthesizer?.write(utterance, toBufferCallback: { buffer in
                     MainActor.assumeIsolated { session.receive(buffer) }
                 }, toMarkerCallback: { markers in
                     MainActor.assumeIsolated { session.receive(markers) }
                 })
+                let watchdog = Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(60))
+                    guard !Task.isCancelled else { return }     // `finish` cancelled us: the utterance landed
+                    session.timeOut()
+                }
+                session.watchdog = watchdog
             }
         }
     }

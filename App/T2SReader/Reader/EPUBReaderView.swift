@@ -55,22 +55,22 @@ struct EPUBReaderView: UIViewControllerRepresentable {
         }
 
         let highlight = reader.activeHighlight
+        let locator = highlight.flatMap { LocatorMapping.locator(for: $0, in: timeline) }
         if highlight != coordinator.lastHighlight {
             coordinator.lastHighlight = highlight
             var decorations: [Decoration] = []
-            if let highlight, let locator = LocatorMapping.locator(for: highlight, in: timeline) {
+            if let locator {
                 decorations.append(Decoration(
                     id: "active", locator: locator,
                     style: .highlight(tint: UIColor(Tokens.accentSoft), isActive: false)
                 ))
             }
             navigator.apply(decorations: decorations, in: Self.decorationGroup)
-            if reader.isFollowing, let selector = highlight?.position.cssSelector {
-                coordinator.scrollToBlock(selector)
+            if reader.isFollowing, let locator {
+                coordinator.scrollToHighlight(locator)
             }
-        } else if reader.isFollowing, !coordinator.wasFollowing,
-                  let selector = highlight?.position.cssSelector {
-            coordinator.scrollToBlock(selector)
+        } else if reader.isFollowing, !coordinator.wasFollowing, let locator {
+            coordinator.scrollToHighlight(locator)
         }
         coordinator.wasFollowing = reader.isFollowing
     }
@@ -130,10 +130,24 @@ struct EPUBReaderView: UIViewControllerRepresentable {
 
         func report(_ error: Error) { onError("This document can't be displayed: \(error)") }
 
-        func scrollToBlock(_ selector: String) {
+        func scrollToHighlight(_ locator: Locator) {
             guard let navigator else { return }
+            guard let highlight = locator.text.highlight else { return }
+            let selector: String?
+            if case .string(let value)? = locator.locations.otherLocations["cssSelector"] {
+                selector = value
+            } else {
+                selector = nil
+            }
             programmaticScrollUntil = Date().addingTimeInterval(1)
-            Task { _ = await navigator.evaluateJavaScript(ReaderScripts.scrollIntoMiddle(selector: selector)) }
+            Task {
+                _ = await navigator.evaluateJavaScript(ReaderScripts.scrollIntoMiddle(
+                    selector: selector,
+                    before: locator.text.before,
+                    highlight: highlight,
+                    after: locator.text.after
+                ))
+            }
         }
 
         /// A location change we did not cause is a manual scroll and suspends following.

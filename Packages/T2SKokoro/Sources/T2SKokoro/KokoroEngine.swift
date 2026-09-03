@@ -22,6 +22,7 @@ public actor KokoroEngine: SynthesisEngine {
     public nonisolated let engineID = KokoroEngine.identity
 
     private let resources: KokoroResources.Located
+    private let gpuCacheLimitBytes: Int?
     private var loaded: Loaded?
 
     /// `generateAudio` blocks its thread for seconds at a time. On the cooperative pool that would
@@ -35,9 +36,16 @@ public actor KokoroEngine: SynthesisEngine {
         let voices: [String: MLXArray]
     }
 
-    public init(resources: KokoroResources.Located) {
+    /// `gpuCacheLimitBytes` is ``KokoroRuntimeDecision/gpuCacheLimitBytes``; nil leaves MLX's own
+    /// default in place, which is what the tests that do not care about memory use.
+    public init(resources: KokoroResources.Located, gpuCacheLimitBytes: Int? = nil) {
         self.resources = resources
+        self.gpuCacheLimitBytes = gpuCacheLimitBytes
     }
+
+    /// MLX's buffer-cache cap, as the process currently has it. Internal: the tests assert that
+    /// ``init(resources:gpuCacheLimitBytes:)`` actually applied the decision's limit.
+    static var currentGPUCacheLimitBytes: Int { Memory.cacheLimit }
 
     /// Loads the model and the voice table. `synthesize` calls it lazily on first use; a caller that
     /// would rather pay the seconds before playback starts can call it itself.
@@ -48,6 +56,10 @@ public actor KokoroEngine: SynthesisEngine {
     @discardableResult
     private func load() throws -> Loaded {
         if let loaded { return loaded }
+        // Before anything allocates on the GPU. MLX's buffer cache otherwise grows to whatever the
+        // device allows, and on a phone that is what puts a long render over the jetsam limit; the
+        // cap comes from the §7.5 footprint in `KokoroRuntimeDecision`.
+        if let gpuCacheLimitBytes { Memory.cacheLimit = gpuCacheLimitBytes }
         // The voice table first: it is the far smaller read, and it is the only one of the two that
         // reports failure. `KokoroTTS.init` does not throw on a missing or corrupt model file — it
         // fails later, deep inside MLX — which is why `KokoroResources.verify` has to have run
@@ -69,6 +81,10 @@ public actor KokoroEngine: SynthesisEngine {
         guard !request.spoken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw SynthesisError.failed("nothing to speak")
         }
+        // The last chance to leave cheaply. The scheduler cancels pending renders on stop, and this
+        // actor's queue is serial: without this, a cancelled render would still load a model and
+        // synthesize for seconds while the next real one waited behind it.
+        try Task.checkCancellation()
 
         let loaded = try load()
         guard let embedding = loaded.voices["\(id.voice).npy"] else {

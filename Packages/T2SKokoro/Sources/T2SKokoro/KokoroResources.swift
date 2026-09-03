@@ -34,7 +34,8 @@ public enum KokoroResources: Sendable {
     }
 
     /// Why a directory cannot serve as the Kokoro resource directory. The payload is the file name.
-    public enum Failure: Error, Equatable, Sendable, LocalizedError {
+    /// `Hashable` so it can be carried by ``KokoroAvailability/Reason``.
+    public enum Failure: Error, Hashable, Sendable, LocalizedError {
         case missing(String)
         case sizeMismatch(String)
         case checksumMismatch(String)

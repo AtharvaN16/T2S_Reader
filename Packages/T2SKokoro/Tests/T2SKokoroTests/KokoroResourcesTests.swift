@@ -3,9 +3,6 @@ import Testing
 @testable import T2SKokoro
 
 @Suite struct KokoroResourcesTests {
-    /// The real files are installed by `scripts/fetch-kokoro-model.sh`; CI has neither.
-    static let haveRealFiles = (try? KokoroResources.locate(in: KokoroResources.developmentDirectory).get()) != nil
-
     @Test func locateReportsTheModelMissingFromAnEmptyDirectory() throws {
         try withTemporaryDirectory { directory in
             #expect(KokoroResources.locate(in: directory) == .failure(.missing("kokoro-v1_0.safetensors")))
@@ -40,7 +37,7 @@ import Testing
         }
     }
 
-    @Test(.enabled(if: KokoroResourcesTests.haveRealFiles))
+    @Test(.enabled(if: KokoroTestSupport.haveRealFiles))
     func verifyAcceptsTheInstalledModelAndVoices() throws {
         let located = try KokoroResources.locate(in: KokoroResources.developmentDirectory).get()
         try KokoroResources.verify(located)

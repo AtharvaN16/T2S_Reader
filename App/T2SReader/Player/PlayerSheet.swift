@@ -5,6 +5,8 @@ import T2SStore
 
 struct PlayerSheet: View {
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.readerRoute) private var readerRoute
     @State private var showChapters = false
     @State private var showDetails = false
     @State private var bookmarkSaved = false
@@ -71,6 +73,22 @@ struct PlayerSheet: View {
             }
 
             ControlPill { showDetails = true }
+
+            if let current = player.current {
+                Button {
+                    dismiss()
+                    readerRoute.open(current)
+                } label: {
+                    HStack {
+                        Text("Read along →").typeRole(.rowTitle)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(Tokens.ink)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
 
             if let error = player.renderError {
                 Text(error).typeRole(.meta).foregroundStyle(Tokens.destructive).lineLimit(2)

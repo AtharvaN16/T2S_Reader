@@ -9,6 +9,7 @@ import T2SStore
 struct BookSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.readerRoute) private var readerRoute
     var summary: DocumentSummary
 
     @State private var chapters: [ChapterEntry] = []
@@ -62,7 +63,8 @@ struct BookSheet: View {
                                     if !isCurrent { await env.player.load(live, play: false) }
                                     await env.player.seek(toChapter: chapter.index)
                                     if !env.player.isPlaying { await env.player.togglePlay() }
-                                    showPlayer = true
+                                    dismiss()
+                                    readerRoute.open(live)
                                 }
                             } label: {
                                 Image(systemName: "play.fill").font(.system(size: 13, weight: .semibold))

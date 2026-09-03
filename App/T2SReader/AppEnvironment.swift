@@ -21,6 +21,9 @@ final class AppEnvironment {
     let libraryModel: LibraryModel
     let player: PlayerModel
     let importModel: ImportModel
+    let publications = PublicationCache()
+    let preferences: ReaderPreferences
+    let readerModel: ReaderModel
     let audioSession = AudioSessionController()
     let deviceMonitor: DeviceMonitor
 
@@ -32,6 +35,8 @@ final class AppEnvironment {
         self.coordinator = coordinator
         libraryModel = LibraryModel(library: library)
         player = PlayerModel(coordinator: coordinator, library: library)
+        preferences = ReaderPreferences()
+        readerModel = ReaderModel(player: player)
         importModel = ImportModel(library: library, extractor: ArticleExtractor())
         deviceMonitor = DeviceMonitor(audioStore: audioStore)
     }

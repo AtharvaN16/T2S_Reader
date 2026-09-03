@@ -29,7 +29,9 @@ struct ReaderPage: View {
                     if summary.document.sourceType == .pdf {
                         PDFReaderView(
                             publication: publication, reader: reader, timeline: timeline,
-                            onTap: handleTap, onError: handleReaderError
+                            onTap: handleTap,
+                            onError: handleReaderError,
+                            onTearDown: releasePublication
                         )
                     } else {
                         EPUBReaderView(
@@ -39,7 +41,8 @@ struct ReaderPage: View {
                             timeline: timeline,
                             httpServer: env.publications.httpServer,
                             onTap: handleTap,
-                            onError: handleReaderError
+                            onError: handleReaderError,
+                            onTearDown: releasePublication
                         )
                     }
                 }
@@ -153,10 +156,14 @@ struct ReaderPage: View {
     /// Readium rejects restricted publications at navigator construction. Keep the failure in the
     /// SwiftUI page instead of allowing an initializer failure to terminate the app.
     private func handleReaderError(_ message: String) {
-        env.publications.release(summary.id)
+        releasePublication()
         publication = nil
         timeline = nil
         error = message
+    }
+
+    private func releasePublication() {
+        env.publications.release(summary.id)
     }
 
     /// Loads and starts the requested document when necessary, then opens its cached Readium

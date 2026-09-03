@@ -18,6 +18,7 @@ struct EPUBReaderView: UIViewControllerRepresentable {
     let httpServer: GCDHTTPServer
     let onTap: (SourceHit?) -> Void
     let onError: (String) -> Void
+    let onTearDown: () -> Void
 
     static let decorationGroup: DecorationGroup = "t2s"
 
@@ -76,7 +77,11 @@ struct EPUBReaderView: UIViewControllerRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(reader: reader, onTap: onTap, onError: onError)
+        Coordinator(reader: reader, onTap: onTap, onError: onError, onTearDown: onTearDown)
+    }
+
+    static func dismantleUIViewController(_ uiViewController: UIViewController, coordinator: Coordinator) {
+        coordinator.tearDown()
     }
 
     /// Reader body: Inter 18 × scale, line height 1.5 by default (spec §2.4.1); theme from
@@ -117,12 +122,14 @@ struct EPUBReaderView: UIViewControllerRepresentable {
         let reader: ReaderModel
         let onTap: (SourceHit?) -> Void
         let onError: (String) -> Void
+        let onTearDown: () -> Void
         weak var navigator: EPUBNavigatorViewController?
         var lastPreferences: EPUBPreferences?
         var lastHighlight: HighlightRange?
         var wasFollowing = true
         private var programmaticScrollUntil = Date.distantPast
         private var capturedTap: CapturedTap?
+        private var hasTornDown = false
 
         private static let tapMessageName = "t2sReaderTap"
 
@@ -131,13 +138,30 @@ struct EPUBReaderView: UIViewControllerRepresentable {
             let date: Date
         }
 
-        init(reader: ReaderModel, onTap: @escaping (SourceHit?) -> Void, onError: @escaping (String) -> Void) {
+        init(
+            reader: ReaderModel,
+            onTap: @escaping (SourceHit?) -> Void,
+            onError: @escaping (String) -> Void,
+            onTearDown: @escaping () -> Void
+        ) {
             self.reader = reader
             self.onTap = onTap
             self.onError = onError
+            self.onTearDown = onTearDown
         }
 
         func report(_ error: Error) { onError("This document can't be displayed: \(error)") }
+
+        /// Drop the cache's ownership only after SwiftUI has dismantled the navigator host. The
+        /// navigator may finish deallocating after this point, but still keeps its own publication
+        /// reference until then.
+        func tearDown() {
+            guard !hasTornDown else { return }
+            hasTornDown = true
+            navigator?.delegate = nil
+            navigator = nil
+            onTearDown()
+        }
 
         func scrollToHighlight(_ locator: Locator) {
             guard let navigator else { return }

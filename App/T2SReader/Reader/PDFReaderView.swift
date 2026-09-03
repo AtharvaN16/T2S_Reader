@@ -14,6 +14,7 @@ struct PDFReaderView: UIViewControllerRepresentable {
     let timeline: Timeline
     let onTap: (SourceHit?) -> Void
     let onError: (String) -> Void
+    let onTearDown: () -> Void
 
     func makeUIViewController(context: Context) -> UIViewController {
         do {
@@ -46,7 +47,13 @@ struct PDFReaderView: UIViewControllerRepresentable {
         }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(reader: reader, onTap: onTap, onError: onError) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(reader: reader, onTap: onTap, onError: onError, onTearDown: onTearDown)
+    }
+
+    static func dismantleUIViewController(_ uiViewController: UIViewController, coordinator: Coordinator) {
+        coordinator.tearDown()
+    }
 
     static func pageCount(in timeline: Timeline) -> Int {
         var progressions: Set<Double> = []
@@ -70,17 +77,35 @@ struct PDFReaderView: UIViewControllerRepresentable {
         let reader: ReaderModel
         let onTap: (SourceHit?) -> Void
         let onError: (String) -> Void
+        let onTearDown: () -> Void
         weak var navigator: PDFNavigatorViewController?
         var lastPage: Int?
         private var programmaticNavigationUntil = Date.distantPast
+        private var hasTornDown = false
 
-        init(reader: ReaderModel, onTap: @escaping (SourceHit?) -> Void, onError: @escaping (String) -> Void) {
+        init(
+            reader: ReaderModel,
+            onTap: @escaping (SourceHit?) -> Void,
+            onError: @escaping (String) -> Void,
+            onTearDown: @escaping () -> Void
+        ) {
             self.reader = reader
             self.onTap = onTap
             self.onError = onError
+            self.onTearDown = onTearDown
         }
 
         func report(_ error: Error) { onError("This document can't be displayed: \(error)") }
+
+        /// Cache ownership ends when the hosted navigator leaves the SwiftUI hierarchy. The
+        /// navigator retains its publication independently until it finishes deallocating.
+        func tearDown() {
+            guard !hasTornDown else { return }
+            hasTornDown = true
+            navigator?.delegate = nil
+            navigator = nil
+            onTearDown()
+        }
 
         func beginFollowingNavigation() {
             programmaticNavigationUntil = Date().addingTimeInterval(1)

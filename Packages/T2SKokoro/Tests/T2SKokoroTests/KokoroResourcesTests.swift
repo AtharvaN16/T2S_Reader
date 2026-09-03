@@ -2,7 +2,9 @@ import Foundation
 import Testing
 @testable import T2SKokoro
 
-@Suite struct KokoroResourcesTests {
+/// Serialized like the other model-backed suites: the installed-model test hashes 340 MB, and
+/// `KokoroResources.developmentDirectory` reads the process environment on every call.
+@Suite(.serialized) struct KokoroResourcesTests {
     @Test func locateReportsTheModelMissingFromAnEmptyDirectory() throws {
         try withTemporaryDirectory { directory in
             #expect(KokoroResources.locate(in: directory) == .failure(.missing("kokoro-v1_0.safetensors")))

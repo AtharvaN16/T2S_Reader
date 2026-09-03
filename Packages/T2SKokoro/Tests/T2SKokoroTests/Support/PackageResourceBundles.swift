@@ -19,9 +19,12 @@ enum KokoroTestSupport {
     /// `xcodebuild` forwards no environment of its own to the test process, so it is set here.
     ///
     /// It is an explicit call rather than a lazily evaluated `static let` because `setenv` mutates
-    /// the process environment: writing it at an unpredictable moment can race another suite's
-    /// `ProcessInfo.environment` read. The lock makes the write happen exactly once, and every suite
-    /// that calls it is `.serialized`.
+    /// the process environment: writing it at an unpredictable moment can race another test's
+    /// `ProcessInfo.environment` read — `KokoroResources.developmentDirectory` does one on every
+    /// call. The lock makes the write happen exactly once, but once is still one write, so what
+    /// actually closes the race is that nothing else is running: `scripts/test-kokoro.sh` passes
+    /// `-parallel-testing-enabled NO`. `.serialized` on a suite is not enough on its own — it orders
+    /// tests within one suite and leaves suites running beside each other.
     ///
     /// The app needs none of this: linked into an app the bundles are in `Bundle.main.resourceURL`,
     /// which is the accessor's first candidate.

@@ -16,15 +16,24 @@ final class ArticleExtractor: NSObject, ArticleExtracting, WKNavigationDelegate 
 
     static let timeoutSeconds: UInt64 = 20
 
+    /// One main-actor hop: the continuation is recorded *before* the load starts, so a navigation
+    /// callback that lands immediately still finds it rather than ending the request by timeout.
     nonisolated func extract(from url: URL) async throws -> ExtractedArticle {
-        try await MainActor.run { try self.begin(url) }
-        return try await withCheckedThrowingContinuation { continuation in
-            Task { @MainActor in self.continuation = continuation }
+        try await withCheckedThrowingContinuation { continuation in
+            Task { @MainActor in
+                do {
+                    guard self.continuation == nil, self.webView == nil else { throw ExtractionError.network("an extraction is already running") }
+                    self.continuation = continuation
+                    try self.begin(url)
+                } catch {
+                    self.continuation = nil
+                    continuation.resume(throwing: error)
+                }
+            }
         }
     }
 
     private func begin(_ url: URL) throws {
-        guard continuation == nil, webView == nil else { throw ExtractionError.network("an extraction is already running") }
         guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { throw ExtractionError.invalidURL }
         self.url = url
         let config = WKWebViewConfiguration()

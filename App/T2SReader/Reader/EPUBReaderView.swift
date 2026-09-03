@@ -89,8 +89,9 @@ struct EPUBReaderView: UIViewControllerRepresentable {
         result.lineHeight = preferences.lineHeight
         result.scroll = true
         result.theme = dark ? .dark : .light
-        result.backgroundColor = ReadiumNavigator.Color(rawValue: dark ? 0x101010 : 0xF8F8F7)
-        result.textColor = ReadiumNavigator.Color(rawValue: dark ? 0xF2F2F2 : 0x111111)
+        let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
+        result.backgroundColor = ReadiumNavigator.Color(uiColor: UIColor(Tokens.ground).resolvedColor(with: traits))
+        result.textColor = ReadiumNavigator.Color(uiColor: UIColor(Tokens.ink).resolvedColor(with: traits))
         return result
     }
 

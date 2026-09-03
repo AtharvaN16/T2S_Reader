@@ -106,7 +106,11 @@ public final class PlaybackCoordinator {
             let expected = RenderKey(documentID: document.id, utteranceIndex: i, voiceID: voice,
                                      engineID: engine.engineID, normalizerVersion: timeline.normalizerVersion,
                                      segmenterVersion: timeline.segmenterVersion)
-            rendered.append(timeline[utterance: i].audioRef == expected.rawValue)
+            let isCurrent = timeline[utterance: i].audioRef == expected.rawValue
+            rendered.append(isCurrent)
+            // `audioRef` is cache metadata, not proof that this build/voice still owns the clip.
+            // Clear old identities so the next persistence cannot revive an invalid cache hit.
+            if !isCurrent { self.timeline?[utterance: i].audioRef = nil }
         }
         manualRequested = false
         lastPlayed = document.id
@@ -347,13 +351,11 @@ public final class PlaybackCoordinator {
         input.windowSeconds = configuration.windowSeconds
         input.primeSeconds = configuration.primeSeconds
         input.prepareBudgetSeconds = configuration.prepareBudgetSeconds
-        let voice = document.voiceID ?? "default"
         let requests = RenderPolicy.plan(input).map { job in
             RenderRequest(job: job,
-                          key: RenderKey(documentID: document.id, utteranceIndex: job.utteranceIndex, voiceID: voice,
-                                         engineID: engine.engineID, normalizerVersion: timeline.normalizerVersion,
-                                         segmenterVersion: timeline.segmenterVersion),
-                          spoken: timeline[utterance: job.utteranceIndex].spoken, voiceID: voice)
+                          key: renderKey(for: document, timeline: timeline, utteranceIndex: job.utteranceIndex),
+                          spoken: timeline[utterance: job.utteranceIndex].spoken,
+                          voiceID: document.voiceID ?? "default")
         }
         submitsInFlight += 1
         let scheduler = self.scheduler
@@ -421,6 +423,12 @@ public final class PlaybackCoordinator {
     private func refreshHighlight() {
         guard let timeline else { highlight = nil; return }
         highlight = Highlighter.highlight(at: playhead, in: timeline)
+    }
+
+    private func renderKey(for document: Document, timeline: Timeline, utteranceIndex: Int) -> RenderKey {
+        RenderKey(documentID: document.id, utteranceIndex: utteranceIndex, voiceID: document.voiceID ?? "default",
+                  engineID: engine.engineID, normalizerVersion: timeline.normalizerVersion,
+                  segmenterVersion: timeline.segmenterVersion)
     }
 
     private func save() {

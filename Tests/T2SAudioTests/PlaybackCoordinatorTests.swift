@@ -226,6 +226,20 @@ import T2SCore
         #expect(await engine.requests.count == 3)                  // nothing re-synthesized
     }
 
+    @Test func staleAudioReferenceForAnotherVoiceIsNotAccepted() async throws {
+        let (c, _, engine, _, _, doc, originalTimeline) = fixture()
+        var timeline = originalTimeline
+        let stale = RenderKey(documentID: doc.id, utteranceIndex: 0, voiceID: "old-voice", engineID: engine.engineID,
+                              normalizerVersion: timeline.normalizerVersion, segmenterVersion: timeline.segmenterVersion)
+        timeline[utterance: 0].audioRef = stale.rawValue
+        await engine.hold()                                        // inspect load state before the replacement can render
+
+        c.load(doc, timeline: timeline)
+
+        #expect(c.timeline?[utterance: 0].audioRef == nil)
+        await engine.release()
+    }
+
     @Test func concurrentPlayEnqueuesEachSegmentOnce() async throws {
         let (c, player, _, _, _, doc, timeline) = fixture()
         c.load(doc, timeline: timeline)

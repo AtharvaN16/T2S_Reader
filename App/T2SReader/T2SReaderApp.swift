@@ -12,6 +12,9 @@ struct T2SReaderApp: App {
             if let environment {
                 RootPager()
                     .environment(environment)
+                    .onOpenURL { url in
+                        Task { await environment.importModel.importFiles([url]) }
+                    }
             } else {
                 Text("The library could not be opened.")
                     .typeRole(.rowTitle)

@@ -55,4 +55,5 @@ scripts/check-licenses.sh      # fails on any copyleft dependency, in every pack
 cd spikes/SpikeHarness && xcodegen generate && open SpikeHarness.xcodeproj
 scripts/build-app.sh           # regenerate App/T2SReader.xcodeproj and build for the simulator
 open App/T2SReader.xcodeproj   # after scripts/build-app.sh has generated it
+scripts/fetch-readability.sh   # re-vendor Readability.js (committed under App/Resources/Readability)
 ```

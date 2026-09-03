@@ -20,6 +20,7 @@ final class AppEnvironment {
     let coordinator: PlaybackCoordinator
     let libraryModel: LibraryModel
     let player: PlayerModel
+    let importModel: ImportModel
 
     init(paths: LibraryPaths, store: LibraryStore, audioStore: FileAudioStore, library: Library, coordinator: PlaybackCoordinator) {
         self.paths = paths
@@ -29,6 +30,7 @@ final class AppEnvironment {
         self.coordinator = coordinator
         libraryModel = LibraryModel(library: library)
         player = PlayerModel(coordinator: coordinator, library: library)
+        importModel = ImportModel(library: library, extractor: ArticleExtractor())
     }
 
     static func live() throws -> AppEnvironment {

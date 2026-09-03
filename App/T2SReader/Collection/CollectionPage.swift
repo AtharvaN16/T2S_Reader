@@ -6,6 +6,7 @@ import T2SStore
 struct CollectionPage: View {
     @Environment(AppEnvironment.self) private var env
     @State private var showAdd = false
+    @State private var showPlayer = false
     @State private var selected: DocumentSummary?
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: 3)
@@ -51,7 +52,14 @@ struct CollectionPage: View {
             .padding(.horizontal, Spacing.margin)
         }
         .background(Tokens.ground)
-        .sheet(isPresented: $showAdd) { AddSheet() }
+        .sheet(isPresented: $showAdd) {
+            AddSheet { imported in
+                Task { await env.player.load(imported, play: true); showPlayer = true }
+            }
+        }
+        .sheet(isPresented: $showPlayer) {
+            PlayerSheet().presentationCornerRadius(Spacing.sheetCorner).presentationBackground(Tokens.raised)
+        }
         .sheet(item: $selected) { BookSheet(summary: $0) }
     }
 }

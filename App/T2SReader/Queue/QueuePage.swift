@@ -61,7 +61,11 @@ struct QueuePage: View {
         .scrollContentBackground(.hidden)
         .background(Tokens.ground)
         .refreshable { await env.libraryModel.refresh() }
-        .sheet(isPresented: $showAdd) { AddSheet() }
+        .sheet(isPresented: $showAdd) {
+            AddSheet { imported in
+                Task { await env.player.load(imported, play: true); showPlayer = true }
+            }
+        }
         .sheet(isPresented: $showPlayer) {
             PlayerSheet().presentationCornerRadius(Spacing.sheetCorner).presentationBackground(Tokens.raised)
         }

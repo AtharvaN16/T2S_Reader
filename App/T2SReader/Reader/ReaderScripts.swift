@@ -90,7 +90,14 @@ enum ReaderScripts {
           var after = \(after) || '';
           if (!highlight) { return false; }
 
-          var root = selector ? document.querySelector(selector) : document.body;
+          var root = document.body;
+          if (selector) {
+            try {
+              root = document.querySelector(selector);
+            } catch (error) {
+              return false;
+            }
+          }
           if (!root) { root = document.body; }
           var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
           var nodes = [];

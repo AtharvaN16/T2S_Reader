@@ -11,7 +11,7 @@ working, tested software on its own. Order follows spec §9.
 | 1 | Text pipeline (`T2SCore`): domain model, normalizer with span mapping, segmenter, timeline, codec, position resolution, highlight projection | 3–4 | `2026-09-02-plan-1-text-pipeline.md` | written |
 | 2 | Render and playback: `SynthesisEngine`, `FakeEngine`, `RenderKey`, audio cache, `RenderPolicy` tiers, `RenderScheduler`, `AudioPlayer` (`T2SAudio`), `PlaybackCoordinator` | 5 | `2026-09-02-plan-2-render-playback.md` | written |
 | 3 | Persistence and ingest: SwiftData store (`T2SStore`), Readium adapter for EPUB and PDF (`T2SReadium`), article-to-EPUB writer | 3 (Readium part), spec §5 | `2026-09-02-plan-3-persistence-ingest.md` | written |
-| 4a | App shell, import, player: T2SApp models, design tokens, pager, Queue, Collection, mini-player, player sheet, Add sheet (link/file/text), system-voice fallback engine | 6, 8 | `2026-09-02-plan-4a-app-shell.md` | written |
+| 4a | App shell, import, player: T2SApp models, design tokens, pager, Queue, Collection, mini-player, player sheet, Add sheet (link/file/text), system-voice fallback engine | 6, 8 | `2026-09-02-plan-4a-app-shell.md` | executing (Tasks 1–12 done; final review pending) |
 | 4b | Reader page with decorations and auto-scroll, speed picker, sleep timer, Preferences, storage manager | 6, 8, 9 (part) | — | after 4a |
 | 5 | Kokoro engine, Share Extension and Readability import, Now Playing, pronunciation dictionary UI, BYO-key HTTP engine, `BGProcessingTask` wiring | 7, 9 | — | after Plan 4 and Plan 0 |
 | 6 | CloudKit sync behind `SyncProvider`, Live Activity, App Intents, Spotlight | 10–11 | — | after Plan 5 |

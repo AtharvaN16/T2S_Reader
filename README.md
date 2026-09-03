@@ -57,3 +57,8 @@ scripts/build-app.sh           # regenerate App/T2SReader.xcodeproj and build fo
 open App/T2SReader.xcodeproj   # after scripts/build-app.sh has generated it
 scripts/fetch-readability.sh   # re-vendor Readability.js (committed under App/Resources/Readability)
 ```
+
+**Running the app.** Open the generated `App/T2SReader.xcodeproj`, pick the
+`T2SReader` scheme and an iPhone simulator, and run. Playback uses the
+system voice until Plan 5 brings the Kokoro engine; import a document with
+the `+` button on the Queue page.

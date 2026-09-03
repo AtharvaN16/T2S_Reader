@@ -15,6 +15,10 @@ struct T2SReaderApp: App {
                     .onOpenURL { url in
                         Task { await environment.importModel.importFiles([url]) }
                     }
+                    .onAppear {
+                        environment.audioSession.activate(pausing: { environment.coordinator.pause() })
+                        environment.deviceMonitor.start()
+                    }
             } else {
                 Text("The library could not be opened.")
                     .typeRole(.rowTitle)

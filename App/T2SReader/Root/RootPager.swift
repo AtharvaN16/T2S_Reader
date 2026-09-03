@@ -25,6 +25,7 @@ enum RootPage: Hashable, CaseIterable {
 /// and the floating mini-player above it on every page.
 struct RootPager: View {
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.scenePhase) private var scenePhase
     @State private var page: RootPage = .queue
     @State private var showPlayer = false
 
@@ -54,5 +55,10 @@ struct RootPager: View {
         }
         .playbackTicking(env.player)
         .task { await env.libraryModel.refresh() }
+        .onChange(of: env.deviceMonitor.deviceState, initial: true) { _, state in env.coordinator.device = state }
+        .onChange(of: env.libraryModel.queue.map(\.id), initial: true) { _, ids in env.coordinator.queue = ids }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { Task { await env.player.persistRenderedChapters() } }
+        }
     }
 }

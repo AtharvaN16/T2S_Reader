@@ -21,6 +21,8 @@ final class AppEnvironment {
     let libraryModel: LibraryModel
     let player: PlayerModel
     let importModel: ImportModel
+    let audioSession = AudioSessionController()
+    let deviceMonitor: DeviceMonitor
 
     init(paths: LibraryPaths, store: LibraryStore, audioStore: FileAudioStore, library: Library, coordinator: PlaybackCoordinator) {
         self.paths = paths
@@ -31,6 +33,7 @@ final class AppEnvironment {
         libraryModel = LibraryModel(library: library)
         player = PlayerModel(coordinator: coordinator, library: library)
         importModel = ImportModel(library: library, extractor: ArticleExtractor())
+        deviceMonitor = DeviceMonitor(audioStore: audioStore)
     }
 
     static func live() throws -> AppEnvironment {

@@ -38,6 +38,9 @@ public final class PlayerModel {
     /// The Preferences default voice. Applied at load to documents without a per-document override
     /// and never persisted (spec §2.2).
     public var defaultVoiceID: String?
+    /// Decides, once per load, which voice the whole document actually renders with when its stored
+    /// route is unavailable on this device (spec §6). The stored voice is never rewritten.
+    public var voiceRouting: any VoiceRouteResolving = PassthroughVoiceRouting()
     public private(set) var current: DocumentSummary?
     /// Load or persistence failures from this model; cleared by the next successful load or persist.
     public private(set) var localError: String?
@@ -146,6 +149,9 @@ public final class PlayerModel {
             if document.voiceID == nil {
                 document.voiceID = defaultVoiceID
             }
+            // Local copy only: the coordinator reads this document for render keys and synthesis
+            // requests, and never writes it back.
+            document.voiceID = await voiceRouting.effectiveVoiceID(document.voiceID ?? VoiceOption.systemDefault.id)
             coordinator.load(document, timeline: timeline)
             current = summary
             persistedChapterHashes = timeline.chapters.map(\.hashValue)

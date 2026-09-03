@@ -15,7 +15,8 @@ public struct CloudVoiceCatalog: VoiceCatalog {
         var voices = base.voices()
         guard let configuration = configurationStore.current() else { return voices }
         let id = CloudVoiceID(configuration: configuration, voice: configuration.voice).rawValue
-        voices.append(VoiceOption(id: id, name: "\(configuration.voice) · Cloud", language: "Cloud"))
+        voices.append(VoiceOption(id: id, name: "\(configuration.voice) · Cloud", language: "Cloud",
+                                  group: .cloud))
         return voices
     }
 }

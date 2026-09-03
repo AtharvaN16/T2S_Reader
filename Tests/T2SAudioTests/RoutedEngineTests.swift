@@ -38,11 +38,61 @@ import T2SCore
         _ = try await routed.synthesize(.init(spoken: "x", voiceID: "system:com.example.voice"))
         #expect(await system.requests == [.init(spoken: "x", voiceID: "com.example.voice")])
     }
+
+    @Test func routesAMatchingKokoroIdentityToTheKokoroEngineUnchanged() async throws {
+        let identity = "kokoro-4e9ecdf0-mlx-misaki1.0.6"
+        let system = RecordingEngine()
+        let kokoro = RecordingEngine(engineID: identity)
+        let routed = RoutedEngine(system: system, configuration: { nil }, key: { nil }, kokoro: kokoro)
+
+        let voiceID = KokoroVoiceID(engineID: identity, voice: "af_heart").rawValue
+        _ = try await routed.synthesize(.init(spoken: "Hello", voiceID: voiceID))
+
+        // The engine parses the voice out of the ID itself, so the request must arrive unchanged.
+        #expect(await kokoro.requests == [.init(spoken: "Hello", voiceID: voiceID)])
+        #expect(await system.requests.isEmpty)
+    }
+
+    @Test func refusesAKokoroIdentityFromAnotherBuildAndOneWithNoKokoroEngine() async throws {
+        let identity = "kokoro-4e9ecdf0-mlx-misaki1.0.6"
+        let other = "kokoro-00000000-mlx-misaki1.0.6"
+        let system = RecordingEngine()
+        let kokoro = RecordingEngine(engineID: identity)
+        let routed = RoutedEngine(system: system, configuration: { nil }, key: { nil }, kokoro: kokoro)
+
+        await #expect(throws: KokoroRouteError.unavailable(engineID: other)) {
+            try await routed.synthesize(.init(spoken: "x", voiceID: KokoroVoiceID(engineID: other, voice: "af_heart").rawValue))
+        }
+
+        let withoutKokoro = RoutedEngine(system: system, configuration: { nil }, key: { nil })
+        await #expect(throws: KokoroRouteError.unavailable(engineID: identity)) {
+            try await withoutKokoro.synthesize(.init(spoken: "x", voiceID: KokoroVoiceID(engineID: identity, voice: "af_heart").rawValue))
+        }
+
+        // A Kokoro ID never silently degrades to a different voice mid-book (spec §6).
+        #expect(await kokoro.requests.isEmpty)
+        #expect(await system.requests.isEmpty)
+    }
+
+    @Test func systemAndBareVoiceIDsStillReachTheSystemEngineBesideAKokoroRoute() async throws {
+        let system = RecordingEngine()
+        let kokoro = RecordingEngine(engineID: "kokoro-4e9ecdf0-mlx-misaki1.0.6")
+        let routed = RoutedEngine(system: system, configuration: { nil }, key: { nil }, kokoro: kokoro)
+
+        _ = try await routed.synthesize(.init(spoken: "a", voiceID: "system:com.example.voice"))
+        _ = try await routed.synthesize(.init(spoken: "b", voiceID: "default"))
+
+        #expect(await system.requests == [.init(spoken: "a", voiceID: "com.example.voice"),
+                                          .init(spoken: "b", voiceID: "default")])
+        #expect(await kokoro.requests.isEmpty)
+    }
 }
 
 private actor RecordingEngine: SynthesisEngine {
-    nonisolated let engineID = "recording"
+    nonisolated let engineID: String
     private(set) var requests: [SynthesisRequest] = []
+
+    init(engineID: String = "recording") { self.engineID = engineID }
 
     func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
         requests.append(request)

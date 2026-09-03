@@ -150,4 +150,26 @@ import T2SStore
         #expect(player.coordinator.document?.voiceID == "custom")
         #expect(try await f.store.document(id: id)?.voiceID == "custom")
     }
+
+    @Test func anUnavailableKokoroVoiceRendersTheWholeDocumentWithTheSystemDefault() async throws {
+        let kokoroVoiceID = "kokoro:kokoro-4e9ecdf0-mlx-misaki1.0.6:af_heart"
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        var stored = try #require(try await f.store.document(id: id))
+        stored.voiceID = kokoroVoiceID
+        try await f.store.update(stored)
+
+        let engine = FakeEngine(secondsPerCharacter: 0.05)
+        let player = try makePlayer(f, engine: engine)
+        player.voiceRouting = KokoroVoiceRouting.unavailable
+        await player.load(try #require(try await f.store.summary(id: id)), play: false)
+        await player.coordinator.waitForRenderIdle()
+
+        // Decided once, before planning: every utterance of the book renders with the system default.
+        let requested = Set(await engine.requests.map(\.voiceID))
+        #expect(requested == ["default"])
+        #expect(player.coordinator.document?.voiceID == "default")
+        // The stored choice is untouched, so the book returns to Kokoro when the engine is available.
+        #expect(try await f.store.document(id: id)?.voiceID == kokoroVoiceID)
+    }
 }

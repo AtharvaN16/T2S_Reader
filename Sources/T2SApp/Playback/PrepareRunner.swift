@@ -59,6 +59,9 @@ public final class PrepareRunner {
     public private(set) var lastError: String?
     /// Applied only to documents without their own override, mirroring `PlayerModel`.
     public var defaultVoiceID: String?
+    /// Resolves an unavailable route to the system default for the whole document before planning,
+    /// so Prepare renders the audio playback will actually ask for (spec §6). Mirrors `PlayerModel`.
+    public var voiceRouting: any VoiceRouteResolving = PassthroughVoiceRouting()
 
     private let library: Library
     private let store: LibraryStore
@@ -177,7 +180,7 @@ public final class PrepareRunner {
                   var snapshot = try? await library.renderSnapshot(for: id)
             else { continue }
 
-            let voiceID = document.voiceID ?? defaultVoiceID ?? "default"
+            let voiceID = await voiceRouting.effectiveVoiceID(document.voiceID ?? defaultVoiceID ?? "default")
             for index in snapshot.rendered.indices {
                 let expected = renderKey(documentID: id, utteranceIndex: index, voiceID: voiceID, timeline: timeline)
                 let hasExpectedReference = timeline[utterance: index].audioRef == expected.rawValue

@@ -1,13 +1,16 @@
 import Foundation
 import T2SCore
 
-/// Routes stable voice IDs to the built-in system engine or the currently configured BYO-key HTTP
-/// engine. The router's own engine ID is fixed; the cloud configuration fingerprint in `voiceID`
-/// supplies the rendering identity required by `RenderKey` (spec §5).
+/// Routes stable voice IDs to the built-in system engine, the on-device Kokoro engine, or the
+/// currently configured BYO-key HTTP engine. The router's own engine ID is fixed; the cloud
+/// configuration fingerprint and the Kokoro engine identity travel in `voiceID`, so each supplies
+/// the rendering identity required by `RenderKey` (spec §5).
 public actor RoutedEngine: SynthesisEngine {
     public nonisolated let engineID = "routed-v1"
 
     private let system: any SynthesisEngine
+    /// Absent in the everyday build, which does not link MLX at all.
+    private let kokoro: (any SynthesisEngine)?
     private let configuration: @Sendable () -> HTTPVoiceConfiguration?
     private let key: @Sendable () async throws -> String?
     private let session: URLSession
@@ -16,14 +19,24 @@ public actor RoutedEngine: SynthesisEngine {
     public init(system: any SynthesisEngine,
                 configuration: @escaping @Sendable () -> HTTPVoiceConfiguration?,
                 key: @escaping @Sendable () async throws -> String?,
-                session: URLSession = .shared) {
+                session: URLSession = .shared,
+                kokoro: (any SynthesisEngine)? = nil) {
         self.system = system
         self.configuration = configuration
         self.key = key
         self.session = session
+        self.kokoro = kokoro
     }
 
     public func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
+        if let kokoroID = KokoroVoiceID(rawValue: request.voiceID) {
+            guard let kokoro, kokoro.engineID == kokoroID.engineID else {
+                throw KokoroRouteError.unavailable(engineID: kokoroID.engineID)
+            }
+            // Unchanged: the engine reads its own voice out of the ID.
+            return try await kokoro.synthesize(request)
+        }
+
         if let cloudID = CloudVoiceID(rawValue: request.voiceID) {
             guard let configuration = configuration(), configuration.fingerprint == cloudID.fingerprint else {
                 throw HTTPVoiceError.notConfigured

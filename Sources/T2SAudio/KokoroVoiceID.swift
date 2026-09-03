@@ -36,3 +36,17 @@ public struct KokoroVoiceID: Hashable, Sendable {
         self.rawValue = rawValue
     }
 }
+
+/// A `kokoro:` voice ID reached the router on a build or device that cannot serve it. The existing
+/// render policy surfaces the failed utterance and fills it with 200 ms of silence rather than
+/// halting the book (spec §6); a document is meant to be routed away from Kokoro before planning.
+public enum KokoroRouteError: Error, Equatable, Sendable, LocalizedError {
+    case unavailable(engineID: String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .unavailable:
+            return "Kokoro is not available on this device."
+        }
+    }
+}

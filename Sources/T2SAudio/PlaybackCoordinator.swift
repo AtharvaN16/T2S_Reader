@@ -76,13 +76,14 @@ public final class PlaybackCoordinator {
 
     public init(engine: any SynthesisEngine, store: any AudioStore, player: any AudioPlaying,
                 playheadStore: any PlayheadStore, timeSource: any TimeSource,
-                configuration: CoordinatorConfiguration = CoordinatorConfiguration()) {
+                configuration: CoordinatorConfiguration = CoordinatorConfiguration(),
+                arbiter: RenderArbiter = RenderArbiter()) {
         self.engine = engine
         self.store = store
         self.player = player
         self.playheadStore = playheadStore
         self.configuration = configuration
-        self.scheduler = RenderScheduler(engine: engine, store: store, timeSource: timeSource)
+        self.scheduler = RenderScheduler(engine: engine, store: store, timeSource: timeSource, arbiter: arbiter)
         player.onSegmentFinished = { [weak self] tag in self?.segmentFinished(tag) }
         eventTask = Task { [weak self, scheduler] in
             for await event in scheduler.events {

@@ -15,6 +15,10 @@ struct T2SReaderApp: App {
         }
     }()
 
+    init() {
+        PrepareTask.register()
+    }
+
     var body: some Scene {
         WindowGroup {
             if let environment {
@@ -30,6 +34,7 @@ struct T2SReaderApp: App {
                                                           recovering: { Task { await environment.coordinator.recoverAfterMediaServicesReset() } })
                         environment.nowPlaying.start()
                         environment.deviceMonitor.start()
+                        PrepareTask.schedule()
                     }
             } else {
                 Text("The library could not be opened.")

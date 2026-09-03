@@ -37,12 +37,19 @@ final class DeviceMonitor {
 
     func refresh() {
         Task {
-            let stats = await audioStore.stats()
-            signals = DeviceSignals(batteryState: Self.battery(UIDevice.current.batteryState),
-                                    thermal: Self.thermal(ProcessInfo.processInfo.thermalState),
-                                    lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled,
-                                    storeBytes: stats.bytes, storeCapacityBytes: stats.capacityBytes)
+            _ = await refreshNow()
         }
+    }
+
+    /// Reads all current signals for a foreground or fresh background Prepare pass. A background
+    /// task cannot rely on the app scene's notification-driven value having been refreshed yet.
+    func refreshNow() async -> DeviceState {
+        let stats = await audioStore.stats()
+        signals = DeviceSignals(batteryState: Self.battery(UIDevice.current.batteryState),
+                                thermal: Self.thermal(ProcessInfo.processInfo.thermalState),
+                                lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled,
+                                storeBytes: stats.bytes, storeCapacityBytes: stats.capacityBytes)
+        return deviceState
     }
 
     private static func battery(_ state: UIDevice.BatteryState) -> BatteryState {

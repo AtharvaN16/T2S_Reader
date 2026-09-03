@@ -1,5 +1,6 @@
 // App/T2SReader/Root/RootPager.swift
 import SwiftUI
+import T2SCore
 import T2SStore
 import UIKit
 
@@ -88,15 +89,19 @@ struct RootPager: View {
         .fullScreenCover(item: $readerDocument) { ReaderPage(summary: $0) }
         .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation, nowPlaying: env.nowPlaying)
         .task { await env.libraryModel.refresh() }
-        .onChange(of: env.deviceMonitor.deviceState, initial: true) { _, state in env.coordinator.device = state }
+        .onChange(of: env.deviceMonitor.deviceState, initial: true) { _, state in
+            updatePrepareDeviceState(state)
+        }
         .onChange(of: env.libraryModel.queue.map(\.id), initial: true) { _, ids in
             env.coordinator.queue = ids
+            startForegroundPrepareIfNeeded()
         }
         .onChange(of: env.libraryModel.summaries.map(\.id)) { _, ids in
             if let current = env.player.current, !ids.contains(current.id) { env.nowPlaying.clear() }
         }
         .onChange(of: env.preferences.defaultVoiceID) { _, voiceID in
             env.player.defaultVoiceID = voiceID
+            env.prepareRunner.defaultVoiceID = voiceID
         }
         .onChange(of: env.preferences.defaultRate) { _, rate in
             env.player.setRate(rate)
@@ -106,8 +111,25 @@ struct RootPager: View {
         .onChange(of: env.player.elapsed) { _, _ in env.nowPlaying.update() }
         .onChange(of: env.player.chapterIndex) { _, _ in env.nowPlaying.update() }
         .onChange(of: env.coordinator.rate) { _, _ in env.nowPlaying.update() }
+        .onChange(of: env.player.state) { _, state in
+            if state == .playing || state == .catchingUp {
+                env.prepareRunner.cancel()
+            } else {
+                startForegroundPrepareIfNeeded()
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background { persistUnderBackgroundTask() }
+            switch phase {
+            case .active:
+                PrepareTask.schedule()
+                startForegroundPrepareIfNeeded()
+            case .background:
+                env.prepareRunner.cancel()
+                persistUnderBackgroundTask()
+                if env.deviceMonitor.deviceState.charging { PrepareTask.schedule() }
+            default:
+                break
+            }
         }
     }
 
@@ -115,6 +137,30 @@ struct RootPager: View {
         guard let doc = pendingOpen else { return }
         pendingOpen = nil
         readerDocument = doc
+    }
+
+    /// A foreground pass is only a convenience while the app is awake and idle. The scheduler's
+    /// shared lease means a user starting playback always receives the next render slot.
+    private func startForegroundPrepareIfNeeded() {
+        let device = env.deviceMonitor.deviceState
+        guard device.charging, !device.thermalSerious, !device.lowPowerMode, !device.storeFull,
+              !env.player.isPlaying, !env.prepareRunner.isRunning
+        else { return }
+        Task {
+            let result = await env.prepareRunner.run(reason: .foreground, device: device)
+            if let recordedAt = result.recordedAt { env.storage.recordPrepareRun(recordedAt) }
+            await env.storage.refresh()
+            await env.libraryModel.refresh()
+        }
+    }
+
+    private func updatePrepareDeviceState(_ state: DeviceState) {
+        env.coordinator.device = state
+        if state.charging && !state.thermalSerious && !state.lowPowerMode && !state.storeFull {
+            startForegroundPrepareIfNeeded()
+        } else {
+            env.prepareRunner.cancel()
+        }
     }
 
     /// iOS can suspend the app as soon as the scene-phase handler returns, which would abandon the

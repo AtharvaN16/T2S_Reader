@@ -52,17 +52,23 @@ public actor RenderScheduler {
     private let store: any AudioStore
     private let timeSource: any TimeSource
     private let rtfWindow: Int
+    private let arbiter: RenderArbiter
 
     public private(set) var pending: [RenderRequest] = []
     public private(set) var isPausedForStorage = false
     private var running = false
+    /// Direct cancellation prevents a request that was waiting on the shared lease from starting.
+    /// An already synthesizing/writing request is intentionally allowed to finish atomically.
+    private var isCancelled = false
     private var rtfSamples: [Double] = []
 
-    public init(engine: any SynthesisEngine, store: any AudioStore, timeSource: any TimeSource, rtfWindow: Int = 20) {
+    public init(engine: any SynthesisEngine, store: any AudioStore, timeSource: any TimeSource,
+                rtfWindow: Int = 20, arbiter: RenderArbiter = RenderArbiter()) {
         self.engine = engine
         self.store = store
         self.timeSource = timeSource
         self.rtfWindow = max(1, rtfWindow)
+        self.arbiter = arbiter
         (events, continuation) = AsyncStream.makeStream(of: RenderEvent.self, bufferingPolicy: .unbounded)
     }
 
@@ -77,6 +83,7 @@ public actor RenderScheduler {
     /// whose `.idle` is already owed. Callers that wait for idleness count on this.
     @discardableResult
     public func setPlan(_ requests: [RenderRequest]) -> Bool {
+        isCancelled = false
         if isPausedForStorage {
             continuation.yield(.idle)                              // never leave a waiter hanging while paused
             return true
@@ -90,61 +97,93 @@ public actor RenderScheduler {
         return false
     }
 
-    public func cancel() { pending.removeAll() }
+    public func cancel() {
+        isCancelled = true
+        pending.removeAll()
+    }
 
     public func resume() { isPausedForStorage = false }
 
     private func run() async {
         while !isPausedForStorage, !pending.isEmpty {
             let request = pending.removeFirst()
-            if await store.contains(request.key) {
-                if let clip = try? await store.read(request.key) {
-                    continuation.yield(.rendered(RenderedUtterance(
-                        documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, key: request.key,
-                        duration: clip.duration, wordTimings: [])))
-                    continue
-                }
-                // The read came back nil or threw: fall through and synthesize as if it were a miss.
-            }
-            let t0 = timeSource.now()
-            var result: SynthesisResult
-            do {
-                result = try await engine.synthesize(SynthesisRequest(spoken: request.spoken, voiceID: request.voiceID))
-                let synthSeconds = timeSource.now() - t0
-                if result.audio.duration > 0 { record(rtf: synthSeconds / result.audio.duration) }
-            } catch {
-                continuation.yield(.failed(documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, message: "\(error)"))
-                result = SynthesisResult(audio: .silence(seconds: Self.failureSilenceSeconds), wordTimings: [])
-            }
-            do {
-                try await store.write(result.audio, for: request.key)
-            } catch AudioStoreError.capacityExceeded, AudioStoreError.diskFull {
+            switch await render(request) {
+            case .events(let events):
+                events.forEach { continuation.yield($0) }
+            case .storeFull:
                 isPausedForStorage = true
                 pending.removeAll()
                 continuation.yield(.storeFull)
                 break
-            } catch {
-                // Encoding or I/O failed for this clip: log it and fall back to the failure silence
-                // so the utterance still arrives (spec §6). Only if that write fails too does a
-                // bare `.failed` go out with no `.rendered` behind it.
-                continuation.yield(.failed(documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, message: "\(error)"))
-                result = SynthesisResult(audio: .silence(seconds: Self.failureSilenceSeconds), wordTimings: [])
-                do {
-                    try await store.write(result.audio, for: request.key)
-                } catch {
-                    continue
-                }
             }
-            continuation.yield(.rendered(RenderedUtterance(
-                documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, key: request.key,
-                duration: result.audio.duration, wordTimings: result.wordTimings)))
         }
         running = false
         continuation.yield(.idle)
     }
 
+    /// The lease is intentionally scoped to one cache check / synthesis / store transaction. This
+    /// lets play-ahead preempt Prepare at the next utterance without allowing a second renderer.
+    private func render(_ request: RenderRequest) async -> RenderOutcome {
+        await arbiter.acquire(request.job.tier)
+        if isCancelled {
+            await arbiter.release()
+            return .events([])
+        }
+        let outcome = await renderWhileHoldingLease(request)
+        await arbiter.release()
+        return outcome
+    }
+
+    private func renderWhileHoldingLease(_ request: RenderRequest) async -> RenderOutcome {
+        if await store.contains(request.key), let clip = try? await store.read(request.key) {
+            return .events([.rendered(RenderedUtterance(
+                documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, key: request.key,
+                duration: clip.duration, wordTimings: []))])
+        }
+
+        var events: [RenderEvent] = []
+        let t0 = timeSource.now()
+        var result: SynthesisResult
+        do {
+            result = try await engine.synthesize(SynthesisRequest(spoken: request.spoken, voiceID: request.voiceID))
+            let synthSeconds = timeSource.now() - t0
+            if result.audio.duration > 0 { record(rtf: synthSeconds / result.audio.duration) }
+        } catch {
+            events.append(.failed(documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, message: "\(error)"))
+            result = SynthesisResult(audio: .silence(seconds: Self.failureSilenceSeconds), wordTimings: [])
+        }
+
+        do {
+            try await store.write(result.audio, for: request.key)
+        } catch AudioStoreError.capacityExceeded, AudioStoreError.diskFull {
+            return .storeFull
+        } catch {
+            // Encoding or I/O failed for this clip: log it and fall back to the failure silence so
+            // the utterance still arrives (spec §6). Only if that write fails too is it bare failed.
+            events.append(.failed(documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, message: "\(error)"))
+            result = SynthesisResult(audio: .silence(seconds: Self.failureSilenceSeconds), wordTimings: [])
+            do {
+                try await store.write(result.audio, for: request.key)
+            } catch AudioStoreError.capacityExceeded, AudioStoreError.diskFull {
+                return .storeFull
+            } catch {
+                return .events(events)
+            }
+        }
+
+        events.append(.rendered(RenderedUtterance(
+            documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, key: request.key,
+            duration: result.audio.duration, wordTimings: result.wordTimings)))
+        return .events(events)
+    }
+
     private func record(rtf: Double) {
         rtfSamples.append(rtf)
         if rtfSamples.count > rtfWindow { rtfSamples.removeFirst(rtfSamples.count - rtfWindow) }
+    }
+
+    private enum RenderOutcome: Sendable {
+        case events([RenderEvent])
+        case storeFull
     }
 }

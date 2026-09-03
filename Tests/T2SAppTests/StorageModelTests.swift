@@ -45,8 +45,9 @@ import T2SStore
         // Reloading immediately primes the paused document's render window, so cache entries can
         // already be fresh again. The stored timeline remains evicted until that new work is saved.
 
-        defaults.set(Date(timeIntervalSince1970: 1_700_000_000), forKey: StorageModel.lastPrepareRunKey)
-        await storage.refresh()
-        #expect(storage.lastPrepareRun == Date(timeIntervalSince1970: 1_700_000_000))
+        let run = Date(timeIntervalSince1970: 1_700_000_000)
+        storage.recordPrepareRun(run)
+        #expect(storage.lastPrepareRun == run)
+        #expect(defaults.object(forKey: StorageModel.lastPrepareRunKey) as? Date == run)
     }
 }

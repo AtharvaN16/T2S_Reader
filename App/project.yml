@@ -48,7 +48,8 @@ targets:
       properties:
         CFBundleDisplayName: t2s
         UILaunchScreen: {}
-        UIBackgroundModes: [audio]
+        UIBackgroundModes: [audio, processing]
+        BGTaskSchedulerPermittedIdentifiers: [com.t2s.reader.prepare]
         UIAppFonts:
           - Inter-Regular.ttf
           - Inter-Medium.ttf

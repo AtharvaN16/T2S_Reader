@@ -79,6 +79,13 @@ public final class StorageModel {
         await refresh()
     }
 
+    /// Records a successful Prepare pass and updates the visible state without waiting for a full
+    /// storage refresh. The runner uses this same persistence key for background launches.
+    public func recordPrepareRun(_ date: Date) {
+        defaults.set(date, forKey: Self.lastPrepareRunKey)
+        lastPrepareRun = date
+    }
+
     /// A loaded document is reloaded paused after eviction by `PlayerModel`, so it can never write
     /// stale audio references back to the store.
     public func evict(_ id: UUID) async {

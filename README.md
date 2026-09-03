@@ -62,3 +62,13 @@ scripts/fetch-readability.sh   # re-vendor Readability.js (committed under App/R
 `T2SReader` scheme and an iPhone simulator, and run. Playback uses the
 system voice until Plan 5 brings the Kokoro engine; import a document with
 the `+` button on the Queue page.
+
+### Reader, speed picker, and sleep timer
+
+Tap a Queue title, a chapter in a book, or **Read along →** in the player to
+open the full-screen Reader. It follows the active word while audio plays;
+scrolling pauses following until **Back to current** is tapped, and tapping a
+sentence seeks to it. Use the speed control to choose 0.5x–4.0x in 0.1x
+steps; rates the device cannot sustain are unavailable. The sleep timer offers
+10, 20, 30, 45, or 60 minutes, plus **End of chapter**, and pauses playback
+when it fires.

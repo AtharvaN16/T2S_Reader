@@ -53,6 +53,22 @@ import T2SStore
         #expect(model.isQueueEmpty && model.queueSubtitle == "0 items")
     }
 
+    @Test func refreshReusesProgressForUnchangedDocuments() async throws {
+        let f = try AppFixtures()
+        let a = try await f.importFake()
+        _ = try await f.importFake()
+        let model = LibraryModel(library: f.library)
+        await model.refresh()
+        let first = model.progress
+        #expect(first.count == 2)
+        await model.refresh()                                               // nothing written: every row is a cache hit
+        #expect(model.progress == first)
+        try await f.store.savePosition(Position(resourceHref: "OEBPS/ch2.xhtml", progression: 0, charOffset: 0), for: a)
+        await model.refresh()                                               // …but a new resume position is not
+        #expect(model.progress != first)
+        #expect(model.progress(for: a)?.chapterIndex == 1)
+    }
+
     @Test func progressFollowsSavedPositions() async throws {
         let f = try AppFixtures()
         let a = try await f.importFake()

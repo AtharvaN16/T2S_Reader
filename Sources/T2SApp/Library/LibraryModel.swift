@@ -7,8 +7,12 @@ import T2SStore
 public enum QueueView: Hashable, Sendable { case queue, finished }
 
 /// The Queue and Collection pages' state (spec §2.3, §2.4.5). Reads summaries from the store and
-/// per-document progress through `Library.timelineForPlayback`, which also re-derives a stale
-/// timeline on the way (spec §3.7.3), so a version bump costs one refresh, not a migration.
+/// per-document progress through `Library.currentTimeline`, which decodes the stored chapters but
+/// never reprocesses: re-derivation after a version bump is a load-time concern
+/// (`Library.timelineForPlayback`), not something an action's refresh should trigger for every
+/// queued document at once. Progress is cached per document against the parts of its summary that
+/// can change it, so a refresh after an archive or a move decodes only what actually changed. A
+/// document with no progress entry (stale, or missing) falls back to the summary's own totals.
 @MainActor
 @Observable
 public final class LibraryModel {
@@ -18,6 +22,10 @@ public final class LibraryModel {
     public private(set) var lastError: String?
 
     private let library: Library
+    /// Progress per document, keyed on the summary fields that can change it (see `progressKey`),
+    /// so an unchanged document is never decoded twice. `@ObservationIgnored`: it is a cache behind
+    /// `progress`, not state a view reads.
+    @ObservationIgnored private var progressCache: [UUID: (key: DocumentSummary, value: DocumentProgress)] = [:]
 
     public init(library: Library) { self.library = library }
 
@@ -67,17 +75,38 @@ public final class LibraryModel {
         do {
             let all = try await library.store.summaries()
             var next: [UUID: DocumentProgress] = [:]
+            var cache: [UUID: (key: DocumentSummary, value: DocumentProgress)] = [:]
             for s in all where s.queueOrder != nil || s.isFinished {
-                if let timeline = try await library.timelineForPlayback(s.id) {
-                    next[s.id] = DocumentProgress.compute(summary: s, timeline: timeline)
+                let key = progressKey(s)
+                if let hit = progressCache[s.id], hit.key == key {           // nothing that moves progress changed
+                    next[s.id] = hit.value
+                    cache[s.id] = hit
+                    continue
+                }
+                if let timeline = try await library.currentTimeline(s.id) {
+                    let computed = DocumentProgress.compute(summary: s, timeline: timeline)
+                    next[s.id] = computed
+                    cache[s.id] = (key, computed)
                 }
             }
             summaries = all
             progress = next
+            progressCache = cache                                            // rebuilt, so deleted ids drop out
             lastError = nil
         } catch {
             lastError = "\(error)"
         }
+    }
+
+    /// The summary reduced to what `DocumentProgress.compute` actually reads: queue position, last
+    /// played, and finished state move rows around but never change a row's progress, so an archive
+    /// or a move must not cost a chapter decode.
+    private func progressKey(_ summary: DocumentSummary) -> DocumentSummary {
+        var key = summary
+        key.queueOrder = nil
+        key.lastPlayedAt = nil
+        key.isFinished = false
+        return key
     }
 
     // MARK: Actions (each ends with a refresh so the lists are always the store's truth)

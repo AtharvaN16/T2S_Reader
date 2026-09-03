@@ -85,6 +85,15 @@ public actor Library {
         return stale ? try await reprocess(id) : try await store.timeline(for: id)?.timeline
     }
 
+    /// The timeline as it currently stands, for callers that only want to *read* it — list refresh,
+    /// row progress. Never reprocesses: a stale document (or a missing one) returns `nil` rather
+    /// than paying for a re-derivation, because re-derivation belongs on the load path
+    /// (`timelineForPlayback`), where it is asked for once and the user is waiting for that document.
+    public func currentTimeline(_ id: UUID) async throws -> Timeline? {
+        guard let stale = try await store.isStale(id: id), !stale else { return nil }
+        return try await store.timeline(for: id)?.timeline
+    }
+
     /// Re-reads the retained source with the current segmenter, normalizer, and dictionary and
     /// replaces the chapters. The resume position survives (spec §3.2). The old utterances' audio
     /// keys are removed from the cache: they embed the old versions and would never be looked up

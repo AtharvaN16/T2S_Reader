@@ -1,11 +1,13 @@
 // App/T2SReader/System/AudioSessionController.swift
 import AVFoundation
 import Foundation
+import os
 
 /// Spec §3.5. Activates the spoken-audio playback session and pauses on interruptions (a call,
 /// another app taking the output) and when headphones are unplugged.
 @MainActor
 final class AudioSessionController {
+    private static let log = Logger(subsystem: "com.t2s.reader", category: "audio")
     private var observers: [NSObjectProtocol] = []
 
     func activate(pausing pause: @escaping @MainActor () -> Void) {
@@ -15,6 +17,7 @@ final class AudioSessionController {
             try session.setActive(true)
         } catch {
             // Playback still works through the default session; the loss is background continuation.
+            Self.log.error("Audio session activation failed: \(error.localizedDescription, privacy: .public)")
         }
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: session, queue: .main) { note in

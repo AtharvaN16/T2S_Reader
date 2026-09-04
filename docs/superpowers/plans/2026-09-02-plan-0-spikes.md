@@ -838,27 +838,52 @@ therefore outside the MLX route; this task asks whether another runtime covers i
 **Timebox:** 1 day. If nothing runs the 50-sentence corpus on the iPhone 11 Pro within it, record
 "MLX only, A14+ floor" and stop.
 
+**Revised 2026-09-03** after the desk research in
+`spikes/findings/2026-09-03-pre-a14-runtime-options.md`, which ranks the candidates with sources
+and carries the hour-by-hour protocol. The order below replaces the original "sherpa-onnx first":
+sherpa-onnx's Kokoro pipeline phonemizes through espeak-ng (GPL-3, ruled out by §7.1) and exposes
+no timings, so it is out; the Core ML conversion the original list put last is the only candidate
+with a measured 4 GB-iPhone number.
+
 **Files:**
-- Create: `spikes/OnnxHarness/` (or a second mode of `SpikeHarness` if the runtime is a Swift package)
+- Modify: `spikes/SpikeHarness/` — a second engine arm (`CoreMLBench`) beside `SynthBench`,
+  selected by launch environment (`SPIKE_ENGINE=coreml|mlx|mlxcpu`), same CSV/WAV/timing output
+- Create: `scripts/fetch-kokoro-coreml.sh` — downloads the single 15-second bucket of
+  `mattmireles/kokoro-coreml` (about 178 MB, sha256 per file from the repo's manifest) into a
+  git-ignored `spikes/SpikeHarness/Resources/CoreML/`
 - Create: `spikes/findings/2026-09-XX-pre-a14-runtime.md`
 
 **Candidates, in order:**
-1. sherpa-onnx (Apache-2.0) — ships a Kokoro TTS recipe and an iOS build on ONNX Runtime; check
-   whether it exposes per-token timing, its model size, and its licence chain (ONNX Runtime MIT).
-2. A kokoro-onnx export run directly on ONNX Runtime's iOS package with the CoreML execution
-   provider; same three checks.
-3. A CoreML conversion with duration outputs, only if one already exists with a permissive licence
-   (do not convert here).
+1. **Core ML** — `mattmireles/kokoro-coreml`, low-level `KokoroPipeline` Swift package
+   (`swift/`, iOS 16+, zero dependencies, Apache-2.0). Token IDs in (MisakiSwift phonemes through
+   Kokoro's 178-symbol vocab), PCM and per-token duration frames out (25 ms per frame at 24 kHz).
+   Measured on an iPhone 12 Pro (A14, 4 GB, June 2026): RTF 0.41–0.46. The author's ANE compile
+   fails on iPhone, so it runs a staged CPU+GPU policy; run that policy and `cpuOnly` back to back.
+2. **MLX on the CPU** — the existing arm with `Device.withDefaultDevice(.cpu)`. A 30-minute
+   control, not a candidate: no kernel fusion on iOS, weights alone 327 MB resident.
+3. **ONNX Runtime, CPU provider** with `onnx-community/Kokoro-82M-v1.0-ONNX-timestamped` — only
+   if Core ML fails outright. Its one same-class anchor (A12X) is RTF 0.62 at 833 MB, over the bar.
 
-**Measure** with the same protocol as Task 4 on the iPhone 11 Pro: median RTF flat out for 5
-minutes, peak footprint, thermal at 3x. Pass bar unchanged: RTF ≤ 0.35, footprint ≤ 400 MB, no
-thermal state 2 in 20 minutes at 3x. Also record whether word timings are available; if they are
-not, the read-along highlight on pre-A14 devices needs the estimated-timeline path and that must
-be stated in the findings.
+**Measure** with the same protocol as Task 4 on the iPhone 11 Pro: median warm RTF flat out for
+5 minutes (discard the first two calls per configuration: Core ML compiles on first load), peak
+footprint, thermal at 3x, per-stage timings, and the first three sentences as WAV with a `timing`
+row per token from the duration frames. Verify the frame-to-seconds constant against the WAV
+before trusting any timing (the Core ML pipeline implies 25 ms per frame; the ONNX community
+recipe divides by 80). Pass bar unchanged: RTF ≤ 0.35, footprint ≤ 400 MB, no thermal state 2 in
+20 minutes at 3x.
 
-**Decision shape:** either a second `SynthesisEngine` behind `RoutedEngine` selected by GPU family
-(with its own `engineID`, so render keys separate the two runtimes), or "MLX only" with the A14
-floor recorded in spec §7.3.
+**Decision shape (owner, 2026-09-03):**
+- RTF ≤ 0.35 with memory and timings in bounds: ship Kokoro on the A13 through Core ML, and open
+  the question of whether A14+ moves to Core ML too (it measured faster than MLX on the A17 Pro
+  and never ran out of memory).
+- RTF 0.35–0.75, memory and timings in bounds: ship it with the *live* playback rate capped at
+  `0.8 / RTF`, and let the listener prepare the whole book to unlock every rate (fully rendered
+  audio needs no synthesis at playback time; the cap must then apply only while unrendered
+  utterances lie ahead of the playhead — a code change outside this spike).
+- RTF > 0.75, footprint > 400 MB, or the family-6 GPU path fails: keep `SystemSpeechEngine` on
+  pre-A14 phones and close this task. Do not fall through to the ONNX spike on hope.
+Either way, a second `SynthesisEngine` behind `RoutedEngine` gets its own `engineID`, so render
+keys separate the two runtimes.
 
 ---
 

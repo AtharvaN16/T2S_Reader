@@ -191,6 +191,9 @@ public final class PlayerModel {
         await coordinator.seek(to: Playhead(utteranceIndex: timeline.utteranceRange(ofChapter: c).lowerBound))
     }
 
+    /// Seeks to an exact playhead, e.g. a resolved bookmark (spec §2.2).
+    public func seek(to playhead: Playhead) async { await coordinator.seek(to: playhead) }
+
     public func setRate(_ rate: Double) { coordinator.setRate(rate) }
 
     public func renderWholeDocument() { coordinator.renderWholeDocument() }

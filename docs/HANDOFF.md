@@ -160,7 +160,8 @@ marked **pending hardware** has never run on a device — treat it as untested, 
 | `BGProcessingTask` forced from the debugger | the simulator rejects the request outright — `BGTaskSchedulerErrorDomain error 1`, seen again in the Task 5f capture | **pending hardware** |
 | `BGProcessingTask` overnight on charge | — | **pending hardware** (§7.7 asks for three nights) |
 | Cloud voice: missing key, 401, 429, network loss, configuration change | Plan 5 Task 4 (PR #13) unit coverage inside `swift test` | **pending hardware** — no real provider key has been exercised end to end |
-| Plan 0 Kokoro metrics §7.2, §7.3, §7.4, §7.5, §7.7 | §7.3/§7.5 were attempted on an iPhone 11 Pro and stopped by the A14 GPU floor; no RTF, memory or thermal number exists for any device | **pending hardware** (the 17 Pro, protocol below) |
+| Plan 0 Kokoro metrics §7.3, §7.4, §7.5 — Core ML route | iPhone 11 Pro (A13): CPU-only Core ML, RTF 0.18 flat out and 0.16 over 20 min at 4x, 119 MB flat, word-onset error ≤ 55 ms; thermal state 2 after 150 s at 4x on charge with no speed collapse (`spikes/findings/2026-09-04-pre-a14-runtime.md`) | **passes (hardware)**; unplugged thermal/battery run pending |
+| Plan 0 Kokoro metrics §7.2, §7.3, §7.5, §7.7 — MLX route | needs an A14+ phone; nothing measured | **pending hardware** (the 17 Pro, protocol below) |
 
 ## The iPhone 17 Pro run (for Harsh)
 
@@ -252,30 +253,35 @@ remains is the measurement itself.
    - Then consider making a Kokoro voice the default. It is a product decision, not a mechanical
      one: it changes every render key, so cached audio is re-derived (spec §3.7.3), and it only
      applies to A14+ phones.
-3. **Plan 0 Task 8 — a runtime for pre-A14 phones** (the owner's own iPhone 11 Pro): a one-day
-   timeboxed spike, same pass bar as §7.3. The desk research in
-   `spikes/findings/2026-09-03-pre-a14-runtime-options.md` ranks the candidates and carries the
-   hour-by-hour protocol: spike `mattmireles/kokoro-coreml`'s `KokoroPipeline` (Core ML, Apache-2.0,
-   per-token duration frames, measured RTF 0.41–0.46 on an A14) first, run MLX on `Device.cpu` as a
-   30-minute control, keep ONNX Runtime's CPU path with the timestamped Kokoro build as the fallback;
-   sherpa-onnx, TTS.cpp and the small models are blocked by espeak-ng (GPL). The honest expectation
-   is RTF 0.5–0.65 on the A13, i.e. Kokoro with the playback rate capped near 1.5x. The A13
-   cannot run the MLX route at all, so without this the owner's phone never gets Kokoro.
+3. **Plan 0 Task 8 — DONE (2026-09-04): Core ML is the Kokoro runtime, and it runs on the
+   iPhone 11 Pro.** `spikes/findings/2026-09-04-pre-a14-runtime.md`: `mattmireles/kokoro-coreml`'s
+   `KokoroPipeline` (Apache-2.0) with **every stage on the CPU** gives median RTF 0.18 flat out and
+   0.16 over 20 minutes at 4x on the A13, a flat 119 MB footprint, and word-onset timing within
+   55 ms — so every rate up to 4x is offered and the rate-cap / prepare-the-whole-book idea is not
+   needed on this phone (it stays the design for any slower device). The GPU-assisted policy is
+   slower there (0.37) and needs 1.2 GB; MLX on the CPU is dead (RTF 15). Open follow-ups: the
+   unplugged 20-minute run for thermal/battery numbers (state 2 was reached on charge at 4x
+   without any speed collapse), and the word-end fold fix (trailing pause belongs to the
+   punctuation). The desk research behind the choice is
+   `spikes/findings/2026-09-03-pre-a14-runtime-options.md`; the harness arm and its fetch script
+   are `spikes/SpikeHarness/SpikeHarness/CoreMLBench.swift` and `scripts/fetch-kokoro-coreml.sh`
+   (see `spikes/README.md`, "Core ML arm", for the stale-manifest fix and the launch switches).
 
-   **Product decision (owner, 2026-09-03), which resolves the spike's middle row in advance:** if
-   the A13 lands between RTF 0.35 and 0.75 with memory and timings in bounds, ship Kokoro on
-   pre-A14 phones with the *live* playback rate capped at `0.8 / RTF` (the existing
-   `RateLimits` rule; rates above the cap stay disabled, never silently lowered), and offer the
-   listener a way out of the cap: **prepare the whole book** — render every utterance up front,
-   on charge through the existing Prepare tier or on demand from the book sheet — after which
-   every rate is available, because fully rendered audio needs no synthesis at playback time.
-   That needs one code change the spike does not: today `PlaybackCoordinator` derives the
-   available rates from the engine's rolling RTF regardless of what is cached, so the cap must
-   apply only while unrendered utterances lie ahead of the playhead (a fully rendered document,
-   or a rendered window large enough for the requested rate, lifts it). The Queue's existing
-   "prepared" check and Storage's prepared-time label are the surfaces that tell the user where
-   a book stands. If the spike lands above RTF 0.75 or out of memory, the fallback stays the
-   system voice on pre-A14 phones and Plan 0 Task 8 closes.
+   **Owner's direction (2026-09-04):** Core ML becomes the engine in the app, on every phone, and
+   newer phones get whichever architecture measures best there. **This is the next code task**
+   (a plan of its own, ahead of items 1–2): a `KokoroCoreMLEngine` beside the MLX one in
+   `Packages/T2SKokoro` — the pipeline package vendored like MLXUtilsLibrary (the upstream repo
+   root has no `Package.swift`; the package is its `swift/` subdirectory), the four fp16 stages
+   per bucket fetched with checksums and bundled, `.mlmodelc` precompiled by Xcode, the token
+   path (MisakiSwift → Kokoro vocab → ids) and the per-word timing fold ported from the harness,
+   engine identity `kokoro-coreml-<hf revision>-cpu-misaki1.0.6`, the availability probe taking the
+   Core ML branch on every device (CPU-only compute units until an A14+ measurement says
+   otherwise), a first-launch compute-plan warm-up (the very first load took 206 s on the A13;
+   later loads take 3–5 s) shown as a one-time "preparing the voice" state rather than a hang,
+   `KokoroRuntimeDecision` filled from the A13 finding for the Core ML route, and Kokoro as the
+   default voice. Core ML also runs in the simulator, so this engine belongs in the everyday
+   `T2SReader` target and makes Kokoro testable on the Mac; `T2SReaderKokoro` (MLX) stays for the
+   17 Pro measurement only.
 4. **The hardware matrix above.** Every row marked *pending hardware* — the Lock Screen and route
    changes, the Share Extension payloads, Prepare's power and thermal stops, `BGProcessingTask`,
    and the cloud error paths — plus Plan 4b Task 9's remaining EPUB/PDF fixture and UI test. A

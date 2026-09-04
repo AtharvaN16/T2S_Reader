@@ -7,7 +7,7 @@ working, tested software on its own. Order follows spec §9.
 
 | # | Plan | Spec §9 steps | File | Status |
 |---|---|---|---|---|
-| 0 | Spikes: background compute, idle compute, runtime benchmark, word timings, memory, G2P coverage, license audit | 1–2 | `2026-09-02-plan-0-spikes.md` | written |
+| 0 | Spikes: background compute, idle compute, runtime benchmark, word timings, memory, G2P coverage, license audit | 1–2 | `2026-09-02-plan-0-spikes.md` | in progress — §7.1 done; §7.3 MLX floor (A14+) found; Task 8 done: Core ML CPU-only passes on the A13 (RTF 0.18, 119 MB) and becomes the baseline runtime; §7.2/§7.7 and the MLX numbers on an A14+ phone still pending |
 | 1 | Text pipeline (`T2SCore`): domain model, normalizer with span mapping, segmenter, timeline, codec, position resolution, highlight projection | 3–4 | `2026-09-02-plan-1-text-pipeline.md` | done |
 | 2 | Render and playback: `SynthesisEngine`, `FakeEngine`, `RenderKey`, audio cache, `RenderPolicy` tiers, `RenderScheduler`, `AudioPlayer` (`T2SAudio`), `PlaybackCoordinator` | 5 | `2026-09-02-plan-2-render-playback.md` | done |
 | 3 | Persistence and ingest: SwiftData store (`T2SStore`), Readium adapter for EPUB and PDF (`T2SReadium`), article-to-EPUB writer | 3 (Readium part), spec §5 | `2026-09-02-plan-3-persistence-ingest.md` | done |

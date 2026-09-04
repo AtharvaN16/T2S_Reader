@@ -785,9 +785,21 @@ and routes the whole document to `system:<voice>` on failure. Pre-A14 coverage
 through a runtime that does not need `simdgroup_matrix` (ONNX Runtime /
 CoreML) is a separate timeboxed spike, Plan 0 Task 8.
 
-**RTF, thermals and mAh/hour are still unmeasured on any device**: the A13 run
-produced no numbers, and the iPhone 17 Pro protocol (`spikes/README.md`) has
-not been run. §3.6's figures remain illustrative.
+**RESOLVED for pre-A14 phones (2026-09-04,
+`spikes/findings/2026-09-04-pre-a14-runtime.md`):** Kokoro-82M runs on the
+iPhone 11 Pro (A13) through **Core ML with every stage on the CPU**
+(`mattmireles/kokoro-coreml`'s `KokoroPipeline`, Apache-2.0, MisakiSwift
+G2P): median warm RTF **0.181** flat out and **0.163** over 20 minutes at 4x
+(p90 0.24, worst 0.335), so every listed rate up to 4x is sustainable by
+§3.6's rule. The GPU-assisted policy is slower on this chip (0.37) and needs
+1.2 GB; MLX on the CPU is not viable (RTF 15). Thermal state 2 was reached
+after 150 s of continuous 4x synthesis on a charging phone without the RTF
+ever falling below real time; the unplugged thermal and battery numbers are
+a recorded follow-up. Core ML is therefore the baseline Kokoro runtime on
+every phone until an MLX measurement on an A14+ device beats it by a margin
+that changes an offered rate or battery life. The iPhone 17 Pro MLX protocol
+(`spikes/README.md`) is still unrun; §3.6's figures remain illustrative for
+that route.
 
 ### 7.4 Word timings must survive the chosen runtime
 Alignments come from Kokoro's `duration_proj`. The
@@ -803,12 +815,13 @@ Published figures for Kokoro range from 80 MB (int8 on disk) to 833 MB
 quoted as if comparable. iOS jetsam does not care which. *Spike: measure
 resident memory on a non-Pro device.*
 
-**Still unmeasured (2026-09-03).** The intended non-Pro device, an iPhone 11
-Pro, cannot run the MLX route at all (§7.3), so no peak footprint was captured;
-the measurement moves to the iPhone 17 Pro, which is the same **A14+ / Apple
-GPU family 7** floor §7.3 records. Until that run,
-`KokoroRuntimeDecision.current` is `nil` and the engine refuses to be
-selected.
+**RESOLVED for the Core ML route (2026-09-04,
+`spikes/findings/2026-09-04-pre-a14-runtime.md`):** on the iPhone 11 Pro
+(4 GB) the CPU-only Core ML pipeline holds a flat **119 MB** peak footprint
+over 20 minutes and 800 sentences (7 s and 15 s buckets, fp16 weights), well
+under the 400 MB bar; the GPU-assisted policy sits at 1.2 GB. The MLX route's
+footprint on an A14+ phone is still unmeasured, and
+`KokoroRuntimeDecision.current` for that route stays `nil` until it is.
 
 ### 7.6 Readium license and platform reach — RESOLVED (rev 6)
 **BSD-3-Clause**, verified against the swift-toolkit 3.11.0 `LICENSE` file;
@@ -889,6 +902,18 @@ against a pipeline that is already proven.
 ---
 
 ## 11. Changelog
+
+**rev 9 (2026-09-04)** — Plan 0 Task 8: a Kokoro runtime for pre-A14 phones.
+
+- **§7.3** resolved for pre-A14 phones: Core ML, CPU-only, on the iPhone 11
+  Pro — RTF 0.18 flat out, 0.16 over 20 minutes at 4x; all rates up to 4x
+  offered. Core ML becomes the baseline runtime on every phone; MLX stays a
+  candidate for A14+ pending measurement. Thermal state 2 on charge at 4x is
+  recorded with the unplugged run as a follow-up.
+- **§7.5** resolved for the Core ML route: 119 MB flat peak footprint.
+- **§7.4** data for this route: word-onset error ≤ 55 ms against the WAV;
+  word ends carry the trailing pause (fold fix noted).
+- §3.6 deliberately unchanged.
 
 **rev 8 (2026-09-03)** — Plan 0 measurements so far, and Plan 5 Task 5.
 

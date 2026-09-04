@@ -5,7 +5,7 @@
 #
 #   (no argument)  Plan 0 Task 8 (spec §7.3 addendum): the throwaway spike harness. Model files
 #                  into spikes/SpikeHarness/Resources/CoreML/, one voice, plus the source clone.
-#   --app          Plan 7 Task 1: the same model files into App/Resources/KokoroCoreML/, with all
+#   --app          Plan 6 Task 1: the same model files into App/Resources/KokoroCoreML/, with all
 #                  28 of Kokoro's English voices instead of just af_heart, and no clone — the app
 #                  builds against the vendored copy at Packages/KokoroPipeline.
 #

@@ -94,7 +94,7 @@ Expected: manifest/target errors until the package is complete; then PASS after 
 
 `Packages/T2SKokoro/Package.swift`: add `.package(name: "KokoroPipeline", path: "../KokoroPipeline")` and the product to both targets.
 
-`scripts/fetch-kokoro-coreml.sh`: keep the spike mode as is; add `--app`, which stages into `App/Resources/KokoroCoreML/` the same two buckets and duration models, `runtime/kokoro-vocab.json`, `runtime/hnsf_weights.json`, and **every** `voices/*.bin` listed by the HF tree API at the pinned revision (each verified against its LFS oid, which is the file's sha256), without the `.deps` clone. `.gitignore` gains `App/Resources/KokoroCoreML/`.
+`scripts/fetch-kokoro-coreml.sh`: keep the spike mode as is; add `--app`, which stages into `App/Resources/KokoroCoreML/` the same two buckets and duration models, `runtime/kokoro-vocab.json`, `runtime/hnsf_weights.json`, and **the 28 English voices** — the `KokoroVoiceCatalog.voiceNames` set — as `.bin` files (at the pinned revision the top-level `voices/` holds only 7 of them; the full set is under `kokoro.js/voices/`; each is verified against its HF LFS oid, which is the file's sha256, with `af_heart` cross-checked against the manifest), without the `.deps` clone. `.gitignore` gains `App/Resources/KokoroCoreML/`.
 
 `docs/licenses.md`: a "Vendored" row for KokoroPipeline (commit, Apache-2.0, `Packages/KokoroPipeline/LICENSE`) and a Kokoro-path row for the Core ML model files (Apache-2.0, inherited from Kokoro-82M; source `mattmireles/kokoro-coreml` revision `2e878c6a`).
 

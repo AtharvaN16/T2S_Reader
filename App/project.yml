@@ -10,6 +10,13 @@ packages:
     path: ..
   T2SReadium:
     path: ../Packages/T2SReadium
+  T2SKokoro:
+    path: ../Packages/T2SKokoro
+  # Listed even though no target names it: this local package takes the SwiftPM identity
+  # `mlxutilslibrary` for the whole graph, which is what keeps ZIPFoundation — and Readium's
+  # colliding fork of it — resolvable. See Packages/MLXUtilsLibrary/README.md.
+  MLXUtilsLibrary:
+    path: ../Packages/MLXUtilsLibrary
   Readium:
     url: https://github.com/readium/swift-toolkit.git
     exactVersion: 3.11.0

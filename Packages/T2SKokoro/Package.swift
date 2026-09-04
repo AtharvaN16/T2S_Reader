@@ -16,7 +16,10 @@ let package = Package(
     dependencies: [
         .package(name: "T2S", path: "../.."),
         .package(url: "https://github.com/mlalma/kokoro-ios", exact: "1.0.11"),
-        .package(url: "https://github.com/mlalma/MLXUtilsLibrary.git", exact: "0.0.6"),
+        // Vendored: upstream depends on `weichsel/ZIPFoundation`, whose SwiftPM identity collides
+        // with Readium's fork of the same library and makes the app's graph unresolvable. A local
+        // package takes the identity `mlxutilslibrary` for the whole graph — see its README.
+        .package(name: "MLXUtilsLibrary", path: "../MLXUtilsLibrary"),
     ],
     targets: [
         .target(
@@ -35,6 +38,9 @@ let package = Package(
                 "T2SKokoro",
                 .product(name: "T2SCore", package: "T2S"),
                 .product(name: "T2SAudio", package: "T2S"),
+                // For NpzArchiveTests: the vendored package's zip reader is tested here, where the
+                // package is already in the graph.
+                .product(name: "MLXUtilsLibrary", package: "MLXUtilsLibrary"),
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

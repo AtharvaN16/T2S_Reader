@@ -172,4 +172,28 @@ import T2SStore
         // The stored choice is untouched, so the book returns to Kokoro when the engine is available.
         #expect(try await f.store.document(id: id)?.voiceID == kokoroVoiceID)
     }
+
+    @Test func aDocumentWithNoVoiceOfItsOwnRendersWithTheKokoroDefaultVoice() async throws {
+        let coreMLIdentity = "kokoro-coreml-2e878c6a-misaki1.0.6"
+        let heart = "kokoro:kokoro-coreml-2e878c6a-misaki1.0.6:af_heart"
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        #expect(try await f.store.document(id: id)?.voiceID == nil)
+
+        let engine = FakeEngine(secondsPerCharacter: 0.05)
+        let player = try makePlayer(f, engine: engine)
+        player.voiceRouting = KokoroVoiceRouting(
+            routes: [.init(engineIdentity: coreMLIdentity, isAvailable: { true })],
+            defaultVoice: heart
+        )
+        await player.load(try #require(try await f.store.summary(id: id)), play: false)
+        await player.coordinator.waitForRenderIdle()
+
+        // Decided once, before planning, exactly like the fallback: the whole book renders on Kokoro.
+        let requested = Set(await engine.requests.map(\.voiceID))
+        #expect(requested == [heart])
+        #expect(player.coordinator.document?.voiceID == heart)
+        // Nothing is written back — the reader never chose a voice, and the default may change.
+        #expect(try await f.store.document(id: id)?.voiceID == nil)
+    }
 }

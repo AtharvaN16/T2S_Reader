@@ -9,28 +9,42 @@ public actor RoutedEngine: SynthesisEngine {
     public nonisolated let engineID = "routed-v1"
 
     private let system: any SynthesisEngine
-    /// Absent in the everyday build, which does not link MLX at all.
-    private let kokoro: (any SynthesisEngine)?
+    /// Every linked Kokoro runtime, by its engine identity. Empty in the everyday build; a build that
+    /// links both the Core ML and the MLX engine holds one entry each, because the two render
+    /// different audio for the same words and a voice ID names which (spec §5).
+    private let kokoro: [String: any SynthesisEngine]
     private let configuration: @Sendable () -> HTTPVoiceConfiguration?
     private let key: @Sendable () async throws -> String?
     private let session: URLSession
     private var cloudEngines: [String: HTTPVoiceEngine] = [:]
 
     public init(system: any SynthesisEngine,
+                kokoro: [any SynthesisEngine],
+                configuration: @escaping @Sendable () -> HTTPVoiceConfiguration?,
+                key: @escaping @Sendable () async throws -> String?,
+                session: URLSession = .shared) {
+        self.system = system
+        // First wins: two engines claiming one identity would be indistinguishable to a render key,
+        // so the composition root's order decides rather than a dictionary literal trap.
+        self.kokoro = Dictionary(kokoro.map { ($0.engineID, $0) }, uniquingKeysWith: { first, _ in first })
+        self.configuration = configuration
+        self.key = key
+        self.session = session
+    }
+
+    /// The single-engine form the composition root used before there was more than one runtime.
+    public init(system: any SynthesisEngine,
                 configuration: @escaping @Sendable () -> HTTPVoiceConfiguration?,
                 key: @escaping @Sendable () async throws -> String?,
                 session: URLSession = .shared,
                 kokoro: (any SynthesisEngine)? = nil) {
-        self.system = system
-        self.configuration = configuration
-        self.key = key
-        self.session = session
-        self.kokoro = kokoro
+        self.init(system: system, kokoro: kokoro.map { [$0] } ?? [],
+                  configuration: configuration, key: key, session: session)
     }
 
     public func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
         if let kokoroID = KokoroVoiceID(rawValue: request.voiceID) {
-            guard let kokoro, kokoro.engineID == kokoroID.engineID else {
+            guard let kokoro = kokoro[kokoroID.engineID] else {
                 throw KokoroRouteError.unavailable(engineID: kokoroID.engineID)
             }
             // Unchanged: the engine reads its own voice out of the ID.

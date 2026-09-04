@@ -15,20 +15,31 @@ public struct KokoroVoiceCatalog: VoiceCatalog {
     ]
 
     private let base: any VoiceCatalog
-    private let engineIdentity: String
+    private let engines: [(identity: String, label: String)]
+
+    /// Every linked runtime's voices, in the order given: a build that links two runtimes lists the
+    /// same 28 voices twice, under different identities, because they are different renders (spec
+    /// §5). `label` names the runtime in the row and is empty for the default route, whose rows read
+    /// as they always have.
+    public init(base: any VoiceCatalog, engines: [(identity: String, label: String)]) {
+        self.base = base
+        self.engines = engines
+    }
 
     public init(base: any VoiceCatalog, engineIdentity: String) {
-        self.base = base
-        self.engineIdentity = engineIdentity
+        self.init(base: base, engines: [(engineIdentity, "")])
     }
 
     public func voices() -> [VoiceOption] {
-        base.voices() + Self.voiceNames.map { name in
-            let language = Self.language(for: name)
-            return VoiceOption(id: KokoroVoiceID(engineID: engineIdentity, voice: name).rawValue,
-                               name: "\(Self.displayName(for: name)) · \(language)",
-                               language: language,
-                               group: .kokoro)
+        base.voices() + engines.flatMap { engine in
+            Self.voiceNames.map { name in
+                let language = Self.language(for: name)
+                let qualifier = engine.label.isEmpty ? "" : " · \(engine.label)"
+                return VoiceOption(id: KokoroVoiceID(engineID: engine.identity, voice: name).rawValue,
+                                   name: "\(Self.displayName(for: name)) · \(language)\(qualifier)",
+                                   language: language,
+                                   group: .kokoro)
+            }
         }
     }
 

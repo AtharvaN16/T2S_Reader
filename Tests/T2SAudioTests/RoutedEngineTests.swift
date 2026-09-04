@@ -86,6 +86,48 @@ import T2SCore
                                           .init(spoken: "b", voiceID: "default")])
         #expect(await kokoro.requests.isEmpty)
     }
+
+    @Test func routesEachKokoroIdentityToItsOwnEngineUnchanged() async throws {
+        let coreML = "kokoro-coreml-2e878c6a-misaki1.0.6"
+        let mlx = "kokoro-4e9ecdf0-mlx-misaki1.0.6"
+        let system = RecordingEngine()
+        let coreMLEngine = RecordingEngine(engineID: coreML)
+        let mlxEngine = RecordingEngine(engineID: mlx)
+        let routed = RoutedEngine(system: system, kokoro: [coreMLEngine, mlxEngine],
+                                  configuration: { nil }, key: { nil })
+
+        let coreMLVoice = KokoroVoiceID(engineID: coreML, voice: "af_heart").rawValue
+        let mlxVoice = KokoroVoiceID(engineID: mlx, voice: "bf_emma").rawValue
+        _ = try await routed.synthesize(.init(spoken: "a", voiceID: coreMLVoice))
+        _ = try await routed.synthesize(.init(spoken: "b", voiceID: mlxVoice))
+
+        // Two runtimes render different audio for the same words, so an ID reaches its own engine and
+        // only its own: the identity inside the ID is the render identity (spec §5).
+        #expect(await coreMLEngine.requests == [.init(spoken: "a", voiceID: coreMLVoice)])
+        #expect(await mlxEngine.requests == [.init(spoken: "b", voiceID: mlxVoice)])
+        #expect(await system.requests.isEmpty)
+    }
+
+    @Test func refusesAKokoroIdentityNoRegisteredEngineServes() async throws {
+        let coreML = "kokoro-coreml-2e878c6a-misaki1.0.6"
+        let mlx = "kokoro-4e9ecdf0-mlx-misaki1.0.6"
+        let stranger = "kokoro-00000000-coreml-misaki1.0.6"
+        let system = RecordingEngine()
+        let coreMLEngine = RecordingEngine(engineID: coreML)
+        let mlxEngine = RecordingEngine(engineID: mlx)
+        let routed = RoutedEngine(system: system, kokoro: [coreMLEngine, mlxEngine],
+                                  configuration: { nil }, key: { nil })
+
+        await #expect(throws: KokoroRouteError.unavailable(engineID: stranger)) {
+            try await routed.synthesize(
+                .init(spoken: "x", voiceID: KokoroVoiceID(engineID: stranger, voice: "af_heart").rawValue))
+        }
+
+        // Never handed to whichever Kokoro engine happens to be loaded (spec §6).
+        #expect(await coreMLEngine.requests.isEmpty)
+        #expect(await mlxEngine.requests.isEmpty)
+        #expect(await system.requests.isEmpty)
+    }
 }
 
 private actor RecordingEngine: SynthesisEngine {

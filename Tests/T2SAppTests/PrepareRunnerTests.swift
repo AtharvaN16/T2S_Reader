@@ -64,4 +64,33 @@ import T2SCore
         #expect(requested == ["default"])
         #expect(try await fixtures.store.document(id: id)?.voiceID == kokoroVoiceID)
     }
+
+    @Test func aDocumentWithNoVoiceOfItsOwnPreparesWithTheKokoroDefaultVoice() async throws {
+        let coreMLIdentity = "kokoro-coreml-2e878c6a-misaki1.0.6"
+        let heart = "kokoro:kokoro-coreml-2e878c6a-misaki1.0.6:af_heart"
+        let fixtures = try AppFixtures()
+        let id = try await fixtures.importFake()
+        #expect(try await fixtures.store.document(id: id)?.voiceID == nil)
+
+        let suite = "prepare-\(UUID())"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        let engine = FakeEngine(secondsPerCharacter: 0.05)
+        let runner = PrepareRunner(library: fixtures.library, store: fixtures.store, audioStore: fixtures.audio,
+                                   engine: engine, defaults: defaults, arbiter: RenderArbiter())
+        runner.voiceRouting = KokoroVoiceRouting(
+            routes: [.init(engineIdentity: coreMLIdentity, isAvailable: { true })],
+            defaultVoice: heart
+        )
+
+        let result = await runner.run(lastPlayed: id, queue: [id],
+                                      device: DeviceState(charging: true, thermalSerious: false,
+                                                          lowPowerMode: false, storeFull: false))
+
+        // The same render key playback will ask for, so the prepared audio is the audio it plays.
+        #expect(result.renderedUtterances > 0)
+        let requested = Set(await engine.requests.map(\.voiceID))
+        #expect(requested == [heart])
+        #expect(try await fixtures.store.document(id: id)?.voiceID == nil)
+    }
 }

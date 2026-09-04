@@ -33,6 +33,29 @@ import T2SAudio
         #expect(emma.name == "Emma · en-GB")
         #expect(emma.language == "en-GB")
     }
+
+    @Test func everyLinkedEngineListsAllTwentyEightVoicesAndOnlyALabelledOneSaysSo() throws {
+        let coreML = "kokoro-coreml-2e878c6a-misaki1.0.6"
+        let catalog = KokoroVoiceCatalog(base: BaseCatalog(), engines: [(coreML, ""), (identity, "MLX")])
+        let voices = catalog.voices()
+
+        #expect(voices.first == .systemDefault)
+        let kokoro = Array(voices.dropFirst())
+        #expect(kokoro.count == 56)
+        // The default route leads, so the picker's first Kokoro row is the one the reader gets by
+        // default (spec §2.2).
+        #expect(kokoro.prefix(28).allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == coreML })
+        #expect(kokoro.dropFirst(28).allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == identity })
+
+        // The label is a runtime qualifier: the everyday route reads as it always has, and only the
+        // second runtime has to name itself to be told apart.
+        #expect(kokoro.first?.name == "Heart · en-US")
+        #expect(kokoro.dropFirst(28).first?.name == "Heart · en-US · MLX")
+        let mlxEmma = try #require(kokoro.dropFirst(28).first { KokoroVoiceID(rawValue: $0.id)?.voice == "bf_emma" })
+        #expect(mlxEmma.name == "Emma · en-GB · MLX")
+        #expect(mlxEmma.language == "en-GB")
+        #expect(kokoro.allSatisfy { $0.group == .kokoro })
+    }
 }
 
 private struct BaseCatalog: VoiceCatalog {

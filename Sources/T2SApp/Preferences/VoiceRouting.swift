@@ -15,27 +15,59 @@ public struct PassthroughVoiceRouting: VoiceRouteResolving {
     public func effectiveVoiceID(_ requested: String) async -> String { requested }
 }
 
-/// Routes `kokoro:` IDs: they render with Kokoro only when `isAvailable()` is true and the ID's
-/// engine identity is this build's; otherwise the whole document falls back to
-/// `VoiceOption.systemDefault.id`. Non-Kokoro IDs pass through.
+/// Routes `kokoro:` IDs: one route per linked Kokoro runtime, and an ID renders with Kokoro only
+/// when its own runtime's route is present and available. Everything else falls back to
+/// `VoiceOption.systemDefault.id` for the whole document, and non-Kokoro IDs pass through.
+///
+/// It also carries the other direction (spec §6): a reader who has never chosen a voice is given
+/// `defaultVoice` — Kokoro Heart on the Core ML route — as long as that route is available.
 public struct KokoroVoiceRouting: VoiceRouteResolving {
-    private let engineIdentity: String?
-    private let isAvailable: @Sendable () async -> Bool
+    /// One linked runtime and the probe that says whether it can run here.
+    public struct Route: Sendable {
+        public let engineIdentity: String
+        public let isAvailable: @Sendable () async -> Bool
 
+        public init(engineIdentity: String, isAvailable: @escaping @Sendable () async -> Bool) {
+            self.engineIdentity = engineIdentity
+            self.isAvailable = isAvailable
+        }
+    }
+
+    private let routes: [String: Route]
+    /// A full Kokoro voice ID, or nil to leave `"default"` meaning the system voice.
+    private let defaultVoice: String?
+
+    public init(routes: [Route], defaultVoice: String?) {
+        // First wins, matching `RoutedEngine`: one identity is one runtime.
+        self.routes = Dictionary(routes.map { ($0.engineIdentity, $0) }, uniquingKeysWith: { first, _ in first })
+        self.defaultVoice = defaultVoice
+    }
+
+    /// The single-route form, from before the app linked more than one runtime.
     public init(engineIdentity: String?, isAvailable: @escaping @Sendable () async -> Bool) {
-        self.engineIdentity = engineIdentity
-        self.isAvailable = isAvailable
+        self.init(routes: engineIdentity.map { [Route(engineIdentity: $0, isAvailable: isAvailable)] } ?? [],
+                  defaultVoice: nil)
     }
 
     /// The everyday build, where Kokoro is not linked at all.
-    public static let unavailable = KokoroVoiceRouting(engineIdentity: nil, isAvailable: { false })
+    public static let unavailable = KokoroVoiceRouting(routes: [], defaultVoice: nil)
 
     public func effectiveVoiceID(_ requested: String) async -> String {
-        guard let kokoroID = KokoroVoiceID(rawValue: requested) else { return requested }
-        // Identity first: a foreign engine identity is refused without waking a probe.
-        guard kokoroID.engineID == engineIdentity, await isAvailable() else {
-            return VoiceOption.systemDefault.id
+        if let kokoroID = KokoroVoiceID(rawValue: requested) {
+            // Identity first: an unrouted engine identity is refused without waking a probe.
+            guard await isAvailable(kokoroID.engineID) else { return VoiceOption.systemDefault.id }
+            return requested
         }
-        return requested
+        guard requested == VoiceOption.systemDefault.id,
+              let defaultVoice,
+              let defaultID = KokoroVoiceID(rawValue: defaultVoice),
+              await isAvailable(defaultID.engineID)
+        else { return requested }
+        return defaultVoice
+    }
+
+    private func isAvailable(_ engineIdentity: String) async -> Bool {
+        guard let route = routes[engineIdentity] else { return false }
+        return await route.isAvailable()
     }
 }

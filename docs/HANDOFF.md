@@ -211,6 +211,18 @@ aborts at launch with `Library not loaded: @rpath/KokoroSwift.framework`. The ap
 does embed `KokoroSwift.framework` correctly, so the spike harness's manual copy-and-re-sign step
 is **not** needed here.
 
+## Resume here (2026-09-04)
+
+Plan 6 (`docs/superpowers/plans/2026-09-04-plan-6-coreml-kokoro-engine.md`, the Core ML Kokoro engine) is
+**in progress on branch `plan-6-coreml-engine`**, checked out in the git worktree
+`.worktrees/plan-6-coreml-engine` (the directory may still be named `plan-7-coreml-engine` on the
+machine that started it; `git worktree list` tells). Task 1 (vendored `Packages/KokoroPipeline`,
+`scripts/fetch-kokoro-coreml.sh --app`, the model files under the git-ignored
+`App/Resources/KokoroCoreML/`) is committed and reviewed; **resume at Task 2** with
+superpowers:subagent-driven-development. The ledger with every ruling so far is
+`.superpowers/sdd/2026-09-04-plan-6-coreml-kokoro-engine/progress.md` inside that worktree. Run
+`scripts/fetch-kokoro-coreml.sh --app` once on a new machine before Task 2's model-backed tests.
+
 ## What comes after
 
 The product owner decided on 2026-09-03 that Kokoro is the app's main engine (the system voice is

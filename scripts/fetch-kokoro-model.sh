@@ -32,7 +32,8 @@ install_file() {
     cp "$spike/$name" "$dest/$name"
   else
     echo "downloading $name"
-    curl -sSL -o "$dest/$name" "$url"
+    # --fail: a 404 must be a download error, not an HTML body that fails the checksum.
+    curl --fail -sSL -o "$dest/$name" "$url"
   fi
   if ! matches "$dest/$name" "$sha"; then
     rm -f "$dest/$name"

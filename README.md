@@ -67,6 +67,11 @@ model files under `spikes/SpikeHarness/Resources/` and `App/Resources/Kokoro/`
   under `Packages/`; `spikes/` is for experiments only.
 - Every plan lives in `docs/superpowers/plans/`; every spec in
   `docs/superpowers/specs/`. Spike results go in `spikes/findings/`.
+- A vendored third-party package under `Packages/` (only when an upstream
+  dependency cannot be used as-is, like `Packages/MLXUtilsLibrary`) records the
+  upstream URL, the exact revision it was copied from, and every local patch in
+  that package's README; it keeps the upstream LICENSE file; and it gets a row
+  in `docs/licenses.md`.
 
 ## Working on it
 
@@ -89,8 +94,9 @@ installs `kokoro-v1_0.safetensors` (327,115,152 bytes) and `voices.npz`
 reuses the spike harness's copies if they are already on the machine. The two
 files are git-ignored; without them the model-backed package tests skip and a
 device build bundles no voices. The first `scripts/test-kokoro.sh` or
-`scripts/build-device.sh` compiles mlx-swift (10–20 minutes, ~2 GB of
-DerivedData); later runs are incremental.
+`scripts/build-device.sh` compiles mlx-swift (10–15 minutes, ~2 GB of
+DerivedData — the cold builds measured here were 1 min 51 s on this Mac and
+3 min 17 s for the Release device build); later runs are incremental.
 
 **Running the app.** Open the generated `App/T2SReader.xcodeproj` and pick a
 scheme:

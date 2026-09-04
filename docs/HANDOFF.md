@@ -17,7 +17,7 @@ and commit message per task. The roadmap is
 | Branch | State | Notes |
 |---|---|---|
 | `dev` | integration branch | Plans 1–4a, Plan 4b Tasks 1–8, Plan 5 Tasks 1–4, the playback crash fix, and the Plan 0 spike findings so far are merged (`499d3fa`, plus `153af2a` recording the approved Task 5 adjustments). The app builds, launches, imports an EPUB, and plays it on the simulator and on an iPhone 11 Pro. |
-| `plan-5-task-5-kokoro` | Plan 5 Tasks 5 and 6; merges to `dev` when the final review is clean | Eight commits, `938c8b8 … 647fad6`, plus this documentation commit. Root package: **309 tests in 72 suites** (`swift test`). `Packages/T2SKokoro`: **56 tests in 7 suites** (`scripts/test-kokoro.sh`, including three that load the real 327 MB model). `Packages/T2SReadium`: **12 tests in 3 suites** (`scripts/test-readium.sh`, on the iPhone simulator). |
+| `plan-5-task-5-kokoro` | Plan 5 Tasks 5 and 6; merges to `dev` when the final review is clean | Eight commits, `938c8b8 … 647fad6`, plus this documentation commit. Root package: **309 tests in 72 suites** (`swift test`). `Packages/T2SKokoro`: **56 tests in 7 suites** (`scripts/test-kokoro.sh`; seven of them are gated on the real model files being installed — four load the 327 MB model and two of those synthesize audio). `Packages/T2SReadium`: **12 tests in 3 suites** (`scripts/test-readium.sh`, on the iPhone simulator). |
 | `main` | stale: only the initial spec commit | Not used for integration yet; fast-forward it to `dev` when you want a release point. |
 
 Plan branches are short-lived: each plan runs on its own branch off `dev` (locally in a git
@@ -25,7 +25,7 @@ worktree under `.worktrees/`, git-ignored) and is merged and deleted when its fi
 
 ## Toolchain
 
-- Xcode 26.6 (Swift 6.2), macOS 15+. CI uses that single pinned toolchain, restores both SPM and Xcode package caches, and retries transient package resolution. `brew install xcodegen`. An iPhone simulator installed.
+- Xcode 26.6 (Swift 6.2), macOS 15+. CI uses that single pinned toolchain, restores both SPM and Xcode package caches, and retries transient package resolution. `brew install xcodegen`. An iPhone simulator installed. The Plan 5 Task 5/6 pass on this branch was run locally on **Xcode 26.3** (iPhoneSimulator 26.2 SDK), not on CI's 26.6 — every build and test result quoted below is from that toolchain.
 - `swift test` — the root package on macOS (everything except Readium).
 - `scripts/test-readium.sh` — the iOS-only Readium package on the simulator (`SIMULATOR_ID=<udid>` to pick one).
 - `scripts/build-app.sh` — regenerates `App/T2SReader.xcodeproj` from `App/project.yml` and builds the app for the simulator. Then `open App/T2SReader.xcodeproj` to run it.
@@ -68,7 +68,8 @@ Everything here is on `dev` except the last two entries, which are on `plan-5-ta
 
 ## Where things are right now
 
-The integration branch is at `499d3fa` (spike findings on top of the PR #14/#15 merges). The completed work is:
+The integration branch is at `153af2a` (the approved Task 5 adjustments on top of `499d3fa`'s
+spike findings and the PR #14/#15 merges). The completed work is:
 
 - **Plan 4a** is complete.
 - **Plan 4b Tasks 1–8** are merged: PR #2 (Reader models and preferences), PR #3 (pronunciation,
@@ -95,7 +96,11 @@ order the approved "Task 5 adjustments" set out. What is now in the tree:
 - Root package: `KokoroVoiceID`, the `kokoro:` route in `RoutedEngine`, the `VoiceRouteResolving` /
   `KokoroVoiceRouting` seam that substitutes the whole document's voice *before* planning,
   `VoiceOption.group`, `KokoroVoiceCatalog` (28 voices, cross-checked against `voices.npz`), and
-  the `NumberWords` compound-number spacing fix with a normalizer version bump.
+  the `NumberWords` compound-number spacing fix with a normalizer version bump. **That bump has an
+  upgrade cost:** `Versions.normalizer` becomes 2, so on first play every document already in a
+  library is stale — it is re-normalized and re-segmented (spec §3.7.3), and the audio rendered
+  under normalizer 1 becomes orphaned cache that only LRU pressure removes. Positions survive:
+  `PositionResolver` re-resolves them against the new segmentation.
 - App: **two targets from one xcodegen template** — `T2SReader` (simulator and any phone, no MLX)
   and `T2SReaderKokoro` (`SUPPORTED_PLATFORMS: iphoneos`, links the engine, compiles with
   `KOKORO_ENGINE`). `KokoroComposition` is the only `#if`. Preferences → Voice shows a "Kokoro
@@ -139,7 +144,7 @@ marked **pending hardware** has never run on a device — treat it as untested, 
 | Scenario | Best evidence today | Status |
 |---|---|---|
 | Kokoro whole-document fallback in a build without the engine | iPhone 16 Pro simulator, iOS 18.5 (Task 5f): the log carries `Kokoro engine not linked in this build` and `voice route fallback: kokoro → default` while the Reader plays; no `KokoroRouteError` and no render error in the 37 s to the screenshot | **passes (simulator)** |
-| Kokoro synthesizes real audio through kokoro-ios/MLX | this Mac (Task 5b + `scripts/test-kokoro.sh`): three model-backed tests read the real 327 MB model and `voices.npz` and produce audio; one 3.25 s sentence at RTF 0.456 warm | **passes (macOS)** |
+| Kokoro synthesizes real audio through kokoro-ios/MLX | this Mac (Task 5b + `scripts/test-kokoro.sh`): seven tests are gated on the real files, four of them load the 327 MB model and `voices.npz`, and two synthesize audio; one 3.25 s sentence at RTF 0.456 warm | **passes (macOS)** |
 | `T2SReaderKokoro` links MLX, embeds `KokoroSwift.framework`, bundles the ~342 MB of model files | `scripts/build-device.sh` — `** BUILD SUCCEEDED **`; `Frameworks/` contains `KokoroSwift.framework` and `otool -L` resolves into the bundle. The spike harness's missing-framework gotcha does not reproduce for this target | **passes (compile + link)** |
 | The `.available` / `.unavailable(reason)` Preferences footer strings, and `GatedKokoroEngine`'s construction path | compiled only. On a simulator the probe answers `.unavailable(.simulator)` before any GPU check, and the everyday target does not link the engine, so neither has ever executed | **pending hardware** |
 | Now Playing dictionary pushed without crashing | iPhone 11 Pro, iOS 26.6.1: the artwork main-actor crash was reproduced there and the fix (`2540e1c`) confirmed on the phone | **passes (hardware, this path only)** |
@@ -186,7 +191,10 @@ open App/T2SReader.xcodeproj           # generated by scripts/build-app.sh or sc
   it `KokoroRuntimeDecision.current` is `nil`, the route reports itself unavailable, and every
   document falls back to the system voice — which is correct behaviour, just not what you want to
   test. (The `kokoro.debugOverride` user default does the same thing.) The override is compiled out
-  of Release builds and labels itself in the Preferences footer as "development override".
+  of Release builds and labels itself in the Preferences footer as "development override". With the
+  override on, Kokoro also runs in Prepare and in background play-ahead — that is the §7.2/§7.7
+  experiment, not an enforced policy yet: the decision's `backgroundInferencePermitted` and
+  `idleInferencePermitted` flags are recorded but read nowhere.
 - Build and run on the phone from Xcode. `scripts/build-device.sh` builds the same target unsigned
   from the command line — useful for a compile check, useless for installing.
 - In the app: Preferences → Voice → the **Kokoro (beta)** section. Read the footer first; it should
@@ -229,6 +237,11 @@ remains is the measurement itself.
      derived from it, and the memory limits. It is `nil` today and the engine refuses to be
      selected while it is; there is a `DEBUG` override precisely so nobody is tempted to guess.
      `debugOverride` is the shape the real value must take.
+   - Wire `backgroundInferencePermitted` into the render policy and `idleInferencePermitted` into
+     `PrepareRunner` / `PrepareTask`. Neither flag is read anywhere today: they are recorded on the
+     decision and nothing consumes them, so filling `current` alone does **not** enforce the
+     §7.2/§7.7 policy — a decision that says "no background inference" would still render in the
+     background. Do this before, or with, the fill.
    - Add the `RESOLVED` lines under spec §7.2, §7.3, §7.4, §7.5 and §7.7, each pointing at its
      findings file, the way §7.1 and §7.6 read now.
    - Write the `KokoroTokenTimingMapper` fixture from the CSV's `timing` rows, then make the mapper
@@ -280,7 +293,17 @@ remains is the measurement itself.
    fallback all landed in Task 5 with **no guessed constants**: `KokoroRuntimeDecision.current` is
    `nil`, `KokoroTokenTimingMapper` returns `[]`, and the default voice stays the system voice. The
    iPhone 11 Pro cannot run this route at all (Plan 0 Task 8).
-7. **`Packages/MLXUtilsLibrary` is vendored, and SwiftPM warns about it on every resolve.**
+7. **A Kokoro engine failure after the probe has passed leaves the book playing silence.** The
+   availability probe runs once, at configuration time (adjustment 3 scopes the fallback there), so
+   a failure inside `KokoroEngine.load()` or `generateAudio` — a corrupted weight file, an MLX
+   allocation failure, jetsam pressure — throws per utterance from then on. The coordinator does
+   what spec §6 asks: it surfaces the message as `lastRenderError` and fills 200 ms of silence, so
+   the book does not halt. But there is no re-route after the probe, so it plays silently with an
+   error showing until the reader changes the voice by hand. Follow-up: on the first
+   `KokoroEngineError` out of `GatedKokoroEngine`, flip `KokoroAvailabilityModel` to unavailable
+   (a new reason, e.g. `.engineFailed`) so the next load falls back to the system voice and the
+   Preferences footer says why.
+8. **`Packages/MLXUtilsLibrary` is vendored, and SwiftPM warns about it on every resolve.**
    `readium/ZIPFoundation` (3.0.1+, via the Readium toolkit) and `weichsel/ZIPFoundation` (0.9.x,
    via `kokoro-ios` → `MLXUtilsLibrary`) share the SwiftPM identity `zipfoundation` with disjoint
    version ranges, so adding Kokoro to the app project broke resolution for the *whole* project —
@@ -296,30 +319,30 @@ remains is the measurement itself.
    in `NpyzReader.swift`); once that is released and `kokoro-ios` picks it up, delete
    `Packages/MLXUtilsLibrary` and go back to the remote. The fallbacks if that stalls are an
    owner-hosted fork or prebuilt XCFrameworks, both costed in `task-5f-report.md`.
-8. **The full suite needs disk, and this machine keeps running out.** A cold `scripts/test-kokoro.sh`
+9. **The full suite needs disk, and this machine keeps running out.** A cold `scripts/test-kokoro.sh`
    or `scripts/build-device.sh` compiles mlx-swift (~2 GB); `scripts/test-readium.sh` resolves the
    Readium toolkit (~1 GB). Reclaim before a cold run rather than during one: `.build` (~4 GB here,
    SwiftPM output plus `DerivedData-App`), `Packages/T2SKokoro/.build` and
    `Packages/T2SReadium/.build` all regenerate from the scripts that use them.
-9. **Deferred minors from the Task 5 reviews**, in the order a reader is likely to hit them:
-   - `VoiceListPage` maps the `.notLinked` status to "Checking this device…" — unreachable in
-     either shipped target, but the wrong text if it ever is reached.
-   - A `kokoro:`-prefixed voice ID that fails to parse passes the route resolver and falls through
-     `RoutedEngine`'s bare-ID path to the system engine silently. Only reachable from a corrupted
-     row; it should throw `KokoroRouteError`.
-   - Fallback-rendered audio is keyed to `"default"` and is not evicted when Kokoro later becomes
-     available, because the stored `document.voiceID` never changed. Left to size-managed eviction.
-   - `NpzArchive` does not check the walked entry count against the EOCD total, and allocates
-     whatever uncompressed size an entry header declares before bounds-checking it. It only ever
-     reads a checksum-verified file we ship.
-   - `KokoroResources.Located`'s public memberwise init lets a caller bypass `locate()`'s size gate;
-     `KokoroAvailability`'s catch-all reports the model file's name even when `voices.npz` was the
-     file that failed to read; `MLX.Memory.cacheLimit` is process-global and the test that sets it
-     never restores it.
-   - Three mlx-swift manifest warnings are visible in `scripts/test-kokoro.sh` output. They are
-     upstream and carry no path, so the script's checkout filter cannot catch them.
-   - Readium's pre-existing `GCDHTTPServer` deprecation warnings now also surface in CI's device
-     build step.
+10. **Deferred minors from the Task 5 reviews**, in the order a reader is likely to hit them:
+    - `VoiceListPage` maps the `.notLinked` status to "Checking this device…" — unreachable in
+      either shipped target, but the wrong text if it ever is reached.
+    - A `kokoro:`-prefixed voice ID that fails to parse passes the route resolver and falls through
+      `RoutedEngine`'s bare-ID path to the system engine silently. Only reachable from a corrupted
+      row; it should throw `KokoroRouteError`.
+    - Fallback-rendered audio is keyed to `"default"` and is not evicted when Kokoro later becomes
+      available, because the stored `document.voiceID` never changed. Left to size-managed eviction.
+    - `NpzArchive` does not check the walked entry count against the EOCD total, and allocates
+      whatever uncompressed size an entry header declares before bounds-checking it. It only ever
+      reads a checksum-verified file we ship.
+    - `KokoroResources.Located`'s public memberwise init lets a caller bypass `locate()`'s size gate;
+      `KokoroAvailability`'s catch-all reports the model file's name even when `voices.npz` was the
+      file that failed to read; `MLX.Memory.cacheLimit` is process-global and the test that sets it
+      never restores it.
+    - Three mlx-swift manifest warnings are visible in `scripts/test-kokoro.sh` output. They are
+      upstream and carry no path, so the script's checkout filter cannot catch them.
+    - Readium's pre-existing `GCDHTTPServer` deprecation warnings now also surface in CI's device
+      build step.
 
 Other retained review items:
 - Same bug class as the artwork crash, unproven: `MainActor.assumeIsolated` inside the

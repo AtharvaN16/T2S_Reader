@@ -35,7 +35,11 @@ targetTemplates:
         excludes:
           - Info.plist
           - Info-Kokoro.plist
+      # `Resources/Kokoro` is ~342 MB of weights only the Kokoro target can use; it is added
+      # under `T2SReaderKokoro` alone so the everyday app never carries it.
       - path: Resources
+        excludes:
+          - Kokoro
         buildPhase: resources
     dependencies:
       - target: T2SReaderShare
@@ -116,6 +120,10 @@ targets:
     templates: [T2SReaderApp]
     info:
       path: T2SReader/Info-Kokoro.plist
+    sources:
+      # Flat-copied to the bundle root, which is where `KokoroResources.bundled(in:)` looks.
+      - path: Resources/Kokoro
+        buildPhase: resources
     dependencies:
       - package: T2SKokoro
         product: T2SKokoro

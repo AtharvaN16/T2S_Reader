@@ -92,7 +92,7 @@ Weights are Kokoro-82M (Apache 2.0) as packaged by KokoroTestApp (Apache 2.0).
 | Package | Pin | License |
 |---|---|---|
 | kokoro-ios (`KokoroSwift`) | 1.0.11 (`4d6d1d8ff8cd`) | MIT |
-| MLXUtilsLibrary | 0.0.6 | see repo |
+| MLXUtilsLibrary | 0.0.6 | Apache-2.0 (vendored as `Packages/MLXUtilsLibrary` from Plan 5 Task 5) |
 | mlx-swift (transitive) | 0.30.2 | MIT |
 | MisakiSwift (transitive) | 1.0.6 | Apache 2.0 — the spec calls it MIT; correct that in the §7.1 audit |
 

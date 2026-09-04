@@ -72,7 +72,7 @@ Two files go in `spikes/SpikeHarness/Resources/` and are gitignored:
 | File | Source | Size | SHA-256 |
 |---|---|---|---|
 | `kokoro-v1_0.safetensors` | `https://media.githubusercontent.com/media/mlalma/KokoroTestApp/main/Resources/kokoro-v1_0.safetensors` | 327,115,152 bytes | `4e9ecdf03b8b6cf906070390237feda473dc13327cb8d56a43deaa374c02acd8` |
-| `voices.npz` | `https://raw.githubusercontent.com/mlalma/KokoroTestApp/main/Resources/voices.npz` | 14,629,684 bytes | — (28 voice styles) |
+| `voices.npz` | `https://raw.githubusercontent.com/mlalma/KokoroTestApp/main/Resources/voices.npz` | 14,629,684 bytes | `56dbfa2f2970af2e395397020393d368c5f441d09b3de4e9b77f6222e790f10f` (28 voice styles) |
 
 ```bash
 cd spikes/SpikeHarness/Resources
@@ -80,6 +80,10 @@ curl -sSL -o kokoro-v1_0.safetensors https://media.githubusercontent.com/media/m
 curl -sSL -o voices.npz https://raw.githubusercontent.com/mlalma/KokoroTestApp/main/Resources/voices.npz
 shasum -a 256 kokoro-v1_0.safetensors     # must match the table
 ```
+
+The app needs the same two files under `App/Resources/Kokoro`; since Plan 5 Task 5,
+`scripts/fetch-kokoro-model.sh` installs both there (reusing these copies when they are already
+present) and verifies both checksums.
 
 Weights are Kokoro-82M (Apache 2.0) as packaged by KokoroTestApp (Apache 2.0).
 

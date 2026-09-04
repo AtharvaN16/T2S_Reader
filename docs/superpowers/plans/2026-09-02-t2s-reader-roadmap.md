@@ -13,7 +13,7 @@ working, tested software on its own. Order follows spec §9.
 | 3 | Persistence and ingest: SwiftData store (`T2SStore`), Readium adapter for EPUB and PDF (`T2SReadium`), article-to-EPUB writer | 3 (Readium part), spec §5 | `2026-09-02-plan-3-persistence-ingest.md` | done |
 | 4a | App shell, import, player: T2SApp models, design tokens, pager, Queue, Collection, mini-player, player sheet, Add sheet (link/file/text), system-voice fallback engine | 6, 8 | `2026-09-02-plan-4a-app-shell.md` | done (merged to `dev` 2026-09-02) |
 | 4b | Reader page with decorations and auto-scroll, speed picker, sleep timer, Preferences, storage manager | 6, 8, 9 (part) | `2026-09-02-plan-4b-reader-controls.md` | done except Task 9: hardware read-along pass, EPUB/PDF fixture, and UI test |
-| 5 | Kokoro engine, Share Extension and Readability import, Now Playing, pronunciation dictionary UI, BYO-key HTTP engine, `BGProcessingTask` wiring | 7, 9 | `2026-09-03-plan-5-engine-share-nowplaying.md` | in progress — Tasks 1, 3, and 4 done; Task 2 open as PR #15; Task 5 gated on Plan 0; Task 6 pending |
+| 5 | Kokoro engine, Share Extension and Readability import, Now Playing, pronunciation dictionary UI, BYO-key HTTP engine, `BGProcessingTask` wiring | 7, 9 | `2026-09-03-plan-5-engine-share-nowplaying.md` | implemented; Kokoro engine, probe, route, catalog and fallback landed on A14+ builds; runtime constants and word timings gated on the iPhone 17 Pro findings (§7.2–§7.5, §7.7); hardware matrix pending |
 | 6 | CloudKit sync behind `SyncProvider`, Live Activity, App Intents, Spotlight | 10–11 | — | after Plan 5 |
 
 **Dependencies.** Plans 0 and 1 are independent; run them in parallel.
@@ -27,11 +27,21 @@ runtime decision from Plan 0.
 ```
 Package.swift                 SPM package "T2S": T2SCore, T2SAudio, T2SStore, T2SLibrary
 Packages/T2SReadium/          iOS-only package wrapping Readium (EPUB reading, Locator mapping)
+Packages/T2SKokoro/           the Kokoro engine on MLX (Plan 5 Task 5); tested with xcodebuild on
+                              macOS, cannot link for the iOS simulator
+Packages/MLXUtilsLibrary/     vendored 0.0.6 without ZIPFoundation, so Kokoro and Readium resolve
+                              together (Plan 5 Task 5)
 Sources/<Target>/             library sources
 Tests/<Target>Tests/          Swift Testing suites; T2SCore runs with `swift test` on macOS
-App/                          the iOS app: project.yml → T2SReader.xcodeproj (generated, ignored),
-                              T2SReader/ (SwiftUI views, composition root), Resources/Fonts (Inter, OFL)
+App/                          the iOS app: project.yml → two targets, T2SReader (simulator + any
+                              phone) and T2SReaderKokoro (A14+ device only), both from one
+                              template; T2SReader/ (SwiftUI views, composition root),
+                              T2SReaderShare/ (Share Extension), Resources/Fonts (Inter, OFL),
+                              Resources/Kokoro/ (model files, git-ignored)
 spikes/                       throwaway harnesses (Plan 0); never imported by shipping code
 scripts/check-licenses.sh     copyleft guard, run in CI from Plan 1 Task 1
+scripts/fetch-kokoro-model.sh install the Kokoro weights and voices into App/Resources/Kokoro
+scripts/test-kokoro.sh        Packages/T2SKokoro on macOS
+scripts/build-device.sh       compile proof of T2SReaderKokoro for a device
 spikes/findings/      spike findings, one file per spike
 ```

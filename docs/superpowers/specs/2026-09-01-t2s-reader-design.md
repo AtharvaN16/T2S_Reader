@@ -1,7 +1,7 @@
 # t2s_reader — Design Spec
 
 **Date:** 2026-09-01
-**Revised:** 2026-09-02 (rev 7 — see §11 changelog)
+**Revised:** 2026-09-03 (rev 8 — see §11 changelog)
 **Status:** Draft for review
 **Working name:** t2s_reader (TBD)
 
@@ -735,8 +735,20 @@ and cannot ship on the App Store. **Mitigation:** use **Misaki**,
 Kokoro's default G2P, via **MisakiSwift** (Apache-2.0; the Python Misaki
 is MIT — corrected rev 6). `mlalma/kokoro-ios` is MIT and
 bundles it. **Cost:** English only in v1, since Misaki's non-English
-coverage degrades to espeak. *Spike: verify MisakiSwift's coverage and
-quality against reference Misaki output.*
+coverage degrades to espeak.
+
+**Coverage measured and accepted (2026-09-03,
+`spikes/findings/2026-09-03-g2p-coverage.md`):** on the committed 50-sentence
+corpus, as the app's `TextNormalizer` emits it, MisakiSwift matched reference
+Python `misaki` exactly on **34/37 = 92%** of sentences once two classes are
+excluded — 7 where the reference itself gave up on a name (`❓`) while
+MisakiSwift produced a plausible pronunciation, and 6 where only the separator
+inside a hyphenated compound number differed (identical phonemes). MisakiSwift
+is accepted as the only G2P, with two mitigations: `NumberWords` joins compound
+numbers with a space rather than a hyphen (**done**, Plan 5 Task 5), and
+heteronyms take the dominant reading because MisakiSwift has no POS tagger —
+the pronunciation dictionary can override per document. Digits never reach the
+engine (§4.1), so MisakiSwift's numeral handling is out of scope.
 
 ### 7.2 Background compute under the `audio` background mode — BLOCKING
 The render-ahead design assumes iOS permits sustained ANE/GPU inference
@@ -761,6 +773,22 @@ number. GPU inference draws more power and competes with UI rendering.
 *Spike: benchmark both paths on device for RTF, sustained thermals,
 resident memory, and **mAh/hour at 1x and 3x** (§3.6).*
 
+**Supported devices — measured (2026-09-03,
+`spikes/findings/2026-09-03-runtime-benchmark.md`):** the MLX route requires
+**Apple GPU family 7 — A14, iPhone 12 or newer**. On an iPhone 11 Pro (A13,
+iOS 26.6.1) the model and voices load, but the first `generateAudio` traps in
+MLX's steel GEMM: those kernels are written on `simdgroup_matrix`, which Metal
+does not provide below family 7, so the Metal compiler cannot build the
+pipeline state. Deterministic across launches. The app therefore probes
+`MTLCreateSystemDefaultDevice()?.supportsFamily(.apple7)` at configuration time
+and routes the whole document to `system:<voice>` on failure. Pre-A14 coverage
+through a runtime that does not need `simdgroup_matrix` (ONNX Runtime /
+CoreML) is a separate timeboxed spike, Plan 0 Task 8.
+
+**RTF, thermals and mAh/hour are still unmeasured on any device**: the A13 run
+produced no numbers, and the iPhone 17 Pro protocol (`spikes/README.md`) has
+not been run. §3.6's figures remain illustrative.
+
 ### 7.4 Word timings must survive the chosen runtime
 Alignments come from Kokoro's `duration_proj`. The
 `Kokoro-82M-v1.0-ONNX-timestamped` build exposes them directly; the MLX
@@ -774,6 +802,13 @@ Published figures for Kokoro range from 80 MB (int8 on disk) to 833 MB
 (runtime) to "2–3 GB VRAM" — different runtimes and quantizations, all
 quoted as if comparable. iOS jetsam does not care which. *Spike: measure
 resident memory on a non-Pro device.*
+
+**Still unmeasured (2026-09-03).** The intended non-Pro device, an iPhone 11
+Pro, cannot run the MLX route at all (§7.3), so no peak footprint was captured;
+the measurement moves to the iPhone 17 Pro, which is the same **A14+ / Apple
+GPU family 7** floor §7.3 records. Until that run,
+`KokoroRuntimeDecision.current` is `nil` and the engine refuses to be
+selected.
 
 ### 7.6 Readium license and platform reach — RESOLVED (rev 6)
 **BSD-3-Clause**, verified against the swift-toolkit 3.11.0 `LICENSE` file;
@@ -854,6 +889,20 @@ against a pipeline that is already proven.
 ---
 
 ## 11. Changelog
+
+**rev 8 (2026-09-03)** — Plan 0 measurements so far, and Plan 5 Task 5.
+
+- **§7.1** coverage measured and accepted: 92% exact match after excluding the
+  reference's own failures on names and a compound-number separator; the two
+  mitigations are the `NumberWords` spacing fix (done) and heteronyms without
+  a POS tagger.
+- **§7.3** supported devices: the MLX route needs Apple GPU family 7 (A14,
+  iPhone 12 or newer); the A13 traps in MLX's steel GEMM. RTF, thermals and
+  battery are still unmeasured and the iPhone 17 Pro protocol is pending.
+- **§7.5** the memory measurement moves to the iPhone 17 Pro for the same
+  reason; nothing measured yet.
+- §3.6 deliberately unchanged: its figures stay illustrative until measured
+  ones exist.
 
 **rev 7 (2026-09-02)** — in-app import.
 

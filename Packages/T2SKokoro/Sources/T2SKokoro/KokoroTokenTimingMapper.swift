@@ -22,17 +22,19 @@ public struct KokoroToken: Hashable, Sendable {
 
 /// Turns Misaki's per-token timestamps into the `WordTiming`s the highlighter reads.
 public enum KokoroTokenTimingMapper {
-    /// Spec §7.4 gate: word timings from this runtime are unproven until the 17 Pro fixture exists
-    /// (plan adjustment 5 — the `timing` rows of the 17 Pro spike CSV, which nobody has captured
-    /// yet). Returns `[]` so the highlighter falls back to the estimated timeline rather than
-    /// highlighting the wrong words with total confidence. When the fixture lands and pins
-    /// ``candidateTimings(_:spoken:duration:)`` against real audio, this forwards to it.
+    /// Spec §7.4 gate, opened on 2026-09-04: `spikes/findings/2026-09-04-pre-a14-runtime.md` measured
+    /// these timings against the audio on an A13 — worst word-**onset** error 55 ms against a ±100 ms
+    /// bar, with the 25 ms frame constant settled from the audio's own energy envelope. The word
+    /// *ends* that failed in that run failed for a reason the engine's fold has since fixed: the
+    /// pause after a word is charged to the whitespace and the punctuation, not to the word. So this
+    /// hands the highlighter ``candidateTimings(_:spoken:duration:)`` rather than making it fall back
+    /// to the estimated timeline.
     public static func map(_ tokens: [KokoroToken], spoken: String, duration: TimeInterval) -> [WordTiming] {
-        []
+        candidateTimings(tokens, spoken: spoken, duration: duration)
     }
 
-    /// The mapping ``map(_:spoken:duration:)`` will return once the fixture proves it. Internal on
-    /// purpose: until then it is only ever exercised on synthetic arithmetic.
+    /// What ``map(_:spoken:duration:)`` returns. Internal on purpose: the gate above is the public
+    /// story, and the tests exercise the rules here on synthetic arithmetic.
     ///
     /// Tokens are walked in order and one is used only when it can be trusted: non-blank text, both
     /// timestamps present and finite, `start <= end`, and neither timestamp earlier than the last

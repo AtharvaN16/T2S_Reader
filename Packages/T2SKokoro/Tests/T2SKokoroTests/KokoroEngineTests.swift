@@ -103,8 +103,11 @@ import T2SCore
         let everySampleIsFinite = result.audio.samples.allSatisfy(\.isFinite)
         #expect(everySampleIsFinite)
         #expect(Self.rms(result.audio.samples) > 0.01)
-        // Spec §7.4 gate: unproven until the 17 Pro timing fixture exists (plan adjustment 5).
-        #expect(result.wordTimings.isEmpty)
+        // The §7.4 gate is open (2026-09-04), and kokoro-ios does populate `start_ts`/`end_ts`, so
+        // this route now returns timings too. What is asserted is the shape the highlighter needs;
+        // the accuracy bar was measured on the Core ML route, not this one.
+        #expect(result.wordTimings.map(\.start) == result.wordTimings.map(\.start).sorted())
+        #expect((result.wordTimings.last?.end ?? 0) <= result.audio.duration + 0.001)
 
         // The plan takes its real-time factor from the 17 Pro; this line records the Mac's, which is
         // the only number this task can measure. Hidden by `scripts/test-kokoro.sh`'s output filter.

@@ -9,8 +9,19 @@ import T2SCore
     static let world = KokoroToken(text: "world", whitespace: "", start: 0.5, end: 0.9)
     static let spoken = "Hello world"
 
-    @Test func mapWithholdsTimingsUntilTheDeviceFixtureProvesThem() {
-        #expect(KokoroTokenTimingMapper.map([Self.hello, Self.world], spoken: Self.spoken, duration: 1.0).isEmpty)
+    /// The §7.4 gate is open (2026-09-04): `map` now hands the highlighter the candidate timings.
+    @Test func mapReturnsTheCandidateTimingsNowTheGateIsOpen() {
+        #expect(KokoroTokenTimingMapper.map([Self.hello, Self.world], spoken: Self.spoken, duration: 1.0) == [
+            WordTiming(spokenRange: 0..<5, start: 0.0, end: 0.4),
+            WordTiming(spokenRange: 6..<11, start: 0.5, end: 0.9),
+        ])
+    }
+
+    /// Opening the gate did not soften it: a token stream that has drifted apart from the text is
+    /// still dropped whole rather than half-highlighted.
+    @Test func mapIsStillEmptyWhenATokenIsNotInTheSpokenText() {
+        let stray = KokoroToken(text: "moon", whitespace: "", start: 0.5, end: 0.9)
+        #expect(KokoroTokenTimingMapper.map([Self.hello, stray], spoken: Self.spoken, duration: 1.0).isEmpty)
     }
 
     @Test func candidateTimingsLocateEachTokenInTheSpokenText() {

@@ -16,6 +16,10 @@ let package = Package(
     dependencies: [
         .package(name: "T2S", path: "../.."),
         .package(url: "https://github.com/mlalma/kokoro-ios", exact: "1.0.11"),
+        // Declared explicitly, though kokoro-ios already pins the same revision: the Core ML engine
+        // calls `EnglishG2P` directly rather than through `KokoroTTS`, and a transitive dependency
+        // compiles but does not link.
+        .package(url: "https://github.com/mlalma/MisakiSwift", exact: "1.0.6"),
         // Vendored: upstream depends on `weichsel/ZIPFoundation`, whose SwiftPM identity collides
         // with Readium's fork of the same library and makes the app's graph unresolvable. A local
         // package takes the identity `mlxutilslibrary` for the whole graph — see its README.
@@ -31,6 +35,7 @@ let package = Package(
                 .product(name: "T2SCore", package: "T2S"),
                 .product(name: "T2SAudio", package: "T2S"),
                 .product(name: "KokoroSwift", package: "kokoro-ios"),
+                .product(name: "MisakiSwift", package: "MisakiSwift"),
                 .product(name: "MLXUtilsLibrary", package: "MLXUtilsLibrary"),
                 .product(name: "KokoroPipeline", package: "KokoroPipeline"),
             ],

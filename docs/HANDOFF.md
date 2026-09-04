@@ -242,9 +242,27 @@ is **not** needed here.
 Plan 6 (`docs/superpowers/plans/2026-09-04-plan-6-coreml-kokoro-engine.md`, the Core ML Kokoro
 engine) is **finished on branch `plan-6-coreml-engine`** — Tasks 1–6, each committed and reviewed —
 checked out in the git worktree `.worktrees/plan-7-coreml-engine` (the directory kept the name it was
-created with, before the plans were renumbered; `git worktree list` tells). It is **not merged**: the
-one thing left is the first listen on the owner's iPhone 11 Pro, written out below. Do that, fix
-whatever it turns up, then merge to `dev`.
+created with, before the plans were renumbered; `git worktree list` tells; since the morning of
+2026-09-04 that worktree has `plan-8-bookmarks-icon-voiceover` checked out, which contains every
+Plan 6 commit). It is **not merged**: the one thing left is the first listen on the owner's
+iPhone 11 Pro, written out below. Do that, fix whatever it turns up, then merge to `dev` — Plan 6
+first, Plan 8 after it; `dev` fast-forwards through both.
+
+State of this Mac on the morning of 2026-09-04, for whoever runs the recipe:
+
+- **Disk.** The night ended at about 1.4 GB free. The regenerable Xcode caches under
+  `~/Library/Developer/Xcode/DerivedData` (`ModuleCache.noindex` and the two older `T2SReader-*`
+  trees from GUI builds) were deleted on the owner's instruction that morning. `.build/DerivedData-App`
+  in the worktree is the app build tree the recipe's signed build reuses; keep it. Any cold MLX build
+  needs about 2 GB and a full `scripts/test-kokoro.sh` run about 2 GB more (see the leak below).
+- **What has not run.** The model-backed `KokoroCoreMLEngineTests` suite was skipped in Plan 6's
+  final fix wave for lack of disk (it was green at f1513a6); run the full `scripts/test-kokoro.sh`
+  once space allows. Nothing has run on a phone. App Store upload validation of the icon has not run.
+- **The build tree was rebuilt once.** A Plan 8 subagent ran `rm -rf .build` in the worktree, which
+  also removes `.build/DerivedData-App`; it has since been rebuilt by the Plan 8 device build. Never
+  delete `.build` in this worktree to "clean" the SwiftPM products.
+- **Rulings.** Every decision taken without the owner is in the two ledgers named below and was
+  listed in the session's final message; each names what it costs if wrong.
 
 What landed:
 
@@ -404,13 +422,15 @@ Lines to look for, in order:
 overflow's **Bookmarks** item, tap to jump, long-press to delete anywhere and swipe too in the
 Bookmarks list), a drawn app icon on
 both app targets, and VoiceOver fixes that fold the Queue row, the Collection cell, a bookmark
-row and the mini-player title into one element each instead of several separate stops. Two
-deferred minors worth knowing: the "·" separators folded into the Queue row's combined label may
-be read aloud as "middle dot", and `scripts/make-app-icon.swift`'s default output path is
-relative to the repo root, so running it from elsewhere writes a nested tree instead of
-overwriting the catalog. The final whole-branch review's two fixes have landed — an opaque app
-icon and a bookmark snippet clamp that survives fallback resolution — and the deferred minors it
-left are recorded in that review's ledger.
+row and the mini-player title into one element each instead of several separate stops. One
+deferred minor worth knowing: `scripts/make-app-icon.swift`'s default output path is relative to
+the repo root, so running it from elsewhere writes a nested tree instead of overwriting the
+catalog. The final whole-branch review's fixes have landed — an opaque app icon, a bookmark
+snippet clamp that survives fallback resolution, the Queue row's "·" separators hidden from
+VoiceOver, and the rendered check reading "Ready to play offline" — and the deferred minors it
+left (a jump error that is set but never shown, the timeline decoded twice on the Book sheet's
+reload, an unbounded inline bookmark section) are recorded in that review's ledger,
+`.superpowers/sdd/2026-09-04-plan-8-bookmarks-icon-voiceover/progress.md`.
 
 ## What comes after
 

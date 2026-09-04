@@ -18,6 +18,7 @@ struct ReaderPage: View {
     @State private var showChapters = false
     @State private var showAppearance = false
     @State private var showSpeed = false
+    @State private var showBookmarks = false
     @State private var bookmarkSaved = false
 
     var body: some View {
@@ -73,6 +74,9 @@ struct ReaderPage: View {
         .sheet(isPresented: $showChapters) { ChapterList() }
         .sheet(isPresented: $showAppearance) { AppearanceSheet() }
         .sheet(isPresented: $showSpeed) { SpeedPicker() }
+        .sheet(isPresented: $showBookmarks) {
+            if let current = env.player.current { BookmarksSheet(summary: current) }
+        }
         .onChange(of: env.player.coordinator.playhead) { _, _ in bookmarkSaved = false }
     }
 
@@ -93,6 +97,9 @@ struct ReaderPage: View {
                     Task { bookmarkSaved = await env.player.addBookmark() }
                 } label: {
                     Label(bookmarkSaved ? "Bookmarked" : "Bookmark", systemImage: bookmarkSaved ? "bookmark.fill" : "bookmark")
+                }
+                Button { showBookmarks = true } label: {
+                    Label("Bookmarks", systemImage: "bookmark.circle")
                 }
                 Button { showAppearance = true } label: {
                     Label("Appearance", systemImage: "textformat.size")

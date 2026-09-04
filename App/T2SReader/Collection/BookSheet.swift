@@ -14,6 +14,7 @@ struct BookSheet: View {
 
     @State private var chapters: [ChapterEntry] = []
     @State private var showPlayer = false
+    @State private var bookmarks: BookmarkListModel?
 
     private var live: DocumentSummary { env.libraryModel.summaries.first { $0.id == summary.id } ?? summary }
     private var isQueued: Bool { live.queueOrder != nil && !live.isFinished }
@@ -81,6 +82,20 @@ struct BookSheet: View {
                         }
                     }
                 }
+                if let bookmarks, !bookmarks.entries.isEmpty {
+                    VStack(alignment: .leading, spacing: 20) {
+                        Text("Bookmarks").typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
+                        ForEach(bookmarks.entries) { entry in
+                            BookmarkRow(entry: entry, onJump: {
+                                Task {
+                                    await bookmarks.jump(to: entry, in: live)
+                                    dismiss()
+                                    readerRoute.open(live)
+                                }
+                            }, onDelete: { Task { await bookmarks.delete(entry) } })
+                        }
+                    }
+                }
                 Color.clear.frame(height: Spacing.section)
             }
             .padding(.horizontal, Spacing.margin)
@@ -99,6 +114,9 @@ struct BookSheet: View {
     private func reload() async {
         await env.libraryModel.refresh()
         await loadChapters()
+        let bookmarks = self.bookmarks ?? BookmarkListModel(library: env.library, player: env.player)
+        self.bookmarks = bookmarks
+        await bookmarks.load(live)
     }
 
     private func loadChapters() async {

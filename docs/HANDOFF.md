@@ -259,9 +259,23 @@ remains is the measurement itself.
    per-token duration frames, measured RTF 0.41–0.46 on an A14) first, run MLX on `Device.cpu` as a
    30-minute control, keep ONNX Runtime's CPU path with the timestamped Kokoro build as the fallback;
    sherpa-onnx, TTS.cpp and the small models are blocked by espeak-ng (GPL). The honest expectation
-   is RTF 0.5–0.65 on the A13, i.e. Kokoro with the playback rate capped near 1.5x, which is a
-   product decision, not a pass. The A13 cannot run the MLX route at all, so without this the
-   owner's phone never gets Kokoro.
+   is RTF 0.5–0.65 on the A13, i.e. Kokoro with the playback rate capped near 1.5x. The A13
+   cannot run the MLX route at all, so without this the owner's phone never gets Kokoro.
+
+   **Product decision (owner, 2026-09-03), which resolves the spike's middle row in advance:** if
+   the A13 lands between RTF 0.35 and 0.75 with memory and timings in bounds, ship Kokoro on
+   pre-A14 phones with the *live* playback rate capped at `0.8 / RTF` (the existing
+   `RateLimits` rule; rates above the cap stay disabled, never silently lowered), and offer the
+   listener a way out of the cap: **prepare the whole book** — render every utterance up front,
+   on charge through the existing Prepare tier or on demand from the book sheet — after which
+   every rate is available, because fully rendered audio needs no synthesis at playback time.
+   That needs one code change the spike does not: today `PlaybackCoordinator` derives the
+   available rates from the engine's rolling RTF regardless of what is cached, so the cap must
+   apply only while unrendered utterances lie ahead of the playhead (a fully rendered document,
+   or a rendered window large enough for the requested rate, lifts it). The Queue's existing
+   "prepared" check and Storage's prepared-time label are the surfaces that tell the user where
+   a book stands. If the spike lands above RTF 0.75 or out of memory, the fallback stays the
+   system voice on pre-A14 phones and Plan 0 Task 8 closes.
 4. **The hardware matrix above.** Every row marked *pending hardware* — the Lock Screen and route
    changes, the Share Extension payloads, Prepare's power and thermal stops, `BGProcessingTask`,
    and the cloud error paths — plus Plan 4b Task 9's remaining EPUB/PDF fixture and UI test. A

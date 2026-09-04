@@ -17,7 +17,7 @@ and commit message per task. The roadmap is
 | Branch | State | Notes |
 |---|---|---|
 | `dev` | integration branch | Plans 1–4a, Plan 4b Tasks 1–8, Plan 5 Tasks 1–4, the playback crash fix, and the Plan 0 spike findings so far are merged (`499d3fa`, plus `153af2a` recording the approved Task 5 adjustments). The app builds, launches, imports an EPUB, and plays it on the simulator and on an iPhone 11 Pro. |
-| `plan-5-task-5-kokoro` | Plan 5 Tasks 5 and 6; merges to `dev` when the final review is clean | Eight commits, `938c8b8 … 647fad6`, plus this documentation commit. Root package: **309 tests in 72 suites** (`swift test`). `Packages/T2SKokoro`: **56 tests in 7 suites** (`scripts/test-kokoro.sh`, including three that load the real 327 MB model). `Packages/T2SReadium` is CI's job (`scripts/test-readium.sh`; not run for this commit — see "Known issues"). |
+| `plan-5-task-5-kokoro` | Plan 5 Tasks 5 and 6; merges to `dev` when the final review is clean | Eight commits, `938c8b8 … 647fad6`, plus this documentation commit. Root package: **309 tests in 72 suites** (`swift test`). `Packages/T2SKokoro`: **56 tests in 7 suites** (`scripts/test-kokoro.sh`, including three that load the real 327 MB model). `Packages/T2SReadium`: **12 tests in 3 suites** (`scripts/test-readium.sh`, on the iPhone simulator). |
 | `main` | stale: only the initial spec commit | Not used for integration yet; fast-forward it to `dev` when you want a release point. |
 
 Plan branches are short-lived: each plan runs on its own branch off `dev` (locally in a git
@@ -83,8 +83,7 @@ The integration branch is at `499d3fa` (spike findings on top of the PR #14/#15 
   (BYO-key cloud engine) in PR #13, and Task 2 (Share Extension) in
   [PR #15](https://github.com/AtharvaN16/T2S_Reader/pull/15).
 
-The app has been built and launched on the simulator. CI is the authority for the iOS-only Readium
-coverage.
+The app has been built and launched on the simulator. CI reruns every script below on each push.
 
 **Plan 5 Task 5 (Kokoro) landed on `plan-5-task-5-kokoro`, commits `938c8b8 … 647fad6`**, in the
 order the approved "Task 5 adjustments" set out. What is now in the tree:
@@ -106,11 +105,11 @@ order the approved "Task 5 adjustments" set out. What is now in the tree:
   Metal framework does not export `_MTLIOErrorDomain` / `_MTLTensorDomain`, on both architectures —
   and Xcode resolves packages per project, not per target.
 
-**Plan 5 Task 6 is this documentation commit.** Its automated pass on this Mac: `swift test` 309
-tests / 72 suites; `scripts/test-kokoro.sh` 56 tests / 7 suites (`** TEST SUCCEEDED **`);
-`scripts/check-licenses.sh` exit 0; `scripts/build-app.sh` and `scripts/build-device.sh` both
-`** BUILD SUCCEEDED **`. `scripts/test-readium.sh` was **not** run: the machine had 2.2 GB free
-and that script resolves Readium (~1 GB). CI covers it.
+**Plan 5 Task 6 is this documentation commit.** The whole suite is green on this branch:
+`swift test` 309 tests / 72 suites; `scripts/test-kokoro.sh` 56 tests / 7 suites
+(`** TEST SUCCEEDED **`); `scripts/test-readium.sh` 12 tests / 3 suites (`** TEST SUCCEEDED **`, on
+the iPhone simulator); `scripts/check-licenses.sh` exit 0; `scripts/build-app.sh` and
+`scripts/build-device.sh` both `** BUILD SUCCEEDED **`.
 
 **Real Kokoro synthesis has run — on this Mac, not on a phone.** Task 5b's model-backed test
 synthesized one 3.25 s sentence with `af_heart`: model load 1.14 s and RTF 0.456 warm; 1.54 s /
@@ -141,7 +140,7 @@ marked **pending hardware** has never run on a device — treat it as untested, 
 |---|---|---|
 | Kokoro whole-document fallback in a build without the engine | iPhone 16 Pro simulator, iOS 18.5 (Task 5f): the log carries `Kokoro engine not linked in this build` and `voice route fallback: kokoro → default` while the Reader plays; no `KokoroRouteError` and no render error in the 37 s to the screenshot | **passes (simulator)** |
 | Kokoro synthesizes real audio through kokoro-ios/MLX | this Mac (Task 5b + `scripts/test-kokoro.sh`): three model-backed tests read the real 327 MB model and `voices.npz` and produce audio; one 3.25 s sentence at RTF 0.456 warm | **passes (macOS)** |
-| `T2SReaderKokoro` links MLX, embeds `KokoroSwift.framework`, bundles the 410 MB of model files | `scripts/build-device.sh` — `** BUILD SUCCEEDED **`; `Frameworks/` contains `KokoroSwift.framework` and `otool -L` resolves into the bundle. The spike harness's missing-framework gotcha does not reproduce for this target | **passes (compile + link)** |
+| `T2SReaderKokoro` links MLX, embeds `KokoroSwift.framework`, bundles the ~342 MB of model files | `scripts/build-device.sh` — `** BUILD SUCCEEDED **`; `Frameworks/` contains `KokoroSwift.framework` and `otool -L` resolves into the bundle. The spike harness's missing-framework gotcha does not reproduce for this target | **passes (compile + link)** |
 | The `.available` / `.unavailable(reason)` Preferences footer strings, and `GatedKokoroEngine`'s construction path | compiled only. On a simulator the probe answers `.unavailable(.simulator)` before any GPU check, and the everyday target does not link the engine, so neither has ever executed | **pending hardware** |
 | Now Playing dictionary pushed without crashing | iPhone 11 Pro, iOS 26.6.1: the artwork main-actor crash was reproduced there and the fix (`2540e1c`) confirmed on the phone | **passes (hardware, this path only)** |
 | Lock Screen and Control Center transport controls | Plan 5 Task 1 verified the software seams (PR #9) | **pending hardware** |
@@ -297,10 +296,11 @@ remains is the measurement itself.
    in `NpyzReader.swift`); once that is released and `kokoro-ios` picks it up, delete
    `Packages/MLXUtilsLibrary` and go back to the remote. The fallbacks if that stalls are an
    owner-hosted fork or prebuilt XCFrameworks, both costed in `task-5f-report.md`.
-8. **`scripts/test-readium.sh` was not run for the Task 6 commit.** The machine had 2.2 GB free and
-   the script resolves the Readium toolkit (~1 GB). Everything else in the suite passed. CI runs it
-   on every push; if you need it locally, reclaim space first — `.build/DerivedData-App` and
-   `Packages/T2SKokoro/.build` are ~6 GB between them and both regenerate.
+8. **The full suite needs disk, and this machine keeps running out.** A cold `scripts/test-kokoro.sh`
+   or `scripts/build-device.sh` compiles mlx-swift (~2 GB); `scripts/test-readium.sh` resolves the
+   Readium toolkit (~1 GB). Reclaim before a cold run rather than during one: `.build` (~4 GB here,
+   SwiftPM output plus `DerivedData-App`), `Packages/T2SKokoro/.build` and
+   `Packages/T2SReadium/.build` all regenerate from the scripts that use them.
 9. **Deferred minors from the Task 5 reviews**, in the order a reader is likely to hit them:
    - `VoiceListPage` maps the `.notLinked` status to "Checking this device…" — unreachable in
      either shipped target, but the wrong text if it ever is reached.
@@ -346,10 +346,11 @@ Other retained review items:
   `scripts/test-readium.sh` when `Packages/T2SReadium` changes; `scripts/test-kokoro.sh` when
   `Packages/T2SKokoro` or `Packages/MLXUtilsLibrary` changes, and `scripts/build-device.sh` when
   anything the Kokoro target links changes.
-- Commit trailer used for AI-written commits: it depends who wrote them. Everything through
-  `153af2a` used `Co-Authored-By: Codex <noreply@openai.com>`; the `plan-5-task-5-kokoro` commits
-  (`938c8b8` onward) use `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. Match whichever
-  tool you are actually using.
+- Commit trailer used for AI-written commits: it depends who wrote them. `Co-Authored-By: Codex
+  <noreply@openai.com>` through `c533290`, the last commit written by that tool;
+  `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>` from `2540e1c` onward, which is where
+  the switch happened on `dev` — not at the start of this branch. Merge commits carry no trailer.
+  Match whichever tool you are actually using.
 - Two app targets now come from one `targetTemplates` entry in `App/project.yml`. Anything that
   applies to the app — a setting, a source path, an entitlement — belongs in the template, or the
   two targets drift apart silently.

@@ -32,7 +32,7 @@ App/                   the iOS app: project.yml → T2SReader.xcodeproj (generat
                        T2SReaderKokoro (A14+ device only); T2SReader/ (SwiftUI views, composition
                        root), T2SReaderShare/ (the Share Extension), Resources/Fonts (Inter, OFL),
                        Resources/Readability/ (Readability.js), Resources/Kokoro/ (the Kokoro
-                       weights and voice styles — 410 MB, git-ignored, installed by
+                       weights and voice styles — ~342 MB, git-ignored, installed by
                        scripts/fetch-kokoro-model.sh)
 scripts/               build and CI helpers (check-licenses.sh, test-readium.sh, test-kokoro.sh,
                        build-app.sh, build-device.sh, fetch-kokoro-model.sh, fetch-fonts.sh,

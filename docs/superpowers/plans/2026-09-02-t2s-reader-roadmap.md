@@ -1,6 +1,6 @@
 # t2s_reader — Plan Series
 
-**Spec:** `docs/superpowers/specs/2026-09-01-t2s-reader-design.md` (rev 4)
+**Spec:** `docs/superpowers/specs/2026-09-01-t2s-reader-design.md` (rev 8)
 
 The spec covers several subsystems. Each gets its own plan that yields
 working, tested software on its own. Order follows spec §9.

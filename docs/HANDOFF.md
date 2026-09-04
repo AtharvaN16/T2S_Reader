@@ -16,8 +16,7 @@ and commit message per task. The roadmap is
 
 | Branch | State | Notes |
 |---|---|---|
-| `dev` | integration branch | Plans 1–4a, Plan 4b Tasks 1–8, Plan 5 Tasks 1–4, the playback crash fix, and the Plan 0 spike findings so far are merged (`499d3fa`, plus `153af2a` recording the approved Task 5 adjustments). The app builds, launches, imports an EPUB, and plays it on the simulator and on an iPhone 11 Pro. |
-| `plan-5-task-5-kokoro` | Plan 5 Tasks 5 and 6; merges to `dev` when the final review is clean | Eight commits, `938c8b8 … 647fad6`, plus this documentation commit. Root package: **309 tests in 72 suites** (`swift test`). `Packages/T2SKokoro`: **56 tests in 7 suites** (`scripts/test-kokoro.sh`; seven of them are gated on the real model files being installed — four load the 327 MB model and two of those synthesize audio). `Packages/T2SReadium`: **12 tests in 3 suites** (`scripts/test-readium.sh`, on the iPhone simulator). |
+| `dev` | integration branch | Plans 1–4a, Plan 4b Tasks 1–8, all of Plan 5 (Tasks 1–6), the playback crash fix, and the Plan 0 spike findings so far are merged. Plan 5 Tasks 5–6 were fast-forwarded from `plan-5-task-5-kokoro` on 2026-09-03 (`938c8b8 … ba207ed`, twelve commits, every task reviewed plus a whole-branch review). Root package: **309 tests in 72 suites** (`swift test`). `Packages/T2SKokoro`: **56 tests in 7 suites** (`scripts/test-kokoro.sh`; seven of them are gated on the real model files being installed — four load the 327 MB model and two of those synthesize audio). `Packages/T2SReadium`: **12 tests in 3 suites** (`scripts/test-readium.sh`, on the iPhone simulator). The everyday app builds, launches, imports an EPUB, and plays it on the simulator and on an iPhone 11 Pro. |
 | `main` | stale: only the initial spec commit | Not used for integration yet; fast-forward it to `dev` when you want a release point. |
 
 Plan branches are short-lived: each plan runs on its own branch off `dev` (locally in a git
@@ -49,7 +48,7 @@ Never commit generated files (`*.xcodeproj`, `App/T2SReader/Info.plist`, `App/T2
 
 ## What exists
 
-Everything here is on `dev` except the last two entries, which are on `plan-5-task-5-kokoro`.
+Everything here is on `dev`.
 
 - **T2SCore** — text pipeline: normalizer with span mapping, sentence segmenter, two-phase timeline (estimated → actual durations), per-chapter codec, `Position` resolution, highlight projection, render policy tiers, render scheduler, audio cache with LRU. Plan 1 + Plan 2.
 - **T2SAudio** — `AudioPlayer` on `AVAudioEngine` with pitch-corrected rate, `PlaybackCoordinator` (owns the playhead), `AACCodec`, and `SystemSpeechEngine` (AVSpeechSynthesizer; the engine until Kokoro lands). Plan 2 + Plan 4a.
@@ -68,8 +67,9 @@ Everything here is on `dev` except the last two entries, which are on `plan-5-ta
 
 ## Where things are right now
 
-The integration branch is at `153af2a` (the approved Task 5 adjustments on top of `499d3fa`'s
-spike findings and the PR #14/#15 merges). The completed work is:
+The integration branch carries Plan 5 in full: its last commit, `ba207ed`, sits on top of
+`153af2a` (the approved Task 5 adjustments) and `499d3fa` (the spike findings and the PR #14/#15
+merges). The completed work is:
 
 - **Plan 4a** is complete.
 - **Plan 4b Tasks 1–8** are merged: PR #2 (Reader models and preferences), PR #3 (pronunciation,

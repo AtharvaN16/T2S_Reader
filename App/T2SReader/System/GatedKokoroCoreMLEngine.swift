@@ -13,16 +13,19 @@ import T2SKokoro
 /// unavailable verdict throws `KokoroRouteError.unavailable`, which the render policy surfaces as a
 /// failed utterance, and a document should have been routed away from Kokoro long before that.
 ///
-/// The expensive part is the engine itself: eight `MLModel`s that take seconds to load and, on a
-/// bundle whose stages were not precompiled, minutes to compile. So there is exactly one, built by
-/// one task that every caller joins — live playback, Prepare, and the launch warm-up alike.
+/// Only the *construction* of the engine is memoized here. Loading it is not: `KokoroCoreMLEngine`
+/// owns its own idempotent, self-retrying ``KokoroCoreMLEngine/preload()`` — it clears its in-flight
+/// compile on failure so the next render tries again — and Core ML is now what "default" resolves
+/// to, so a transient failure at launch must not become a whole session of silent utterances.
 actor GatedKokoroCoreMLEngine: SynthesisEngine {
     nonisolated let engineID = KokoroCoreMLEngine.identity
 
     /// Read once, at construction, on the main actor where the model lives: the verdict is a
     /// `let` decided in the model's `init` and never changes for the life of the launch.
     private let verdict: KokoroCoreMLAvailability.Verdict
-    private var creation: Task<KokoroCoreMLEngine, any Error>?
+    /// The one engine. Eight `MLModel`s are far too expensive to hold twice, and every caller —
+    /// live playback, Prepare, the launch warm-up — must reach the same instance.
+    private var constructed: KokoroCoreMLEngine?
 
     @MainActor
     init(availability: KokoroCoreMLAvailabilityModel) {
@@ -30,30 +33,27 @@ actor GatedKokoroCoreMLEngine: SynthesisEngine {
     }
 
     /// Loads the stages now rather than on the first utterance. The launch warm-up calls this so the
-    /// seconds are spent while the reader is still choosing a book (spec §6).
+    /// seconds are spent while the reader is still choosing a book (spec §6). Safe to call again: a
+    /// loaded engine returns immediately, and a failed load is retried rather than remembered.
     func preload() async throws {
-        _ = try await engine()
+        try await engine().preload()
     }
 
     func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
         try await engine().synthesize(request)
     }
 
-    private func engine() async throws -> KokoroCoreMLEngine {
-        if let creation { return try await creation.value }
-        let verdict = verdict
-        let engineID = engineID
-        // Assigned before the first suspension point, so a second caller finds this task.
-        let creation = Task<KokoroCoreMLEngine, any Error> {
-            guard case .available(_, let resources) = verdict else {
-                throw KokoroRouteError.unavailable(engineID: engineID)
-            }
-            let engine = KokoroCoreMLEngine(resources: resources)
-            try await engine.preload()
-            return engine
+    /// Constructing the engine only stores the resource URLs the verdict already vouched for, so
+    /// there is nothing here that can fail transiently and nothing that suspends — which is why this
+    /// needs no shared `Task`: the actor's own isolation is enough to make it happen once.
+    private func engine() throws -> KokoroCoreMLEngine {
+        if let constructed { return constructed }
+        guard case .available(_, let resources) = verdict else {
+            throw KokoroRouteError.unavailable(engineID: engineID)
         }
-        self.creation = creation
-        return try await creation.value
+        let engine = KokoroCoreMLEngine(resources: resources)
+        constructed = engine
+        return engine
     }
 }
 #endif

@@ -15,15 +15,25 @@ public struct KokoroVoiceCatalog: VoiceCatalog {
     ]
 
     private let base: any VoiceCatalog
-    private let engines: [(identity: String, label: String)]
+    private let engines: @Sendable () -> [(identity: String, label: String)]
 
     /// Every linked runtime's voices, in the order given: a build that links two runtimes lists the
     /// same 28 voices twice, under different identities, because they are different renders (spec
     /// §5). `label` names the runtime in the row and is empty for the default route, whose rows read
     /// as they always have.
-    public init(base: any VoiceCatalog, engines: [(identity: String, label: String)]) {
+    ///
+    /// A closure rather than an array, because a runtime's availability is not always known when the
+    /// composition root builds this catalog: a probe that has to hash its weights answers seconds
+    /// into the launch, and its rows must appear on the next redraw rather than the next launch.
+    /// Asked once per ``voices()`` call — that is, once per body evaluation — so it must stay cheap.
+    public init(base: any VoiceCatalog, engines: @escaping @Sendable () -> [(identity: String, label: String)]) {
         self.base = base
         self.engines = engines
+    }
+
+    /// The fixed form, for the runtimes a build already knows about before it draws anything.
+    public init(base: any VoiceCatalog, engines: [(identity: String, label: String)]) {
+        self.init(base: base, engines: { engines })
     }
 
     public init(base: any VoiceCatalog, engineIdentity: String) {
@@ -31,7 +41,7 @@ public struct KokoroVoiceCatalog: VoiceCatalog {
     }
 
     public func voices() -> [VoiceOption] {
-        base.voices() + engines.flatMap { engine in
+        base.voices() + engines().flatMap { engine in
             Self.voiceNames.map { name in
                 let language = Self.language(for: name)
                 let qualifier = engine.label.isEmpty ? "" : " · \(engine.label)"

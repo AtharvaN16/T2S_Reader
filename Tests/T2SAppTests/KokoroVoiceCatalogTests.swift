@@ -1,3 +1,4 @@
+import os
 import Testing
 import T2SAudio
 @testable import T2SApp
@@ -55,6 +56,30 @@ import T2SAudio
         #expect(mlxEmma.name == "Emma · en-GB · MLX")
         #expect(mlxEmma.language == "en-GB")
         #expect(kokoro.allSatisfy { $0.group == .kokoro })
+    }
+
+    /// A runtime whose availability probe answers after the catalog was built must still reach the
+    /// picker: the list is asked for on every draw, not fixed when the composition root wired it.
+    @Test func listsARuntimeAsSoonAsItsProbeAnswers() throws {
+        let mlx = identity
+        let coreML = "kokoro-coreml-2e878c6a-misaki1.0.6"
+        let mlxAvailable = OSAllocatedUnfairLock(initialState: false)
+        let catalog = KokoroVoiceCatalog(base: BaseCatalog()) {
+            var engines: [(identity: String, label: String)] = [(coreML, "")]
+            if mlxAvailable.withLock({ $0 }) { engines.append((mlx, "MLX")) }
+            return engines
+        }
+
+        let beforeTheProbe = Array(catalog.voices().dropFirst())
+        #expect(beforeTheProbe.count == 28)
+        #expect(beforeTheProbe.allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == coreML })
+
+        mlxAvailable.withLock { $0 = true }
+
+        let afterTheProbe = Array(catalog.voices().dropFirst())
+        #expect(afterTheProbe.count == 56)
+        #expect(afterTheProbe.dropFirst(28).allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == mlx })
+        #expect(afterTheProbe.dropFirst(28).first?.name == "Heart · en-US · MLX")
     }
 }
 

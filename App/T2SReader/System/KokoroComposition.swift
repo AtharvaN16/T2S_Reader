@@ -4,6 +4,7 @@ import T2SKokoro
 #endif
 import Foundation
 import Observation
+import os
 import OSLog
 import T2SApp
 import T2SAudio
@@ -61,13 +62,16 @@ struct KokoroComposition {
     /// How `PlayerModel` and `PrepareRunner` decide a document's effective voice.
     let voiceRouting: any VoiceRouteResolving
     let status: KokoroStatusModel
-    /// The runtimes whose voices the picker lists, with the qualifier each row carries. Empty in the
-    /// everyday build, which is what keeps Kokoro out of the picker there.
-    private let catalogEngines: [(identity: String, label: String)]
+    /// The runtimes whose voices the picker lists, with the qualifier each row carries — asked every
+    /// time the list is drawn, because the MLX probe answers seconds after the composition root has
+    /// finished. Returns an empty list in the everyday build.
+    private let catalogEngines: @Sendable () -> [(identity: String, label: String)]
 
     /// Adds the bundled Kokoro voices to the picker, in the build that has the engine.
     func catalog(wrapping base: any VoiceCatalog) -> any VoiceCatalog {
-        guard !catalogEngines.isEmpty else { return base }
+        // Whether Kokoro is linked at all is fixed at compile time; only which runtimes are listed
+        // changes as the probes answer, and that is the catalog's own question from here on.
+        guard !catalogEngines().isEmpty else { return base }
         return KokoroVoiceCatalog(base: base, engines: catalogEngines)
     }
 
@@ -81,6 +85,10 @@ struct KokoroComposition {
         // The MLX route costs a 340 MB hash, so one probe per launch, started below and memoized —
         // the route's `isAvailable` joins this same work rather than starting a second.
         let mlx = KokoroAvailabilityModel(probe: .live(defaults: defaults))
+        // The probe's answer, where the picker can read it. `VoiceCatalog.voices()` is nonisolated
+        // and is called from off the main actor in the root package's tests, so the MLX model's
+        // main-actor `state` cannot be the source — a lock can.
+        let mlxListed = OSAllocatedUnfairLock(initialState: false)
         let status = KokoroStatusModel(.checking)
 
         let coreMLAvailable: Bool
@@ -102,6 +110,9 @@ struct KokoroComposition {
             switch await mlx.resolve() {
             case .available(let decision, _):
                 log.notice("Kokoro MLX route available (development override: \(decision.isDebugOverride, privacy: .public))")
+                mlxListed.withLock { $0 = true }
+                // Written after the box, and last: `KokoroStatusModel` is observed by the voice
+                // list, so this line is also what redraws it with the MLX rows now in the catalog.
                 status.updateMLXLine(decision.isDebugOverride
                     ? "MLX route: development override active."
                     : "MLX route: available (measured).")
@@ -126,12 +137,12 @@ struct KokoroComposition {
                 defaultVoice: KokoroVoiceID(engineID: KokoroCoreMLEngine.identity, voice: "af_heart").rawValue
             ),
             status: status,
-            catalogEngines: catalogEngines(mlx: mlx.state)
+            catalogEngines: catalogEngines(mlxListed: mlxListed)
         )
         #else
         log.notice("Kokoro engine not linked in this build")
         return KokoroComposition(engines: [], voiceRouting: KokoroVoiceRouting.unavailable,
-                                 status: KokoroStatusModel(.notLinked), catalogEngines: [])
+                                 status: KokoroStatusModel(.notLinked), catalogEngines: { [] })
         #endif
     }
 
@@ -140,15 +151,18 @@ struct KokoroComposition {
     ///
     /// Listing 28 voices twice on a phone that can only speak one of the two sets would be a picker
     /// full of choices that silently fall back (spec §6), so the MLX rows are gated on the MLX
-    /// verdict. That verdict is asynchronous and this decision is not: `state` is still `.checking`
-    /// when the composition root asks, so today the MLX rows never appear — right on every device
-    /// the app ships to, since MLX needs an A14 and staged weights, and a gap only on a development
-    /// phone that has both. Closing it means a catalog that re-reads the probe rather than a list
-    /// fixed at launch, which `AppEnvironment.voices` is.
-    private static func catalogEngines(mlx: KokoroAvailabilityModel.State) -> [(identity: String, label: String)] {
-        var engines: [(identity: String, label: String)] = [(KokoroCoreMLEngine.identity, "")]
-        if case .available = mlx { engines.append((KokoroEngine.identity, "MLX")) }
-        return engines
+    /// verdict. That verdict is not in yet when the composition root builds the catalog — the probe
+    /// hashes 340 MB on a detached task — which is why this is a closure the catalog asks on every
+    /// draw rather than a list decided once. The voice list observes `KokoroStatusModel.mlxLine`,
+    /// which the same probe task writes, so the redraw that adds the rows happens on its own.
+    private static func catalogEngines(
+        mlxListed: OSAllocatedUnfairLock<Bool>
+    ) -> @Sendable () -> [(identity: String, label: String)] {
+        {
+            var engines: [(identity: String, label: String)] = [(KokoroCoreMLEngine.identity, "")]
+            if mlxListed.withLock({ $0 }) { engines.append((KokoroEngine.identity, "MLX")) }
+            return engines
+        }
     }
 
     /// The one-time stage load, reported to the reader through the footer and to the log in seconds.

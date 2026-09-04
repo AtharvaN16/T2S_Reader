@@ -286,7 +286,7 @@ remains is the measurement itself.
    changes, the Share Extension payloads, Prepare's power and thermal stops, `BGProcessingTask`,
    and the cloud error paths — plus Plan 4b Task 9's remaining EPUB/PDF fixture and UI test. A
    failing row is a fix round, not a footnote.
-5. **Plan 6** is unchanged: CloudKit sync behind `SyncProvider`, Live Activity, App Intents, and
+5. **Plan 7** (renumbered 2026-09-04; Plan 6 is now the Core ML engine) is unchanged: CloudKit sync behind `SyncProvider`, Live Activity, App Intents, and
    Spotlight. Its constraints from Plan 5: sync stays behind `SyncProvider`; the app-group store is
    the only local source of truth; a Live Activity or App Intent may *read* `NowPlayingSnapshot` /
    `PlayerModel` but must not become a second playback owner; CarPlay stays deferred even though

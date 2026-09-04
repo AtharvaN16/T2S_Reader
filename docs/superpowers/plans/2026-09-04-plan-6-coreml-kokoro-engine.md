@@ -1,10 +1,10 @@
-# Plan 7: Core ML Kokoro Engine Implementation Plan
+# Plan 6: Core ML Kokoro Engine Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make Kokoro the app's working voice on the owner's iPhone 11 Pro and every other phone, through the Core ML runtime that Plan 0 Task 8 measured, with real word timings for read-along.
 
-**Architecture:** A second Kokoro engine, `KokoroCoreMLEngine`, sits beside the MLX one in `Packages/T2SKokoro` and drives `mattmireles/kokoro-coreml`'s low-level `KokoroPipeline` package (vendored as `Packages/KokoroPipeline`, the way `MLXUtilsLibrary` is). Text → MisakiSwift phonemes → Kokoro's 178-symbol vocabulary → token IDs → four fp16 Core ML stages on the CPU → 24 kHz PCM plus per-token duration frames, which fold into per-word `WordTiming`s. The engine's identity travels in the voice ID (`kokoro:kokoro-coreml-2e878c6a-cpu-misaki1.0.6:<voice>`), so `RenderKey` separates its audio from the MLX engine's and from the system voice. `RoutedEngine` learns to hold several Kokoro engines keyed by identity; the resolver seam maps the app's "default" voice to Kokoro Heart when the Core ML route is available, so Kokoro becomes the default voice without touching any stored document. The MLX engine and its gate stay exactly as they are, for the iPhone 17 Pro measurement.
+**Architecture:** One Kokoro engine in the app, `KokoroCoreMLEngine` in `Packages/T2SKokoro`, drives `mattmireles/kokoro-coreml`'s low-level `KokoroPipeline` package (vendored as `Packages/KokoroPipeline`, the way `MLXUtilsLibrary` is). Text → MisakiSwift phonemes → Kokoro's 178-symbol vocabulary → token IDs → four fp16 Core ML stages on the CPU → 24 kHz PCM plus per-token duration frames, which fold into per-word `WordTiming`s. The engine's identity travels in the voice ID (`kokoro:kokoro-coreml-2e878c6a-misaki1.0.6:<voice>`), so `RenderKey` separates its audio from the system voice and from anything the MLX engine ever rendered; the identity deliberately omits the compute policy, because CPU versus GPU/ANE units do not change the voice, and a later policy change must not orphan cached audio. `RoutedEngine` learns to hold several Kokoro engines keyed by identity: the Core ML engine is the default route on every phone, and the existing MLX engine (`KokoroEngine`, gated on its measured decision or the development override exactly as Plan 5 left it) stays wired beside it so the collaborator's iPhone 17 Pro build can play MLX voices and be benchmarked without a second integration pass (owner's decision 2026-09-04). The resolver seam maps the app's "default" voice to Kokoro Heart on the Core ML route when it is available, so Kokoro becomes the default voice without touching any stored document; an MLX voice is chosen explicitly in Preferences and falls back per its own availability. The published MLX numbers on A14–A17 phones (RTF 0.24–0.34, an out-of-memory failure on long sentences on a 4 GB phone) are slower than Core ML's measured 0.18 at 119 MB on the A13, which is why Core ML is the default; the 17 Pro measurement decides whether MLX or the GPU/ANE Core ML policy ever earns the default on newer chips, and either is a constant change, not a plan.
 
 **Tech Stack:** Swift 6, Core ML (`MLModel`, `MLComputeUnits.cpuOnly`), `KokoroPipeline` (Apache-2.0, vendored), MisakiSwift 1.0.6 (already linked via kokoro-ios; its out-of-lexicon fallback runs on MLX and is pinned to the CPU), `scripts/test-kokoro.sh` (xcodebuild on macOS — Core ML runs on the Mac, so the engine is exercised with the real models), xcodegen, `devicectl`.
 
@@ -19,7 +19,7 @@
 - **Resources are never committed**: `App/Resources/KokoroCoreML/` is git-ignored and filled by `scripts/fetch-kokoro-coreml.sh --app`; every fetched file is sha256-verified against the upstream manifest (files from HF revision `2e878c6a33c56b40de094ef8237bf15a83d233c5`, hashes from the manifest at `32399b333e809044c404c518cb3807a488e8f47d`, whose stale-manifest story the script header already tells).
 - **Where the engine lives**: MisakiSwift links mlx-swift, and mlx-swift cannot link for the iOS Simulator, so the Core ML engine ships in the device-only `T2SReaderKokoro` target (the app the owner installs) and in the macOS test bundle. `T2SReader` (simulator, CI) keeps the system voice. HANDOFF's line saying the engine "belongs in the everyday target" is corrected in Task 6.
 - **Swift 6 strict concurrency**; public types `Sendable`, actor-isolated, or `@MainActor`; token-only SwiftUI; one conventional commit per task with the trailer `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`; `scripts/test-kokoro.sh` after every package edit, root `swift test` after every root edit, `scripts/build-device.sh` after app edits.
-- Exact identities: engine `kokoro-coreml-2e878c6a-cpu-misaki1.0.6`; voice `kokoro:kokoro-coreml-2e878c6a-cpu-misaki1.0.6:af_heart`; sample rate 24 000; 600 samples (25 ms) per duration frame; BOS/EOS/pad token id 0; voice table rows = `clamp(phonemeUTF16Count − 1, 0, rows − 1)`; buckets 7 s and 15 s; duration models t128 and t256.
+- Exact identities: engine `kokoro-coreml-2e878c6a-misaki1.0.6`; voice `kokoro:kokoro-coreml-2e878c6a-misaki1.0.6:af_heart`; sample rate 24 000; 600 samples (25 ms) per duration frame; BOS/EOS/pad token id 0; voice table rows = `clamp(phonemeUTF16Count − 1, 0, rows − 1)`; buckets 7 s and 15 s; duration models t128 and t256.
 
 ## File structure
 
@@ -36,7 +36,7 @@ Packages/T2SKokoro/Sources/T2SKokoro/
   KokoroTokenTimingMapper.swift          the [] gate opens for tokens that carry times
 Packages/T2SKokoro/Tests/T2SKokoroTests/CoreML/*.swift
 Sources/T2SAudio/RoutedEngine.swift      several Kokoro engines keyed by identity
-Sources/T2SApp/Preferences/VoiceRouting.swift   multi-identity routing; "default" → Kokoro Heart
+Sources/T2SApp/Preferences/VoiceRouting.swift   one route per identity; "default" → Kokoro Heart on Core ML
 Sources/T2SApp/Preferences/KokoroVoiceCatalog.swift   unchanged API, fed the Core ML identity
 App/T2SReader/System/KokoroComposition.swift    both engines; Core ML primary; warm-up + status
 App/T2SReader/System/GatedKokoroCoreMLEngine.swift
@@ -209,7 +209,7 @@ public struct KokoroTokenizer: Sendable {
 ```swift
 public actor KokoroCoreMLEngine: SynthesisEngine {
     public static let runtime = "coreml-cpu"
-    public static let identity = "kokoro-coreml-\(KokoroCoreMLResources.revisionPrefix)-cpu-misaki1.0.6"
+    public static let identity = "kokoro-coreml-\(KokoroCoreMLResources.revisionPrefix)-misaki1.0.6"
     public nonisolated let engineID = KokoroCoreMLEngine.identity
     public init(resources: KokoroCoreMLResources.Located)
     /// Loads the eight stages (compiling .mlpackage on the fly when not precompiled) and the vocab.
@@ -228,7 +228,7 @@ public enum KokoroCoreMLError: Error, Equatable, Sendable, LocalizedError {
 ```swift
 @Suite(.serialized) struct KokoroCoreMLEngineTests {
     @Test func identityIsPinnedToTheRevisionAndRuntime() {
-        #expect(KokoroCoreMLEngine.identity == "kokoro-coreml-2e878c6a-cpu-misaki1.0.6")
+        #expect(KokoroCoreMLEngine.identity == "kokoro-coreml-2e878c6a-misaki1.0.6")
     }
     @Test func refusesAnotherEngineIdentityBeforeLoading() async {
         let engine = KokoroCoreMLEngine(resources: .init(stages: [:], voices: [:], vocab: URL(filePath: "/nope"), hnsfWeights: URL(filePath: "/nope"), isPrecompiled: false))
@@ -266,11 +266,11 @@ Mapper tests: `map` now returns the candidate timings for a well-formed token li
 
 ---
 
-### Task 4: Availability, multi-engine routing, Kokoro as the default voice
+### Task 4: Availability, multi-engine routing, Kokoro Heart as the default voice
 
 **Files:**
 - Create: `Packages/T2SKokoro/Sources/T2SKokoro/CoreML/KokoroCoreMLAvailability.swift`
-- Modify: `Sources/T2SAudio/RoutedEngine.swift`, `Sources/T2SApp/Preferences/VoiceRouting.swift`, `Tests/T2SAudioTests/RoutedEngineTests.swift`, `Tests/T2SAppTests/VoiceRoutingTests.swift`, `Tests/T2SAppTests/PlayerModelTests.swift`
+- Modify: `Sources/T2SAudio/RoutedEngine.swift`, `Sources/T2SApp/Preferences/VoiceRouting.swift`, `Sources/T2SApp/Preferences/KokoroVoiceCatalog.swift`, `Tests/T2SAudioTests/RoutedEngineTests.swift`, `Tests/T2SAppTests/VoiceRoutingTests.swift`, `Tests/T2SAppTests/KokoroVoiceCatalogTests.swift`, `Tests/T2SAppTests/PlayerModelTests.swift`, `Tests/T2SAppTests/PrepareRunnerTests.swift`
 - Test: `Packages/T2SKokoro/Tests/T2SKokoroTests/CoreML/KokoroCoreMLAvailabilityTests.swift`
 
 **Interfaces:**
@@ -289,22 +289,31 @@ public enum KokoroCoreMLAvailability {
     public var verdict: KokoroCoreMLAvailability.Verdict { get }
 }
 
-// RoutedEngine
-public init(system:, kokoro: [any SynthesisEngine] = [], configuration:, key:, session:)   // matched by engineID; the old single-engine init stays as a convenience
+// RoutedEngine — several Kokoro engines, matched by engineID; the old single-engine init stays as a convenience
+public init(system: any SynthesisEngine, kokoro: [any SynthesisEngine], configuration: ..., key: ..., session: URLSession = .shared)
 
-// VoiceRouting
+// VoiceRouting — one route per Kokoro identity, plus the default-voice rule
 public struct KokoroVoiceRouting: VoiceRouteResolving {
-    public struct Route: Sendable { public let engineIdentity: String; public let isAvailable: @Sendable () async -> Bool }
-    public init(routes: [Route], defaultKokoroVoiceID: String?)   // when the default route is available, "default" resolves to it
-    public static let unavailable: KokoroVoiceRouting
+    public struct Route: Sendable {
+        public let engineIdentity: String
+        public let isAvailable: @Sendable () async -> Bool
+        public init(engineIdentity: String, isAvailable: @escaping @Sendable () async -> Bool)
+    }
+    /// `defaultVoice` is a full Kokoro voice ID (Heart on the Core ML identity); when that identity's route
+    /// is available, "default" / VoiceOption.systemDefault.id resolve to it.
+    public init(routes: [Route], defaultVoice: String?)
+    public static let unavailable: KokoroVoiceRouting       // no routes, no default
 }
+
+// KokoroVoiceCatalog — voices for every identity handed to it, each name suffixed by its runtime
+public init(base: any VoiceCatalog, engines: [(identity: String, label: String)])   // e.g. [(coreML, "Kokoro"), (mlx, "Kokoro · MLX")]
 ```
 
-- [ ] **Step 1: Failing tests**: `RoutedEngineTests` — two recording engines with different identities each receive their own IDs; an unknown identity throws `.unavailable`. `VoiceRoutingTests` — with a Core ML route available and `defaultKokoroVoiceID` set, `"default"` and `VoiceOption.systemDefault.id` resolve to the Kokoro Heart ID; when unavailable they stay `"default"`; MLX IDs route by their own availability; a foreign identity falls back. `PlayerModelTests` — a document with a nil voice renders with the Kokoro default when the route is available (fake engine records the request's voice ID) and its stored `voiceID` stays nil. `KokoroCoreMLAvailabilityTests` — a bundle without the stages → `.unavailable(.resources(.missing("kokoro_duration_t128")))`; `.enabled(if: haveCoreMLFiles)`: the development directory (through a test-only `check(directory:)`) → `.available` with `KokoroCoreMLDecision.current`.
+- [ ] **Step 1: Failing tests**: `RoutedEngineTests` — two recording engines with different identities each receive exactly their own IDs (request unchanged); an unknown identity throws `KokoroRouteError.unavailable`; the single-engine init still works. `VoiceRoutingTests` — with the Core ML route available and `defaultVoice` set, `"default"` and `VoiceOption.systemDefault.id` resolve to `kokoro:kokoro-coreml-2e878c6a-misaki1.0.6:af_heart`; when that route is unavailable they stay `"default"`; a Core ML ID passes through when available and falls back when not; an MLX ID (`kokoro:kokoro-4e9ecdf0-mlx-misaki1.0.6:af_heart`) passes through only when the MLX route is available and otherwise falls back to `"default"`; an identity with no route falls back; `system:` and `cloud:` IDs are untouched. `KokoroVoiceCatalogTests` — two identities produce 56 options, Core ML first, MLX names carrying " · MLX". `PlayerModelTests` — a document with a nil voice renders with the Kokoro default when the Core ML route is available (the fake engine records the request's voice ID) and its stored `voiceID` stays nil; `PrepareRunnerTests` likewise. `KokoroCoreMLAvailabilityTests` — a bundle without the stages → `.unavailable(.resources(.missing("kokoro_duration_t128")))`; `.enabled(if: haveCoreMLFiles)`: the development directory (through a test-only `check(directory:)`) → `.available` with `KokoroCoreMLDecision.current`.
 - [ ] **Step 2: Run** `swift test` and `scripts/test-kokoro.sh` → failures.
-- [ ] **Step 3: Implement**. The resolver's rule, in order: a `kokoro:` ID whose identity has a route → that route's availability decides pass-through or `"default"`; a `kokoro:` ID with no route → `"default"`; `"default"` / systemDefault → `defaultKokoroVoiceID` when its route is available, else unchanged; anything else unchanged.
+- [ ] **Step 3: Implement**. `RoutedEngine` keeps a `[String: any SynthesisEngine]` by `engineID`. The resolver's rule, in order: a `kokoro:` ID whose identity has a route → pass through when that route is available, else `"default"`; a `kokoro:` ID with no route → `"default"`; `"default"` / systemDefault → `defaultVoice` when its identity's route is available, else unchanged; anything else unchanged.
 - [ ] **Step 4: Run** both suites → green; `scripts/build-app.sh` still compiles.
-- [ ] **Step 5: Commit** `Audio: route several Kokoro engines by identity; Kokoro Heart is the default voice when available`
+- [ ] **Step 5: Commit** `Audio: route several Kokoro engines by identity; Kokoro Heart on Core ML is the default voice`
 
 ---
 
@@ -318,7 +327,7 @@ public struct KokoroVoiceRouting: VoiceRouteResolving {
 - Consumes: Tasks 2–4. Produces: `KokoroStatus` gains `.preparing` ("Preparing the Kokoro voice…") shown during warm-up.
 
 - [ ] **Step 1: `project.yml`** — `T2SReaderKokoro` gains `- path: Resources/KokoroCoreML, buildPhase: resources` (Xcode compiles each `.mlpackage` to `.mlmodelc` at the bundle root; add `COREML_CODEGEN_LANGUAGE: None` to that target's settings, as the spike harness did). The template's `Resources` path also excludes `KokoroCoreML`.
-- [ ] **Step 2: Composition** — under `KOKORO_ENGINE`: build `KokoroCoreMLAvailabilityModel`, a `GatedKokoroCoreMLEngine` (same shape as `GatedKokoroEngine`: one `Task` that creates `KokoroCoreMLEngine` after `.available`, then `preload()`), keep the MLX gated engine, pass `kokoro: [coreML, mlx]` to `RoutedEngine`, `KokoroVoiceRouting(routes: [coreML route, mlx route], defaultKokoroVoiceID: "kokoro:<coreml identity>:af_heart")`, catalog fed the Core ML identity. At launch, when the Core ML verdict is `.available`, start a warm-up `Task` that calls the gated engine's `preload()` and moves the status `.preparing` → `.available(isDebugOverride: false)`; log the seconds. Status text: `.preparing` → "Preparing the Kokoro voice (one-time, up to a few minutes on the first launch)…".
+- [ ] **Step 2: Composition** — under `KOKORO_ENGINE`: build `KokoroCoreMLAvailabilityModel` and a `GatedKokoroCoreMLEngine` (same shape as `GatedKokoroEngine`: one `Task` that creates `KokoroCoreMLEngine` after `.available`, then `preload()`); keep the MLX `GatedKokoroEngine` and its availability model exactly as they are; pass `kokoro: [coreML, mlx]` to `RoutedEngine`; `KokoroVoiceRouting(routes: [Route(coreML identity) { Core ML verdict is .available }, Route(MLX identity) { MLX verdict is .available }], defaultVoice: "kokoro:\(KokoroCoreMLEngine.identity):af_heart")`; catalog fed `[(KokoroCoreMLEngine.identity, "Kokoro"), (KokoroEngine.identity, "Kokoro · MLX")]` — the MLX voices are listed only when the MLX route is available (17 Pro with the development override), so the picker on the owner's phone shows one set. `KokoroStatus` reports the Core ML route (`.preparing`, `.available`, `.unavailable(reason)`) and, separately, the MLX route's state on a second footer line only when it is not `.notLinked`/unavailable-by-design ("MLX route: waiting for the device measurements" / "MLX route: development override active"). At launch, when the Core ML verdict is `.available`, start a warm-up `Task` that calls the gated engine's `preload()` and moves the status `.preparing` → `.available(isDebugOverride: false)`; log the seconds. Status text: `.preparing` → "Preparing the Kokoro voice (one-time, up to a few minutes on the first launch)…".
 - [ ] **Step 3: Preferences** — the "Default voice" row's subtitle resolves through the routing (shows "Heart · Kokoro" when that is what "default" means); the Kokoro group lists the Core ML voices; the footer shows the new status.
 - [ ] **Step 4: Verify** — `swift test`; `scripts/build-app.sh` (everyday target unchanged); `scripts/build-device.sh` → `BUILD SUCCEEDED` and `T2SReaderKokoro.app` contains the eight `.mlmodelc` bundles, 28 `.bin` voices, both JSON files. Then, with the owner present, install on the iPhone 11 Pro with the owner's team (Xcode, scheme `T2SReaderKokoro`, or `xcodebuild … CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM=V69PL7U8EX ENABLE_DEBUG_DYLIB=NO` + `devicectl install`), launch, watch the warm-up status, import an EPUB, play: Kokoro Heart speaks by default, read-along highlights follow words, 2x and 4x are offered, lock-screen controls work. Record load time, first-utterance latency, and any failure in the report.
 - [ ] **Step 5: Commit** `App: Core ML Kokoro as the default voice on the device build, with first-launch warm-up`

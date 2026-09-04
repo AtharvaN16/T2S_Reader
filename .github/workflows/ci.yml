@@ -147,7 +147,8 @@ jobs:
       - run: scripts/test-kokoro.sh -clonedSourcePackagesDirPath "$SPM_CLONED_PACKAGES_DIR"
   app-ios:
     runs-on: macos-26
-    timeout-minutes: 30
+    # The device build compiles mlx-swift for iphoneos on a cold cache, like the kokoro-macos job.
+    timeout-minutes: 45
     env:
       SPM_CLONED_PACKAGES_DIR: ${{ github.workspace }}/.build/SourcePackages
     steps:
@@ -198,3 +199,5 @@ jobs:
           done
           exit 1
       - run: scripts/build-app.sh -clonedSourcePackagesDirPath "$SPM_CLONED_PACKAGES_DIR"
+      # The device target links MLX, which only builds for iphoneos.
+      - run: scripts/build-device.sh -clonedSourcePackagesDirPath "$SPM_CLONED_PACKAGES_DIR"

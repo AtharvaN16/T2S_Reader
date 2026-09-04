@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 import T2SAudio
 import T2SCore
 import T2SLibrary
@@ -48,6 +49,7 @@ public final class PlayerModel {
     public var renderError: String? { coordinator.lastRenderError ?? localError }
 
     private let library: Library
+    private static let log = Logger(subsystem: "com.t2s.reader", category: "playback")
     /// Hash of each chapter as last written, to skip unchanged chapters on the next persist.
     private var persistedChapterHashes: [Int] = []
     /// The tick array is O(timeline) and the player sheet's body runs at 10 Hz while playing, so it
@@ -151,7 +153,14 @@ public final class PlayerModel {
             }
             // Local copy only: the coordinator reads this document for render keys and synthesis
             // requests, and never writes it back.
-            document.voiceID = await voiceRouting.effectiveVoiceID(document.voiceID ?? VoiceOption.systemDefault.id)
+            let requestedVoiceID = document.voiceID ?? VoiceOption.systemDefault.id
+            document.voiceID = await voiceRouting.effectiveVoiceID(requestedVoiceID)
+            if let effective = document.voiceID, effective != requestedVoiceID {
+                // The route, never the voice: a voice ID can carry a provider's voice name, and the
+                // document's title must never reach the log.
+                let route = String(requestedVoiceID.prefix { $0 != ":" })
+                Self.log.notice("voice route fallback: \(route, privacy: .public) → \(effective, privacy: .public)")
+            }
             coordinator.load(document, timeline: timeline)
             current = summary
             persistedChapterHashes = timeline.chapters.map(\.hashValue)

@@ -45,6 +45,16 @@ struct Pill: View {
     }
 }
 
+/// The section header of spec §2.4.5, shared by the pages that group rows under one — the
+/// spacing below it belongs to each page, so only the type is here.
+struct SectionHeader: View {
+    var title: String
+
+    var body: some View {
+        Text(title).typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
+    }
+}
+
 /// Page title 56pt below the safe-area top, with an optional dropdown menu (spec §2.4.4).
 struct PageTitle<Menu: View>: View {
     var text: String

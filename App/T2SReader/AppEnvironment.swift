@@ -38,11 +38,14 @@ final class AppEnvironment {
     let audioSession = AudioSessionController()
     let nowPlaying: NowPlayingController
     let deviceMonitor: DeviceMonitor
+    /// What Preferences tells the reader about the on-device engine on this device.
+    let kokoroStatus: KokoroStatusModel
 
     init(paths: LibraryPaths, store: LibraryStore, audioStore: FileAudioStore, library: Library,
          importModel: ImportModel, coordinator: PlaybackCoordinator, engine: any SynthesisEngine,
          renderArbiter: RenderArbiter, cloudVoiceSettings: CloudVoiceSettings,
-         cloudVoiceSecrets: any SecretStoring, cloudRouter: RoutedEngine) {
+         cloudVoiceSecrets: any SecretStoring, cloudRouter: RoutedEngine,
+         kokoro: KokoroComposition) {
         self.paths = paths
         self.store = store
         self.audioStore = audioStore
@@ -55,7 +58,9 @@ final class AppEnvironment {
         self.cloudVoiceSettings = cloudVoiceSettings
         self.cloudVoiceSecrets = cloudVoiceSecrets
         self.cloudRouter = cloudRouter
-        voices = CloudVoiceCatalog(base: SystemVoiceCatalog(), configurationStore: cloudVoiceSettings.configurationStore)
+        voices = kokoro.catalog(wrapping: CloudVoiceCatalog(base: SystemVoiceCatalog(),
+                                                            configurationStore: cloudVoiceSettings.configurationStore))
+        kokoroStatus = kokoro.status
         pronunciation = PronunciationModel(store: store)
         storage = StorageModel(library: library, audioStore: audioStore, player: player, libraryModel: libraryModel)
         prepareRunner = PrepareRunner(library: library, store: store, audioStore: audioStore,
@@ -67,6 +72,10 @@ final class AppEnvironment {
         nowPlaying = NowPlayingController(player: player, libraryModel: libraryModel, preferences: preferences, paths: paths)
         player.defaultVoiceID = preferences.defaultVoiceID
         prepareRunner.defaultVoiceID = preferences.defaultVoiceID
+        // One resolver for both: a document's voice is decided the same way whether it is played
+        // now or prepared in the background (spec §6).
+        player.voiceRouting = kokoro.voiceRouting
+        prepareRunner.voiceRouting = kokoro.voiceRouting
         coordinator.setRate(preferences.defaultRate)
         self.importModel = importModel
         deviceMonitor = DeviceMonitor(audioStore: audioStore)
@@ -81,10 +90,12 @@ final class AppEnvironment {
         let cloudVoiceSecrets = KeychainSecretStore()
         let configurationStore = cloudVoiceSettings.configurationStore
         let systemEngine = SystemSpeechEngine()
+        let kokoro = KokoroComposition.make()
         let cloudRouter = RoutedEngine(
             system: systemEngine,
             configuration: { configurationStore.current() },
-            key: { try cloudVoiceSecrets.load() }
+            key: { try cloudVoiceSecrets.load() },
+            kokoro: kokoro.engine
         )
         let renderArbiter = RenderArbiter()
         let coordinator = PlaybackCoordinator(engine: cloudRouter, store: shared.audioStore, player: try AudioPlayer(),
@@ -95,6 +106,7 @@ final class AppEnvironment {
                               library: shared.library, importModel: shared.importModel, coordinator: coordinator,
                               engine: cloudRouter, renderArbiter: renderArbiter,
                               cloudVoiceSettings: cloudVoiceSettings,
-                              cloudVoiceSecrets: cloudVoiceSecrets, cloudRouter: cloudRouter)
+                              cloudVoiceSecrets: cloudVoiceSecrets, cloudRouter: cloudRouter,
+                              kokoro: kokoro)
     }
 }

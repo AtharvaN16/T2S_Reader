@@ -20,12 +20,21 @@ packages:
   Readium:
     url: https://github.com/readium/swift-toolkit.git
     exactVersion: 3.11.0
-targets:
-  T2SReader:
+targetTemplates:
+  # Both app targets are the same app, built from the same sources. `T2SReader` is the
+  # everyday build; `T2SReaderKokoro` adds the on-device engine and cannot build for the
+  # simulator at all.
+  T2SReaderApp:
     type: application
     platform: iOS
     sources:
+      # Both generated Info.plists sit in this directory. Each target's own is consumed by
+      # INFOPLIST_FILE, but the other target's would otherwise be copied in as a stray resource —
+      # and, in the Kokoro target, collide with the bundle's own Info.plist.
       - path: T2SReader
+        excludes:
+          - Info.plist
+          - Info-Kokoro.plist
       - path: Resources
         buildPhase: resources
     dependencies:
@@ -57,7 +66,6 @@ targets:
       properties:
         com.apple.security.application-groups: [group.com.t2s.reader]
     info:
-      path: T2SReader/Info.plist
       properties:
         CFBundleDisplayName: t2s
         UILaunchScreen: {}
@@ -92,6 +100,29 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
         INFOPLIST_KEY_UIUserInterfaceStyle: Automatic
+targets:
+  # The everyday build: no MLX, so it runs in the simulator and is what CI builds.
+  T2SReader:
+    templates: [T2SReaderApp]
+    info:
+      path: T2SReader/Info.plist
+  # The iPhone build with the on-device engine. mlx-swift cannot link against the simulator SDK
+  # (`_MTLIOErrorDomain` and `_MTLTensorDomain` are absent from it), and neither Xcode nor SwiftPM
+  # can link a package product for one SDK only — hence a second target rather than a build flag.
+  # Same bundle identifier and display name: it is the same app, built for a phone. The product
+  # name stays the target name so the two `.app`s never overwrite each other in a shared
+  # DerivedData.
+  T2SReaderKokoro:
+    templates: [T2SReaderApp]
+    info:
+      path: T2SReader/Info-Kokoro.plist
+    dependencies:
+      - package: T2SKokoro
+        product: T2SKokoro
+    settings:
+      base:
+        SUPPORTED_PLATFORMS: iphoneos
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) KOKORO_ENGINE"
   T2SReaderShare:
     type: app-extension
     platform: iOS

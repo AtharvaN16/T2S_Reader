@@ -219,3 +219,12 @@ sentence seeks to it. Use the speed control to choose 0.5x–4.0x in 0.1x
 steps; rates the device cannot sustain are unavailable. The sleep timer offers
 10, 20, 30, 45, or 60 minutes, plus **End of chapter**, and pauses playback
 when it fires.
+
+### Bookmarks
+
+Save the current position with the bookmark button in the Player, or
+**Bookmark** in the Reader's overflow menu. See them in the Book sheet's
+**Bookmarks** section, shown once a document has any, or from **Bookmarks**
+in the Player or Reader overflow menu — newest first. Tapping a bookmark
+plays from there; swipe a row to delete it, or long-press for
+**Delete bookmark**.

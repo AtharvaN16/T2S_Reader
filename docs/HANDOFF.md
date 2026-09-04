@@ -174,6 +174,9 @@ install is under "Resume here" below, and it is the last thing between Plan 6 an
 | Cloud voice: missing key, 401, 429, network loss, configuration change | Plan 5 Task 4 (PR #13) unit coverage inside `swift test` | **pending hardware** — no real provider key has been exercised end to end |
 | Plan 0 Kokoro metrics §7.3, §7.4, §7.5 — Core ML route | iPhone 11 Pro (A13): CPU-only Core ML, RTF 0.18 flat out and 0.16 over 20 min at 4x, 119 MB flat, word-onset error ≤ 55 ms; thermal state 2 after 150 s at 4x on charge with no speed collapse (`spikes/findings/2026-09-04-pre-a14-runtime.md`) | **passes (hardware)**; unplugged thermal/battery run pending |
 | Plan 0 Kokoro metrics §7.2, §7.3, §7.5, §7.7 — MLX route | needs an A14+ phone; nothing measured | **pending hardware** (the 17 Pro, protocol below) |
+| Bookmarks: add in Player/Reader, list in Book sheet and overflow, jump, swipe-delete | wired in Plan 8 Tasks 2–3; `BookmarkListModelTests`/`BookmarkSnippetTests` cover the model, the Book sheet section is hidden until a document has a bookmark, `scripts/build-app.sh` — `** BUILD SUCCEEDED **`; nobody has tapped it | **pending simulator** |
+| App icon on the home screen | `scripts/make-app-icon.swift` draws it deterministically (byte-identical shasum across two runs), `Assets.car` is produced and `CFBundleIconName` resolves to `AppIcon` in the built Info.plist (Plan 8 Task 1); no home screen has been looked at | **pending simulator** |
+| VoiceOver: Queue row / Collection cell / bookmark row / mini-player title read as one element each | wired in Plan 8 Task 4 — `.accessibilityElement(children: .combine)` on the Queue row's meta line, a combined label on the Collection cell, `BookmarkRow`'s own combined label, the mini-player title wrapped in an activatable `Button`; `scripts/build-app.sh` — `** BUILD SUCCEEDED **`; never run under VoiceOver | **pending hardware** |
 
 ## The iPhone 17 Pro run (for Harsh)
 
@@ -395,6 +398,17 @@ Lines to look for, in order:
     sentence sounds, whether 4x sustains, whether the Lock Screen controls work, and anything in the
     `com.t2s.reader` log that is not in the list above.
 
+**Plan 8 is also complete**, on branch `plan-8-bookmarks-icon-voiceover`, stacked on
+`plan-6-coreml-engine` in this same worktree — merge it after Plan 6. It adds a bookmark list
+(add from the Player or the Reader's overflow, browse it from the Book sheet or from either
+overflow's **Bookmarks** item, tap to jump, swipe or long-press to delete), a drawn app icon on
+both app targets, and VoiceOver fixes that fold the Queue row, the Collection cell, a bookmark
+row and the mini-player title into one element each instead of several separate stops. Two
+deferred minors worth knowing: the "·" separators folded into the Queue row's combined label may
+be read aloud as "middle dot", and `scripts/make-app-icon.swift`'s default output path is
+relative to the repo root, so running it from elsewhere writes a nested tree instead of
+overwriting the catalog.
+
 ## What comes after
 
 The product owner decided on 2026-09-03 that Kokoro is the app's main engine (the system voice is
@@ -613,7 +627,12 @@ Other retained review items:
   `NowPlayingController` and `AudioPlayer`. They hold as long as MediaPlayer delivers commands on
   the main thread and those objects are only ever released on it; the Lock Screen / AirPods pass on
   hardware is where they would show.
-- No app icon / asset catalog yet — blocking for TestFlight, fine for development.
+- ~~No app icon / asset catalog yet — blocking for TestFlight, fine for development.~~
+  **Resolved** in Plan 8 Task 1: `scripts/make-app-icon.swift` draws a deterministic
+  CoreGraphics icon (accent (#FF7A1A) ground, three rounded white bars, a play triangle) into
+  `App/T2SReader/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png`; both app targets pick it
+  up through `ASSETCATALOG_COMPILER_APPICON_NAME` in the shared `targetTemplates` entry.
+  Regenerate the PNG after editing the script with `swift scripts/make-app-icon.swift`.
 - `LibraryModel` progress is still computed per queued document on refresh (cached per summary);
   lazy per-row computation and an explicit, cancellable stale-timeline migration are the next step
   if the library grows large.

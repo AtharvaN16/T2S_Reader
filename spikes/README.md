@@ -75,7 +75,7 @@ stages plus Swift/Accelerate DSP. `CoreMLBench.swift` does the front half itself
 Kokoro's 178-symbol vocab → token IDs), so both arms phonemize identically.
 
 ```bash
-scripts/fetch-kokoro-coreml.sh          # ~178 MB of models + the pinned source clone; idempotent
+scripts/fetch-kokoro-coreml.sh          # ~350 MB of models + the pinned source clone; idempotent
 cd spikes/SpikeHarness && xcodegen generate
 ```
 
@@ -89,7 +89,13 @@ Launch environment:
 | Variable | Values | Meaning |
 |---|---|---|
 | `SPIKE_ENGINE` | `mlx` (default), `coreml`, `mlxcpu` | which runtime the run measures |
-| `SPIKE_COREML_POLICY` | `default`, `cpuOnly` | per-stage Core ML compute units, `coreml` only |
+| `SPIKE_COREML_POLICY` | `default`, `cpuOnly` (case-insensitive) | per-stage Core ML compute units, `coreml` only |
+| `SPIKE_COREML_BUCKETS` | `7,15` (default), or a subset | which decoder/f0ntrain buckets are vended to `selectBucket` |
+| `SPIKE_COREML_DURATION_TOKENS` | `128,256` (default), or a subset | which duration models are offered to `selectDurationChoice` |
+
+An unrecognised policy logs a `policy.unknown` row and falls back to `default`; an unparseable
+bucket or token list logs `config.unknown`. Neither is silent, because a run mislabelled in the CSV
+is worse than a run that fails.
 
 `default` is the upstream SDK's shipped iPhone policy (`KokoroComputePolicy.gistDefault`): duration on
 the CPU — the padded duration graph can spend *minutes* in MPSGraph specialization otherwise —
@@ -111,11 +117,26 @@ upstream iPhone 12 Pro / A17 Pro numbers measure), `rtfPipeline`, and `st_*` per
 (`duration, align, matrix, f0ntrain, pad, decoderPre, hnsf, generator, trim`). `synth`/`rtf` stay
 G2P-inclusive so they compare with the MLX arm directly. `timing` rows are per Misaki **word**, folded
 from `tokenDurationFrames`; one `frames.check` row per WAV sentence records
-`frames × samplesPerDurationFrame` against the real sample count, so the 25 ms-vs-12.5 ms
-frame-to-seconds question is settled from the audio rather than from a constant.
+`frames × samplesPerDurationFrame` against the real sample count.
 
-Only the 15-second bucket and the 256-token duration model are staged, so sentences longer than
-about 15 s of audio or 256 tokens are out of range (the corpus is well inside both).
+Read that `frames.check` row for what it is: the executor trims to
+`round(frames × 2 / f0FrameRate × sampleRate)` and `samplesPerDurationFrame` is the same formula, so
+the two columns agree by construction whenever the utterance fits its bucket — which is the one
+thing the row does prove (`trimLen = min(waveform.count, targetLen)`, so a mismatch means the
+bucket clamped the speech). The 25 ms-vs-12.5 ms question is settled off-device instead: an energy
+envelope over the WAV (12.5 ms would leave the second half of the file silent; it is not) plus
+`python3 spikes/timing_check.py <csv> <dir>` on the per-word rows, plus listening.
+
+**Bucket staging is a measurement variable, not a packaging detail.** The pipeline pads every
+utterance out to the geometry of the smallest staged bucket that can hold it, and `decoderPre` +
+the generator are ~80% of a warm call, so staging only the 15-second bucket makes a 6.5-second
+sentence pay 15 seconds of decoder work — it inflates RTF as much as it inflates footprint. The
+fetch script therefore stages the 7- and 15-second buckets and the `t128`/`t256` duration models,
+and the harness vends all of them so the upstream `selectBucket` /
+`KokoroPipeline.selectDurationChoice` do the picking. Each `sentence` row records the `bucket` and
+`durationModel` that were actually used. Narrow the set with `SPIKE_COREML_BUCKETS=15` to reproduce
+a single-geometry run. Sentences longer than 15 s of audio or 256 tokens are out of range (the
+corpus is well inside both).
 
 ### Model files (not committed)
 
@@ -152,4 +173,10 @@ Weights are Kokoro-82M (Apache 2.0) as packaged by KokoroTestApp (Apache 2.0).
 
 Each run writes `spike-<epoch>.csv` to the app's Documents folder (Files → On My iPhone → Spike Harness).
 Columns: `ts,event,k,v`. Events: `app.launch`, `model.loaded`, `bench.start`, `sentence`, `timing`, `bench.stop`.
-Analyse with `python3 spikes/analyze.py spike-*.csv` (added in Plan 0 Task 4).
+Analyse with `python3 spikes/analyze.py spike-*.csv` (added in Plan 0 Task 4). It splits the file
+by run — one CSV can hold several `bench.start`s, and mixing engines or policies produces a median
+of nothing — discards the first two calls of each run (`--warm-skip N` to change it; Core ML's
+first prediction builds the compute plan), and reports warm median and p90 RTF, the footprint slope
+in MB per sentence over each half of the run, the elapsed seconds to each thermal state measured
+from `bench.start`, the battery delta and the median stage split. `--per-minute` adds the old
+per-minute median view.

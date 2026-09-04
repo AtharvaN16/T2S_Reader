@@ -97,6 +97,10 @@ final class SynthBench: Bench, @unchecked Sendable {
         var i = 0
         var progress = BenchProgress()
         while !stopped, !sentences.isEmpty {
+          // One pool per sentence — see the same comment in `CoreMLBench.run`. The whole bench is a
+          // single work item on a global queue, so nothing drains between iterations otherwise and
+          // a memory curve would be measuring the harness, not the runtime.
+          autoreleasepool {
             let text = sentences[i % sentences.count]
             let t0 = Date()
             var samples: [Float] = []
@@ -184,6 +188,7 @@ final class SynthBench: Bench, @unchecked Sendable {
                 if sleep > 0 { Thread.sleep(forTimeInterval: sleep) }
             }
             i += 1
+          }
         }
         SpikeLog.shared.record("bench.stop", ["engine": cpuOnly ? "mlxcpu" : "mlx", "iterations": "\(i)"])
     }

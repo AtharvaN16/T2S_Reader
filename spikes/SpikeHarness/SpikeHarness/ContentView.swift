@@ -1,12 +1,58 @@
 import SwiftUI
 
+/// Core ML arm settings read from the launch environment, resolved exactly once.
+///
+/// A `static let` and not a stored property on the view: SwiftUI re-creates the `ContentView`
+/// struct freely, and anything that logs from an initialiser would log once per re-creation.
+struct CoreMLLaunchConfig {
+    let policy: CoreMLStagePolicy
+    let buckets: [Int]
+    let durationTokens: [Int]
+
+    static let shared = CoreMLLaunchConfig()
+
+    private init() {
+        let env = ProcessInfo.processInfo.environment
+        let rawPolicy = env["SPIKE_COREML_POLICY"] ?? "default"
+        if let named = CoreMLStagePolicy.named(rawPolicy) {
+            policy = named
+        } else {
+            // Silently falling back to `gistDefault` would label a `cpuonly` run "default" in the
+            // CSV, which is worse than failing: the numbers would look measured and be wrong.
+            SpikeLog.shared.record("policy.unknown", [
+                "value": rawPolicy, "known": CoreMLStagePolicy.knownNames,
+                "using": CoreMLStagePolicy.gistDefault.name,
+            ])
+            policy = .gistDefault
+        }
+        buckets = Self.ints(env["SPIKE_COREML_BUCKETS"], default: CoreMLModelBundle.stagedBuckets,
+                            what: "buckets")
+        durationTokens = Self.ints(env["SPIKE_COREML_DURATION_TOKENS"],
+                                   default: CoreMLModelBundle.stagedDurationTokenLengths,
+                                   what: "durationTokens")
+    }
+
+    /// "7,15" -> [7, 15]. An unparseable or empty value keeps the default and logs a row.
+    private static func ints(_ raw: String?, default fallback: [Int], what: String) -> [Int] {
+        guard let raw, !raw.trimmingCharacters(in: .whitespaces).isEmpty else { return fallback }
+        let parsed = raw.split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+        guard !parsed.isEmpty, parsed.count == raw.split(separator: ",").count else {
+            SpikeLog.shared.record("config.unknown", [
+                "key": what, "value": raw,
+                "using": fallback.map(String.init).joined(separator: ","),
+            ])
+            return fallback
+        }
+        return parsed.sorted()
+    }
+}
+
 struct ContentView: View {
     @State private var bench: Bench?
     /// `SPIKE_ENGINE=mlx|mlxcpu|coreml`; read once at launch so the UI and the CSV agree.
     private let engine = SpikeEngine.fromEnvironment()
-    /// `SPIKE_COREML_POLICY=default|cpuOnly` — per-stage Core ML compute units.
-    private let coreMLPolicy = CoreMLStagePolicy.named(
-        ProcessInfo.processInfo.environment["SPIKE_COREML_POLICY"] ?? "default")
+    /// `SPIKE_COREML_POLICY=default|cpuOnly`, `SPIKE_COREML_BUCKETS`, `SPIKE_COREML_DURATION_TOKENS`.
+    private let coreML = CoreMLLaunchConfig.shared
     @State private var running = false
     @State private var loading = false
     @State private var rate = 0.0
@@ -18,7 +64,9 @@ struct ContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text("Spike Harness").font(.largeTitle.bold())
-            Text(engine == .coreml ? "engine: coreml (\(coreMLPolicy.name))" : "engine: \(engine.rawValue)")
+            Text(engine == .coreml
+                 ? "engine: coreml (\(coreML.policy.name), buckets \(coreML.buckets.map(String.init).joined(separator: "+")))"
+                 : "engine: \(engine.rawValue)")
                 .font(.system(.subheadline, design: .monospaced))
                 .foregroundStyle(.secondary)
 
@@ -71,7 +119,8 @@ struct ContentView: View {
         backgroundAudio = env["SPIKE_BACKGROUND_AUDIO"] == "1"     // §7.2: then lock the screen
         SpikeLog.shared.record("autorun", [
             "seconds": "\(seconds)", "rate": "\(rate)", "backgroundAudio": "\(backgroundAudio)",
-            "engine": engine.rawValue, "policy": engine == .coreml ? coreMLPolicy.name : "",
+            "engine": engine.rawValue, "policy": engine == .coreml ? coreML.policy.name : "",
+            "buckets": engine == .coreml ? coreML.buckets.map(String.init).joined(separator: "+") : "",
         ])
         // The clock starts when the bench does, not when the app launches: the Core ML arm's four
         // models take minutes to load on an A13, and a launch-relative timer fires during the load
@@ -95,14 +144,17 @@ struct ContentView: View {
         status = "Loading model…"
         let cycle = BenchCycle(playbackRate: rate)
         let engine = self.engine
-        let coreMLPolicy = self.coreMLPolicy
+        let coreML = self.coreML
         DispatchQueue.global(qos: .userInitiated).async {
             let bench: Bench
             do {
                 switch engine {
                 case .mlx: bench = try SynthBench()
                 case .mlxcpu: bench = try SynthBench(cpuOnly: true)
-                case .coreml: bench = try CoreMLBench(policy: coreMLPolicy)
+                case .coreml:
+                    bench = try CoreMLBench(policy: coreML.policy,
+                                            buckets: coreML.buckets,
+                                            durationTokenLengths: coreML.durationTokens)
                 }
             } catch {
                 SpikeLog.shared.record("model.failed", ["engine": engine.rawValue, "error": "\(error)"])

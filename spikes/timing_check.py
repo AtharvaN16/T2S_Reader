@@ -3,31 +3,24 @@
 # just after it. A word onset should sit on a rise (quiet -> loud). Reports each sentence's
 # tokens with the energy ratio and flags starts that land inside sustained sound or silence.
 # This is a screen for gross drift only; the plan's pass criterion (±100 ms) is judged by ear.
-import csv, math, os, sys, wave, array
+import math, os, sys, wave, array
 from collections import defaultdict
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from analyze import read_events   # noqa: E402  — one correct CSV reader for both tools
 
 csv_path, wav_dir = sys.argv[1], sys.argv[2]
 WIN = 0.06  # seconds each side of the boundary
 
+# One sentence's per-word rows are written in a tight loop and share a millisecond timestamp, so
+# the records must be split on a repeated key, not on the timestamp — see `read_events`.
 timings = defaultdict(dict)   # i -> k -> (token, start, end)
 texts = {}
-with open(csv_path) as f:
-    for ts, event, k, v in csv.reader(f):
-        pass  # header skip handled by event check below
-with open(csv_path) as f:
-    rows = list(csv.reader(f))
-cur = defaultdict(dict)
-for ts, event, k, v in rows:
-    if event == "timing":
-        cur[ts][k] = v
-        r = cur[ts]
-        if all(x in r for x in ("i", "k", "token")):
-            timings[int(r["i"])][int(r["k"])] = (r["token"], r.get("start", ""), r.get("end", ""))
-    elif event == "wav.written":
-        cur[ts][k] = v
-        r = cur[ts]
-        if "i" in r and "text" in r:
-            texts[int(r["i"])] = r["text"]
+for ts, event, r in read_events(csv_path):
+    if event == "timing" and all(x in r for x in ("i", "k", "token")):
+        timings[int(r["i"])][int(r["k"])] = (r["token"], r.get("start", ""), r.get("end", ""))
+    elif event == "wav.written" and "i" in r and "text" in r:
+        texts[int(r["i"])] = r["text"]
 
 def rms(samples, a, b):
     a, b = max(0, a), min(len(samples), b)

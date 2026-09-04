@@ -30,3 +30,6 @@ spikes/SpikeHarness/.deps/
 
 # Git worktrees for parallel plans (superpowers)
 .worktrees/
+
+# Python bytecode from the spike analysis scripts
+__pycache__/

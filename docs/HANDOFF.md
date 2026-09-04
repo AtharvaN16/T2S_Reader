@@ -216,12 +216,20 @@ is **not** needed here.
 Plan 6 (`docs/superpowers/plans/2026-09-04-plan-6-coreml-kokoro-engine.md`, the Core ML Kokoro engine) is
 **in progress on branch `plan-6-coreml-engine`**, checked out in the git worktree
 `.worktrees/plan-6-coreml-engine` (the directory may still be named `plan-7-coreml-engine` on the
-machine that started it; `git worktree list` tells). Task 1 (vendored `Packages/KokoroPipeline`,
-`scripts/fetch-kokoro-coreml.sh --app`, the model files under the git-ignored
-`App/Resources/KokoroCoreML/`) is committed and reviewed; **resume at Task 2** with
+machine that started it; `git worktree list` tells). Tasks 1–3 are committed and reviewed: the
+vendored `Packages/KokoroPipeline` and `scripts/fetch-kokoro-coreml.sh --app` (Task 1); the Core ML
+resources contract, the measured A13 decision and the tokenizer (Task 2); `KokoroCoreMLEngine` with
+real word timings, chunking of utterances longer than the pipeline's 15 s bucket, and the §7.4 timing
+gate opened in `KokoroTokenTimingMapper` (Task 3, `scripts/test-kokoro.sh` 80+ tests green).
+**Resume at Task 4** (availability, multi-engine routing, Kokoro Heart as the default voice) with
 superpowers:subagent-driven-development. The ledger with every ruling so far is
 `.superpowers/sdd/2026-09-04-plan-6-coreml-kokoro-engine/progress.md` inside that worktree. Run
-`scripts/fetch-kokoro-coreml.sh --app` once on a new machine before Task 2's model-backed tests.
+`scripts/fetch-kokoro-coreml.sh --app` once on a new machine before the model-backed tests. Two
+things learned in Task 3: the engine's development path (`.mlpackage` staging, used by the tests)
+compiles the eight stages into `/var/folders/…/T` on every engine instance and never removes them —
+repeated test runs filled this Mac's disk (4.7 GB found and deleted); the app bundle is precompiled
+and unaffected. And `preload()` is `async` and its compile is shared, so a render cancelled during a
+cold load waits the compile out rather than returning promptly.
 
 ## What comes after
 

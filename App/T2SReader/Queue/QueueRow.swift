@@ -32,6 +32,7 @@ struct QueueRow: View {
             }
             .typeRole(.meta)
             .foregroundStyle(Tokens.ink2)
+            .accessibilityElement(children: .combine)
 
             Button(action: onOpen) {
                 Text(summary.document.title)
@@ -41,6 +42,7 @@ struct QueueRow: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
+            .accessibilityHint("Opens the reader")
 
             HStack(spacing: 8) {
                 Pill(label: isPlayingHere ? "Pause" : "Play \(remainingText)",

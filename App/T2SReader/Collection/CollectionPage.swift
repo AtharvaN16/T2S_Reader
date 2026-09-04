@@ -47,6 +47,9 @@ struct CollectionPage: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("\(book.document.title), \(Int(((env.libraryModel.progress(for: book.id)?.fraction ?? 0) * 100).rounded())) percent read")
+                        .accessibilityHint("Opens the book")
                     }
                 }
                 Color.clear.frame(height: 120)

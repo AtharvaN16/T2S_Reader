@@ -111,6 +111,7 @@ struct Artwork: View {
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        .accessibilityHidden(true)
     }
 }
 
@@ -135,6 +136,6 @@ struct PositiveCheck: View {
         Image(systemName: "checkmark.circle.fill")
             .font(.system(size: 16))
             .foregroundStyle(Tokens.positive)
-            .accessibilityLabel("Ready to play offline")
+            .accessibilityLabel("Fully rendered")
     }
 }

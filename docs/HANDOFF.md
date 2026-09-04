@@ -253,8 +253,15 @@ remains is the measurement itself.
      one: it changes every render key, so cached audio is re-derived (spec §3.7.3), and it only
      applies to A14+ phones.
 3. **Plan 0 Task 8 — a runtime for pre-A14 phones** (the owner's own iPhone 11 Pro): a one-day
-   timeboxed spike on an ONNX Runtime / CoreML Kokoro (sherpa-onnx first), same pass bar as §7.3.
-   The A13 cannot run the MLX route at all, so without this the owner's phone never gets Kokoro.
+   timeboxed spike, same pass bar as §7.3. The desk research in
+   `spikes/findings/2026-09-03-pre-a14-runtime-options.md` ranks the candidates and carries the
+   hour-by-hour protocol: spike `mattmireles/kokoro-coreml`'s `KokoroPipeline` (Core ML, Apache-2.0,
+   per-token duration frames, measured RTF 0.41–0.46 on an A14) first, run MLX on `Device.cpu` as a
+   30-minute control, keep ONNX Runtime's CPU path with the timestamped Kokoro build as the fallback;
+   sherpa-onnx, TTS.cpp and the small models are blocked by espeak-ng (GPL). The honest expectation
+   is RTF 0.5–0.65 on the A13, i.e. Kokoro with the playback rate capped near 1.5x, which is a
+   product decision, not a pass. The A13 cannot run the MLX route at all, so without this the
+   owner's phone never gets Kokoro.
 4. **The hardware matrix above.** Every row marked *pending hardware* — the Lock Screen and route
    changes, the Share Extension payloads, Prepare's power and thermal stops, `BGProcessingTask`,
    and the cloud error paths — plus Plan 4b Task 9's remaining EPUB/PDF fixture and UI test. A

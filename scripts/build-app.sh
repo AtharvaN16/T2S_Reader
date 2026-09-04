@@ -18,7 +18,7 @@ else
   signing=(CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=-)
 fi
 set +e
-xcodebuild build -scheme T2SReader -destination "generic/platform=iOS Simulator" \
+xcodebuild build -scheme Simulator -destination "generic/platform=iOS Simulator" \
   -derivedDataPath ../.build/DerivedData-App \
   "${signing[@]}" "$@" 2>&1 \
   | grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" \

@@ -128,9 +128,9 @@ engine instance and never removes it, so every model-backed test costs about
 bundle is precompiled by Xcode and is unaffected.
 
 **Running the app.** Open the generated `App/T2SReader.xcodeproj` and pick a
-scheme:
+scheme — **Phone** for an iPhone, **Simulator** for the Mac:
 
-- **`T2SReader`** — the everyday scheme, and the one CI builds. Runs on the
+- **Simulator** (the `T2SReader` target) — the everyday build, and the one CI builds. Runs on the
   iPhone simulator and on any phone, does not link Kokoro, and speaks with the
   system voice. mlx-swift cannot link against the iOS simulator SDK (the SDK's
   Metal framework does not export `_MTLIOErrorDomain` or `_MTLTensorDomain`),
@@ -140,8 +140,8 @@ scheme:
   the G2P both runtimes use, links mlx-swift. A document whose stored voice is
   a Kokoro voice plays through the system default here, and the log says so
   (`voice route resolved: kokoro → default`).
-- **`T2SReaderKokoro`** — device only (`SUPPORTED_PLATFORMS: iphoneos`) and the
-  scheme to build for a phone. It links `Packages/T2SKokoro`, compiles with
+- **Phone** (the `T2SReaderKokoro` target) — device only (`SUPPORTED_PLATFORMS: iphoneos`),
+  the app you install on a phone. It links `Packages/T2SKokoro`, compiles with
   `KOKORO_ENGINE`, and bundles `Resources/KokoroCoreML` — Xcode compiles the
   eight `.mlpackage` stages into `.mlmodelc`, which is most of the 433 MB app.
   Core ML is CPU-only, so it runs on any iPhone the app supports. The MLX route
@@ -170,7 +170,7 @@ phone you can switch that gate on by hand in a `DEBUG` build, which yields an
 explicitly labelled decision (`isDebugOverride`) rather than a measured one.
 Set either the `T2S_KOKORO_DEBUG_OVERRIDE` environment variable to `1` (Xcode →
 Product → Scheme → Edit Scheme → Run → Arguments → Environment Variables, on
-the `T2SReaderKokoro` scheme) or the `kokoro.debugOverride` user default to
+the **Phone** scheme) or the `kokoro.debugOverride` user default to
 true. Once the MLX probe answers available the Preferences footer gains a
 second line ("MLX route: development override active.") and the picker gains a
 second set of 28 voices, each row suffixed " · MLX". The override is compiled

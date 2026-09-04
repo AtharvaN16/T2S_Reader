@@ -18,7 +18,7 @@ cd "$(dirname "$0")/../App"
 mkdir -p Resources/Kokoro Resources/KokoroCoreML
 xcodegen generate --quiet
 set +e
-xcodebuild build -scheme T2SReaderKokoro -destination "generic/platform=iOS" \
+xcodebuild build -scheme Phone -destination "generic/platform=iOS" \
   -configuration Release \
   -derivedDataPath ../.build/DerivedData-App \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO ENABLE_DEBUG_DYLIB=NO "$@" 2>&1 \

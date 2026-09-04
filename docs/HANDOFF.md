@@ -350,7 +350,9 @@ Lines to look for, in order:
   MLX weights are staged in this build anyway). It is silent in the UI by design.
 - **`Kokoro Core ML warm-up finished in <N> s`** — the number this whole run is for. The A13 spike
   measured **206 s** to build the compute plans on a *first* launch; later launches should be
-  seconds. `Kokoro Core ML warm-up failed: …` instead means the load threw: capture the message.
+  seconds. `Kokoro Core ML warm-up failed, retrying: …` means the first attempt threw and a second
+  starts two seconds later; `… failed, route closed: …` means both did and the phone will speak
+  this book with the system voice. Capture either message.
 - `voice route resolved: default → kokoro:kokoro-coreml-2e878c6a-misaki1.0.6:af_heart` when a
   document loads.
 
@@ -360,22 +362,38 @@ Lines to look for, in order:
    read *"Preparing the Kokoro voice (one-time, up to a few minutes on the first launch)…"*. Note
    how long it stays there — expect around 206 s on this phone the first time, seconds afterwards —
    then it must flip to *"Runs on this device."*. There should be **no** second "MLX route:" line.
-2. Preferences → the **Default voice** row's grey subtitle should read **"Heart · en-US"**, not
+2. **Stop during the warm-up** — the first launch is the only chance, so do it while that footer
+   still says "Preparing…". Open any book, press play, wait a few seconds, then press stop. The
+   render does *not* cancel promptly: the stage load is shared, and a waiter cancelled during a cold
+   load sits out the whole compile before it comes back. So what is being checked is that the app
+   survives it — the transport goes back to stopped, nothing spins forever, and playback works
+   normally once the warm-up line lands in the log. Note whether an error banner appears (it may;
+   what matters is that the app is not wedged), and report a stuck transport or a spinner that
+   never clears.
+3. Preferences → the **Default voice** row's grey subtitle should read **"Heart · en-US"**, not
    "System default", once the page has appeared.
-3. Preferences → Voice: the Kokoro section lists **28** voices, each named like "Heart · en-US" —
+4. Preferences → Voice: the Kokoro section lists **28** voices, each named like "Heart · en-US" —
    **one** set, with no " · MLX" rows.
-4. Import a **fresh** EPUB (share sheet, or the `t2s:` URL). Fresh matters: a document imported
+5. Import a **fresh** EPUB (share sheet, or the `t2s:` URL). Fresh matters: a document imported
    before this build already has a stored `voiceID`. Press play without choosing a voice —
    **Kokoro Heart should speak**, not the system voice. Time the wait from tap to first audio.
-5. **Read-along:** the highlight should follow **individual words**, not whole sentences.
+6. **Read-along:** the highlight should follow **individual words**, not whole sentences.
    Sentence-level highlighting means the word timings did not arrive, and is worth reporting.
-6. **Speed:** the picker should offer **2x and 4x** (`maxSustainableRate` is 4.0, from RTF 0.181).
+7. **A long sentence, listened to at the seam.** Find or paste one of about **60 words or more**
+   (Dickens and Melville oblige; so does a pasted paragraph with the full stops taken out). The
+   duration model tops out at 256 tokens, so the engine cuts anything longer into pieces of ≤ 176
+   phoneme ids, synthesizes them separately and concatenates the audio — about 13 seconds a piece.
+   Listen at the joins for a click, a swallowed or doubled word, or a gap, and watch that the
+   highlight keeps tracking across them. A prosody dip at the seam is expected and fine; a missing
+   word is not.
+8. **Speed:** the picker should offer **2x and 4x** (`maxSustainableRate` is 4.0, from RTF 0.181).
    Play at 4x for a minute and listen for dropouts.
-7. **Lock screen:** lock the phone mid-playback. Play/pause, skip back, skip forward, the title and
+9. **Lock screen:** lock the phone mid-playback. Play/pause, skip back, skip forward, the title and
    the artwork should all work from the Lock Screen and Control Center.
-8. Report back: the warm-up seconds, the tap-to-first-audio latency at 1x, whether word highlighting
-   tracks, whether 4x sustains, whether the Lock Screen controls work, and anything in the
-   `com.t2s.reader` log that is not in the list above.
+10. Report back: the warm-up seconds, whether stopping during the warm-up left the app usable, the
+    tap-to-first-audio latency at 1x, whether word highlighting tracks, how the seam in a long
+    sentence sounds, whether 4x sustains, whether the Lock Screen controls work, and anything in the
+    `com.t2s.reader` log that is not in the list above.
 
 ## What comes after
 
@@ -501,16 +519,30 @@ What remains, in order:
    error showing until the reader changes the voice by hand. Follow-up: on the first
    `KokoroEngineError` out of `GatedKokoroEngine`, flip `KokoroAvailabilityModel` to unavailable
    (a new reason, e.g. `.engineFailed`) so the next load falls back to the system voice and the
-   Preferences footer says why. **Plan 6 narrows this on the Core ML route without closing it:**
+   Preferences footer says why. **Plan 6 closes this on the Core ML route.**
    `GatedKokoroCoreMLEngine` no longer remembers a failed load, so a transient failure costs one
-   utterance instead of the session — but the route's availability is still decided from the
-   *presence* of the model files, so a permanently broken bundle routes to Kokoro and fails per
-   utterance rather than falling the whole document back. The footer has the mirror-image of the
-   same split: a failed warm-up sets it to `.unavailable(<error>)` and it stays there for the
-   launch even if the next utterance loads fine. The string it shows is
-   `error.localizedDescription`, which for a plain Swift error reads "The operation couldn't be
-   completed." — poor reader-facing copy on a path that should never fire on a bundle whose stages
-   Xcode compiled.
+   utterance instead of the session; and the launch warm-up now decides the *route*, not just the
+   footer — it tries `preload()` twice, two seconds apart, and a second failure closes the Core ML
+   route for the rest of the launch, so every document opened from then on falls back for its whole
+   length (spec §6) instead of failing utterance by utterance. The footer then reads "The Kokoro
+   voice could not be prepared on this device." — a constant, because
+   `error.localizedDescription` for a plain Swift error reads "The operation couldn't be
+   completed."; the real error goes to the log (`Kokoro Core ML warm-up failed, route closed: …`).
+   What is left: a document already routed to Kokoro when the route closes keeps failing per
+   utterance until it is reloaded, a cancelled warm-up neither retries nor closes anything, and a
+   route closed by two unlucky transient failures stays closed until the app is relaunched.
+   Whether the route falls back to the *system* voice or to another Kokoro voice is the resolver's
+   business, not this one's: an unavailable `kokoro:` ID resolves to the app's default voice
+   (Kokoro Heart on Core ML where that route is open), and only to the system voice when no Kokoro
+   route is left — which is how a model-revision bump re-routes old documents to the new default.
+   **One engine failure is by design and worth recognising in the log:** a piece of an utterance
+   whose predicted speech still overruns the 15-second bucket throws
+   `KokoroCoreMLError.audioTruncated(predictedSeconds:bucketSeconds:)` rather than return speech
+   clipped to fit, so that sentence is dropped and filled with 200 ms of silence like any other
+   engine failure, and the reader sees "The on-device voice could not fit this passage into one
+   breath." The chunker aims at about 13 seconds a piece, so it should be rare — but it means
+   "a sentence went silent" is diagnosable rather than mysterious: look for `audioTruncated` and
+   its two second-counts in the log.
 8. **`Packages/MLXUtilsLibrary` is vendored, and SwiftPM warns about it on every resolve.**
    `readium/ZIPFoundation` (3.0.1+, via the Readium toolkit) and `weichsel/ZIPFoundation` (0.9.x,
    via `kokoro-ios` → `MLXUtilsLibrary`) share the SwiftPM identity `zipfoundation` with disjoint
@@ -536,8 +568,9 @@ What remains, in order:
    `.build/DerivedData-App` and produces a 433 MB `.app`. And the Core ML engine's *development*
    path compiles the eight `.mlpackage` stages into `$TMPDIR` on every engine instance and never
    removes them, so each model-backed test leaks about 350 MB — 4.7 GB accumulated here in one
-   night. `rm -rf "$TMPDIR"/kokoro_*.mlmodelc` reclaims it; macOS also clears them on reboot; the
-   app bundle is precompiled and leaks nothing on the phone.
+   night. `scripts/test-kokoro.sh` now sweeps `"$TMPDIR"/kokoro_*.mlmodelc` before it starts, so the
+   leak is one run's worth rather than every run's; the same command reclaims it by hand, macOS
+   clears them on reboot, and the app bundle is precompiled and leaks nothing on the phone.
 10. **Deferred minors from the Task 5 reviews**, in the order a reader is likely to hit them:
     - `VoiceListPage` maps the `.notLinked` status to "Checking this device…" — unreachable in
       either shipped target, but the wrong text if it ever is reached.

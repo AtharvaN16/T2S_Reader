@@ -196,4 +196,36 @@ import T2SStore
         // Nothing is written back — the reader never chose a voice, and the default may change.
         #expect(try await f.store.document(id: id)?.voiceID == nil)
     }
+
+    @Test func aKokoroVoiceWhoseRuntimeIsMissingRendersWithTheKokoroDefaultVoice() async throws {
+        let mlxIdentity = "kokoro-4e9ecdf0-mlx-misaki1.0.6"
+        let mlxVoiceID = "kokoro:kokoro-4e9ecdf0-mlx-misaki1.0.6:af_bella"
+        let coreMLIdentity = "kokoro-coreml-2e878c6a-misaki1.0.6"
+        let heart = "kokoro:kokoro-coreml-2e878c6a-misaki1.0.6:af_heart"
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        var stored = try #require(try await f.store.document(id: id))
+        stored.voiceID = mlxVoiceID
+        try await f.store.update(stored)
+
+        let engine = FakeEngine(secondsPerCharacter: 0.05)
+        let player = try makePlayer(f, engine: engine)
+        player.voiceRouting = KokoroVoiceRouting(
+            routes: [
+                .init(engineIdentity: coreMLIdentity, isAvailable: { true }),
+                .init(engineIdentity: mlxIdentity, isAvailable: { false }),
+            ],
+            defaultVoice: heart
+        )
+        await player.load(try #require(try await f.store.summary(id: id)), play: false)
+        await player.coordinator.waitForRenderIdle()
+
+        // Not the system voice: a document pinned to a runtime this phone cannot run still speaks
+        // with Kokoro, through the default voice's own route (spec §5, §6).
+        let requested = Set(await engine.requests.map(\.voiceID))
+        #expect(requested == [heart])
+        #expect(player.coordinator.document?.voiceID == heart)
+        // The stored choice is untouched, so the book returns to MLX on a phone that has it.
+        #expect(try await f.store.document(id: id)?.voiceID == mlxVoiceID)
+    }
 }

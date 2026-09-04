@@ -3,6 +3,7 @@ import Foundation
 import KokoroPipeline
 import MisakiSwift
 import MLX
+// `MToken` — what `EnglishG2P.phonemize` hands back — is declared here, not in MisakiSwift.
 import MLXUtilsLibrary
 import T2SAudio
 import T2SCore
@@ -204,6 +205,10 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     private func render(_ piece: Piece, tokenizer: KokoroTokenizer, loaded: Loaded) throws -> KokoroPipelineResult {
         let framed = [KokoroTokenizer.boundary] + piece.ids + [KokoroTokenizer.boundary]
         let padding = KokoroCoreMLModels.maxDurationTokenLength - framed.count
+        // ``maxPieceTokenCount`` (176 + 2 frame tokens) is chosen to fit `maxDurationTokenLength`
+        // (256, the largest staged duration model). The two constants are coupled by hand, so if one
+        // ever moves without the other, refuse the piece rather than build a negative-length pad.
+        guard padding >= 0 else { throw KokoroCoreMLError.tooManyTokens(framed.count) }
         let result: KokoroPipelineResult
         do {
             var tensorDump: TensorDumpWriter?
@@ -371,8 +376,9 @@ public enum KokoroCoreMLError: Error, Equatable, Sendable, LocalizedError {
     /// The request's voice ID is not a `kokoro:` route for this staging.
     case voiceNotForThisEngine(String)
     case unknownVoice(String)
-    /// One Misaki token phonemized to more ids than a whole pipeline input holds, so there is no
-    /// boundary to split it at. The payload is that token's id count.
+    /// More ids than a pipeline input holds: normally one Misaki token that phonemized past the cap,
+    /// so there is no boundary to split it at, and — if the chunker's cap is ever raised out of step
+    /// with the duration models — a whole framed piece. The payload is the offending id count.
     case tooManyTokens(Int)
     /// A stage failed to compile, to load or to predict. The payload describes the underlying error
     /// and never the spoken text.

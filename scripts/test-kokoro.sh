@@ -15,9 +15,16 @@
 # no environment of its own to a macOS unit-test bundle, and `TEST_RUNNER_PACKAGE_RESOURCE_BUNDLE_PATH`
 # (the UI-test-runner mechanism) is dropped — verified by passing a deliberately invalid path and
 # watching the tests pass anyway. Serial costs about a second on this suite.
+#
+# The Core ML stages ship as .mlpackage on the development path, so every model-backed engine test
+# compiles its own copy into $TMPDIR and leaves it there (~350 MB each; the app bundle is
+# precompiled and unaffected). Left alone they fill the disk in a few runs, and a full disk is what
+# produced Task 3's nonsense timings, so the leak from earlier runs is swept before this one starts.
 # Usage: scripts/test-kokoro.sh [extra xcodebuild args]
 set -euo pipefail
 cd "$(dirname "$0")/../Packages/T2SKokoro"
+
+rm -rf "${TMPDIR:-/tmp}"/kokoro_*.mlmodelc
 
 set +e
 xcodebuild test -scheme T2SKokoro -destination 'platform=macOS' \

@@ -6,8 +6,11 @@ struct PreferencesPage: View {
     @Environment(AppEnvironment.self) private var env
     @State private var showAppearance = false
     /// What "System default" actually resolves to on this device: Kokoro Heart where the Core ML
-    /// route is available, the system voice otherwise (spec §6). Resolved in `.task` because the
-    /// routing answer is asynchronous — the MLX route's probe is behind the same call.
+    /// route is available, the system voice otherwise (spec §6). Resolved in `.task` because
+    /// `VoiceRouteResolving` is `async`, not because the answer is slow: resolving `"default"`
+    /// consults only the default voice's own route — the Core ML one, whose closure reads a lock and
+    /// returns at once — so the subtitle is settled a redraw after the page appears. The MLX probe
+    /// is not on this path; it is only ever woken by an MLX voice ID.
     @State private var resolvedDefaultVoiceID: String?
 
     var body: some View {

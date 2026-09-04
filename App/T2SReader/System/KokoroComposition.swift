@@ -91,17 +91,21 @@ struct KokoroComposition {
         let mlxListed = OSAllocatedUnfairLock(initialState: false)
         let status = KokoroStatusModel(.checking)
 
-        let coreMLAvailable: Bool
+        // Whether the resolver may still route a document to Core ML. It starts as the presence
+        // verdict — the files are there — and the warm-up may close it: a bundle whose stages will
+        // never load must route documents *away* from Kokoro (spec §6, whole document) rather than
+        // give a reader a book of 200 ms silences. Nothing reopens it before the next launch.
+        let coreMLRouteOpen = OSAllocatedUnfairLock(initialState: false)
+
         switch coreML.verdict {
         case .available(let decision, _):
-            coreMLAvailable = true
+            coreMLRouteOpen.withLock { $0 = true }
             log.notice("Kokoro Core ML route available (\(decision.runtime, privacy: .public), RTF \(decision.measuredRTF, format: .fixed(precision: 3), privacy: .public))")
             // Loading eight stages takes seconds on a modern phone and minutes on an A13. Pay them
             // now, while the reader is still choosing a book, rather than at the first utterance.
             status.update(.preparing)
-            Task { await warmUp(coreMLEngine, status: status, log: log) }
+            Task { await warmUp(coreMLEngine, routeOpen: coreMLRouteOpen, status: status, log: log) }
         case .unavailable(let reason):
-            coreMLAvailable = false
             log.notice("Kokoro Core ML unavailable: \(reason.description, privacy: .public)")
             status.update(.unavailable(readerFacing(reason)))
         }
@@ -126,7 +130,9 @@ struct KokoroComposition {
             engines: [coreMLEngine, GatedKokoroEngine(availability: mlx)],
             voiceRouting: KokoroVoiceRouting(
                 routes: [
-                    KokoroVoiceRouting.Route(engineIdentity: KokoroCoreMLEngine.identity) { coreMLAvailable },
+                    KokoroVoiceRouting.Route(engineIdentity: KokoroCoreMLEngine.identity) {
+                        coreMLRouteOpen.withLock { $0 }
+                    },
                     KokoroVoiceRouting.Route(engineIdentity: KokoroEngine.identity) {
                         if case .available = await mlx.resolve() { return true }
                         return false
@@ -165,20 +171,54 @@ struct KokoroComposition {
         }
     }
 
-    /// The one-time stage load, reported to the reader through the footer and to the log in seconds.
-    private static func warmUp(_ engine: GatedKokoroCoreMLEngine, status: KokoroStatusModel, log: Logger) async {
-        let started = Date()
-        do {
-            try await engine.preload()
-            let seconds = Date().timeIntervalSince(started)
-            log.notice("Kokoro Core ML warm-up finished in \(seconds, format: .fixed(precision: 1), privacy: .public) s")
-            // Never an override: the Core ML decision is measured, not a development escape hatch.
-            status.update(.available(isDebugOverride: false))
-        } catch {
-            log.error("Kokoro Core ML warm-up failed: \(error.localizedDescription, privacy: .public)")
-            status.update(.unavailable(error.localizedDescription))
+    /// The one-time stage load, reported to the reader through the footer and to the log in seconds,
+    /// and — if it will not load at all — the thing that closes the route.
+    ///
+    /// Two attempts, because the two failures look identical from here and only one of them is the
+    /// bundle's fault: a first load can lose to a transient condition (memory pressure while the
+    /// system kills something else, a cold filesystem) where a second, two seconds later, succeeds.
+    /// A second failure is taken as final: the route closes, so a new document falls back for its
+    /// whole length instead of failing utterance by utterance. Cancellation is not a failure — the
+    /// engine's own load is shared and retryable — so it is never retried and never closes anything.
+    private static func warmUp(
+        _ engine: GatedKokoroCoreMLEngine,
+        routeOpen: OSAllocatedUnfairLock<Bool>,
+        status: KokoroStatusModel,
+        log: Logger
+    ) async {
+        // Wall time that no clock change can move; the A13's first launch spends minutes here.
+        let clock = ContinuousClock()
+        let started = clock.now
+        for attempt in 1...2 {
+            do {
+                try await engine.preload()
+                let elapsed = clock.now - started
+                let seconds = Double(elapsed.components.seconds)
+                    + Double(elapsed.components.attoseconds) * 1e-18
+                log.notice("Kokoro Core ML warm-up finished in \(seconds, format: .fixed(precision: 1), privacy: .public) s")
+                // Never an override: the Core ML decision is measured, not a development escape hatch.
+                status.update(.available(isDebugOverride: false))
+                return
+            } catch is CancellationError {
+                return
+            } catch {
+                guard attempt == 1 else {
+                    routeOpen.withLock { $0 = false }
+                    // The engine's own error, never a request: this string reaches the log only.
+                    log.error("Kokoro Core ML warm-up failed, route closed: \(error.localizedDescription, privacy: .public)")
+                    status.update(.unavailable(warmUpFailed))
+                    return
+                }
+                log.notice("Kokoro Core ML warm-up failed, retrying: \(error.localizedDescription, privacy: .public)")
+                do { try await Task.sleep(for: .seconds(2)) } catch { return }
+            }
         }
     }
+
+    /// What the footer says when the stages will not load. A reader cannot act on Core ML's own
+    /// message — and `localizedDescription` on a plain Swift error is "The operation couldn't be
+    /// completed." — so they get one sentence and the log gets the error.
+    private static let warmUpFailed = "The Kokoro voice could not be prepared on this device."
 
     /// `Reason.resources` describes a missing file and tells a developer to run the fetch script,
     /// which is not something to put in front of a reader. The full reason still goes to the log.

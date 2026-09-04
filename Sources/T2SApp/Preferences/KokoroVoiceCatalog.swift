@@ -5,8 +5,9 @@ import T2SAudio
 /// `VoiceRouteResolving`. Only a build that links the engine installs this catalog, so the everyday
 /// build lists no Kokoro voices.
 public struct KokoroVoiceCatalog: VoiceCatalog {
-    /// The voice names in `voices.npz`, in picker order — `af_heart`, the model's reference voice,
-    /// leads.
+    /// The 28 English voice names, in picker order — `af_heart`, the model's reference voice, leads.
+    /// One list for both runtimes: the same voices ship as rows of `voices.npz` on the MLX route and
+    /// as one `<name>.bin` each on the Core ML route.
     public static let voiceNames: [String] = [
         "af_heart", "af_alloy", "af_aoede", "af_bella", "af_jessica", "af_kore", "af_nicole",
         "af_nova", "af_river", "af_sarah", "af_sky", "am_adam", "am_echo", "am_eric", "am_fenrir",

@@ -101,7 +101,10 @@ public enum KokoroCoreMLResources: Sendable {
 
         return .success(Located(
             stages: stages, voices: voices, vocab: vocab, hnsfWeights: hnsfWeights,
-            isPrecompiled: stages.values.allSatisfy { $0.pathExtension == "mlmodelc" }
+            // Always true here: the loop above asks the bundle for `<name>.mlmodelc` and returns
+            // `.missing` for anything it does not find, so every stage is compiled by construction.
+            // (The directory overload really does have to look; it stages `.mlpackage`.)
+            isPrecompiled: true
         ))
     }
 

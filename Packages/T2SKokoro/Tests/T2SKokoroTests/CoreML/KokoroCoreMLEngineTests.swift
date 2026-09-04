@@ -1,4 +1,5 @@
 import Foundation
+// `MToken` — the G2P's output type, which the chunker tests build by hand — is declared here.
 import MLXUtilsLibrary
 import Testing
 import T2SAudio

@@ -105,7 +105,9 @@ import T2SCore
         #expect(Self.rms(result.audio.samples) > 0.01)
         // The §7.4 gate is open (2026-09-04), and kokoro-ios does populate `start_ts`/`end_ts`, so
         // this route now returns timings too. What is asserted is the shape the highlighter needs;
-        // the accuracy bar was measured on the Core ML route, not this one.
+        // the accuracy bar was measured on the Core ML route, not this one. Asserted first because
+        // every check below it holds vacuously on an empty array.
+        #expect(!result.wordTimings.isEmpty)
         #expect(result.wordTimings.map(\.start) == result.wordTimings.map(\.start).sorted())
         #expect((result.wordTimings.last?.end ?? 0) <= result.audio.duration + 0.001)
 

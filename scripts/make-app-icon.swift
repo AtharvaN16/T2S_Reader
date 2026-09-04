@@ -2,7 +2,9 @@
 // scripts/make-app-icon.swift — draws the app icon. Run: `swift scripts/make-app-icon.swift [output.png]`.
 // The design lives here so it can be tuned in code: the accent (`Tokens.accent`, #FF7A1A, spec
 // §2.4.2) as the ground, three white bars for a block of text, a play triangle for the speech.
-// Deterministic: the same pixels every run, so the committed PNG is reproducible.
+// Deterministic: the same pixels every run, so the committed PNG is reproducible. The bitmap is
+// opaque RGB (no alpha channel): App Store Connect rejects an app icon that carries one
+// (ITMS-90717), even when every pixel is fully opaque.
 import Foundation
 import CoreGraphics
 import ImageIO
@@ -11,7 +13,7 @@ import UniformTypeIdentifiers
 let size = 1024
 let space = CGColorSpace(name: CGColorSpace.sRGB)!
 guard let context = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
-                              space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+                              space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else {
     fatalError("no bitmap context")
 }
 // Core Graphics' origin is bottom-left; flip so the geometry below reads top-down like a design file.

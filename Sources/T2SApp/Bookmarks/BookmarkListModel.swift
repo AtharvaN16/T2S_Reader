@@ -55,7 +55,10 @@ public final class BookmarkListModel {
     /// Loads the document when it is not the current one, seeks to the bookmark, and plays.
     public func jump(to entry: BookmarkEntry, in summary: DocumentSummary) async {
         if player.current?.id != summary.id { await player.load(summary, play: false) }
-        guard let timeline = player.coordinator.timeline else { return }
+        guard let timeline = player.coordinator.timeline else {
+            error = "Document is missing"
+            return
+        }
         await player.seek(to: PositionResolver.resolve(entry.position, in: timeline))
         if !player.isPlaying { await player.togglePlay() }
     }
@@ -71,7 +74,11 @@ public final class BookmarkListModel {
         let playhead = PositionResolver.resolve(bookmark.position, in: timeline)
         let utterance = timeline[utterance: playhead.utteranceIndex]
         let chapter = timeline.chapterIndex(forUtterance: playhead.utteranceIndex).map { timeline.chapters[$0].title } ?? ""
-        let offset = (bookmark.position.charOffset ?? 0) - (utterance.position.charOffset ?? 0)
+        let raw = (bookmark.position.charOffset ?? 0) - (utterance.position.charOffset ?? 0)
+        // A fallback resolution (PositionResolver.resolve, spec §1.4 "never fails") can return an
+        // utterance that does not contain the bookmark's offset; show it from its start rather
+        // than let a negative or out-of-range offset produce an empty snippet.
+        let offset = (0..<utterance.source.utf16.count).contains(raw) ? raw : 0
         return BookmarkEntry(id: bookmark.id,
                              position: bookmark.position,
                              chapterTitle: chapter,

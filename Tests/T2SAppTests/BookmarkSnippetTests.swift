@@ -22,4 +22,11 @@ import Testing
     @Test func aNegativeOffsetClampsToTheStart() {
         #expect(BookmarkSnippet.make(from: "Short.", offset: -3) == "Short.")
     }
+    @Test func aSpacelessRunOfSurrogatePairsIsCutOnACharacterBoundary() {
+        let emoji = String(repeating: "😀", count: 60)   // 120 UTF-16 units, no spaces anywhere
+        let snippet = BookmarkSnippet.make(from: emoji, offset: 0)
+        #expect(!snippet.contains("\u{FFFD}"))
+        #expect(snippet.hasSuffix("…"))
+        #expect(snippet.utf16.count <= 90)
+    }
 }

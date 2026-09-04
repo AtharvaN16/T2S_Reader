@@ -22,10 +22,10 @@ struct QueueRow: View {
             HStack(spacing: 6) {
                 Image(systemName: sourceMark).font(.system(size: 16, weight: .medium))
                 Text(sourceName)
-                Text("·")
+                Text("·").accessibilityHidden(true)
                 Text(DurationFormatter.age(of: summary.document.addedAt))
                 if let progress, summary.document.sourceType != .article, progress.chapterCount > 1, let c = progress.chapterIndex {
-                    Text("·")
+                    Text("·").accessibilityHidden(true)
                     Text("Chapter \(c + 1) of \(progress.chapterCount)")
                 }
                 if summary.isFullyRendered { PositiveCheck() }

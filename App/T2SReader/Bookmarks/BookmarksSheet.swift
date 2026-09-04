@@ -29,7 +29,7 @@ struct BookmarksSheet: View {
                                         onDelete: { Task { await model.delete(entry) } })
                             .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button { Task { await model.delete(entry) } } label: { Label("Delete", systemImage: "trash") }
+                                Button { Task { await model.delete(entry) } } label: { Label("Delete bookmark", systemImage: "trash") }
                                     .tint(Tokens.destructive)
                             }
                         }

@@ -33,16 +33,27 @@ public enum BookmarkSnippet {
     public static let maxLength = 90
 
     public static func make(from source: String, offset: Int) -> String {
-        let units = Array(source.utf16)
-        let start = max(0, min(offset, units.count))
-        guard start < units.count else { return "" }
-        let rest = units[start...]
-        if rest.count <= maxLength { return String(decoding: rest, as: UTF16.self) }
-        // Room for the ellipsis, then back up to the last space so no word is cut.
-        let window = rest.prefix(maxLength - 1)
-        let space = UInt16(UnicodeScalar(" ").value)
-        let cut = window.lastIndex(of: space).map { window[..<$0] } ?? window
-        var text = String(decoding: cut, as: UTF16.self)
+        let utf16Count = source.utf16.count
+        let start = max(0, min(offset, utf16Count))
+        guard start < utf16Count else { return "" }
+        let startIndex = String.Index(utf16Offset: start, in: source)
+        let rest = source[startIndex...]
+        if rest.utf16.count <= maxLength { return String(rest) }
+
+        // Room for the ellipsis. Cut on Character boundaries — never mid-surrogate-pair, never
+        // mid-grapheme-cluster — by taking whole characters until the next one would overrun the
+        // budget, then back up to the last space so no word is cut.
+        var prefixEnd = rest.startIndex
+        var utf16Used = 0
+        for i in rest.indices {
+            let length = rest[i].utf16.count
+            if utf16Used + length > maxLength - 1 { break }
+            utf16Used += length
+            prefixEnd = rest.index(after: i)
+        }
+        let window = rest[..<prefixEnd]
+        let cut = window.lastIndex(of: " ").map { window[..<$0] } ?? window
+        var text = String(cut)
         while text.hasSuffix(" ") { text.removeLast() }
         return text + "…"
     }

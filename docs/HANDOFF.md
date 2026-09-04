@@ -408,7 +408,9 @@ row and the mini-player title into one element each instead of several separate 
 deferred minors worth knowing: the "·" separators folded into the Queue row's combined label may
 be read aloud as "middle dot", and `scripts/make-app-icon.swift`'s default output path is
 relative to the repo root, so running it from elsewhere writes a nested tree instead of
-overwriting the catalog.
+overwriting the catalog. The final whole-branch review's two fixes have landed — an opaque app
+icon and a bookmark snippet clamp that survives fallback resolution — and the deferred minors it
+left are recorded in that review's ledger.
 
 ## What comes after
 
@@ -629,11 +631,13 @@ Other retained review items:
   the main thread and those objects are only ever released on it; the Lock Screen / AirPods pass on
   hardware is where they would show.
 - ~~No app icon / asset catalog yet — blocking for TestFlight, fine for development.~~
-  **Resolved** in Plan 8 Task 1: `scripts/make-app-icon.swift` draws a deterministic
+  **Resolved**: the icon exists (`scripts/make-app-icon.swift`, opaque RGB — no alpha channel, so
+  App Store Connect's ITMS-90717 icon-alpha check does not reject it) and draws a deterministic
   CoreGraphics icon (accent (#FF7A1A) ground, three rounded white bars, a play triangle) into
   `App/T2SReader/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png`; both app targets pick it
   up through `ASSETCATALOG_COMPILER_APPICON_NAME` in the shared `targetTemplates` entry.
-  Regenerate the PNG after editing the script with `swift scripts/make-app-icon.swift`.
+  Regenerate the PNG after editing the script with `swift scripts/make-app-icon.swift`. App Store
+  upload validation itself has not yet run — pending an upload.
 - `LibraryModel` progress is still computed per queued document on refresh (cached per summary);
   lazy per-row computation and an explicit, cancellable stale-timeline migration are the next step
   if the library grows large.

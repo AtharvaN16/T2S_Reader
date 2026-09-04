@@ -136,6 +136,6 @@ struct PositiveCheck: View {
         Image(systemName: "checkmark.circle.fill")
             .font(.system(size: 16))
             .foregroundStyle(Tokens.positive)
-            .accessibilityLabel("Fully rendered")
+            .accessibilityLabel("Ready to play offline")
     }
 }

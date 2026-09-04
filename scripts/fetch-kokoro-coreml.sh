@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
-# Plan 0 Task 8 (spec §7.3 addendum): stages the Core ML Kokoro arm of the throwaway spike harness.
+# Stages the Core ML Kokoro model files, and — for the spike — the Swift package that drives them.
 #
-# Two things are fetched, both git-ignored and never committed:
+# Usage: scripts/fetch-kokoro-coreml.sh [--app]
+#
+#   (no argument)  Plan 0 Task 8 (spec §7.3 addendum): the throwaway spike harness. Model files
+#                  into spikes/SpikeHarness/Resources/CoreML/, one voice, plus the source clone.
+#   --app          Plan 7 Task 1: the same model files into App/Resources/KokoroCoreML/, with all
+#                  28 of Kokoro's English voices instead of just af_heart, and no clone — the app
+#                  builds against the vendored copy at Packages/KokoroPipeline.
+#
+# What is fetched, all git-ignored and never committed:
 #
 #   1. Model files — the 7-second and 15-second buckets of the Hugging Face model repo
-#      `mattmireles/kokoro-coreml`, into spikes/SpikeHarness/Resources/CoreML/ (~350 MB).
+#      `mattmireles/kokoro-coreml`, into the mode's destination (~350 MB).
 #      Layout is preserved (coreml/*.mlpackage, voices/, runtime/) so xcodegen picks the
 #      .mlpackage directories up as single resources and Xcode compiles them to .mlmodelc.
 #      Two buckets, not one: `selectBucket` picks the smallest bucket >= ceil(audio seconds), and
@@ -12,10 +20,24 @@
 #      and generator geometry. That inflates RTF as well as footprint, and 80% of a warm call is
 #      those two stages. Same reason for two duration models (t128 and t256): upstream pads to the
 #      smallest enumerated token size >= the token count, and these sentences are 71-127 tokens.
-#   2. Source — the low-level `KokoroPipeline` Swift package. The repo root has NO Package.swift;
-#      the package lives in the `swift/` subdirectory, and SwiftPM cannot consume a subdirectory
-#      by URL, so the repo is cloned to spikes/SpikeHarness/.deps/kokoro-coreml at a pinned commit
-#      and project.yml references `path: .deps/kokoro-coreml/swift`.
+#   2. Source (default mode only) — the low-level `KokoroPipeline` Swift package. The repo root
+#      has NO Package.swift; the package lives in the `swift/` subdirectory, and SwiftPM cannot
+#      consume a subdirectory by URL, so the repo is cloned to spikes/SpikeHarness/.deps/
+#      kokoro-coreml at a pinned commit and project.yml references
+#      `path: .deps/kokoro-coreml/swift`. --app skips this: the app builds against
+#      Packages/KokoroPipeline, a vendored copy of that same `swift/` directory at the same commit.
+#
+# Voices (--app): the app offers Kokoro's 28 English voices — exactly the stems in
+# `Sources/T2SApp/Preferences/KokoroVoiceCatalog.voiceNames` — and MisakiSwift's G2P is English, so
+# the other 26 voices in the repo would be dead weight. They are not all under the repo's top-level
+# `voices/`, which holds only 7 at this revision; `kokoro.js/voices/` carries all 54, and each of
+# the 7 is byte-identical to its `kokoro.js/voices/` twin (same LFS oid, same byte count — checked
+# 2026-09-04). So the plan takes the top-level copy where there is one and the kokoro.js copy
+# otherwise, and stages every voice flat under `voices/`. Each is verified against its Hugging Face
+# LFS oid, which *is* the file's sha256; that equivalence is proved against the root of trust by
+# voices/af_heart.bin, the one voice the manifest covers — its tree oid and the manifest's sha256
+# must agree or the script stops. The planned count must be exactly 28, so a moved pin fails loudly
+# rather than quietly shipping a different picker.
 #
 # Pins:
 #   HF model revision  2e878c6a33c56b40de094ef8237bf15a83d233c5  (files, 2026-07-15)
@@ -48,6 +70,16 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+MODE=spike
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --app) MODE=app ;;
+    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+    *) echo "unknown argument: $1 (usage: $0 [--app])" >&2; exit 2 ;;
+  esac
+  shift
+done
+
 REPO=mattmireles/kokoro-coreml
 REV=2e878c6a33c56b40de094ef8237bf15a83d233c5
 PKG_COMMIT=66d8cf5108cce0991b8868b01b4d8a8b2e98881d
@@ -55,9 +87,18 @@ MANIFEST_REV=32399b333e809044c404c518cb3807a488e8f47d
 MANIFEST_PATH=sdk/starter/KokoroRuntimeManifest.json
 MANIFEST_SHA256=11e7e71158da599cc01c6515d9ff834ef31ffcef8c3a79e83d84937612e7500b
 
-DEST=spikes/SpikeHarness/Resources/CoreML
 DEPS=spikes/SpikeHarness/.deps
 PKG_DIR="$DEPS/kokoro-coreml"
+if [[ "$MODE" == app ]]; then
+  DEST=App/Resources/KokoroCoreML
+else
+  DEST=spikes/SpikeHarness/Resources/CoreML
+fi
+
+# The app's voice set: Kokoro's English accents, `a` (American) and `b` (British). Pinned as a
+# count so a moved revision cannot silently change the picker — see the header.
+APP_VOICE_PREFIXES='ab'
+APP_VOICE_COUNT=28
 
 # Manifest-covered: both duration models, and the 15-second bucket's F0Ntrain partner and two
 # decoder halves. Anything longer than 15 s of audio falls back to this bucket and is truncated.
@@ -185,8 +226,78 @@ for entry in "${EXTRA_SHA256[@]}"; do
   fetch_verified "$path" "$sha" "$DEST/$path"
 done
 
-# ---------------------------------------------------------------- the Swift package
-if [[ -d "$PKG_DIR/.git" ]]; then
+# ------------------------------------------------- every English voice (--app; hashes are LFS oids)
+if [[ "$MODE" == app ]]; then
+  echo "listing voices @ ${REV:0:12} (tree API)"
+  tree=$(mktemp -t KokoroTree)
+  trap 'rm -f "$manifest" "$tree"' EXIT
+  curl --fail -sSL -o "$tree" \
+    "https://huggingface.co/api/models/$REPO/tree/$REV?recursive=true&limit=1000"
+
+  # Emits "<sha256> <hf path> <basename>" per English voice, top-level `voices/` preferred.
+  voice_plan=$(python3 - "$tree" "$APP_VOICE_PREFIXES" <<'PY'
+import json, sys
+
+tree_path, prefixes = sys.argv[1:3]
+entries = json.load(open(tree_path))
+if len(entries) >= 1000:
+    sys.exit("the tree listing hit the API's page limit; this script needs pagination")
+
+best = {}
+for entry in entries:
+    if entry.get("type") != "file":
+        continue
+    path = entry["path"]
+    parent, _, name = path.rpartition("/")
+    if parent.rsplit("/", 1)[-1] != "voices" or not name.endswith(".bin"):
+        continue
+    if name[:1] not in list(prefixes):
+        continue
+    oid = (entry.get("lfs") or {}).get("oid")
+    if not oid:
+        sys.exit(f"{path} is not an LFS file, so its listed oid is a git blob id, not a sha256")
+    if name in best:
+        if best[name][0] != oid:
+            sys.exit(f"two copies of {name} disagree: {best[name][1]} vs {path}")
+        if parent != "voices":
+            continue  # keep the copy already chosen; the top-level one wins
+    best[name] = (oid, path)
+
+for name in sorted(best):
+    oid, path = best[name]
+    print(oid, path, name)
+PY
+  )
+
+  # `|| true`: grep -c exits 1 on a count of 0, which under `set -e` would abort the script before
+  # the message below could say why.
+  planned=$(grep -c . <<< "$voice_plan" || true)
+  if [[ "$planned" -ne "$APP_VOICE_COUNT" ]]; then
+    echo "planned $planned English voices, expected $APP_VOICE_COUNT — the pin moved" >&2
+    exit 1
+  fi
+
+  # The manifest covers exactly one voice. Its tree oid must equal the manifest's sha256: that is
+  # what makes every other oid above trustworthy as a sha256.
+  tree_heart=$(awk '$2 == "voices/af_heart.bin" { print $1 }' <<< "$voice_plan")
+  manifest_heart=$(awk '$2 == "voices/af_heart.bin" { print $1 }' <<< "$plan")
+  if [[ -z "$tree_heart" || -z "$manifest_heart" || "$tree_heart" != "$manifest_heart" ]]; then
+    echo "voices/af_heart.bin tree oid ($tree_heart) disagrees with the manifest ($manifest_heart)" >&2
+    exit 1
+  fi
+  echo "ok: LFS oids cross-check against the manifest via voices/af_heart.bin"
+
+  while read -r sha path name; do
+    [[ -z "$sha" ]] && continue
+    fetch_verified "$path" "$sha" "$DEST/voices/$name"
+  done <<< "$voice_plan"
+  echo "ok: $planned English voices"
+fi
+
+# ---------------------------------------------------------------- the Swift package (spike only)
+if [[ "$MODE" == app ]]; then
+  echo "ok: the app builds against the vendored Packages/KokoroPipeline; no clone needed"
+elif [[ -d "$PKG_DIR/.git" ]]; then
   if [[ "$(git -C "$PKG_DIR" rev-parse HEAD)" == "$PKG_COMMIT" ]]; then
     echo "ok: kokoro-coreml @ ${PKG_COMMIT:0:12} (already checked out)"
   else
@@ -201,10 +312,16 @@ else
   git clone --quiet "https://github.com/$REPO.git" "$PKG_DIR"
   git -C "$PKG_DIR" checkout --quiet "$PKG_COMMIT"
 fi
-test -f "$PKG_DIR/swift/Package.swift" || { echo "$PKG_DIR/swift/Package.swift is missing" >&2; exit 1; }
+if [[ "$MODE" != app ]]; then
+  test -f "$PKG_DIR/swift/Package.swift" || { echo "$PKG_DIR/swift/Package.swift is missing" >&2; exit 1; }
+fi
 
 echo
 echo "$DEST:"
 find "$DEST" -mindepth 1 -maxdepth 2 -print | sort
 echo
-du -sh "$DEST" "$PKG_DIR"
+if [[ "$MODE" == app ]]; then
+  du -sh "$DEST"
+else
+  du -sh "$DEST" "$PKG_DIR"
+fi

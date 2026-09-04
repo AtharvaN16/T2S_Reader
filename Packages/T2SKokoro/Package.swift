@@ -20,6 +20,9 @@ let package = Package(
         // with Readium's fork of the same library and makes the app's graph unresolvable. A local
         // package takes the identity `mlxutilslibrary` for the whole graph — see its README.
         .package(name: "MLXUtilsLibrary", path: "../MLXUtilsLibrary"),
+        // Vendored: the upstream repo root has no Package.swift — the package lives in its
+        // `swift/` subdirectory, which SwiftPM cannot consume by URL. See its README.
+        .package(name: "KokoroPipeline", path: "../KokoroPipeline"),
     ],
     targets: [
         .target(
@@ -29,6 +32,7 @@ let package = Package(
                 .product(name: "T2SAudio", package: "T2S"),
                 .product(name: "KokoroSwift", package: "kokoro-ios"),
                 .product(name: "MLXUtilsLibrary", package: "MLXUtilsLibrary"),
+                .product(name: "KokoroPipeline", package: "KokoroPipeline"),
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
@@ -41,6 +45,7 @@ let package = Package(
                 // For NpzArchiveTests: the vendored package's zip reader is tested here, where the
                 // package is already in the graph.
                 .product(name: "MLXUtilsLibrary", package: "MLXUtilsLibrary"),
+                .product(name: "KokoroPipeline", package: "KokoroPipeline"),
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

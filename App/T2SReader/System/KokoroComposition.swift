@@ -217,8 +217,9 @@ struct KokoroComposition {
 
     /// What the footer says when the stages will not load. A reader cannot act on Core ML's own
     /// message — and `localizedDescription` on a plain Swift error is "The operation couldn't be
-    /// completed." — so they get one sentence and the log gets the error.
-    private static let warmUpFailed = "The Kokoro voice could not be prepared on this device."
+    /// completed." — so they get one sentence and the log gets the error. No "on this device" here:
+    /// `VoiceListPage`'s footer already opens with "Not available on this device: ".
+    private static let warmUpFailed = "The Kokoro voice could not be prepared."
 
     /// `Reason.resources` describes a missing file and tells a developer to run the fetch script,
     /// which is not something to put in front of a reader. The full reason still goes to the log.

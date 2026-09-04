@@ -524,8 +524,8 @@ What remains, in order:
    utterance instead of the session; and the launch warm-up now decides the *route*, not just the
    footer — it tries `preload()` twice, two seconds apart, and a second failure closes the Core ML
    route for the rest of the launch, so every document opened from then on falls back for its whole
-   length (spec §6) instead of failing utterance by utterance. The footer then reads "The Kokoro
-   voice could not be prepared on this device." — a constant, because
+   length (spec §6) instead of failing utterance by utterance. The footer then reads "Not available
+   on this device: The Kokoro voice could not be prepared. …" — a constant, because
    `error.localizedDescription` for a plain Swift error reads "The operation couldn't be
    completed."; the real error goes to the log (`Kokoro Core ML warm-up failed, route closed: …`).
    What is left: a document already routed to Kokoro when the route closes keeps failing per

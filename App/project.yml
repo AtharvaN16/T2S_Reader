@@ -35,11 +35,13 @@ targetTemplates:
         excludes:
           - Info.plist
           - Info-Kokoro.plist
-      # `Resources/Kokoro` is ~342 MB of weights only the Kokoro target can use; it is added
-      # under `T2SReaderKokoro` alone so the everyday app never carries it.
+      # `Resources/Kokoro` (~342 MB of MLX weights) and `Resources/KokoroCoreML` (~347 MB of
+      # Core ML stages, voices and runtime JSON) are only usable by the Kokoro target; both are
+      # added under `T2SReaderKokoro` alone so the everyday app never carries them.
       - path: Resources
         excludes:
           - Kokoro
+          - KokoroCoreML
         buildPhase: resources
     dependencies:
       - target: T2SReaderShare
@@ -124,6 +126,11 @@ targets:
       # Flat-copied to the bundle root, which is where `KokoroResources.bundled(in:)` looks.
       - path: Resources/Kokoro
         buildPhase: resources
+      # Also flat-copied, and Xcode compiles each `coreml/*.mlpackage` into a `<stage>.mlmodelc`
+      # at the bundle root on the way — exactly the layout `KokoroCoreMLResources.locate(in:)`
+      # expects, and the reason the app never pays the on-device compile.
+      - path: Resources/KokoroCoreML
+        buildPhase: resources
     dependencies:
       - package: T2SKokoro
         product: T2SKokoro
@@ -131,6 +138,10 @@ targets:
       base:
         SUPPORTED_PLATFORMS: iphoneos
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) KOKORO_ENGINE"
+        # The stages are loaded by URL through `KokoroCoreMLModels`, so the eight generated Swift
+        # classes Xcode would otherwise emit per `.mlpackage` are dead code in the app target.
+        # The spike harness set the same flag.
+        COREML_CODEGEN_LANGUAGE: None
   T2SReaderShare:
     type: app-extension
     platform: iOS

@@ -159,7 +159,7 @@ public final class PlayerModel {
                 // The route, never the voice: a voice ID can carry a provider's voice name, and the
                 // document's title must never reach the log.
                 let route = String(requestedVoiceID.prefix { $0 != ":" })
-                Self.log.notice("voice route fallback: \(route, privacy: .public) → \(effective, privacy: .public)")
+                Self.log.notice("voice route resolved: \(route, privacy: .public) → \(effective, privacy: .public)")
             }
             coordinator.load(document, timeline: timeline)
             current = summary

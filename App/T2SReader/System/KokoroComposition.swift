@@ -9,11 +9,15 @@ import T2SApp
 import T2SAudio
 import T2SCore
 
-/// What Preferences shows for the Kokoro section.
+/// What Preferences shows for the Kokoro section. It describes the Core ML route — the one that runs
+/// on every phone the app supports and therefore the one a reader has (spec §7.3).
 enum KokoroStatus: Hashable, Sendable {
     /// The everyday build, which does not link the engine at all.
     case notLinked
     case checking
+    /// The launch warm-up is loading the stages. Reached before ``available`` on every launch of a
+    /// build that has the model files.
+    case preparing
     case available(isDebugOverride: Bool)
     case unavailable(String)
 }
@@ -22,6 +26,11 @@ enum KokoroStatus: Hashable, Sendable {
 @Observable
 final class KokoroStatusModel {
     private(set) var status: KokoroStatus
+    /// A second footer line for the MLX route, or nil when there is nothing worth saying — which is
+    /// every device where MLX is unavailable by construction (the simulator, a pre-A14 phone, a
+    /// build with no weights staged). Two "not available" lines would only invite a reader to look
+    /// for a second set of voices that is not there; the full reason is in the log either way.
+    private(set) var mlxLine: String?
 
     init(_ status: KokoroStatus) {
         self.status = status
@@ -30,68 +39,139 @@ final class KokoroStatusModel {
     func update(_ status: KokoroStatus) {
         self.status = status
     }
+
+    func updateMLXLine(_ line: String?) {
+        mlxLine = line
+    }
 }
 
 /// Everything the composition root needs from the Kokoro package, decided once per launch (spec
-/// §3, plan adjustment 3). This is the app's only `#if KOKORO_ENGINE` apart from the gated engine
-/// beside it: the route, the fallback resolver and the catalog are all pure types in the root
-/// package, so every other file compiles the same way in both builds.
+/// §3, plan adjustment 3). This is the app's only `#if KOKORO_ENGINE` apart from the two gated
+/// engines beside it: the routes, the fallback resolver and the catalog are all pure types in the
+/// root package, so every other file compiles the same way in both builds.
+///
+/// The Kokoro build links two runtimes, and they are different renders of the same words — different
+/// engine identities, different render keys (spec §5). Core ML leads: it is CPU-only, so it runs
+/// everywhere, and it is what "default" resolves to.
 @MainActor
 struct KokoroComposition {
-    /// The gated engine, or nil in the everyday build — `RoutedEngine` takes it as an option.
-    let engine: (any SynthesisEngine)?
+    /// Every linked runtime's gated engine, in route order — `RoutedEngine` keys them by identity.
+    /// Empty in the everyday build.
+    let engines: [any SynthesisEngine]
     /// How `PlayerModel` and `PrepareRunner` decide a document's effective voice.
     let voiceRouting: any VoiceRouteResolving
     let status: KokoroStatusModel
-    /// nil when the engine is not linked, which is also what keeps its voices out of the picker.
-    private let engineIdentity: String?
+    /// The runtimes whose voices the picker lists, with the qualifier each row carries. Empty in the
+    /// everyday build, which is what keeps Kokoro out of the picker there.
+    private let catalogEngines: [(identity: String, label: String)]
 
     /// Adds the bundled Kokoro voices to the picker, in the build that has the engine.
     func catalog(wrapping base: any VoiceCatalog) -> any VoiceCatalog {
-        guard let engineIdentity else { return base }
-        return KokoroVoiceCatalog(base: base, engineIdentity: engineIdentity)
+        guard !catalogEngines.isEmpty else { return base }
+        return KokoroVoiceCatalog(base: base, engines: catalogEngines)
     }
 
     static func make(defaults: UserDefaults = .standard) -> KokoroComposition {
         let log = Logger(subsystem: "com.t2s.reader", category: "kokoro")
         #if KOKORO_ENGINE
-        let availability = KokoroAvailabilityModel(probe: .live(defaults: defaults))
+        // Presence-only and synchronous (spec §6): the fetch script verified the digests, so the
+        // answer for the Core ML route is already here, before the first view is built.
+        let coreML = KokoroCoreMLAvailabilityModel(bundle: .main)
+        let coreMLEngine = GatedKokoroCoreMLEngine(availability: coreML)
+        // The MLX route costs a 340 MB hash, so one probe per launch, started below and memoized —
+        // the route's `isAvailable` joins this same work rather than starting a second.
+        let mlx = KokoroAvailabilityModel(probe: .live(defaults: defaults))
         let status = KokoroStatusModel(.checking)
-        // One probe per launch, started now so the answer is usually there before the first play.
-        // `resolve()` is memoized, so the route's `isAvailable` below joins this same work.
+
+        let coreMLAvailable: Bool
+        switch coreML.verdict {
+        case .available(let decision, _):
+            coreMLAvailable = true
+            log.notice("Kokoro Core ML route available (\(decision.runtime, privacy: .public), RTF \(decision.measuredRTF, format: .fixed(precision: 3), privacy: .public))")
+            // Loading eight stages takes seconds on a modern phone and minutes on an A13. Pay them
+            // now, while the reader is still choosing a book, rather than at the first utterance.
+            status.update(.preparing)
+            Task { await warmUp(coreMLEngine, status: status, log: log) }
+        case .unavailable(let reason):
+            coreMLAvailable = false
+            log.notice("Kokoro Core ML unavailable: \(reason.description, privacy: .public)")
+            status.update(.unavailable(readerFacing(reason)))
+        }
+
         Task {
-            switch await availability.resolve() {
+            switch await mlx.resolve() {
             case .available(let decision, _):
-                log.notice("Kokoro route available (development override: \(decision.isDebugOverride, privacy: .public))")
-                status.update(.available(isDebugOverride: decision.isDebugOverride))
+                log.notice("Kokoro MLX route available (development override: \(decision.isDebugOverride, privacy: .public))")
+                status.updateMLXLine(decision.isDebugOverride
+                    ? "MLX route: development override active."
+                    : "MLX route: available (measured).")
             case .unavailable(let reason):
-                log.notice("Kokoro unavailable: \(reason.description, privacy: .public)")
-                status.update(.unavailable(readerFacing(reason)))
+                log.notice("Kokoro MLX unavailable: \(reason.description, privacy: .public)")
+                status.updateMLXLine(nil)
             }
         }
+
         return KokoroComposition(
-            engine: GatedKokoroEngine(availability: availability),
-            voiceRouting: KokoroVoiceRouting(engineIdentity: KokoroEngine.identity) {
-                if case .available = await availability.resolve() { return true }
-                return false
-            },
+            engines: [coreMLEngine, GatedKokoroEngine(availability: mlx)],
+            voiceRouting: KokoroVoiceRouting(
+                routes: [
+                    KokoroVoiceRouting.Route(engineIdentity: KokoroCoreMLEngine.identity) { coreMLAvailable },
+                    KokoroVoiceRouting.Route(engineIdentity: KokoroEngine.identity) {
+                        if case .available = await mlx.resolve() { return true }
+                        return false
+                    },
+                ],
+                // Spec §6: a reader who has never chosen a voice gets Kokoro Heart, not the system
+                // voice — but only while the route that renders it is available.
+                defaultVoice: KokoroVoiceID(engineID: KokoroCoreMLEngine.identity, voice: "af_heart").rawValue
+            ),
             status: status,
-            engineIdentity: KokoroEngine.identity
+            catalogEngines: catalogEngines(mlx: mlx.state)
         )
         #else
         log.notice("Kokoro engine not linked in this build")
-        return KokoroComposition(engine: nil, voiceRouting: KokoroVoiceRouting.unavailable,
-                                 status: KokoroStatusModel(.notLinked), engineIdentity: nil)
+        return KokoroComposition(engines: [], voiceRouting: KokoroVoiceRouting.unavailable,
+                                 status: KokoroStatusModel(.notLinked), catalogEngines: [])
         #endif
     }
 
     #if KOKORO_ENGINE
+    /// The Core ML voices always; the MLX voices only where they can actually render.
+    ///
+    /// Listing 28 voices twice on a phone that can only speak one of the two sets would be a picker
+    /// full of choices that silently fall back (spec §6), so the MLX rows are gated on the MLX
+    /// verdict. That verdict is asynchronous and this decision is not: `state` is still `.checking`
+    /// when the composition root asks, so today the MLX rows never appear — right on every device
+    /// the app ships to, since MLX needs an A14 and staged weights, and a gap only on a development
+    /// phone that has both. Closing it means a catalog that re-reads the probe rather than a list
+    /// fixed at launch, which `AppEnvironment.voices` is.
+    private static func catalogEngines(mlx: KokoroAvailabilityModel.State) -> [(identity: String, label: String)] {
+        var engines: [(identity: String, label: String)] = [(KokoroCoreMLEngine.identity, "")]
+        if case .available = mlx { engines.append((KokoroEngine.identity, "MLX")) }
+        return engines
+    }
+
+    /// The one-time stage load, reported to the reader through the footer and to the log in seconds.
+    private static func warmUp(_ engine: GatedKokoroCoreMLEngine, status: KokoroStatusModel, log: Logger) async {
+        let started = Date()
+        do {
+            try await engine.preload()
+            let seconds = Date().timeIntervalSince(started)
+            log.notice("Kokoro Core ML warm-up finished in \(seconds, format: .fixed(precision: 1), privacy: .public) s")
+            // Never an override: the Core ML decision is measured, not a development escape hatch.
+            status.update(.available(isDebugOverride: false))
+        } catch {
+            log.error("Kokoro Core ML warm-up failed: \(error.localizedDescription, privacy: .public)")
+            status.update(.unavailable(error.localizedDescription))
+        }
+    }
+
     /// `Reason.resources` describes a missing file and tells a developer to run the fetch script,
-    /// which is not something to put in front of a reader; every other reason already reads as a
-    /// sentence. The full reason still goes to the log.
-    private static func readerFacing(_ reason: KokoroAvailability.Reason) -> String {
-        if case .resources = reason { return "The Kokoro voice files are not installed." }
-        return reason.description
+    /// which is not something to put in front of a reader. The full reason still goes to the log.
+    private static func readerFacing(_ reason: KokoroCoreMLAvailability.Reason) -> String {
+        switch reason {
+        case .resources: "The Kokoro voice files are not installed."
+        }
     }
     #endif
 }

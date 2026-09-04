@@ -28,6 +28,9 @@ final class AppEnvironment {
     let cloudVoiceSecrets: any SecretStoring
     let cloudRouter: RoutedEngine
     let voices: any VoiceCatalog
+    /// The same resolver the player and Prepare use, so Preferences can show what "default" means
+    /// on this device rather than guessing (spec §6).
+    let voiceRouting: any VoiceRouteResolving
     let pronunciation: PronunciationModel
     let storage: StorageModel
     let prepareRunner: PrepareRunner
@@ -61,6 +64,7 @@ final class AppEnvironment {
         voices = kokoro.catalog(wrapping: CloudVoiceCatalog(base: SystemVoiceCatalog(),
                                                             configurationStore: cloudVoiceSettings.configurationStore))
         kokoroStatus = kokoro.status
+        voiceRouting = kokoro.voiceRouting
         pronunciation = PronunciationModel(store: store)
         storage = StorageModel(library: library, audioStore: audioStore, player: player, libraryModel: libraryModel)
         prepareRunner = PrepareRunner(library: library, store: store, audioStore: audioStore,
@@ -72,10 +76,10 @@ final class AppEnvironment {
         nowPlaying = NowPlayingController(player: player, libraryModel: libraryModel, preferences: preferences, paths: paths)
         player.defaultVoiceID = preferences.defaultVoiceID
         prepareRunner.defaultVoiceID = preferences.defaultVoiceID
-        // One resolver for both: a document's voice is decided the same way whether it is played
-        // now or prepared in the background (spec §6).
-        player.voiceRouting = kokoro.voiceRouting
-        prepareRunner.voiceRouting = kokoro.voiceRouting
+        // One resolver for all three: a document's voice is decided the same way whether it is
+        // played now, prepared in the background, or described in Preferences (spec §6).
+        player.voiceRouting = voiceRouting
+        prepareRunner.voiceRouting = voiceRouting
         coordinator.setRate(preferences.defaultRate)
         self.importModel = importModel
         deviceMonitor = DeviceMonitor(audioStore: audioStore)
@@ -93,9 +97,11 @@ final class AppEnvironment {
         let kokoro = KokoroComposition.make()
         let cloudRouter = RoutedEngine(
             system: systemEngine,
+            // Both on-device runtimes, keyed by identity: a `kokoro:` voice ID names which one
+            // rendered it, so the two never share a render key (spec §5).
+            kokoro: kokoro.engines,
             configuration: { configurationStore.current() },
-            key: { try cloudVoiceSecrets.load() },
-            kokoro: kokoro.engine
+            key: { try cloudVoiceSecrets.load() }
         )
         let renderArbiter = RenderArbiter()
         let coordinator = PlaybackCoordinator(engine: cloudRouter, store: shared.audioStore, player: try AudioPlayer(),

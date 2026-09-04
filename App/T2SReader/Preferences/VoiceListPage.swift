@@ -23,10 +23,15 @@ struct VoiceListPage: View {
                             row(option)
                         }
                         if group == .kokoro {
-                            Text(kokoroFooter)
-                                .typeRole(.meta)
-                                .foregroundStyle(Tokens.ink2)
-                                .padding(.top, Spacing.grid)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(kokoroFooter)
+                                if let mlxLine = env.kokoroStatus.mlxLine {
+                                    Text(mlxLine)
+                                }
+                            }
+                            .typeRole(.meta)
+                            .foregroundStyle(Tokens.ink2)
+                            .padding(.top, Spacing.grid)
                         }
                     }
                 }
@@ -90,6 +95,11 @@ struct VoiceListPage: View {
         switch env.kokoroStatus.status {
         case .notLinked, .checking:
             return "Checking this device…"
+        case .preparing:
+            // The eight Core ML stages load once per launch, and on a first launch the system may
+            // still be building their compute plans — minutes on an A13. Say so, rather than let a
+            // reader wonder why the first sentence is slow to arrive.
+            return "Preparing the Kokoro voice (one-time, up to a few minutes on the first launch)…"
         case .available(let isDebugOverride):
             return isDebugOverride ? "Runs on this device (development override)." : "Runs on this device."
         case .unavailable(let reason):

@@ -5,6 +5,10 @@ import T2SApp
 struct PreferencesPage: View {
     @Environment(AppEnvironment.self) private var env
     @State private var showAppearance = false
+    /// What "System default" actually resolves to on this device: Kokoro Heart where the Core ML
+    /// route is available, the system voice otherwise (spec §6). Resolved in `.task` because the
+    /// routing answer is asynchronous — the MLX route's probe is behind the same call.
+    @State private var resolvedDefaultVoiceID: String?
 
     var body: some View {
         @Bindable var preferences = env.preferences
@@ -18,12 +22,7 @@ struct PreferencesPage: View {
                                 preferences.defaultVoiceID = option.isDefault ? nil : option.id
                             }
                         } label: {
-                            row(
-                                "Default voice",
-                                subtitle: env.voices.voices().first {
-                                    $0.id == (preferences.defaultVoiceID ?? VoiceOption.systemDefault.id)
-                                }?.name ?? "System default"
-                            )
+                            row("Default voice", subtitle: defaultVoiceSubtitle)
                         }
                     }
                     section("Playback") {
@@ -112,9 +111,20 @@ struct PreferencesPage: View {
         }
         .sheet(isPresented: $showAppearance) { AppearanceSheet() }
         .task {
+            resolvedDefaultVoiceID = await env.voiceRouting.effectiveVoiceID(VoiceOption.systemDefault.id)
             await env.pronunciation.refresh()
             await env.storage.refresh()
         }
+    }
+
+    /// The row shows the voice that will speak, not the token stored for it: a reader who has never
+    /// chosen one is on "System default", and on a phone with the on-device engine that means Kokoro
+    /// Heart. Until the routing answers — and always, in the everyday build — this reads as it
+    /// always has.
+    private var defaultVoiceSubtitle: String {
+        let chosen = env.preferences.defaultVoiceID ?? VoiceOption.systemDefault.id
+        let effective = chosen == VoiceOption.systemDefault.id ? (resolvedDefaultVoiceID ?? chosen) : chosen
+        return env.voices.voices().first { $0.id == effective }?.name ?? "System default"
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

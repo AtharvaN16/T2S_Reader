@@ -182,9 +182,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-xcode-26.6-source-packages-
       - run: brew install xcodegen
+      # Neither model directory is in the repository, so this checkout has neither and xcodegen
+      # refuses a missing source path. The build scripts create them too; this step runs xcodegen
+      # itself, ahead of -resolvePackageDependencies, so it needs the same two lines.
       - name: Generate app project
         working-directory: App
-        run: xcodegen generate --quiet
+        run: |
+          mkdir -p Resources/Kokoro Resources/KokoroCoreML
+          xcodegen generate --quiet
       - name: Resolve app package dependencies
         working-directory: App
         shell: bash
@@ -199,5 +204,8 @@ jobs:
           done
           exit 1
       - run: scripts/build-app.sh -clonedSourcePackagesDirPath "$SPM_CLONED_PACKAGES_DIR"
-      # The device target links MLX, which only builds for iphoneos.
+      # The device target links MLX, which only builds for iphoneos. Neither the MLX weights nor
+      # the Core ML stages are in the repository, so what this job proves is the compile: the app
+      # it produces has both on-device routes reporting their files missing, and would speak with
+      # the system voice. The staged bundle is only ever built on a developer's Mac.
       - run: scripts/build-device.sh -clonedSourcePackagesDirPath "$SPM_CLONED_PACKAGES_DIR"

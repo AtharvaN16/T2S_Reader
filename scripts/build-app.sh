@@ -7,6 +7,10 @@
 # Usage: scripts/build-app.sh [extra xcodebuild args]
 set -euo pipefail
 cd "$(dirname "$0")/../App"
+# Both model directories are git-ignored, so a fresh clone has neither, and xcodegen refuses a
+# missing source path outright. Empty is enough to generate a project: the Kokoro target then
+# builds an app whose on-device routes report their files missing.
+mkdir -p Resources/Kokoro Resources/KokoroCoreML
 xcodegen generate --quiet
 if [[ -n "${CI:-}" ]]; then
   signing=(CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO)

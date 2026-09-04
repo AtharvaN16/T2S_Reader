@@ -226,5 +226,6 @@ Save the current position with the bookmark button in the Player, or
 **Bookmark** in the Reader's overflow menu. See them in the Book sheet's
 **Bookmarks** section, shown once a document has any, or from **Bookmarks**
 in the Player or Reader overflow menu — newest first. Tapping a bookmark
-plays from there; swipe a row to delete it, or long-press for
-**Delete bookmark**.
+plays from there; long-press one for **Delete bookmark**, and in the
+Bookmarks list reached from the Player or Reader overflow you can also
+swipe it away.

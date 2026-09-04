@@ -401,7 +401,8 @@ Lines to look for, in order:
 **Plan 8 is also complete**, on branch `plan-8-bookmarks-icon-voiceover`, stacked on
 `plan-6-coreml-engine` in this same worktree — merge it after Plan 6. It adds a bookmark list
 (add from the Player or the Reader's overflow, browse it from the Book sheet or from either
-overflow's **Bookmarks** item, tap to jump, swipe or long-press to delete), a drawn app icon on
+overflow's **Bookmarks** item, tap to jump, long-press to delete anywhere and swipe too in the
+Bookmarks list), a drawn app icon on
 both app targets, and VoiceOver fixes that fold the Queue row, the Collection cell, a bookmark
 row and the mini-player title into one element each instead of several separate stops. Two
 deferred minors worth knowing: the "·" separators folded into the Queue row's combined label may

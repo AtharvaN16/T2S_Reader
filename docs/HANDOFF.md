@@ -251,6 +251,16 @@ folder and one obvious build: both branches fold into `dev`, the worktree is rem
 schemes are now **Phone** (the `T2SReaderKokoro` target, the app for an iPhone) and **Simulator**
 (the `T2SReader` target, the Mac-only build). The recipe below runs from the main checkout.
 
+The first listen happened that morning and found one crash: the first chapter died in MLX with
+"[Compiled::eval_cpu] CPU compilation not supported on the platform". MisakiSwift's fallback network
+for words outside its lexicon applies MLXNN's `gelu`, an MLX *compiled* function, and the CPU backend
+compiles those at run time with a C compiler that iOS does not have. The spike corpus never contained
+an unknown word; a book has a name on every page. `KokoroCoreMLEngine` now calls
+`MLX.compile(enable: false)` once before the first G2P exists — process-global, so the MLX route loses
+its fused kernels too (a benchmark-only cost on A14+ phones) — and
+`KokoroCoreMLEngineTests.speaksWordsTheLexiconDoesNotKnow` walks the fallback with two invented names.
+The rest of the checklist below is still to be reported.
+
 State of this Mac on the morning of 2026-09-04, for whoever runs the recipe:
 
 - **Disk.** The night ended at about 1.4 GB free. The regenerable Xcode caches under

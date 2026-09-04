@@ -252,6 +252,16 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         return tokenizer
     }
 
+    /// MisakiSwift's fallback network applies MLXNN's `gelu`, which is an MLX *compiled* function. On
+    /// the CPU backend MLX builds its fused kernels at run time with a C compiler, and iOS has none, so
+    /// the first out-of-lexicon word on a pre-A14 phone died with "[Compiled::eval_cpu] CPU compilation
+    /// not supported on the platform" (iPhone 11 Pro, 2026-09-04; the spike corpus never had an unknown
+    /// word, a book has one on every page). With compilation disabled every compiled function runs its
+    /// plain graph instead. The switch is process-global: the MLX Kokoro engine wired beside this one
+    /// loses its fused kernels too, which costs that benchmark-only route some speed on an A14+ phone
+    /// and nothing else. Evaluated once, before the first G2P exists.
+    private static let mlxCompilationDisabled: Void = MLX.compile(enable: false)
+
     /// The G2P for a language, built once and kept.
     ///
     /// MisakiSwift's out-of-lexicon fallback is a BART network on MLX, whose GEMMs are exactly what a
@@ -261,6 +271,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// one in the app, where pinning the process to the CPU would cripple it (RTF 15).
     private func g2p(british: Bool) -> EnglishG2P {
         if let cached = british ? britishG2P : americanG2P { return cached }
+        _ = Self.mlxCompilationDisabled
         let g2p = MLX.Device.withDefaultDevice(.cpu) { EnglishG2P(british: british, unk: Self.unknownPhoneme) }
         if british { britishG2P = g2p } else { americanG2P = g2p }
         return g2p

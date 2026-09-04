@@ -188,6 +188,23 @@ import T2SCore
         #expect(Self.rms(result.audio.samples) > 0.01)
     }
 
+    /// Words the lexicon does not know go through MisakiSwift's fallback network, which runs on MLX
+    /// with compiled `gelu` activations. On iOS the CPU backend cannot compile at run time, and that
+    /// killed the app on the iPhone 11 Pro on the first name in a book; the engine now disables MLX
+    /// compilation before the fallback exists. This test walks that path, which no sentence in the
+    /// other tests did.
+    @Test(.enabled(if: KokoroTestSupport.haveCoreMLFiles))
+    func speaksWordsTheLexiconDoesNotKnow() async throws {
+        let engine = try Self.engineWithRealResources()
+        let result = try await engine.synthesize(.init(
+            spoken: "Vashtiquor greeted Zembrallion at the quay.",
+            voiceID: Self.voiceID("af_heart")
+        ))
+        #expect(result.audio.duration > 1.0)
+        #expect(Self.rms(result.audio.samples) > 0.01)
+        #expect(result.wordTimings.count == 6)
+    }
+
     @Test(.enabled(if: KokoroTestSupport.haveCoreMLFiles))
     func rejectsAnUnknownVoice() async throws {
         let engine = try Self.engineWithRealResources()

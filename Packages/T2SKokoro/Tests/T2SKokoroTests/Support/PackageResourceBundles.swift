@@ -7,6 +7,11 @@ enum KokoroTestSupport {
     /// machine. CI has neither, so the tests that need them are `.enabled(if:)` this.
     static let haveRealFiles = (try? KokoroResources.locate(in: KokoroResources.developmentDirectory).get()) != nil
 
+    /// Whether `scripts/fetch-kokoro-coreml.sh --app` has staged the Core ML model files on this
+    /// machine. CI has none, so the tests that need them are `.enabled(if:)` this.
+    static let haveCoreMLFiles =
+        (try? KokoroCoreMLResources.locate(inDirectory: KokoroCoreMLResources.developmentDirectory).get()) != nil
+
     /// Points KokoroSwift's `Bundle.module` at this test bundle's resources. Call it at the top of
     /// every test that builds an engine or a probe over the real files.
     ///

@@ -34,22 +34,42 @@ final class KokoroCoreMLModels: KokoroModelProvider {
     private let choices: [DurationModelChoice]
     private let buckets: [Int]
 
-    /// Loads every staged stage, compiling it first when the staging is a raw `.mlpackage`.
+    /// Compiles every staged `.mlpackage` and hands back the compiled URLs, or passes an already
+    /// compiled staging straight through.
+    ///
+    /// Deliberately separate from ``init(compiledStages:)``: this is the whole load's only
+    /// asynchronous step, and URLs are the only part of a load that can safely cross an actor
+    /// suspension. ``KokoroCoreMLEngine`` shares one call of this between concurrent renders and
+    /// then builds the models synchronously, so the eight stages are compiled and loaded once
+    /// however many renders ask at the same time.
     ///
     /// `async` because the only non-deprecated `MLModel.compileModel` is the asynchronous one. The
     /// app bundle needs no compile at all — Xcode runs `coremlc` at build time, which is what
     /// ``KokoroCoreMLResources/Located/isPrecompiled`` reports — but the development layout this
     /// package's tests read stages `.mlpackage` directories, so those are compiled here into the
     /// per-process temporary directory `compileModel` returns.
-    init(resources: KokoroCoreMLResources.Located) async throws {
+    static func compileStages(_ resources: KokoroCoreMLResources.Located) async throws -> [String: URL] {
+        guard !resources.isPrecompiled else { return resources.stages }
+        var compiled: [String: URL] = [:]
+        for name in KokoroCoreMLResources.stageNames() {
+            guard let staged = resources.stages[name] else { throw KokoroCoreMLResources.Failure.missing(name) }
+            compiled[name] = try await MLModel.compileModel(at: staged)
+        }
+        return compiled
+    }
+
+    /// Loads every stage from the compiled URLs ``compileStages(_:)`` returned.
+    ///
+    /// Synchronous on purpose: it runs to completion on the engine's actor, so no second render can
+    /// arrive between the first one's decision to load and the loaded stages being there.
+    init(compiledStages stages: [String: URL]) throws {
         // `MLModel(contentsOf:)` builds the compute plan, and that is where a slow first load goes:
         // 206 s on an A13's first launch after install, 3-5 s on every later one (§7.3).
         let configuration = MLModelConfiguration()
         configuration.computeUnits = .cpuOnly
 
-        func load(_ name: String) async throws -> (model: MLModel, url: URL) {
-            guard let staged = resources.stages[name] else { throw KokoroCoreMLResources.Failure.missing(name) }
-            let compiled = resources.isPrecompiled ? staged : try await MLModel.compileModel(at: staged)
+        func load(_ name: String) throws -> (model: MLModel, url: URL) {
+            guard let compiled = stages[name] else { throw KokoroCoreMLResources.Failure.missing(name) }
             return (try MLModel(contentsOf: compiled, configuration: configuration), compiled)
         }
 
@@ -58,7 +78,7 @@ final class KokoroCoreMLModels: KokoroModelProvider {
         // Ascending, because `selectDurationChoice` returns the first padded choice that fits and
         // upstream sorts its choices the same way — the smallest model that holds the tokens wins.
         for tokens in KokoroCoreMLResources.durationTokenLengths.sorted() {
-            let stage = try await load("kokoro_duration_t\(tokens)")
+            let stage = try load("kokoro_duration_t\(tokens)")
             durations[tokens] = stage.model
             durationChoices.append(DurationModelChoice(
                 cacheKey: "padded_t\(tokens)",
@@ -81,10 +101,10 @@ final class KokoroCoreMLModels: KokoroModelProvider {
             }
             // Two buckets can share one F0Ntrain geometry; load each only once.
             if f0ntrain[tFrames] == nil {
-                f0ntrain[tFrames] = try await load("kokoro_f0ntrain_t\(tFrames)").model
+                f0ntrain[tFrames] = try load("kokoro_f0ntrain_t\(tFrames)").model
             }
-            decoderPre[seconds] = try await load("kokoro_decoder_pre_\(seconds)s").model
-            generator[seconds] = try await load("kokoro_decoder_har_post_\(seconds)s").model
+            decoderPre[seconds] = try load("kokoro_decoder_pre_\(seconds)s").model
+            generator[seconds] = try load("kokoro_decoder_har_post_\(seconds)s").model
         }
         f0ntrainModels = f0ntrain
         decoderPreModels = decoderPre

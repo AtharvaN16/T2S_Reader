@@ -43,6 +43,11 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
 
     private let resources: KokoroCoreMLResources.Located
     private var loaded: Loaded?
+    /// The stage compile in flight, if one is. See ``compiledStages()`` for why it is shared.
+    private var compiling: Task<[String: URL], Error>?
+    /// How many times this engine has begun loading its stages. Internal for one test: "loaded once"
+    /// and "compiled and loaded twice" differ only in this number and several minutes of Core ML.
+    private(set) var loadCount = 0
     /// One per voice: the style table is the voice, and the vocabulary beside it is 114 entries.
     private var tokenizers: [String: KokoroTokenizer] = [:]
     private var americanG2P: EnglishG2P?
@@ -75,22 +80,66 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     @discardableResult
     private func load() async throws -> Loaded {
         if let loaded { return loaded }
+        // hn-NSF's `l_linear` weights: the one piece of the vocoder that stayed in Swift.
+        struct HnsfWeights: Decodable {
+            let linear_weights: [Float]
+            let linear_bias: Float
+        }
         do {
-            // hn-NSF's `l_linear` weights: the one piece of the vocoder that stayed in Swift.
-            struct HnsfWeights: Decodable {
-                let linear_weights: [Float]
-                let linear_bias: Float
-            }
+            let compiled = try await compiledStages()
+            // The compile is this function's only suspension, and the actor is released across it,
+            // so a render that arrived meanwhile may have finished the whole load. Building a second
+            // set of eight `MLModel`s would pay for eight more compute plans and hold two copies of
+            // the 119 MB (§7.3) until the first was dropped.
+            if let loaded { return loaded }
+            try Task.checkCancellation()
+
             let weights = try JSONDecoder().decode(HnsfWeights.self, from: Data(contentsOf: resources.hnsfWeights))
-            let loaded = Loaded(models: try await KokoroCoreMLModels(resources: resources),
+            // Synchronous, so from here to the assignment the actor is never released: no other
+            // render can observe this engine mid-load.
+            let loaded = Loaded(models: try KokoroCoreMLModels(compiledStages: compiled),
                                 linearWeights: weights.linear_weights,
                                 linearBias: weights.linear_bias)
             self.loaded = loaded
             return loaded
+        } catch is CancellationError {
+            // A render cancelled while the stages were compiling is not an engine failure. Wrapping
+            // it would surface a stopped utterance as 200 ms of silence and a logged error instead
+            // of the scheduler simply dropping it.
+            throw CancellationError()
         } catch {
             // Core ML's own error, a missing stage or a malformed weights file — never the request
             // text: this string reaches logs.
             throw KokoroCoreMLError.stageFailed(String(describing: error))
+        }
+    }
+
+    /// The compiled stage URLs, compiling the `.mlpackage` staging exactly once however many renders
+    /// ask at the same time.
+    ///
+    /// `MLModel.compileModel` is asynchronous, so the actor is released while it runs and `load()`
+    /// is reentrant across it. The recommended app wiring — `preload()` off the playback path, a
+    /// render on play — is exactly the pattern that arrives twice: without sharing the one task both
+    /// would compile and load a full set of eight stages, doubling the compute-plan build (206 s on
+    /// an A13's first launch) and, briefly, the footprint. Sharing a `Task` is what makes the two
+    /// callers wait on the same work; URLs are the only part of a load that may cross the suspension,
+    /// which is why the compile is split out of ``KokoroCoreMLModels`` at all.
+    private func compiledStages() async throws -> [String: URL] {
+        if let compiling { return try await compiling.value }
+        loadCount += 1
+        // Nothing to compile: Xcode ran `coremlc` at build time, so on the app's own staging this
+        // function never suspends and `load()` cannot be reentered at all.
+        guard !resources.isPrecompiled else { return resources.stages }
+
+        let task = Task { [resources] in try await KokoroCoreMLModels.compileStages(resources) }
+        compiling = task
+        do {
+            return try await task.value
+        } catch {
+            // A failed compile must not poison the engine: clearing the task lets the next render
+            // try again rather than inherit this failure for the life of the app.
+            compiling = nil
+            throw error
         }
     }
 

@@ -195,6 +195,29 @@ import T2SCore
         }
     }
 
+    /// Loading suspends while the eight `.mlpackage` stages compile, and the actor is released
+    /// across that suspension — so the wiring the app is headed for, `preload()` off the playback
+    /// path and a render on play, arrives at a half-loaded engine twice. Both have to wait on the
+    /// one compile: loading twice would build eight more compute plans (206 s on an A13's first
+    /// launch after install) and hold two copies of the 119 MB until the first was dropped.
+    ///
+    /// `loadCount` is the only way to see the difference from outside — both spellings return the
+    /// same audio, one of them several minutes later.
+    @Test(.enabled(if: KokoroTestSupport.haveCoreMLFiles))
+    func loadsTheStagesOnceWhenAPreloadAndARenderArriveTogether() async throws {
+        let engine = try Self.engineWithRealResources()
+
+        async let preloaded: Void = engine.preload()
+        async let rendered = engine.synthesize(.init(spoken: "Hello there.", voiceID: Self.voiceID("af_heart")))
+        try await preloaded
+        let result = try await rendered
+
+        let loadCount = await engine.loadCount
+        #expect(loadCount == 1)
+        #expect(result.audio.duration > 0.3)
+        #expect(Self.rms(result.audio.samples) > 0.01)
+    }
+
     /// The app's segmenter allows 300 characters of source, which is more speech than the pipeline's
     /// largest bucket holds — so the engine splits the utterance at Misaki-token boundaries and
     /// concatenates the pieces. The seam has to be invisible in the timings: one timing per word, in

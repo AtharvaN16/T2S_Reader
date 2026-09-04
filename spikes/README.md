@@ -65,6 +65,58 @@ Gotchas seen on 2026-09-03:
   counts twice. `MIFreeProfileValidatedAppTracker … ApplicationVerificationFailed` means remove one.
 - `xcodebuild -destination id=…` wants the UDID (`00008030-…`), `devicectl` the CoreDevice UUID.
 
+### Core ML arm (Plan 0 Task 8, §7.3 addendum)
+
+A second engine beside the MLX one, for the question the A13 raised: kokoro-ios/MLX traps in Metal's
+steel GEMM kernels on Apple GPU family 6, so can *any* Kokoro runtime drive the owner's iPhone 11 Pro?
+The runtime is `mattmireles/kokoro-coreml`'s low-level `KokoroPipeline` package (Apache-2.0, iOS 16+,
+no dependencies): Kokoro token IDs in, PCM plus per-input-token duration frames out, four fp16 Core ML
+stages plus Swift/Accelerate DSP. `CoreMLBench.swift` does the front half itself (MisakiSwift 1.0.6 →
+Kokoro's 178-symbol vocab → token IDs), so both arms phonemize identically.
+
+```bash
+scripts/fetch-kokoro-coreml.sh          # ~178 MB of models + the pinned source clone; idempotent
+cd spikes/SpikeHarness && xcodegen generate
+```
+
+The script must run **before** `xcodegen generate`: it stages `Resources/CoreML/` (whose `.mlpackage`
+directories Xcode compiles to `.mlmodelc` at the bundle root) and clones the package into
+`.deps/kokoro-coreml` — the repo root has no `Package.swift`, the package is its `swift/` subdirectory,
+and SwiftPM cannot consume a subdirectory by URL. Both directories are git-ignored.
+
+Launch environment:
+
+| Variable | Values | Meaning |
+|---|---|---|
+| `SPIKE_ENGINE` | `mlx` (default), `coreml`, `mlxcpu` | which runtime the run measures |
+| `SPIKE_COREML_POLICY` | `default`, `cpuOnly` | per-stage Core ML compute units, `coreml` only |
+
+`default` is the upstream SDK's shipped iPhone policy (`KokoroComputePolicy.gistDefault`): duration on
+the CPU — the padded duration graph can spend *minutes* in MPSGraph specialization otherwise —
+f0ntrain and generator on CPU+GPU, decoder-pre on CPU+ANE. `cpuOnly` puts every stage on the CPU.
+`mlxcpu` is the control: the MLX arm with `MLX.Device` forced to `.cpu`, behind a 120-second
+per-sentence watchdog that logs `sentence.timeout` and stops the bench.
+
+The A13 run (phone unlocked, on USB):
+
+```bash
+xcrun devicectl device process launch --device <id> --terminate-existing \
+  -e '{"SPIKE_ENGINE":"coreml","SPIKE_COREML_POLICY":"default","SPIKE_AUTORUN_SECONDS":"300","SPIKE_AUTORUN_RATE":"0"}' \
+  com.t2s.spike.harness
+```
+
+Extra CSV columns on the Core ML arm's `sentence` rows: `engine`, `policy`, `bucket`, `tokens`,
+`frames`, `g2p`, `pipeline` (the pipeline's own token-IDs-in-to-PCM-out boundary, which is what the
+upstream iPhone 12 Pro / A17 Pro numbers measure), `rtfPipeline`, and `st_*` per stage
+(`duration, align, matrix, f0ntrain, pad, decoderPre, hnsf, generator, trim`). `synth`/`rtf` stay
+G2P-inclusive so they compare with the MLX arm directly. `timing` rows are per Misaki **word**, folded
+from `tokenDurationFrames`; one `frames.check` row per WAV sentence records
+`frames × samplesPerDurationFrame` against the real sample count, so the 25 ms-vs-12.5 ms
+frame-to-seconds question is settled from the audio rather than from a constant.
+
+Only the 15-second bucket and the 256-token duration model are staged, so sentences longer than
+about 15 s of audio or 256 tokens are out of range (the corpus is well inside both).
+
 ### Model files (not committed)
 
 Two files go in `spikes/SpikeHarness/Resources/` and are gitignored:

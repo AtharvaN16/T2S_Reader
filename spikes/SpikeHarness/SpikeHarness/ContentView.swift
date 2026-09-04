@@ -1,7 +1,12 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var bench: SynthBench?
+    @State private var bench: Bench?
+    /// `SPIKE_ENGINE=mlx|mlxcpu|coreml`; read once at launch so the UI and the CSV agree.
+    private let engine = SpikeEngine.fromEnvironment()
+    /// `SPIKE_COREML_POLICY=default|cpuOnly` — per-stage Core ML compute units.
+    private let coreMLPolicy = CoreMLStagePolicy.named(
+        ProcessInfo.processInfo.environment["SPIKE_COREML_POLICY"] ?? "default")
     @State private var running = false
     @State private var loading = false
     @State private var rate = 0.0
@@ -13,6 +18,9 @@ struct ContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text("Spike Harness").font(.largeTitle.bold())
+            Text(engine == .coreml ? "engine: coreml (\(coreMLPolicy.name))" : "engine: \(engine.rawValue)")
+                .font(.system(.subheadline, design: .monospaced))
+                .foregroundStyle(.secondary)
 
             Picker("Rate", selection: $rate) {
                 Text("flat out").tag(0.0)
@@ -61,14 +69,17 @@ struct ContentView: View {
               !running, !loading else { return }
         rate = env["SPIKE_AUTORUN_RATE"].flatMap(Double.init) ?? 0
         backgroundAudio = env["SPIKE_BACKGROUND_AUDIO"] == "1"     // §7.2: then lock the screen
-        SpikeLog.shared.record("autorun", ["seconds": "\(seconds)", "rate": "\(rate)", "backgroundAudio": "\(backgroundAudio)"])
-        start()
-        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
-            if running { stop() }
-        }
+        SpikeLog.shared.record("autorun", [
+            "seconds": "\(seconds)", "rate": "\(rate)", "backgroundAudio": "\(backgroundAudio)",
+            "engine": engine.rawValue, "policy": engine == .coreml ? coreMLPolicy.name : "",
+        ])
+        // The clock starts when the bench does, not when the app launches: the Core ML arm's four
+        // models take minutes to load on an A13, and a launch-relative timer fires during the load
+        // and then never stops the run.
+        start(stopAfter: seconds)
     }
 
-    private func start() {
+    private func start(stopAfter: Double? = nil) {
         if backgroundAudio, silentPlayer == nil {
             do {
                 let player = SilentPlayer()
@@ -83,11 +94,18 @@ struct ContentView: View {
         loading = true
         status = "Loading model…"
         let cycle = BenchCycle(playbackRate: rate)
+        let engine = self.engine
+        let coreMLPolicy = self.coreMLPolicy
         DispatchQueue.global(qos: .userInitiated).async {
-            let bench: SynthBench
+            let bench: Bench
             do {
-                bench = try SynthBench()
+                switch engine {
+                case .mlx: bench = try SynthBench()
+                case .mlxcpu: bench = try SynthBench(cpuOnly: true)
+                case .coreml: bench = try CoreMLBench(policy: coreMLPolicy)
+                }
             } catch {
+                SpikeLog.shared.record("model.failed", ["engine": engine.rawValue, "error": "\(error)"])
                 DispatchQueue.main.async {
                     status = "Load failed: \(error.localizedDescription)"
                     loading = false
@@ -98,8 +116,14 @@ struct ContentView: View {
                 self.bench = bench
                 loading = false
                 running = true
-                status = "Running (\(bench.voiceName))"
+                status = "Running \(engine.rawValue) (\(bench.voiceName))"
                 UIApplication.shared.isIdleTimerDisabled = true      // Auto-Lock would suspend a foreground run
+                if let stopAfter {
+                    SpikeLog.shared.record("autorun.armed", ["seconds": "\(stopAfter)"])
+                    DispatchQueue.main.asyncAfter(deadline: .now() + stopAfter) {
+                        if running { stop() }
+                    }
+                }
             }
             bench.run(sentences: Corpus.sentences, cycle: cycle) { p in
                 DispatchQueue.main.async { progress = p }

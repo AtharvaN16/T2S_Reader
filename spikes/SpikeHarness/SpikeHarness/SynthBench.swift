@@ -19,8 +19,26 @@ struct BenchProgress: Sendable {
     var error = ""
 }
 
+/// What `ContentView` drives, so the MLX and Core ML arms are interchangeable behind `SPIKE_ENGINE`.
+protocol Bench: AnyObject {
+    var voiceName: String { get }
+    func run(sentences: [String], cycle: BenchCycle, onProgress: @escaping @Sendable (BenchProgress) -> Void)
+    func cancel()
+}
+
+/// Which runtime the run measures. `mlxcpu` is the control from the pre-A14 desk research: the same
+/// MLX arm with MLX's default device forced to `.cpu`, to see whether the A13 can run Kokoro at all
+/// when the GPU path is out. Default stays `mlx` so the existing protocol runs are unchanged.
+enum SpikeEngine: String {
+    case mlx, mlxcpu, coreml
+
+    static func fromEnvironment() -> SpikeEngine {
+        SpikeEngine(rawValue: ProcessInfo.processInfo.environment["SPIKE_ENGINE"] ?? "") ?? .mlx
+    }
+}
+
 /// Loops Kokoro over a corpus and logs one `sentence` row per synthesis.
-final class SynthBench: @unchecked Sendable {
+final class SynthBench: Bench, @unchecked Sendable {
     enum Failure: LocalizedError {
         case missingModel, missingVoices, noSuchVoice(String)
         var errorDescription: String? {
@@ -33,11 +51,19 @@ final class SynthBench: @unchecked Sendable {
     }
 
     let voiceName: String
+    /// `mlxcpu`: force MLX's default device to the CPU. On an A13 the GPU path traps inside Metal's
+    /// steel GEMM kernels (Apple GPU family 7), so this is the only way MLX can be measured there.
+    let cpuOnly: Bool
+    /// A CPU MLX call has no published timing and could take minutes; past this the bench stops.
+    static let cpuWatchdogSeconds = 120.0
     private let tts: KokoroTTS
     private let voice: MLXArray
     private var stopped = false
 
-    init(voiceName: String = "af_heart") throws {
+    init(voiceName: String = "af_heart", cpuOnly: Bool = false) throws {
+        self.cpuOnly = cpuOnly
+        // Set before the weights are loaded: MLX resolves its default device once, lazily.
+        if cpuOnly { MLX.Device.setDefault(device: .cpu) }
         guard let modelURL = Bundle.main.url(forResource: "kokoro-v1_0", withExtension: "safetensors") else {
             throw Failure.missingModel
         }
@@ -51,6 +77,7 @@ final class SynthBench: @unchecked Sendable {
         voice = embedding
         self.voiceName = voiceName
         SpikeLog.shared.record("model.loaded", [
+            "engine": cpuOnly ? "mlxcpu" : "mlx",
             "seconds": String(format: "%.2f", Date().timeIntervalSince(t0)),
             "footprintMB": "\(Self.footprintMB())",
             "voices": "\(voices.count)",
@@ -64,6 +91,7 @@ final class SynthBench: @unchecked Sendable {
     func run(sentences: [String], cycle: BenchCycle, onProgress: @escaping @Sendable (BenchProgress) -> Void) {
         stopped = false
         SpikeLog.shared.record("bench.start", [
+            "engine": cpuOnly ? "mlxcpu" : "mlx",
             "rate": "\(cycle.playbackRate)", "voice": voiceName, "sentences": "\(sentences.count)",
         ])
         var i = 0
@@ -74,10 +102,33 @@ final class SynthBench: @unchecked Sendable {
             var samples: [Float] = []
             var tokens: [MToken]? = nil
             var errorText = ""
-            do {
-                (samples, tokens) = try tts.generateAudio(voice: voice, language: .enUS, text: text)
-            } catch {
-                errorText = "\(error)"
+            if cpuOnly {
+                // A CPU MLX synthesis is unbounded in principle (no kernel fusion on iOS at all), so
+                // it runs on its own thread behind a watchdog: one row either way and the run stops.
+                switch Self.withWatchdog(seconds: Self.cpuWatchdogSeconds, {
+                    try MLX.Device.withDefaultDevice(.cpu) {
+                        try self.tts.generateAudio(voice: self.voice, language: .enUS, text: text)
+                    }
+                }) {
+                case .value(let out):
+                    (samples, tokens) = out
+                case .failed(let error):
+                    errorText = "\(error)"
+                case .timedOut:
+                    SpikeLog.shared.record("sentence.timeout", [
+                        "engine": "mlxcpu", "i": "\(i)",
+                        "seconds": String(format: "%.0f", Self.cpuWatchdogSeconds),
+                        "chars": "\(text.utf16.count)",
+                    ])
+                    errorText = "timed out after \(Int(Self.cpuWatchdogSeconds)) s"
+                    stopped = true
+                }
+            } else {
+                do {
+                    (samples, tokens) = try tts.generateAudio(voice: voice, language: .enUS, text: text)
+                } catch {
+                    errorText = "\(error)"
+                }
             }
             let synthSec = Date().timeIntervalSince(t0)
             let audioSec = Double(samples.count) / Double(KokoroTTS.Constants.samplingRate)
@@ -86,6 +137,7 @@ final class SynthBench: @unchecked Sendable {
             let thermal = ProcessInfo.processInfo.thermalState
 
             SpikeLog.shared.record("sentence", [
+                "engine": cpuOnly ? "mlxcpu" : "mlx",
                 "i": "\(i)",
                 "chars": "\(text.utf16.count)",
                 "synth": String(format: "%.3f", synthSec),
@@ -133,7 +185,32 @@ final class SynthBench: @unchecked Sendable {
             }
             i += 1
         }
-        SpikeLog.shared.record("bench.stop", ["iterations": "\(i)"])
+        SpikeLog.shared.record("bench.stop", ["engine": cpuOnly ? "mlxcpu" : "mlx", "iterations": "\(i)"])
+    }
+
+    enum WatchdogOutcome<T> {
+        case value(T)
+        case failed(Error)
+        case timedOut
+    }
+
+    /// Written by the worker thread before `signal()`, read only after `wait()` returns success.
+    private final class WatchdogBox<T>: @unchecked Sendable {
+        var value: WatchdogOutcome<T> = .timedOut
+    }
+
+    /// Runs `work` on its own thread and gives up waiting after `seconds`. A timed-out thread is
+    /// left running — MLX offers no cancellation — but the bench stops, so it is the last one.
+    static func withWatchdog<T>(seconds: Double, _ work: @escaping () throws -> T) -> WatchdogOutcome<T> {
+        let box = WatchdogBox<T>()
+        let done = DispatchSemaphore(value: 0)
+        let thread = Thread {
+            do { box.value = .value(try work()) } catch { box.value = .failed(error) }
+            done.signal()
+        }
+        thread.stackSize = 4 << 20
+        thread.start()
+        return done.wait(timeout: .now() + seconds) == .success ? box.value : .timedOut
     }
 
     static func footprintMB() -> Int {

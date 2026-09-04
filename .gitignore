@@ -18,6 +18,10 @@ spikes/SpikeHarness/Resources/*.npz
 App/Resources/Kokoro/*.safetensors
 App/Resources/Kokoro/*.npz
 
+# Core ML spike arm — scripts/fetch-kokoro-coreml.sh installs both (models ~178 MB, source clone)
+spikes/SpikeHarness/Resources/CoreML/
+spikes/SpikeHarness/.deps/
+
 # macOS
 .DS_Store
 

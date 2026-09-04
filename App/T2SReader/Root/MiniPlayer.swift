@@ -14,10 +14,15 @@ struct MiniPlayer: View {
         if let shown {
             HStack(spacing: 12) {
                 Artwork(relativePath: shown.document.coverImagePath, paths: env.paths, size: 36, radius: Spacing.artworkSmall)
-                Text(shown.document.title)
-                    .typeRole(.rowTitle)
-                    .lineLimit(1)
-                    .foregroundStyle(Tokens.ink)
+                Button(action: onExpand) {
+                    Text(shown.document.title)
+                        .typeRole(.rowTitle)
+                        .lineLimit(1)
+                        .foregroundStyle(Tokens.ink)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Now playing: \(shown.document.title)")
+                .accessibilityHint("Opens the player")
                 Spacer(minLength: 8)
                 Button {
                     Task { await togglePlay(shown) }

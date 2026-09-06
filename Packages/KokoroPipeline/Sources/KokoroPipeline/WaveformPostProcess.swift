@@ -26,9 +26,10 @@ public func suppressPunctuationTokenAudio(
     inputIds: [Int32],
     predDur: [Int],
     samplesPerDurationFrame: Int = PipelineConstants.samplesPerDurationFrame,
-    fadeSamples: Int = PipelineConstants.punctuationFadeSamples
+    fadeSamples: Int = PipelineConstants.punctuationFadeSamples,
+    suppressedTokenIds: Set<Int32> = KokoroVocabulary.silentPunctuationTokenIds
 ) -> [Float] {
-    guard !audio.isEmpty, samplesPerDurationFrame > 0 else { return audio }
+    guard !audio.isEmpty, samplesPerDurationFrame > 0, !suppressedTokenIds.isEmpty else { return audio }
     let tokenCount = min(inputIds.count, predDur.count)
     guard tokenCount > 0 else { return audio }
     let alignedInputIds = Array(inputIds.prefix(tokenCount))
@@ -40,8 +41,7 @@ public func suppressPunctuationTokenAudio(
         let durationFrames = max(0, alignedPredDur[tokenIndex])
         defer { frameStart += durationFrames }
 
-        guard durationFrames > 0,
-              shouldSuppressPunctuationSpan(inputIds: alignedInputIds, tokenIndex: tokenIndex) else {
+        guard durationFrames > 0, suppressedTokenIds.contains(alignedInputIds[tokenIndex]) else {
             continue
         }
 
@@ -55,14 +55,6 @@ public func suppressPunctuationTokenAudio(
         )
     }
     return result
-}
-
-private func shouldSuppressPunctuationSpan(inputIds: [Int32], tokenIndex: Int) -> Bool {
-    // Punctuation tokens only. Whitespace spans — including whitespace next to
-    // punctuation — carry real speech (word onsets and phrase-final decays)
-    // and must never be silenced. See the doc comment on
-    // suppressPunctuationTokenAudio for the 2026-07-14 measurement.
-    KokoroVocabulary.silentPunctuationTokenIds.contains(inputIds[tokenIndex])
 }
 
 private func fadeToSilence(

@@ -2,9 +2,13 @@ import AVFoundation
 import Foundation
 import T2SCore
 
-/// AAC ≈ 32 kbps mono 24 kHz ≈ 14 MB/hour (spec §3.4).
+/// AAC 64 kbps mono 24 kHz ≈ 33.6 MB/hour (spec §3.4). Was 32 kbps (≈18.9 MB/hour) until the first
+/// listen on the iPhone 11 Pro (2026-09-05) heard it as "robotic" and "underwater" — every second
+/// played back goes through this cache, never the render itself. Measured against the render: 32
+/// kbps 13 dB SNR, 48 kbps 19 dB, 64 kbps 24 dB; the encoder refuses 96 kbps at this sample
+/// rate/channel count (`spikes/findings/2026-09-05-coreml-audio-quality.md`).
 public struct AACCodec: T2SCore.AudioCodec {
-    public let identifier = "aac-32k-mono-24k"
+    public let identifier = "aac-64k-mono-24k"
     public init() {}
 
     public func encode(_ pcm: PCMAudio) throws -> Data {
@@ -21,7 +25,7 @@ public struct AACCodec: T2SCore.AudioCodec {
             AVFormatIDKey: kAudioFormatMPEG4AAC,
             AVSampleRateKey: pcm.sampleRate,
             AVNumberOfChannelsKey: 1,
-            AVEncoderBitRateKey: 32_000,
+            AVEncoderBitRateKey: 64_000,
         ]
         let file = try AVAudioFile(forWriting: url, settings: settings)
         guard let format = AVAudioFormat(standardFormatWithSampleRate: pcm.sampleRate, channels: 1),

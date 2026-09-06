@@ -24,7 +24,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/../Packages/T2SKokoro"
 
-rm -rf "${TMPDIR:-/tmp}"/kokoro_*.mlmodelc
+# Core ML's own runtime cache (distinct from the $TMPDIR compile output below): it caches ~0.9 GB
+# of compiled graphs per fresh model path under a test bundle and never reclaims it on its own —
+# it filled the disk three times on 2026-09-05. Swept both before and after, so neither this run's
+# own accumulation nor an earlier run's leftovers can starve the run that follows.
+e5_bundle_cache="$HOME/Library/Caches/com.apple.dt.xctest.tool/com.apple.e5rt.e5bundlecache"
+rm -rf "${TMPDIR:-/tmp}"/kokoro_*.mlmodelc "$e5_bundle_cache"
 
 set +e
 xcodebuild test -scheme T2SKokoro -destination 'platform=macOS' \
@@ -32,4 +37,6 @@ xcodebuild test -scheme T2SKokoro -destination 'platform=macOS' \
   -derivedDataPath .build/DerivedData "$@" 2>&1 \
   | grep -E "error:|warning:|Suite |Test run|Executed|TEST (SUCCEEDED|FAILED)|Testing failed" \
   | grep -Ev "/checkouts/.*: warning:"
-exit "${PIPESTATUS[0]}"
+status="${PIPESTATUS[0]}"
+rm -rf "${TMPDIR:-/tmp}"/kokoro_*.mlmodelc "$e5_bundle_cache"
+exit "$status"

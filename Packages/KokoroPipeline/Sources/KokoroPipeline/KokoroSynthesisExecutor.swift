@@ -28,6 +28,9 @@ public struct KokoroSynthesisRequest {
     public let seed: UInt64
     public let warmModelsBeforeTiming: Bool
     public let bucketDurationOverrideSeconds: Double?
+    /// Which punctuation spans ``suppressPunctuationTokenAudio`` fades to silence after the trim.
+    /// Upstream's default is every punctuation token; see ``PunctuationSuppression``.
+    public let punctuationSuppression: PunctuationSuppression
 
     public init(
         inputIds: [Int32],
@@ -36,7 +39,8 @@ public struct KokoroSynthesisRequest {
         speed: Float = 1.0,
         seed: UInt64 = 42,
         warmModelsBeforeTiming: Bool = false,
-        bucketDurationOverrideSeconds: Double? = nil
+        bucketDurationOverrideSeconds: Double? = nil,
+        punctuationSuppression: PunctuationSuppression = .allPunctuation
     ) {
         self.inputIds = inputIds
         self.attentionMask = attentionMask
@@ -45,6 +49,32 @@ public struct KokoroSynthesisRequest {
         self.seed = seed
         self.warmModelsBeforeTiming = warmModelsBeforeTiming
         self.bucketDurationOverrideSeconds = bucketDurationOverrideSeconds
+        self.punctuationSuppression = punctuationSuppression
+    }
+}
+
+/// How much of the waveform ``suppressPunctuationTokenAudio`` is allowed to silence.
+///
+/// Vendored addition (t2s_reader, 2026-09-05). Upstream zeroes the duration span of every
+/// punctuation token, quotation marks and parentheses included, with a 5 ms fade on each side.
+/// Those spans are near-silent in the PyTorch reference, but the Core ML decoder does not place its
+/// audio exactly where the duration model predicted, so the zeroing lands on running speech at every
+/// comma and every quotation mark of a novel. The engine chooses; the pipeline's default is upstream's.
+public enum PunctuationSuppression: Sendable, Hashable {
+    /// Upstream behaviour: every id in ``KokoroVocabulary/silentPunctuationTokenIds``.
+    case allPunctuation
+    /// Only the spans of sentence-final marks — `.` `!` `?` `…` — where a real pause is predicted.
+    case sentenceFinal
+    /// Leave the waveform as the generator produced it (the PyTorch reference's behaviour).
+    case none
+
+    /// The token ids whose spans are faded to silence.
+    public var tokenIds: Set<Int32> {
+        switch self {
+        case .allPunctuation: KokoroVocabulary.silentPunctuationTokenIds
+        case .sentenceFinal: KokoroVocabulary.sentenceFinalPunctuationTokenIds
+        case .none: []
+        }
     }
 }
 
@@ -367,7 +397,8 @@ public func executeKokoroSynthesis(
     let audio = suppressPunctuationTokenAudio(
         rawAudio,
         inputIds: Array(request.inputIds.prefix(predDur.count)),
-        predDur: predDur
+        predDur: predDur,
+        suppressedTokenIds: request.punctuationSuppression.tokenIds
     )
     let t17 = CFAbsoluteTimeGetCurrent()
     timings.trim = t17 - t16

@@ -91,6 +91,30 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: expected.path))
     }
 
+    /// A codec change (spec §3.7.4) lands in a new namespace; the previous codec's directory must
+    /// not sit on disk forever (`AACCodec` moved from 32 kbps to 64 kbps on 2026-09-05,
+    /// `spikes/findings/2026-09-05-coreml-audio-quality.md`).
+    @Test func removesStaleCodecDirectoriesOnInit() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("t2s-store-\(UUID().uuidString)")
+        let staleDir = dir.appendingPathComponent("aac-32k-mono-24k", isDirectory: true)
+        try FileManager.default.createDirectory(at: staleDir, withIntermediateDirectories: true)
+        try Data("stale".utf8).write(to: staleDir.appendingPathComponent("leftover.audio"))
+
+        // The current codec's own directory, as if from an earlier launch — the sweep must never
+        // touch it.
+        let currentDir = dir.appendingPathComponent("pcm-f32le", isDirectory: true)
+        try FileManager.default.createDirectory(at: currentDir, withIntermediateDirectories: true)
+        let keptFile = currentDir.appendingPathComponent("keep.audio")
+        try Data("keep".utf8).write(to: keptFile)
+
+        let s = FileAudioStore(directory: dir, codec: RawPCMCodec(), capacityBytes: 10_000)
+
+        #expect(!FileManager.default.fileExists(atPath: staleDir.path))
+        #expect(FileManager.default.fileExists(atPath: keptFile.path))
+        try await s.write(pcm(1), for: key(1))
+        #expect(await s.contains(key(1)))
+    }
+
     @Test func fileStoreIgnoresForeignFilesOnScan() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("t2s-store-\(UUID().uuidString)")
         let codecDir = dir.appendingPathComponent("pcm-f32le", isDirectory: true)

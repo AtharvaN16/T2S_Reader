@@ -34,4 +34,25 @@ public enum KokoroVocabulary {
         14, // “
         15, // ”
     ]
+
+    /// The subset of ``silentPunctuationTokenIds`` that ends a sentence, where the duration model
+    /// predicts a real pause. Vendored addition (t2s_reader): the app's
+    /// ``PunctuationSuppression/sentenceFinal`` policy.
+    public static let sentenceFinalPunctuationTokenIds: Set<Int32> = [
+        4,  // .
+        5,  // !
+        6,  // ?
+        10, // …
+    ]
+
+    /// The subset of ``silentPunctuationTokenIds`` that ends a clause without ending the sentence.
+    /// Vendored addition (t2s_reader): the app's piece cutter (`KokoroCoreMLEngine`) prefers to
+    /// close a piece here when no sentence-final boundary is available before its token cap —
+    /// second-best after a full stop, because the duration model still predicts a real pause.
+    public static let clauseBoundaryPunctuationTokenIds: Set<Int32> = [
+        1, // ;
+        2, // :
+        3, // ,
+        9, // —
+    ]
 }

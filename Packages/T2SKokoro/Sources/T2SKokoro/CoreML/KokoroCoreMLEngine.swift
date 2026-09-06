@@ -35,14 +35,44 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// bucket selector silently falls back to the 15-second bucket and the executor clamps the audio
     /// to it: truncated speech with no signal. So a long utterance is split into consecutive pieces
     /// instead. 176 ids frame to 178, well inside 256, and speak for about 13 seconds, inside the
-    /// 15-second bucket. Most sentences are one piece; the seam is a prosody nit on the longest ones.
+    /// 15-second bucket. Most sentences are one piece; the seam is a prosody nit on the longest ones
+    /// — ``pieces(ids:owners:words:)`` cuts at a sentence or clause boundary before the cap when one
+    /// is available, and a piece whose predicted audio still overflows its bucket is split and
+    /// rendered in two rather than lost to 200 ms of silence
+    /// (`spikes/findings/2026-09-05-coreml-audio-quality.md`).
     static let maxPieceTokenCount = 176
 
     /// Misaki's marker for a word it could not transcribe. Passed to `EnglishG2P` explicitly so
     /// ``phonemeWalk(_:)`` provably reproduces the string `phonemize` returns.
     static let unknownPhoneme = "❓"
 
+    /// The post-processing choices the engine makes on the pipeline's output. Both exist because
+    /// the first listen on the iPhone 11 Pro (2026-09-05) heard cut-off words and abrupt joins;
+    /// `spikes/findings/2026-09-05-coreml-audio-quality.md` measures each setting and is why
+    /// ``default`` chooses values other than this initializer's own (upstream's).
+    public struct Options: Sendable, Hashable {
+        /// Which punctuation spans are faded to silence after synthesis. Upstream's default silences
+        /// every punctuation token's span, quotation marks included; the app ships `.none` — 25 of
+        /// 45 zeroed spans measured held ≥10 ms of audible speech, worst case 75 ms at peak 0.75 on
+        /// an exclamation mark.
+        public var punctuationSuppression: PunctuationSuppression
+        /// Whether consecutive pieces of one utterance are joined with a short equal-power crossfade
+        /// (`PcmJoiner`, 5 ms) instead of butted together. The app ships `true`: a long sentence cut
+        /// at a word boundary and butted to the next piece left an audible seam.
+        public var crossfadePieces: Bool
+
+        public init(punctuationSuppression: PunctuationSuppression = .allPunctuation, crossfadePieces: Bool = false) {
+            self.punctuationSuppression = punctuationSuppression
+            self.crossfadePieces = crossfadePieces
+        }
+
+        /// What the app ships with — not this initializer's own defaults, which are upstream's. See
+        /// the property docs above and `spikes/findings/2026-09-05-coreml-audio-quality.md`.
+        public static let `default` = Options(punctuationSuppression: .none, crossfadePieces: true)
+    }
+
     private let resources: KokoroCoreMLResources.Located
+    public private(set) var options: Options
     private var loaded: Loaded?
     /// The stage compile in flight, if one is. See ``compiledStages()`` for why it is shared.
     private var compiling: Task<[String: URL], Error>?
@@ -67,8 +97,16 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         let linearBias: Float
     }
 
-    public init(resources: KokoroCoreMLResources.Located) {
+    public init(resources: KokoroCoreMLResources.Located, options: Options = .default) {
         self.resources = resources
+        self.options = options
+    }
+
+    /// Changes the post-processing for every render from here on. Internal, for the audio probe:
+    /// it renders one passage under several settings, and a second engine would mean a second copy
+    /// of the loaded stages. The app decides its options once, at construction.
+    func setOptions(_ options: Options) {
+        self.options = options
     }
 
     /// Loads the eight stages, compiling them first when the staging is not precompiled, and the
@@ -172,17 +210,32 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         let (phonemes, ownersByCharacter) = Self.phonemeWalk(words)
         let tokenization = tokenizer.tokenize(phonemes: phonemes, ownersByCharacter: ownersByCharacter)
 
+        let pieces = try Self.pieces(ids: tokenization.ids, owners: tokenization.owners, words: words)
         var samples: [Float] = []
         var folds: [KokoroCoreMLTimingFold.Piece] = []
-        for piece in try Self.pieces(ids: tokenization.ids, owners: tokenization.owners, words: words) {
+        for (index, piece) in pieces.enumerated() {
             try Task.checkCancellation()
-            let rendered = try render(piece, tokenizer: tokenizer, loaded: loaded)
-            folds.append(KokoroCoreMLTimingFold.Piece(
-                owners: piece.owners,
-                frames: rendered.tokenDurationFrames,
-                offsetSeconds: Double(samples.count) / Double(PipelineConstants.sampleRate)
-            ))
-            samples += rendered.audio
+            // A piece whose predicted audio overflows its bucket is split and rendered in halves
+            // rather than losing the sentence to 200 ms of silence (spec §6; Task 3,
+            // `spikes/findings/2026-09-05-coreml-audio-quality.md`), so one piece from `pieces` may
+            // become several rendered pieces here.
+            let rendered = try renderWithSplitting(
+                piece, isFinal: index == pieces.count - 1, words: words, tokenizer: tokenizer, loaded: loaded
+            )
+            for (subPiece, result) in rendered {
+                // With a crossfade the join overlaps the last 5 ms of the previous piece, so the
+                // piece's audio starts that much earlier than a plain append would put it.
+                let joined = options.crossfadePieces && !samples.isEmpty
+                    ? PcmJoiner.join(segments: [samples, result.audio], sampleRate: PipelineConstants.sampleRate)
+                    : samples + result.audio
+                let offsetSamples = joined.count - result.audio.count
+                folds.append(KokoroCoreMLTimingFold.Piece(
+                    owners: subPiece.owners,
+                    frames: result.tokenDurationFrames,
+                    offsetSeconds: Double(offsetSamples) / Double(PipelineConstants.sampleRate)
+                ))
+                samples = joined
+            }
         }
 
         guard !samples.isEmpty, samples.allSatisfy(\.isFinite) else { throw KokoroCoreMLError.emptyAudio }
@@ -218,7 +271,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                     attentionMask: Array(repeating: 1, count: framed.count)
                         + Array(repeating: 0, count: padding),
                     refS: tokenizer.refS(phonemeUTF16Count: piece.phonemeUTF16Count),
-                    speed: 1.0
+                    speed: 1.0,
+                    punctuationSuppression: options.punctuationSuppression
                 ),
                 modelProvider: loaded.models,
                 linearWeights: loaded.linearWeights,
@@ -243,6 +297,94 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             )
         }
         return result
+    }
+
+    /// Renders `piece` and, when the pipeline predicted more audio than the piece's bucket holds
+    /// (``KokoroCoreMLError/audioTruncated``), splits it at the boundary nearest its middle — the
+    /// same preference order ``pieces(ids:owners:words:)`` uses at the cap: a sentence ending, else
+    /// a clause boundary, else any group boundary — and renders each half in turn, instead of
+    /// losing the sentence to 200 ms of silence (spec §6;
+    /// `spikes/findings/2026-09-05-coreml-audio-quality.md`). A half that overflows again is split
+    /// again; the recursion is bounded by `piece`'s group count, since a piece that is already a
+    /// single group still throws on overflow — there is nothing left to cut. `isFinal` is whether
+    /// `piece` is the whole utterance's last piece, so a split second half can still inherit the
+    /// token range that charges trailing zero-id tokens to the last piece (see
+    /// ``pieces(ids:owners:words:)``).
+    ///
+    /// The cutting rule lives in ``renderSplittingOnOverflow(_:isFinal:words:render:)``, which this
+    /// calls with a closure over ``render(_:tokenizer:loaded:)``. That closure only ever runs
+    /// synchronously, on this call's own stack, and never outlives it — but Swift's actor-isolation
+    /// checker cannot see that for a closure passed as an argument, and flags `loaded` (reused on
+    /// every iteration of `synthesize`'s loop) as unsafe to capture repeatedly. Calling `render`
+    /// directly here, rather than through the shared closure-based helper, keeps the production
+    /// path a plain same-actor call with no closure at all.
+    private func renderWithSplitting(
+        _ piece: Piece, isFinal: Bool, words: [MToken], tokenizer: KokoroTokenizer, loaded: Loaded
+    ) throws -> [(piece: Piece, result: KokoroPipelineResult)] {
+        do {
+            return [(piece, try render(piece, tokenizer: tokenizer, loaded: loaded))]
+        } catch let error as KokoroCoreMLError {
+            guard case .audioTruncated = error else { throw error }
+            let groups = Self.groups(ids: piece.ids, owners: piece.owners)
+            guard groups.count > 1 else { throw error }
+            let cutIndex = Self.middleCutIndex(in: groups)
+            let (first, second) = Self.splitPiece(groups: groups, at: cutIndex, isFinal: isFinal, words: words)
+            return try renderWithSplitting(first, isFinal: false, words: words, tokenizer: tokenizer, loaded: loaded)
+                + (try renderWithSplitting(second, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: loaded))
+        }
+    }
+
+    /// The same recursion as ``renderWithSplitting(_:isFinal:words:tokenizer:loaded:)``, over an
+    /// injected render call instead of the real pipeline. `static`, and so not actor-isolated: it
+    /// touches no engine state — only `piece`'s own ids and owners, plus `words` for the halves'
+    /// `phonemeUTF16Count` — so a test can call it directly, on any machine, with a fake `renderOne`
+    /// that makes the first attempt throw ``KokoroCoreMLError/audioTruncated`` and asserts the
+    /// halves that follow, without a real Core ML stage or any actor-isolation ceremony.
+    static func renderSplittingOnOverflow(
+        _ piece: Piece, isFinal: Bool, words: [MToken], render renderOne: RenderPiece
+    ) throws -> [(piece: Piece, result: KokoroPipelineResult)] {
+        do {
+            return [(piece, try renderOne(piece))]
+        } catch let error as KokoroCoreMLError {
+            guard case .audioTruncated = error else { throw error }
+            let groups = Self.groups(ids: piece.ids, owners: piece.owners)
+            guard groups.count > 1 else { throw error }
+            let cutIndex = Self.middleCutIndex(in: groups)
+            let (first, second) = Self.splitPiece(groups: groups, at: cutIndex, isFinal: isFinal, words: words)
+            return try renderSplittingOnOverflow(first, isFinal: false, words: words, render: renderOne)
+                + (try renderSplittingOnOverflow(second, isFinal: isFinal, words: words, render: renderOne))
+        }
+    }
+
+    /// Splits `piece` at `cutIndex` into its `groups` before and after: two new `Piece`s whose ids
+    /// and owners tile `piece`'s exactly, each with its own `phonemeUTF16Count` computed the same
+    /// way ``pieces(ids:owners:words:)`` computes a piece's — `extendToEnd` on the second half
+    /// preserves the charge to trailing zero-id tokens when `piece` was the whole utterance's last.
+    private static func splitPiece(
+        groups: [Group], at cutIndex: Int, isFinal: Bool, words: [MToken]
+    ) -> (first: Piece, second: Piece) {
+        let firstGroups = groups[0 ... cutIndex]
+        let secondGroups = groups[(cutIndex + 1)...]
+        let (first, _) = Self.piece(
+            from: firstGroups, firstToken: firstGroups.first?.token ?? 0, words: words, extendToEnd: false
+        )
+        let (second, _) = Self.piece(
+            from: secondGroups, firstToken: secondGroups.first?.token ?? 0, words: words, extendToEnd: isFinal
+        )
+        return (first, second)
+    }
+
+    /// How many pipeline ids `spoken` phonemizes to for `voice`, and the phonemized string itself —
+    /// what the segmenter's utterance length has to be calibrated against. Internal, for the audio
+    /// probe; it loads the G2P and the voice table but no Core ML stage.
+    func phonemization(of spoken: String, voice: String) throws -> (ids: Int, phonemes: String) {
+        guard let voiceURL = resources.voices[voice] else { throw KokoroCoreMLError.unknownVoice(voice) }
+        let tokenizer = try tokenizer(voice: voice, url: voiceURL)
+        let words = MLX.Device.withDefaultDevice(.cpu) {
+            g2p(british: voice.hasPrefix("b")).phonemize(text: spoken).1
+        }
+        let (phonemes, owners) = Self.phonemeWalk(words)
+        return (tokenizer.tokenize(phonemes: phonemes, ownersByCharacter: owners).ids.count, phonemes)
     }
 
     private func tokenizer(voice: String, url: URL) throws -> KokoroTokenizer {
@@ -291,6 +433,16 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         var phonemeUTF16Count = 0
     }
 
+    /// One piece's render call, as ``renderSplittingOnOverflow(_:isFinal:words:render:)`` takes it —
+    /// a plain closure, not `@Sendable`: that function is `static` (not actor-isolated), so nothing
+    /// calling it, including a test, ever crosses into the actor at all.
+    typealias RenderPiece = (Piece) throws -> KokoroPipelineResult
+
+    /// One Misaki token's ids plus the whitespace that follows it: the smallest unit a piece
+    /// boundary — at the cap, or at a later split of a piece that overflowed its bucket — may fall
+    /// between.
+    typealias Group = (token: Int, ids: [Int32], owners: [Int])
+
     /// The phonemized text and, for each of its `Character`s, the index of the Misaki token that
     /// contributed it — or ``KokoroCoreMLTimingFold/noOwner`` for the whitespace that follows a token.
     ///
@@ -319,17 +471,11 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         return (phonemes, ownersByCharacter)
     }
 
-    /// Cuts the utterance's ids into consecutive pieces of at most ``maxPieceTokenCount`` ids,
-    /// greedily and only between Misaki tokens: a token whose ids would push the current piece over
-    /// the cap starts the next one, and the whitespace ids after a token stay with it.
-    ///
-    /// Internal rather than private so the cut can be tested on synthetic ids, on a machine with no
-    /// model files: end to end this rule is only visible in an utterance long enough to need two
-    /// pipeline calls, which is a minute of Core ML per run.
-    static func pieces(ids: [Int32], owners: [Int], words: [MToken]) throws -> [Piece] {
-        // The ids of one Misaki token plus the whitespace that follows it: the smallest unit a piece
-        // boundary may fall between.
-        var groups: [(token: Int, ids: [Int32], owners: [Int])] = []
+    /// Groups `ids` by the Misaki token that contributed them: one Misaki token's ids plus the
+    /// whitespace ids that follow it make one group, so a piece boundary can only ever fall between
+    /// two groups, never inside one.
+    private static func groups(ids: [Int32], owners: [Int]) -> [Group] {
+        var groups: [Group] = []
         for (id, owner) in zip(ids, owners) {
             if owner != KokoroCoreMLTimingFold.noOwner, groups.last?.token != owner {
                 groups.append((owner, [], []))
@@ -340,19 +486,108 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             groups[groups.count - 1].ids.append(id)
             groups[groups.count - 1].owners.append(owner)
         }
+        return groups
+    }
 
-        var packed: [[(token: Int, ids: [Int32], owners: [Int])]] = []
-        var current: [(token: Int, ids: [Int32], owners: [Int])] = []
+    /// Whether `group`'s last id — ignoring the trailing whitespace ids that follow the token it
+    /// belongs to — is one of `tokenIds`. Trailing ids are found by owner (``KokoroCoreMLTimingFold/noOwner``),
+    /// not by id value, so this reads correctly whatever the vocabulary assigns to whitespace.
+    private static func groupEnds(_ group: Group, with tokenIds: Set<Int32>) -> Bool {
+        for index in stride(from: group.ids.count - 1, through: 0, by: -1) where group.owners[index] != KokoroCoreMLTimingFold.noOwner {
+            return tokenIds.contains(group.ids[index])
+        }
+        return false
+    }
+
+    /// Where to close the current piece when the next group would overflow the cap: the last group
+    /// in `current` that ends a sentence, else the last that ends a clause, else all of `current` —
+    /// the cutter's original rule, kept as the last resort. A long sentence cut at a bare word and
+    /// butted to the next left an audible seam; cutting where the duration model already predicts a
+    /// pause hides it (`spikes/findings/2026-09-05-coreml-audio-quality.md`). The groups after the
+    /// returned index start the next piece.
+    private static func bestCutIndex(in current: [Group]) -> Int {
+        if let index = current.lastIndex(where: { Self.groupEnds($0, with: KokoroVocabulary.sentenceFinalPunctuationTokenIds) }) {
+            return index
+        }
+        if let index = current.lastIndex(where: { Self.groupEnds($0, with: KokoroVocabulary.clauseBoundaryPunctuationTokenIds) }) {
+            return index
+        }
+        return current.count - 1
+    }
+
+    /// Where to split a piece whose predicted audio overflowed its bucket: the boundary closest to
+    /// the middle by id count, in the same preference order as ``bestCutIndex(in:)`` — a sentence
+    /// ending, else a clause boundary, else any group boundary. Never the last index, so the second
+    /// half is never empty; `groups.count > 1` is the caller's responsibility.
+    private static func middleCutIndex(in groups: [Group]) -> Int {
+        let target = groups.reduce(0) { $0 + $1.ids.count } / 2
+        var idsThroughIndex: [Int] = []
+        var running = 0
+        for group in groups {
+            running += group.ids.count
+            idsThroughIndex.append(running)
+        }
+        let eligible = Array(groups.indices.dropLast())
+        func closestToMiddle(among candidates: [Int]) -> Int? {
+            candidates.min { abs(idsThroughIndex[$0] - target) < abs(idsThroughIndex[$1] - target) }
+        }
+        if let index = closestToMiddle(among: eligible.filter { Self.groupEnds(groups[$0], with: KokoroVocabulary.sentenceFinalPunctuationTokenIds) }) {
+            return index
+        }
+        if let index = closestToMiddle(among: eligible.filter { Self.groupEnds(groups[$0], with: KokoroVocabulary.clauseBoundaryPunctuationTokenIds) }) {
+            return index
+        }
+        return closestToMiddle(among: eligible) ?? 0
+    }
+
+    /// Builds one `Piece` from a contiguous run of groups: every id and owner concatenated in
+    /// order, and the UTF-16 length of the Misaki tokens it spans, read from `words` between
+    /// `firstToken` and either the last group's token or — for the piece that reaches the end of
+    /// the whole utterance — `words.count - 1`, so any trailing tokens that contributed no id at
+    /// all are still charged to that last piece. Returns the token index the next piece should
+    /// start counting from.
+    private static func piece(
+        from groups: ArraySlice<Group>, firstToken: Int, words: [MToken], extendToEnd: Bool
+    ) -> (piece: Piece, lastToken: Int) {
+        var piece = Piece()
+        for group in groups {
+            piece.ids += group.ids
+            piece.owners += group.owners
+        }
+        let lastToken = extendToEnd ? max(firstToken, words.count - 1) : (groups.last?.token ?? firstToken)
+        piece.phonemeUTF16Count = (firstToken ... lastToken).reduce(0) {
+            $0 + ((words[$1].phonemes ?? unknownPhoneme) + words[$1].whitespace).utf16.count
+        }
+        return (piece, lastToken)
+    }
+
+    /// Cuts the utterance's ids into consecutive pieces of at most ``maxPieceTokenCount`` ids,
+    /// greedily and only between Misaki tokens: a group whose ids would push the current piece over
+    /// the cap starts the next one, unless a sentence or clause boundary earlier in the current
+    /// piece gives it a better place to close (``bestCutIndex(in:)``) — the groups after that
+    /// boundary carry over into the piece that starts with the overflowing group, which is checked
+    /// against the cap again in turn, so a boundary near the start of a very long run cannot itself
+    /// produce an oversized piece.
+    ///
+    /// Internal rather than private so the cut can be tested on synthetic ids, on a machine with no
+    /// model files: end to end this rule is only visible in an utterance long enough to need two
+    /// pipeline calls, which is a minute of Core ML per run.
+    static func pieces(ids: [Int32], owners: [Int], words: [MToken]) throws -> [Piece] {
+        let groups = Self.groups(ids: ids, owners: owners)
+
+        var packed: [[Group]] = []
+        var current: [Group] = []
         var currentCount = 0
         for group in groups {
             guard group.ids.count <= maxPieceTokenCount else {
                 // One word longer than a whole pipeline input. Nothing to split it at.
                 throw KokoroCoreMLError.tooManyTokens(group.ids.count)
             }
-            if currentCount + group.ids.count > maxPieceTokenCount, !current.isEmpty {
-                packed.append(current)
-                current = []
-                currentCount = 0
+            while currentCount + group.ids.count > maxPieceTokenCount, !current.isEmpty {
+                let cutIndex = Self.bestCutIndex(in: current)
+                packed.append(Array(current[0 ... cutIndex]))
+                current = Array(current[(cutIndex + 1)...])
+                currentCount = current.reduce(0) { $0 + $1.ids.count }
             }
             current.append(group)
             currentCount += group.ids.count
@@ -364,18 +599,10 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         // the one-piece case reproduces the whole string's length.
         var pieces: [Piece] = []
         var firstToken = 0
-        for (index, groups) in packed.enumerated() {
-            let lastToken = index == packed.count - 1
-                ? max(firstToken, words.count - 1)
-                : (groups.last?.token ?? firstToken)
-            var piece = Piece()
-            for group in groups {
-                piece.ids += group.ids
-                piece.owners += group.owners
-            }
-            piece.phonemeUTF16Count = (firstToken ... lastToken).reduce(0) {
-                $0 + ((words[$1].phonemes ?? unknownPhoneme) + words[$1].whitespace).utf16.count
-            }
+        for (index, groupSlice) in packed.enumerated() {
+            let (piece, lastToken) = Self.piece(
+                from: groupSlice[...], firstToken: firstToken, words: words, extendToEnd: index == packed.count - 1
+            )
             pieces.append(piece)
             firstToken = lastToken + 1
         }

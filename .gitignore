@@ -36,3 +36,6 @@ App/Resources/KokoroCoreML/
 
 # Python bytecode from the spike analysis scripts
 __pycache__/
+
+# Audio probe output (scripts/audio-probe.sh writes WAVs here)
+spikes/findings/audio-probe/

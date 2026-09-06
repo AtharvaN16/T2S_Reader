@@ -15,10 +15,30 @@ public actor FileAudioStore: AudioStore {
         self.directory = directory.appendingPathComponent(codec.identifier, isDirectory: true)
         self.codec = codec
         self.capacity = capacityBytes
+        Self.removeStaleCodecDirectories(parent: directory, keeping: codec.identifier)
+    }
+
+    /// Removes every sibling directory under `parent` that is not `current`'s — an earlier codec's
+    /// cached audio (spec §3.7.4: a codec change lands in a new directory), so a bitrate change
+    /// (`AACCodec` moved from 32 kbps to 64 kbps on 2026-09-05,
+    /// `spikes/findings/2026-09-05-coreml-audio-quality.md`) does not leave the old format's bytes
+    /// on disk forever. Best-effort and silent: this is disk hygiene, not correctness — an
+    /// `audioRef` that pointed into a namespace this sweep removed simply misses `contains` and
+    /// gets re-rendered rather than served stale bytes (`PlaybackCoordinator.reconcileWithStore`).
+    private static func removeStaleCodecDirectories(parent: URL, keeping current: String) {
+        let fileManager = FileManager.default
+        guard let entries = try? fileManager.contentsOfDirectory(
+            at: parent, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
+        ) else { return }
+        for entry in entries where entry.lastPathComponent != current {
+            guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true else { continue }
+            try? fileManager.removeItem(at: entry)
+        }
     }
 
     /// Scans `directory` and builds the LRU index on first use, rather than in `init`, so
-    /// constructing a store is cheap and never touches the filesystem until it's actually needed.
+    /// constructing a store stays cheap — beyond the one-time codec-directory sweep above — and
+    /// never touches its own directory until it's actually needed.
     private func ensureIndexed() {
         guard !indexed else { return }
         indexed = true

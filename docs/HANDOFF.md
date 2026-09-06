@@ -1,13 +1,55 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-04 (Plan 6 is finished on `plan-6-coreml-engine` and not yet merged: a Core ML Kokoro engine with real word timings, multi-engine routing, and Kokoro Heart as the default voice on the phone build). Written for whoever picks up the coding next._
+_Last updated 2026-09-06 (Plan 9 — the first listen's fixes — is on `plan-9-voice-quality-readalong`, merged to `dev` once its final review is clean; the phone is unplugged, so the listen that proves it is the next thing to do). Written for whoever picks up the coding next._
+
+## Resume here (2026-09-06) — Plan 9
+
+The owner's first listen on the iPhone 11 Pro (2026-09-05) reported three things: the voice list
+should be Kokoro-only with previews; the Reader looked wrong (one word filling a black page); and the
+voice sounded cut off, abrupt between sentences, and flat — "is this Kokoro, or how we set it up?"
+Plan 9 (`docs/superpowers/plans/2026-09-05-plan-9-voice-quality-readalong.md`) answered and fixed:
+
+- **Diagnosis** (`spikes/findings/2026-09-05-coreml-audio-quality.md`; probe `scripts/audio-probe.sh`,
+  analyzer `scripts/analyze-wav.swift`): four of five causes were ours — upstream's punctuation
+  silencing removed ~1 s of speech per 30 s; one Kokoro call per sentence left ~800 ms of dead air after
+  each (identical on MLX: the model's behaviour for short inputs); long sentences were cut at a word and
+  butted together; every second played went through a 32 kbps AAC cache at 13 dB SNR. The fifth, an even
+  delivery, is Kokoro's own — the Core ML port is not flatter than the MLX reference.
+- **Task 1** engine: `KokoroCoreMLEngine.Options.default` = no punctuation silencing + 5 ms crossfade;
+  pieces cut at sentence/clause boundaries; an overflowing piece is re-split instead of dropped to
+  silence; `AACCodec` 64 kbps (`aac-64k-mono-24k`; `FileAudioStore` removes the old codec directory);
+  the model-backed tests share one compile; `scripts/test-kokoro.sh` sweeps Core ML's runtime cache.
+- **Task 2** segmenter: consecutive sentences pack into one utterance up to 160 UTF-16 units
+  (`Segmenter.appPackLength`, passed by `Library`); `Versions.segmenter` 2 — every stored timeline
+  re-derives on its next play; `ReaderModel.playhead(for:in:)` seeks to the tapped word.
+- **Task 3** voices: Kokoro-only list wherever a Kokoro route is listed (the Simulator build keeps the
+  system voices — it links no engine); rows show name, accent, gender; `VoicePreviewModel` previews any
+  row through the routed engine on its own player, pausing the book.
+- **Task 4** Reader: Readium's `fontSize` is a ratio and was set to 18 (1800 %) — now 1.125 × scale;
+  publisher styles off; sentence tint + word tint; ElevenReader chrome (floating circles, thin
+  scrubber, transport row, voice chip, contents). Screenshot in the ledger (`task-4-reader.png`).
+- **Dev rule from the owner: never play audio on the Mac.** Simulator runs only as
+  `SIMCTL_CHILD_T2S_SILENT=1 xcrun simctl launch <udid> com.t2s.reader` (the app mutes every player
+  when `T2S_SILENT` is set). Never change the Mac's volume.
+
+**The phone listen (deferred — the phone is unplugged).** Same install recipe as the 2026-09-04
+section below (scheme **Phone**, your team on both targets). Fresh documents re-segment on first play
+(the segmenter version changed); already-rendered audio is discarded (new codec namespace). Listen for:
+word endings intact; sentences flowing into each other with short pauses; no mid-sentence seam; a
+cleaner, less "underwater" tone (64 kbps); Preferences → Voice showing 28 Kokoro rows, no System
+section, previews playing on tap and pausing the book; the Reader readable with the sentence and word
+tints. Delivery that still feels flat is the model — try Bella, Nicole, Sarah or the British voices.
+
+**Deferred:** a 30 s Core ML bucket (whole paragraphs in one call, as the MLX reference does — needs the
+30 s decoder pair and the 512-token duration model staged; bigger bundle, longer first-launch plan
+build); the Player sheet's styling; Kokoro in the Simulator build (needs a phonemizer without MLX).
 
 ## What this is
 
 An iOS app that turns EPUBs, web articles, and text PDFs into read-along audiobooks
 synthesized on the phone. The design spec is the source of truth:
 [docs/superpowers/specs/2026-09-01-t2s-reader-design.md](superpowers/specs/2026-09-01-t2s-reader-design.md)
-(rev 8). Work is organised as numbered plans under
+(rev 10). Work is organised as numbered plans under
 [docs/superpowers/plans/](superpowers/plans/), each a list of tasks with the exact code, tests,
 and commit message per task. The roadmap is
 [2026-09-02-t2s-reader-roadmap.md](superpowers/plans/2026-09-02-t2s-reader-roadmap.md).
@@ -16,7 +58,7 @@ and commit message per task. The roadmap is
 
 | Branch | State | Notes |
 |---|---|---|
-| `dev` | integration branch | Plans 1–4a, Plan 4b Tasks 1–8, all of Plan 5 (Tasks 1–6), the playback crash fix, and the Plan 0 spike findings so far are merged. Plan 5 Tasks 5–6 were fast-forwarded from `plan-5-task-5-kokoro` on 2026-09-03 (`938c8b8 … ba207ed`, twelve commits, every task reviewed plus a whole-branch review). Root package: **309 tests in 72 suites** (`swift test`). `Packages/T2SKokoro`: **56 tests in 7 suites** (`scripts/test-kokoro.sh`; seven of them are gated on the real model files being installed — four load the 327 MB model and two of those synthesize audio). `Packages/T2SReadium`: **12 tests in 3 suites** (`scripts/test-readium.sh`, on the iPhone simulator). The everyday app builds, launches, imports an EPUB, and plays it on the simulator and on an iPhone 11 Pro. |
+| `dev` | integration branch | Plans 1–6 and 8 merged (3b77b0f); Plan 9 fast-forwards on top once its final review is clean. Earlier notes:. Plan 5 Tasks 5–6 were fast-forwarded from `plan-5-task-5-kokoro` on 2026-09-03 (`938c8b8 … ba207ed`, twelve commits, every task reviewed plus a whole-branch review). Root package: **309 tests in 72 suites** (`swift test`). `Packages/T2SKokoro`: **56 tests in 7 suites** (`scripts/test-kokoro.sh`; seven of them are gated on the real model files being installed — four load the 327 MB model and two of those synthesize audio). `Packages/T2SReadium`: **12 tests in 3 suites** (`scripts/test-readium.sh`, on the iPhone simulator). The everyday app builds, launches, imports an EPUB, and plays it on the simulator and on an iPhone 11 Pro. |
 | `main` | stale: only the initial spec commit | Not used for integration yet; fast-forward it to `dev` when you want a release point. |
 
 Plan branches are short-lived: each plan runs on its own branch off `dev` (locally in a git
@@ -237,7 +279,7 @@ aborts at launch with `Library not loaded: @rpath/KokoroSwift.framework`. The ap
 does embed `KokoroSwift.framework` correctly, so the spike harness's manual copy-and-re-sign step
 is **not** needed here.
 
-## Resume here (2026-09-04)
+## Resume here (2026-09-04) — superseded by the 2026-09-06 section above; the install recipe still applies
 
 Plan 6 (`docs/superpowers/plans/2026-09-04-plan-6-coreml-kokoro-engine.md`, the Core ML Kokoro
 engine) is **finished on branch `plan-6-coreml-engine`** — Tasks 1–6, each committed and reviewed —
@@ -532,6 +574,14 @@ What remains, in order:
    the MediaPlayer remote commands now work.
 
 ## Known issues and parked items
+
+0. **Build and disk gotchas found on 2026-09-06.** (a) After changing a `static let` such as
+   `Versions.segmenter`, SwiftPM's incremental build kept the old value baked into a default argument
+   through several edits; only removing `.build/arm64-apple-macosx` (SwiftPM intermediates — never
+   `.build/DerivedData-App`, the app build tree) fixed it. (b) Core ML's runtime cache under
+   `~/Library/Caches/com.apple.dt.xctest.tool` grows ~0.9 GB per loaded engine and filled the disk
+   three times; the Kokoro scripts now sweep it. (c) The Bash working directory persists between
+   commands in an agent session — a `cd` into a subfolder once made every relative path fail.
 
 1. **Plan 4b Task 9 is open:** the EPUB read-along has now passed once on the simulator (see
    above), but the pass on hardware, the EPUB/PDF fixture, and the UI test are still not done.

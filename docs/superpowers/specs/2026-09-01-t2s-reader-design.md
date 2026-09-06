@@ -1,7 +1,7 @@
 # t2s_reader — Design Spec
 
 **Date:** 2026-09-01
-**Revised:** 2026-09-03 (rev 8 — see §11 changelog)
+**Revised:** 2026-09-06 (rev 10 — see §11 changelog)
 **Status:** Draft for review
 **Working name:** t2s_reader (TBD)
 
@@ -177,6 +177,7 @@ one tunable (§10); the values below are starting points.
 | `ink3` | #C9C9C7 | #3A3A3A | disabled, unrendered scrubber ticks |
 | `accent` | #FF7A1A | #FF8C3A | the one primary action per screen |
 | `accentSoft` | accent @ 18% | accent @ 22% | read-along word highlight, soft pills |
+| `accentFaint` | accent @ 8% | accent @ 12% | read-along sentence tint behind the word (rev 10) |
 | `positive` | #22A559 | #34C070 | rendered / finished states |
 | `destructive` | #E5453B | #FF5A50 | archive, delete, discard cache |
 
@@ -270,18 +271,27 @@ Times below in monospaced; total prefixed `~` until fully rendered.
 Control pill: overflow | back 15 · play · forward 30 | speed as a bare
 number.
 
-**Reader page.** Separate full-screen page. Entered from a Queue row
-title, a chapter in the book sheet, or `Read along` in the player. Back
-chevron top-left, chapter title center (tap → chapter list), overflow
-right (bookmark, appearance). Body is the Readium navigator at 24pt
-margins on `ground`. The active word is decorated with `accentSoft`,
-4pt radius; nothing else on the page uses accent. Auto-scroll keeps the
-active line in the middle third of the screen; a manual scroll suspends
-it and shows a `Back to current` pill until tapped. Tap a sentence →
-seek there. Bottom bar pinned over a `ground` fade: tick scrubber, then
-back 15 · play · forward 30 · speed. During underrun (§3.6) the play
-glyph becomes a ring and a caption reads `catching up…`. PDF uses the
-same page with page-level highlight (§6.1).
+**Reader page (rev 10, after ElevenReader).** Separate full-screen page.
+Entered from a Queue row title, a chapter in the book sheet, or `Read
+along` in the player. No bar: floating 36pt `surface` circles over a
+`ground` fade — back top-left; bookmark and overflow (Chapters, Bookmarks,
+Appearance, Change voice, Sleep timer, Details, Render whole document)
+top-right. Body is the Readium navigator on `ground`, publisher styles
+off, Inter at the spec's 18pt (Readium's `fontSize` is a ratio: 1.125 ×
+the reader's text scale), start-aligned, unhyphenated. The utterance
+being read is tinted `accentFaint` and the active word `accentSoft`, 4pt
+radius; nothing else on the page uses accent. Auto-scroll keeps the
+active word in the middle third of the screen (only a word change
+scrolls); a manual scroll suspends it and shows a `Back to current` pill
+until tapped. Tap a word → seek to that word (utterances hold two or
+three sentences since rev 10, §3.1). Bottom block pinned over a `ground`
+fade: a 3pt progress bar whose segments show the render frontier (`ink`
+rendered, `ink3` not) with a knob, elapsed and total in monospaced
+beneath; then sleep timer · back 15 · play · forward 30 · speed; then
+appearance · a voice chip naming the routed voice (→ change voice) ·
+contents. During underrun (§3.6) the play glyph becomes a ring and a
+caption reads `catching up…`. PDF uses the same page with page-level
+highlight (§6.1). The Player sheet keeps its tick scrubber.
 
 **Speed picker.** Vertical list, 0.5x–4.0x in 0.1x steps. Rates whose
 sustained demand exceeds the §3.6 threshold are drawn in `ink3` with a
@@ -442,8 +452,9 @@ an uncertainty treatment past the render frontier.
 - Serial, on a background actor; inference never touches main
 - Seek flushes the queue and re-prioritizes at the new position
 - Backpressure: idles when no job is eligible (§3.4.1)
-- Output encoded to **AAC ~32kbps mono 24kHz ≈ 14 MB/hour**; raw PCM
-  (172 MB/hour) is never persisted
+- Output encoded to **AAC 64 kbps mono 24 kHz ≈ 34 MB/hour** (rev 10; 32 kbps
+  measured 19 MB/hour and 13 dB SNR against the render, 64 kbps 24 dB — every
+  second played comes from this cache); raw PCM (172 MB/hour) is never persisted
 - LRU eviction against a user-configurable cache cap
 - Concurrency: **one document renders at a time.** Starting playback of a
   second document preempts the first; the first's completed utterances are
@@ -902,6 +913,22 @@ against a pipeline that is already proven.
 ---
 
 ## 11. Changelog
+
+**rev 10 (2026-09-06)** — Plan 9: the first listen's fixes.
+
+- **§3.4** cache codec 64 kbps (was 32): 13 dB → 24 dB SNR for +15 MB/hour.
+- **§3.1** an utterance packs consecutive sentences of a block up to 160
+  UTF-16 units (`Segmenter.appPackLength`): one Kokoro call per sentence
+  left ~800 ms of dead air after each; `Versions.segmenter` 2.
+- Core ML engine: upstream's punctuation silencing off (it removed ~1 s of
+  speech per 30 s), pieces cut at sentence/clause boundaries and
+  crossfaded, an overflowing piece re-split instead of dropped to silence.
+  Measured in `spikes/findings/2026-09-05-coreml-audio-quality.md`.
+- **§2.4.2** `accentFaint`; **§2.4.5** Reader page rewritten after
+  ElevenReader (the Readium `fontSize` ratio bug made the old page
+  unreadable); voice list is Kokoro-only with previews wherever a Kokoro
+  route is listed (the Simulator build keeps the system voices).
+- Dev rule: no audio on the owner's Mac — the app honours `T2S_SILENT`.
 
 **rev 9 (2026-09-04)** — Plan 0 Task 8: a Kokoro runtime for pre-A14 phones.
 

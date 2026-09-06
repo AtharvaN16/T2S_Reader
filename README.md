@@ -100,6 +100,8 @@ cd spikes/SpikeHarness && xcodegen generate && open SpikeHarness.xcodeproj
 scripts/build-app.sh           # regenerate App/T2SReader.xcodeproj and build for the simulator
 swift scripts/make-app-icon.swift  # regenerate the app icon PNG after editing the script
 scripts/build-device.sh        # compile proof of the Kokoro target for a device (Release, unsigned)
+scripts/audio-probe.sh         # render one passage nine ways (Core ML variants + MLX control) into spikes/findings/audio-probe/
+swift scripts/analyze-wav.swift spikes/findings/audio-probe/*.wav   # pitch spread, pauses, impulses per WAV
 open App/T2SReader.xcodeproj   # after scripts/build-app.sh has generated it
 scripts/fetch-readability.sh   # re-vendor Readability.js (committed under App/Resources/Readability)
 ```
@@ -121,11 +123,18 @@ and a device build bundles no MLX voices. The first `scripts/test-kokoro.sh` or
 DerivedData — the cold builds measured here were 1 min 51 s on this Mac and
 3 min 17 s for the Release device build); later runs are incremental.
 
-Repeated `scripts/test-kokoro.sh` runs leak disk. The Core ML engine's
-development path compiles each `.mlpackage` into a fresh temp directory per
-engine instance and never removes it, so every model-backed test costs about
-350 MB of `$TMPDIR`; `rm -rf "$TMPDIR"/kokoro_*.mlmodelc` reclaims it. The app
-bundle is precompiled by Xcode and is unaffected.
+`scripts/test-kokoro.sh` and `scripts/audio-probe.sh` need disk. The
+model-backed tests share one compile of the staging (about 350 MB in
+`$TMPDIR`), and Core ML's own runtime cache under
+`~/Library/Caches/com.apple.dt.xctest.tool` grows by roughly 0.9 GB per loaded
+engine; both scripts sweep both before and after a run. Budget about 2 GB free.
+The app bundle is precompiled by Xcode and is unaffected.
+
+**Never play audio on the owner's Mac.** Opening a book in the simulator starts
+playback through the Mac's speakers; launch the app with
+`SIMCTL_CHILD_T2S_SILENT=1 xcrun simctl launch <udid> com.t2s.reader` — the app
+zeroes every player's gain when `T2S_SILENT` is set — and never touch the Mac's
+volume.
 
 **Running the app.** Open the generated `App/T2SReader.xcodeproj` and pick a
 scheme — **Phone** for an iPhone, **Simulator** for the Mac:
@@ -210,15 +219,29 @@ key, so changing the rate limit does not invalidate cached audio. "Remove key"
 deletes it from the device. Leave the section empty and the app never talks to
 anything but the phone.
 
+### Voices
+
+On a phone the voice list (Preferences → Voice, and **Change voice** on a
+document) lists the 28 Kokoro voices only — name, accent and gender per row,
+American English then British — and nothing from the system; every row has a
+preview button that reads one sample sentence in that voice (the book pauses
+while it plays). The Simulator build links no Kokoro engine and keeps the
+system voices there, with the same previews.
+
 ### Reader, speed picker, and sleep timer
 
 Tap a Queue title, a chapter in a book, or **Read along →** in the player to
-open the full-screen Reader. It follows the active word while audio plays;
+open the full-screen Reader. The sentence being read is tinted lightly and
+the spoken word more strongly; the page follows the word while audio plays,
 scrolling pauses following until **Back to current** is tapped, and tapping a
-sentence seeks to it. Use the speed control to choose 0.5x–4.0x in 0.1x
-steps; rates the device cannot sustain are unavailable. The sleep timer offers
-10, 20, 30, 45, or 60 minutes, plus **End of chapter**, and pauses playback
-when it fires.
+word seeks to it. Floating buttons at the top: back, bookmark, and a menu
+(chapters, bookmarks, appearance, change voice, sleep timer, details, render
+whole document). At the bottom: a thin progress bar with times (its darker
+segments are the rendered audio), sleep timer · back 15 · play · forward 30 ·
+speed, then appearance · the voice chip · contents. Use the speed control to
+choose 0.5x–4.0x in 0.1x steps; rates the device cannot sustain are
+unavailable. The sleep timer offers 10, 20, 30, 45, or 60 minutes, plus
+**End of chapter**, and pauses playback when it fires.
 
 ### Bookmarks
 

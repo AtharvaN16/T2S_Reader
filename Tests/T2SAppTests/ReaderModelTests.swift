@@ -83,6 +83,17 @@ import T2SStore
                 == Playhead(utteranceIndex: 0, offset: 0))
     }
 
+    /// A packed source keeps the HTML's whitespace runs between its sentences; the tap offset counts
+    /// them as one space, the way the block text was compared, so it has to be mapped back.
+    @Test func collapsedOffsetsMapOntoTheRawSource() {
+        let source = "First.\n    Second here."
+        #expect(ReaderModel.rawOffset(forCollapsed: 0, in: source) == 0)
+        #expect(ReaderModel.rawOffset(forCollapsed: 6, in: source) == 6)      // the first newline of the run
+        #expect(ReaderModel.rawOffset(forCollapsed: 7, in: source) == 11)     // "S" of Second
+        #expect(ReaderModel.rawOffset(forCollapsed: 14, in: source) == 18)    // "h" of here
+        #expect(ReaderModel.rawOffset(forCollapsed: 99, in: source) == source.utf16.count)
+    }
+
     @Test func withoutWordTimingsATapSeeksToTheUtteranceStart() {
         let t = epubTimeline
         let block = "First sentence. Second sentence here."

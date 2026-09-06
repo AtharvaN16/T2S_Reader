@@ -46,11 +46,22 @@ public struct KokoroVoiceCatalog: VoiceCatalog {
         self.init(base: base, engines: [(engineIdentity, "")])
     }
 
+    /// The one row that means "no override" once the system rows are gone: its id is
+    /// `VoiceOption.systemDefault.id`, which `VoiceRouteResolving` turns into the app's default voice
+    /// (Kokoro Heart while the Core ML route is open). Without it a reader who picked a voice once
+    /// could never go back to following the Preferences default.
+    public static let defaultRow = VoiceOption(
+        id: VoiceOption.systemDefault.id, name: "Default", detail: "Heart, unless Preferences says otherwise",
+        language: "en", isDefault: true, group: .kokoro
+    )
+
     public func voices() -> [VoiceOption] {
         let activeEngines = engines()
         // No engine yet (the everyday build, or a Kokoro build before its first probe answers):
         // the base rows — system voices included — pass through exactly as they always have.
-        let baseVoices = activeEngines.isEmpty ? base.voices() : base.voices().filter { $0.group != .system }
+        let baseVoices = activeEngines.isEmpty
+            ? base.voices()
+            : [Self.defaultRow] + base.voices().filter { $0.group != .system }
         return baseVoices + activeEngines.flatMap { engine in
             Self.voiceNames.map { name in
                 let language = Self.language(for: name)

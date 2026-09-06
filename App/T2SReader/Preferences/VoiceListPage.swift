@@ -63,9 +63,11 @@ struct VoiceListPage: View {
     /// them (spec: Plan 9 voice quality) — "American English" leads because the default route's
     /// default voice is American (Heart).
     private func kokoroRows(_ options: [VoiceOption]) -> some View {
-        let american = options.filter { $0.language == "en-US" }
-        let british = options.filter { $0.language == "en-GB" }
+        let defaults = options.filter(\.isDefault)
+        let american = options.filter { !$0.isDefault && $0.language == "en-US" }
+        let british = options.filter { !$0.isDefault && $0.language == "en-GB" }
         return VStack(alignment: .leading, spacing: 0) {
+            ForEach(defaults) { row($0) }
             if !american.isEmpty {
                 subsectionHeader("American English")
                 ForEach(american) { row($0) }
@@ -86,8 +88,11 @@ struct VoiceListPage: View {
     }
 
     private func row(_ option: VoiceOption) -> some View {
+        // No override chosen: the "Default" row is the one checked wherever the list has one; where it
+        // has none (the simulator's system list), the resolved default's own row is.
+        let hasDefaultRow = env.voices.voices().contains(where: \.isDefault)
         let isSelected = option.id == selection
-            || (selection == nil && (resolvedDefault.map { $0 == option.id } ?? option.isDefault))
+            || (selection == nil && (hasDefaultRow ? option.isDefault : (resolvedDefault.map { $0 == option.id } ?? false)))
         return HStack(spacing: 12) {
             Button { onSelect(option) } label: {
                 HStack(spacing: 12) {
@@ -97,7 +102,7 @@ struct VoiceListPage: View {
                             .typeRole(.rowTitle)
                             .foregroundStyle(Tokens.ink)
                             .lineLimit(1)
-                        if let detail = option.detail {
+                        if let detail = detailText(for: option) {
                             Text(detail)
                                 .typeRole(.meta)
                                 .foregroundStyle(Tokens.ink2)
@@ -115,9 +120,22 @@ struct VoiceListPage: View {
             }
             .buttonStyle(.plain)
 
-            previewButton(for: option)
+            // The "Default" row is a pointer, not a voice: the voice it points at has its own row and
+            // its own preview.
+            if !option.isDefault {
+                previewButton(for: option)
+            }
         }
         .frame(minHeight: 56)
+    }
+
+    /// The "Default" row says which voice it currently means, once the routing has answered.
+    private func detailText(for option: VoiceOption) -> String? {
+        guard option.isDefault, option.group == .kokoro else { return option.detail }
+        if let resolvedDefault, let resolved = env.voices.voices().first(where: { $0.id == resolvedDefault }) {
+            return "Currently \(resolved.name)"
+        }
+        return option.detail
     }
 
     /// Every row previews — Kokoro, system and cloud alike (spec: Plan 9 voice quality) — through

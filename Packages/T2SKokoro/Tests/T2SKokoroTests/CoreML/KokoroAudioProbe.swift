@@ -59,8 +59,9 @@ import T2SCore
         let out = Self.outputDirectory
         var report: [String] = ["# Audio probe — \(Date().ISO8601Format())", "", "Passage: \(Self.passage.count) characters, voice \(Self.voice).", ""]
 
-        // The app's own segmentation: one utterance per sentence, normalized.
-        let segmenter = Segmenter(normalizer: TextNormalizer())
+        // One utterance per sentence, normalized — what the app did before Plan 9 packed sentences
+        // (`Segmenter.appPackLength`); the per-sentence variants are the "before".
+        let segmenter = Segmenter(normalizer: TextNormalizer(), packLength: 0)
         let block = SourceBlock(text: Self.passage, position: Position(resourceHref: "probe", progression: 0, charOffset: 0))
         let sentences = segmenter.segment(block).map(\.spoken)
         report.append("Segmenter produced \(sentences.count) utterances:")

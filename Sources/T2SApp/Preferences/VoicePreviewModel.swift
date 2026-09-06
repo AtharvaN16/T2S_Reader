@@ -57,6 +57,7 @@ public final class VoicePreviewModel {
         player = nil
         previewing = nil
         isRendering = false
+        lastError = nil
     }
 
     private func render(_ voiceID: String) async {

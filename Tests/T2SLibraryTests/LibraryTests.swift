@@ -12,14 +12,29 @@ import T2SCore
         let audio: InMemoryAudioStore
     }
 
-    func makeHarness(readers: [any DocumentReader]) throws -> Harness {
+    /// One sentence per utterance unless a test asks for the app's packing: these tests count
+    /// sentences; packing is the segmenter's own test, plus `packsSentencesAtTheAppsLength` below.
+    func makeHarness(readers: [any DocumentReader], packLength: Int = 0) throws -> Harness {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("t2s-lib-\(UUID().uuidString)")
         let paths = LibraryPaths(root: root)
         let store = try LibraryStore.inMemory()
         let audio = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
-        // One sentence per utterance: these tests count sentences; packing is the segmenter's own test.
-        let library = Library(paths: paths, store: store, audioStore: audio, readers: readers, segmenterPackLength: 0)
+        let library = Library(paths: paths, store: store, audioStore: audio, readers: readers, segmenterPackLength: packLength)
         return Harness(library: library, paths: paths, store: store, audio: audio)
+    }
+
+    /// The production `Library` packs (Plan 9 Task 2): the two sentences of page one become one
+    /// utterance, page two stays its own (packing never crosses a block).
+    @Test func packsSentencesAtTheAppsLength() async throws {
+        let h = try makeHarness(readers: [PDFDocumentReader()], packLength: Segmenter.appPackLength)
+        let pdf = try PDFFixture.write(pages: [["Hello from page one.", "And a second line."], ["Page two speaks."]],
+                                       title: "Two Pages")
+        let result = try await h.library.importFile(at: pdf, sourceType: .pdf)
+        #expect(result.utteranceCount == 2)
+        let timeline = try #require(try await h.store.timeline(for: result.document.id)?.timeline)
+        // The page's lines are joined by a newline; the packed source keeps the text between sentences.
+        #expect(timeline[utterance: 0].source == "Hello from page one.\nAnd a second line.")
+        #expect(timeline[utterance: 1].source == "Page two speaks.")
     }
 
     func exists(_ url: URL) -> Bool { FileManager.default.fileExists(atPath: url.path) }

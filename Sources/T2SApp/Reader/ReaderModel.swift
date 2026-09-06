@@ -62,7 +62,10 @@ public final class ReaderModel {
         let utterance = timeline[utterance: located.index]
         guard let timings = utterance.wordTimings, !timings.isEmpty else { return Playhead(utteranceIndex: located.index) }
         let sourceLength = utterance.source.utf16.count
-        let clamped = min(max(0, sourceOffset), max(0, sourceLength - 1))
+        // `sourceOffset` counts characters of the whitespace-collapsed text; a packed source keeps the
+        // HTML's own runs of whitespace between its sentences, so map it onto the raw source first.
+        let raw = Self.rawOffset(forCollapsed: sourceOffset, in: utterance.source)
+        let clamped = min(max(0, raw), max(0, sourceLength - 1))
         let spoken = utterance.normalized.spokenRange(forSource: clamped ..< min(sourceLength, clamped + 1)).lowerBound
         let word = timings.first { $0.spokenRange.contains(spoken) }
             ?? timings.first { $0.spokenRange.lowerBound >= spoken }
@@ -129,6 +132,32 @@ public final class ReaderModel {
             return (following.index, nil)
         }
         return located.max(by: { $0.start < $1.start }).map { ($0.index, nil) }
+    }
+
+    /// The raw UTF-16 offset in `source` that `collapsed` characters of `normalized(source)` reach:
+    /// every run of whitespace in `source` counts as the one space it collapses to.
+    static func rawOffset(forCollapsed collapsed: Int, in source: String) -> Int {
+        let units = Array(source.utf16)
+        func isSpace(_ unit: UInt16) -> Bool { unit == 0x20 || unit == 0x09 || unit == 0x0A || unit == 0x0D || unit == 0xA0 }
+        var remaining = collapsed
+        var raw = 0
+        var inWhitespace = false
+        while raw < units.count, remaining > 0 {
+            if isSpace(units[raw]) {
+                if !inWhitespace { remaining -= 1 }
+                inWhitespace = true
+            } else {
+                inWhitespace = false
+                remaining -= 1
+            }
+            raw += 1
+        }
+        // The count ended on the first unit of a whitespace run: the collapsed text has already
+        // stepped over the whole run, so land on the text that follows it.
+        if inWhitespace {
+            while raw < units.count, isSpace(units[raw]) { raw += 1 }
+        }
+        return raw
     }
 
     /// PDF positions are `pageIndex / pageCount`; the count is recoverable from the smallest positive step.

@@ -73,6 +73,9 @@ struct ReaderPage: View {
         }
         .task(id: summary.id) { await open() }
         .task(id: summary.id) { await resolveVoiceName() }
+        .onChange(of: showVoiceChange) { _, shown in
+            if !shown { Task { await resolveVoiceName() } }
+        }
         .onDisappear {
             Task { await env.player.persistRenderedChapters() }
         }

@@ -30,6 +30,7 @@ public struct KokoroSynthesisRequest {
     public let bucketDurationOverrideSeconds: Double?
     /// Which punctuation spans ``suppressPunctuationTokenAudio`` fades to silence after the trim.
     /// Upstream's default is every punctuation token; see ``PunctuationSuppression``.
+    /// Vendored addition (t2s_reader).
     public let punctuationSuppression: PunctuationSuppression
 
     public init(

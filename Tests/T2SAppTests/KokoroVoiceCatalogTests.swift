@@ -10,17 +10,21 @@ import T2SAudio
         let catalog = KokoroVoiceCatalog(base: BaseCatalog(), engineIdentity: identity)
         let voices = catalog.voices()
 
-        #expect(voices.count == 28)
+        // One "Default" row leads — the only way left to mean "no override" — then the 28 voices.
+        #expect(voices.count == 29)
+        #expect(voices.first == KokoroVoiceCatalog.defaultRow)
+        #expect(voices.first?.id == VoiceOption.systemDefault.id)
+        let kokoro = Array(voices.dropFirst())
         #expect(voices.allSatisfy { $0.group == .kokoro })
-        #expect(voices.map(\.id) == KokoroVoiceCatalog.voiceNames.map {
+        #expect(kokoro.map(\.id) == KokoroVoiceCatalog.voiceNames.map {
             KokoroVoiceID(engineID: identity, voice: $0).rawValue
         })
-        for option in voices {
+        for option in kokoro {
             let parsed = try #require(KokoroVoiceID(rawValue: option.id))
             #expect(parsed.engineID == identity)
         }
 
-        let heart = try #require(voices.first)
+        let heart = try #require(kokoro.first)
         #expect(heart.name == "Heart")
         #expect(heart.detail == "American · Female")
         #expect(heart.language == "en-US")
@@ -46,8 +50,9 @@ import T2SAudio
         let catalog = KokoroVoiceCatalog(base: base, engineIdentity: identity)
         let voices = catalog.voices()
 
-        #expect(voices.count == 29)
+        #expect(voices.count == 30)
         #expect(!voices.contains { $0.group == .system })
+        #expect(voices.first?.isDefault == true)
         #expect(voices.contains(cloud))
     }
 
@@ -56,20 +61,21 @@ import T2SAudio
         let catalog = KokoroVoiceCatalog(base: BaseCatalog(), engines: [(coreML, ""), (identity, "MLX")])
         let voices = catalog.voices()
 
-        #expect(voices.count == 56)
+        #expect(voices.count == 57)
         #expect(!voices.contains { $0.group == .system })
+        let kokoro = Array(voices.dropFirst())   // past the "Default" row
         // The default route leads, so the picker's first Kokoro row is the one the reader gets by
         // default (spec §2.2).
-        #expect(voices.prefix(28).allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == coreML })
-        #expect(voices.dropFirst(28).allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == identity })
+        #expect(kokoro.prefix(28).allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == coreML })
+        #expect(kokoro.dropFirst(28).allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == identity })
 
         // The label is a runtime qualifier: the everyday route reads as it always has, and only the
         // second runtime has to name itself to be told apart.
-        #expect(voices.first?.name == "Heart")
-        #expect(voices.first?.detail == "American · Female")
-        #expect(voices.dropFirst(28).first?.name == "Heart")
-        #expect(voices.dropFirst(28).first?.detail == "American · Female · MLX")
-        let mlxEmma = try #require(voices.dropFirst(28).first { KokoroVoiceID(rawValue: $0.id)?.voice == "bf_emma" })
+        #expect(kokoro.first?.name == "Heart")
+        #expect(kokoro.first?.detail == "American · Female")
+        #expect(kokoro.dropFirst(28).first?.name == "Heart")
+        #expect(kokoro.dropFirst(28).first?.detail == "American · Female · MLX")
+        let mlxEmma = try #require(kokoro.dropFirst(28).first { KokoroVoiceID(rawValue: $0.id)?.voice == "bf_emma" })
         #expect(mlxEmma.detail == "British · Female · MLX")
         #expect(mlxEmma.language == "en-GB")
         #expect(voices.allSatisfy { $0.group == .kokoro })
@@ -87,13 +93,13 @@ import T2SAudio
             return engines
         }
 
-        let beforeTheProbe = catalog.voices()
+        let beforeTheProbe = Array(catalog.voices().dropFirst())   // past the "Default" row
         #expect(beforeTheProbe.count == 28)
         #expect(beforeTheProbe.allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == coreML })
 
         mlxAvailable.withLock { $0 = true }
 
-        let afterTheProbe = catalog.voices()
+        let afterTheProbe = Array(catalog.voices().dropFirst())
         #expect(afterTheProbe.count == 56)
         #expect(afterTheProbe.dropFirst(28).allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == mlx })
         #expect(afterTheProbe.dropFirst(28).first?.detail == "American · Female · MLX")

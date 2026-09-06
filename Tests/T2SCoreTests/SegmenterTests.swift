@@ -109,7 +109,7 @@ import Testing
             let start = u.position.charOffset!
             let located = String(decoding: units[start..<(start + u.source.utf16.count)], as: UTF16.self)
             #expect(located == u.source, "piece at \(start)")
-            #expect(u.source.utf16.count <= 60 || u.source.utf16.count <= 40)
+            #expect(u.source.utf16.count <= 60)
         }
     }
 

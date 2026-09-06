@@ -27,6 +27,7 @@ public func suppressPunctuationTokenAudio(
     predDur: [Int],
     samplesPerDurationFrame: Int = PipelineConstants.samplesPerDurationFrame,
     fadeSamples: Int = PipelineConstants.punctuationFadeSamples,
+    // Vendored addition (t2s_reader): which spans to silence; the default is upstream's behaviour.
     suppressedTokenIds: Set<Int32> = KokoroVocabulary.silentPunctuationTokenIds
 ) -> [Float] {
     guard !audio.isEmpty, samplesPerDurationFrame > 0, !suppressedTokenIds.isEmpty else { return audio }

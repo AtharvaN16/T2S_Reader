@@ -357,9 +357,12 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     }
 
     /// Splits `piece` at `cutIndex` into its `groups` before and after: two new `Piece`s whose ids
-    /// and owners tile `piece`'s exactly, each with its own `phonemeUTF16Count` computed the same
-    /// way ``pieces(ids:owners:words:)`` computes a piece's — `extendToEnd` on the second half
-    /// preserves the charge to trailing zero-id tokens when `piece` was the whole utterance's last.
+    /// and owners tile `piece`'s exactly, each with its own `phonemeUTF16Count`. Each half counts
+    /// from its own first group's token, so a token that phonemized to no id between the halves is
+    /// charged to neither (``pieces(ids:owners:words:)`` charges it to the following piece) — a
+    /// difference of a character or two in the voice-row lookup, on a path only an overflow reaches.
+    /// `extendToEnd` on the second half preserves the charge to trailing zero-id tokens when `piece`
+    /// was the whole utterance's last.
     private static func splitPiece(
         groups: [Group], at cutIndex: Int, isFinal: Bool, words: [MToken]
     ) -> (first: Piece, second: Piece) {
@@ -506,12 +509,20 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// pause hides it (`spikes/findings/2026-09-05-coreml-audio-quality.md`). The groups after the
     /// returned index start the next piece.
     private static func bestCutIndex(in current: [Group]) -> Int {
-        if let index = current.lastIndex(where: { Self.groupEnds($0, with: KokoroVocabulary.sentenceFinalPunctuationTokenIds) }) {
-            return index
+        // A boundary is only worth taking when the piece it closes is at least half a call's worth of
+        // ids: a comma twenty ids into a 250-id sentence would otherwise make a tiny first piece and
+        // three calls where two would do — and every call ends with Kokoro's long predicted tail.
+        var idsThrough = 0
+        var minimumIndex = current.count
+        for (index, group) in current.enumerated() {
+            idsThrough += group.ids.count
+            if idsThrough * 2 >= maxPieceTokenCount { minimumIndex = index; break }
         }
-        if let index = current.lastIndex(where: { Self.groupEnds($0, with: KokoroVocabulary.clauseBoundaryPunctuationTokenIds) }) {
-            return index
+        func lastBoundary(_ tokenIds: Set<Int32>) -> Int? {
+            current.lastIndex(where: { Self.groupEnds($0, with: tokenIds) }).flatMap { $0 >= minimumIndex ? $0 : nil }
         }
+        if let index = lastBoundary(KokoroVocabulary.sentenceFinalPunctuationTokenIds) { return index }
+        if let index = lastBoundary(KokoroVocabulary.clauseBoundaryPunctuationTokenIds) { return index }
         return current.count - 1
     }
 

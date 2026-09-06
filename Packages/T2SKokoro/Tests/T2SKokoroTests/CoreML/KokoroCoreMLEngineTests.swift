@@ -207,6 +207,27 @@ import T2SCore
         #expect(everyPieceFits)
     }
 
+    /// A comma too early in the window is not worth a cut: closing the piece there would make a tiny
+    /// first call and three calls where two would do, each ending in Kokoro's long predicted tail.
+    /// The cutter takes a boundary only when the piece it closes holds at least half the cap.
+    @Test func ignoresAClauseBoundaryThatWouldLeaveATinyPiece() throws {
+        var words: [MToken] = []
+        var ids: [Int32] = []
+        var owners: [Int] = []
+        Self.appendPlainWords(count: 3, startIndex: 0, words: &words, ids: &ids, owners: &owners)
+        words.append(Self.word(",", phonemes: ","))
+        ids += [3, 16]
+        owners += [3, KokoroCoreMLTimingFold.noOwner]
+        Self.appendPlainWords(count: 40, startIndex: 4, words: &words, ids: &ids, owners: &owners)
+
+        let pieces = try KokoroCoreMLEngine.pieces(ids: ids, owners: owners, words: words)
+
+        #expect(pieces.count == 2)
+        #expect(pieces.flatMap(\.ids) == ids)
+        #expect(pieces[0].ids.suffix(2) != [3, 16])
+        #expect(pieces[0].ids.count > KokoroCoreMLEngine.maxPieceTokenCount / 2)
+    }
+
     /// No punctuation anywhere in the run: the cutter falls back to the last word, same as before
     /// either kind of boundary existed. Ids are chosen so none of them coincide with a real
     /// vocabulary punctuation id, unlike ``cutsALongUtteranceAtTokenBoundaries``'s ids 1–4.

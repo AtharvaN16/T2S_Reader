@@ -20,7 +20,7 @@ struct ThinScrubber: View {
             let width = max(1, geo.size.width)
             let fraction = dragFraction ?? model.fraction
             ZStack(alignment: .leading) {
-                HStack(spacing: 1) {
+                HStack(spacing: 0) {
                     ForEach(0..<model.tickCount, id: \.self) { i in
                         Rectangle().fill(model.renderedTicks[i] ? Tokens.ink : Tokens.ink3)
                     }

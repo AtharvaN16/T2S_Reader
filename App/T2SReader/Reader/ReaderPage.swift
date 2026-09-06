@@ -120,8 +120,12 @@ struct ReaderPage: View {
         .padding(.horizontal, Spacing.margin)
         .padding(.top, Spacing.grid)
         .background(alignment: .top) {
-            LinearGradient(colors: [Tokens.ground, Tokens.ground.opacity(0)], startPoint: .top, endPoint: .bottom)
-                .frame(height: 72)
+            // Opaque through the circles' own band, then a fade the text scrolls under.
+            LinearGradient(stops: [.init(color: Tokens.ground, location: 0),
+                                   .init(color: Tokens.ground, location: 0.62),
+                                   .init(color: Tokens.ground.opacity(0), location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: 150)
                 .ignoresSafeArea(edges: .top)
         }
     }
@@ -148,11 +152,14 @@ struct ReaderPage: View {
             toolRow
         }
         .padding(.horizontal, Spacing.margin)
-        .padding(.top, 16)
+        .padding(.top, 40)
         .padding(.bottom, Spacing.grid)
         .background(
+            // Opaque behind every control; the fade lives in the 40 pt of top padding above them.
             LinearGradient(
-                colors: [Tokens.ground.opacity(0), Tokens.ground, Tokens.ground],
+                stops: [.init(color: Tokens.ground.opacity(0), location: 0),
+                        .init(color: Tokens.ground, location: 0.16),
+                        .init(color: Tokens.ground, location: 1)],
                 startPoint: .top,
                 endPoint: .bottom
             )

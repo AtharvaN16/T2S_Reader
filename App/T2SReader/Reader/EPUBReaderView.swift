@@ -37,7 +37,9 @@ struct EPUBReaderView: UIViewControllerRepresentable {
         ]
         let config = EPUBNavigatorViewController.Configuration(
             preferences: Self.preferences(from: preferences, colorScheme: context.environment.colorScheme),
-            contentInset: [.compact: (top: Spacing.margin, bottom: 120), .regular: (top: Spacing.margin, bottom: 120)],
+            // Room for the floating top circles and the three-row bottom block, so the first and last
+            // lines are never under the chrome (they scroll under its fades while reading).
+            contentInset: [.compact: (top: 72, bottom: 240), .regular: (top: 72, bottom: 240)],
             decorationTemplates: templates,
             fontFamilyDeclarations: [Self.interDeclaration()]
         )

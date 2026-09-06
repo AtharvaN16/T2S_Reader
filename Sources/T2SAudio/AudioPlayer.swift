@@ -59,6 +59,12 @@ public final class AudioPlayer: AudioPlaying {
         }
     }
 
+    /// See the note in `makeGraph()`: a development switch, read once per process.
+    static let isSilenced: Bool = {
+        guard let value = ProcessInfo.processInfo.environment["T2S_SILENT"] else { return false }
+        return !["", "0", "false", "no"].contains(value.lowercased())
+    }()
+
     public init(sampleRate: Double = PCMAudio.defaultSampleRate, manualRendering: Bool = false) throws {
         guard let f = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else { throw Error.badFormat }
         format = f
@@ -89,6 +95,11 @@ public final class AudioPlayer: AudioPlaying {
         if manual {
             try freshEngine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: 4096)
         }
+        // `T2S_SILENT=1` in the environment mutes every player the app builds — the book and the voice
+        // previews alike — without touching the Mac's own output. For simulator runs on a machine
+        // whose speakers are in use: `SIMCTL_CHILD_T2S_SILENT=1 xcrun simctl launch <udid> com.t2s.reader`.
+        // Playback, timing and highlights behave exactly as with sound; only the mixer's gain is zero.
+        if Self.isSilenced { freshEngine.mainMixerNode.outputVolume = 0 }
         try freshEngine.start()
         engine = freshEngine
         player = freshPlayer

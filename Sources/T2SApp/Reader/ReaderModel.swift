@@ -44,12 +44,29 @@ public final class ReaderModel {
     /// Tap a sentence → seek there (spec §2.4.5). False when the tap matches no utterance.
     public func seek(to hit: SourceHit) async -> Bool {
         guard let timeline = player.coordinator.timeline,
-              let index = Self.utteranceIndex(for: hit, in: timeline) else {
+              let playhead = Self.playhead(for: hit, in: timeline) else {
             return false
         }
-        await player.coordinator.seek(to: Playhead(utteranceIndex: index))
+        await player.coordinator.seek(to: playhead)
         isFollowing = true
         return true
+    }
+
+    /// Where a tap lands: the utterance under it and, when that utterance carries word timings, the
+    /// start of the tapped word inside it — an utterance can hold two or three sentences since the
+    /// segmenter began packing them (`Segmenter.packLength`), so the utterance start alone could be
+    /// a sentence or two early. Without timings, or on a PDF page, the utterance start as before.
+    public static func playhead(for hit: SourceHit, in timeline: Timeline) -> Playhead? {
+        guard let located = locate(hit, in: timeline) else { return nil }
+        guard let sourceOffset = located.sourceOffset else { return Playhead(utteranceIndex: located.index) }
+        let utterance = timeline[utterance: located.index]
+        guard let timings = utterance.wordTimings, !timings.isEmpty else { return Playhead(utteranceIndex: located.index) }
+        let sourceLength = utterance.source.utf16.count
+        let clamped = min(max(0, sourceOffset), max(0, sourceLength - 1))
+        let spoken = utterance.normalized.spokenRange(forSource: clamped ..< min(sourceLength, clamped + 1)).lowerBound
+        let word = timings.first { $0.spokenRange.contains(spoken) }
+            ?? timings.first { $0.spokenRange.lowerBound >= spoken }
+        return Playhead(utteranceIndex: located.index, offset: word?.start ?? 0)
     }
 
     /// Whitespace runs collapse to one space and the ends are trimmed, the way Readium's segments are.
@@ -61,6 +78,13 @@ public final class ReaderModel {
     /// and the tap's normalized offset inside it (or the nearest following one; PDF: first utterance
     /// of the tapped page).
     public static func utteranceIndex(for hit: SourceHit, in timeline: Timeline) -> Int? {
+        locate(hit, in: timeline)?.index
+    }
+
+    /// `utteranceIndex(for:in:)` plus, when the tap fell inside an utterance's text, the tapped
+    /// offset into that utterance's `source` (in the whitespace-collapsed text both are compared in,
+    /// which is the source itself for any block whose whitespace is already single spaces).
+    private static func locate(_ hit: SourceHit, in timeline: Timeline) -> (index: Int, sourceOffset: Int?)? {
         var index = 0
         var candidates: [(index: Int, utterance: Utterance)] = []
         for chapter in timeline.chapters {
@@ -77,7 +101,7 @@ public final class ReaderModel {
             let pages = candidates.map(\.utterance.position.progression)
             guard let count = pageCount(from: pages) else { return nil }
             let target = Double(page) / Double(count)
-            return candidates.first { abs($0.utterance.position.progression - target) < 1e-9 }?.index
+            return candidates.first { abs($0.utterance.position.progression - target) < 1e-9 }.map { ($0.index, nil) }
         }
 
         let block = normalized(hit.blockText)
@@ -97,14 +121,14 @@ public final class ReaderModel {
         }
         guard !located.isEmpty else { return nil }
         if let inside = located.first(where: { $0.start <= offset && offset < $0.start + $0.length }) {
-            return inside.index
+            return (inside.index, offset - inside.start)
         }
         // A caret in collapsed whitespace belongs to the sentence about to be read. This agrees
         // with Readium's tap behavior and gives the following utterance at sentence boundaries.
         if let following = located.filter({ $0.start >= offset }).min(by: { $0.start < $1.start }) {
-            return following.index
+            return (following.index, nil)
         }
-        return located.max(by: { $0.start < $1.start })?.index
+        return located.max(by: { $0.start < $1.start }).map { ($0.index, nil) }
     }
 
     /// PDF positions are `pageIndex / pageCount`; the count is recoverable from the smallest positive step.

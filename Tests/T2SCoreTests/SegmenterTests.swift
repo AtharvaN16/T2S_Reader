@@ -2,7 +2,9 @@ import Testing
 @testable import T2SCore
 
 @Suite struct SegmenterTests {
-    let seg = Segmenter(normalizer: TextNormalizer())
+    /// The per-sentence segmenter every test below was written against: `packLength: 0` keeps one
+    /// sentence per utterance. The packing tests at the end construct their own.
+    let seg = Segmenter(normalizer: TextNormalizer(), packLength: 0)
     func block(_ text: String, offset: Int = 100) -> SourceBlock {
         SourceBlock(text: text, position: Position(resourceHref: "ch1.xhtml", progression: 0.25, charOffset: offset))
     }
@@ -30,7 +32,7 @@ import Testing
 
     @Test func splitsOverlongSentencesAtClauses() {
         let long = Array(repeating: "clause one, clause two; clause three", count: 6).joined(separator: ", ") + "."
-        let us = Segmenter(normalizer: TextNormalizer(), maxUtteranceLength: 80).segment(block(long))
+        let us = Segmenter(normalizer: TextNormalizer(), maxUtteranceLength: 80, packLength: 0).segment(block(long))
         #expect(us.count >= 3)
         #expect(us.allSatisfy { $0.source.utf16.count <= 80 })
         #expect(us.map(\.source).joined(separator: " ") == long)   // nothing lost, nothing duplicated
@@ -48,7 +50,7 @@ import Testing
 
     @Test func piecesLocateThemselvesInTheBlock() {
         let text = "First clause here,\nsecond clause there; third clause, and a fourth one, then a fifth clause; the end."
-        let us = Segmenter(normalizer: TextNormalizer(), maxUtteranceLength: 40).segment(block(text, offset: 0))
+        let us = Segmenter(normalizer: TextNormalizer(), maxUtteranceLength: 40, packLength: 0).segment(block(text, offset: 0))
         #expect(us.count >= 3)
         let units = Array(text.utf16)
         for u in us {
@@ -59,9 +61,61 @@ import Testing
         }
     }
 
+    // MARK: Packing (Plan 9: one Kokoro call per sentence left 800 ms of dead air after each)
+
+    @Test func packsTwoShortSentencesIntoOneUtterance() {
+        let us = Segmenter(normalizer: TextNormalizer(), packLength: 160).segment(block("Hello world. This is a test."))
+        #expect(us.count == 1)
+        #expect(us[0].source == "Hello world. This is a test.")
+        #expect(us[0].position.charOffset == 100)
+        #expect(us[0].spoken == "Hello world. This is a test.")
+    }
+
+    @Test func aSentenceThatWouldOverflowStartsTheNextUtterance() {
+        let a = "First sentence is short."                     // 24
+        let b = "Second sentence is also fairly short."         // 37 → 24 + 1 + 37 = 62
+        let c = "Third sentence pushes the pack past the limit set for this test."   // would exceed 80
+        let us = Segmenter(normalizer: TextNormalizer(), packLength: 80).segment(block([a, b, c].joined(separator: " "), offset: 0))
+        #expect(us.map(\.source) == ["\(a) \(b)", c])
+        #expect(us.map(\.position.charOffset) == [0, a.utf16.count + 1 + b.utf16.count + 1])
+    }
+
+    @Test func aSentenceLongerThanThePackLengthStaysAlone() {
+        let long = "This one sentence is on its own longer than the pack length used here."
+        let us = Segmenter(normalizer: TextNormalizer(), packLength: 40).segment(block("Tiny. \(long) End."))
+        #expect(us.map(\.source) == ["Tiny.", long, "End."])
+    }
+
+    @Test func packingNeverCrossesABlock() {
+        let s = Segmenter(normalizer: TextNormalizer(), packLength: 160)
+        let first = s.segment(block("One.", offset: 0))
+        let second = s.segment(block("Two.", offset: 10))
+        #expect(first.map(\.source) == ["One."])
+        #expect(second.map(\.source) == ["Two."])
+    }
+
+    @Test func zeroPackLengthKeepsOneSentencePerUtterance() {
+        let text = "Hello world. This is a test. And a third."
+        let packed = Segmenter(normalizer: TextNormalizer(), packLength: 0).segment(block(text))
+        #expect(packed.map(\.source) == ["Hello world.", "This is a test.", "And a third."])
+    }
+
+    @Test func packedPiecesLocateThemselvesInTheBlock() {
+        let text = "First clause here,\nsecond clause there; third clause, and a fourth one, then a fifth clause; the end. Then more."
+        let us = Segmenter(normalizer: TextNormalizer(), maxUtteranceLength: 40, packLength: 60).segment(block(text, offset: 0))
+        #expect(us.count >= 2)
+        let units = Array(text.utf16)
+        for u in us {
+            let start = u.position.charOffset!
+            let located = String(decoding: units[start..<(start + u.source.utf16.count)], as: UTF16.self)
+            #expect(located == u.source, "piece at \(start)")
+            #expect(u.source.utf16.count <= 60 || u.source.utf16.count <= 40)
+        }
+    }
+
     @Test func hardCutNeverSplitsASurrogatePair() {
         let text = String(repeating: "😀", count: 10)                       // 20 UTF-16 units, no spaces
-        let us = Segmenter(normalizer: TextNormalizer(), maxUtteranceLength: 7).segment(block(text, offset: 0))
+        let us = Segmenter(normalizer: TextNormalizer(), maxUtteranceLength: 7, packLength: 0).segment(block(text, offset: 0))
         #expect(us.map(\.source).joined() == text)
         #expect(us.allSatisfy { $0.source.utf16.count % 2 == 0 })
     }

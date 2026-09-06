@@ -24,11 +24,17 @@ public actor Library {
     private let audioStore: any AudioStore
     private let readers: [any DocumentReader]
 
-    public init(paths: LibraryPaths, store: LibraryStore, audioStore: any AudioStore, readers: [any DocumentReader]) {
+    /// How many UTF-16 units of consecutive sentences one utterance may pack (`Segmenter.packLength`);
+    /// the app passes the default, tests that count sentences pass 0.
+    private let segmenterPackLength: Int
+
+    public init(paths: LibraryPaths, store: LibraryStore, audioStore: any AudioStore, readers: [any DocumentReader],
+                segmenterPackLength: Int = Segmenter.appPackLength) {
         self.paths = paths
         self.store = store
         self.audioStore = audioStore
         self.readers = readers
+        self.segmenterPackLength = segmenterPackLength
     }
 
     // MARK: Import
@@ -162,7 +168,7 @@ public actor Library {
     /// Phase 1 (spec §3.3) with the dictionary as it stands now (Global Constraints).
     private func build(_ read: ReadDocument) async throws -> Timeline {
         let dictionary = try await store.pronunciations()
-        let segmenter = Segmenter(normalizer: TextNormalizer(dictionary: dictionary))
+        let segmenter = Segmenter(normalizer: TextNormalizer(dictionary: dictionary), packLength: segmenterPackLength)
         let timeline = TimelineBuilder.build(chapters: read.chapters, segmenter: segmenter)
         guard timeline.utteranceCount > 0 else { throw ImportError.noText }
         return timeline

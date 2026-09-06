@@ -18,6 +18,8 @@ public struct Timeline: Codable, Hashable, Sendable {
     public var normalizerVersion: Int
     public var chapters: [Chapter]
 
+    /// Versions default to the current ones (`Versions`); a decoded timeline carries the ones it
+    /// was derived under, and a mismatch marks it stale (spec §3.7.4).
     public init(chapters: [Chapter],
                 schemaVersion: Int = Versions.schema,
                 segmenterVersion: Int = Versions.segmenter,

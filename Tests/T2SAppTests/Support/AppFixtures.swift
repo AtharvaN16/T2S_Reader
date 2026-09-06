@@ -14,7 +14,8 @@ struct AppFixtures {
         paths = LibraryPaths(root: root)
         store = try LibraryStore.inMemory()
         audio = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 50_000_000)
-        library = Library(paths: paths, store: store, audioStore: audio, readers: readers)
+        // One sentence per utterance, as the app-model tests were written against (Plan 9 Task 2 packs in the app).
+        library = Library(paths: paths, store: store, audioStore: audio, readers: readers, segmenterPackLength: 0)
     }
 
     /// Imports a placeholder EPUB through `FakeReader` and returns the new document's id.

@@ -46,6 +46,51 @@ import T2SStore
         #expect(ReaderModel.utteranceIndex(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: "", offsetInBlock: 0), in: t) == nil)
     }
 
+    // MARK: Word-precise seeks inside a packed utterance (Plan 9 Task 2)
+
+    /// "First sentence. Second sentence here." as one utterance, with a timing per word.
+    var packedTimeline: Timeline {
+        let text = "First sentence. Second sentence here."
+        var u = utterance(text, href: "OEBPS/ch1.xhtml", offset: 0)
+        var timings: [WordTiming] = []
+        var start = 0.0
+        var cursor = 0
+        for word in text.split(separator: " ") {
+            let range = cursor ..< cursor + word.utf16.count
+            timings.append(WordTiming(spokenRange: range, start: start, end: start + 0.4))
+            start += 0.5
+            cursor = range.upperBound + 1
+        }
+        u.wordTimings = timings
+        return Timeline(chapters: [Chapter(title: "One", position: Position(resourceHref: "OEBPS/ch1.xhtml", progression: 0), utterances: [u])])
+    }
+
+    @Test func aTapInTheSecondSentenceSeeksToThatWordsStart() {
+        let t = packedTimeline
+        let block = "First sentence. Second sentence here."
+        // "Second" is the third word: starts at 1.0 s.
+        let ph = ReaderModel.playhead(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: block, offsetInBlock: 18), in: t)
+        #expect(ph == Playhead(utteranceIndex: 0, offset: 1.0))
+        // "here." is the fifth word: 2.0 s.
+        let last = ReaderModel.playhead(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: block, offsetInBlock: 34), in: t)
+        #expect(last == Playhead(utteranceIndex: 0, offset: 2.0))
+    }
+
+    @Test func aTapInTheFirstWordSeeksToTheStart() {
+        let t = packedTimeline
+        let block = "First sentence. Second sentence here."
+        #expect(ReaderModel.playhead(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: block, offsetInBlock: 2), in: t)
+                == Playhead(utteranceIndex: 0, offset: 0))
+    }
+
+    @Test func withoutWordTimingsATapSeeksToTheUtteranceStart() {
+        let t = epubTimeline
+        let block = "First sentence. Second sentence here."
+        #expect(ReaderModel.playhead(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: block, offsetInBlock: 20), in: t)
+                == Playhead(utteranceIndex: 1, offset: 0))
+        #expect(ReaderModel.playhead(for: SourceHit(resourceHref: "OEBPS/ch9.xhtml", blockText: block, offsetInBlock: 0), in: t) == nil)
+    }
+
     @Test func pdfTapsResolveByPage() {
         let href = PDFDocumentReader.resourceHref
         let t = Timeline(chapters: [Chapter(title: "Doc", position: Position(resourceHref: href, progression: 0), utterances: [

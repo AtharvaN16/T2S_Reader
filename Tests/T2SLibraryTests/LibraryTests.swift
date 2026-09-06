@@ -17,7 +17,8 @@ import T2SCore
         let paths = LibraryPaths(root: root)
         let store = try LibraryStore.inMemory()
         let audio = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
-        let library = Library(paths: paths, store: store, audioStore: audio, readers: readers)
+        // One sentence per utterance: these tests count sentences; packing is the segmenter's own test.
+        let library = Library(paths: paths, store: store, audioStore: audio, readers: readers, segmenterPackLength: 0)
         return Harness(library: library, paths: paths, store: store, audio: audio)
     }
 

@@ -5,31 +5,76 @@ public struct Segmenter: Sendable {
     public static let version = Versions.segmenter
     /// Sentences longer than this (UTF-16 units of source) split at clause boundaries.
     public private(set) var maxUtteranceLength: Int
+    /// Consecutive sentences of one block are packed into one utterance while the packed source stays
+    /// within this many UTF-16 units; 0 keeps one sentence per utterance.
+    ///
+    /// Why pack at all: an utterance is one synthesis call, and Kokoro ends every call with a long
+    /// predicted pause and starts the next one cold — about 800 ms of dead air after every sentence,
+    /// and the same on the MLX reference, so it is the model's behaviour for short inputs. Two or
+    /// three sentences in one call read as continuous speech with natural pauses between them
+    /// (`spikes/findings/2026-09-05-coreml-audio-quality.md`). Why 160: the Core ML engine's one-call
+    /// cap is 176 phoneme ids and the probe measured 0.98 ids per source character, so 160 leaves a
+    /// margin for phoneme-dense text — a packed utterance is almost always one call, and the seam the
+    /// owner heard inside a sentence never comes from packing.
+    public private(set) var packLength: Int
+    /// What the app's `Library` passes: see `packLength`. The initializer's own default is 0 — one
+    /// sentence per utterance — so a segmenter built for a test or a tool packs nothing unless asked.
+    public static let appPackLength = 160
     public var normalizer: TextNormalizer
 
-    public init(normalizer: TextNormalizer, maxUtteranceLength: Int = 300) {
+    public init(normalizer: TextNormalizer, maxUtteranceLength: Int = 300, packLength: Int = 0) {
         precondition(maxUtteranceLength >= 2, "maxUtteranceLength must be at least 2")
+        precondition(packLength >= 0, "packLength must not be negative")
         self.normalizer = normalizer
         self.maxUtteranceLength = maxUtteranceLength
+        self.packLength = packLength
     }
 
     public func segment(_ block: SourceBlock) -> [Utterance] {
-        var result: [Utterance] = []
+        var pieces: [(text: String, offset: Int)] = []
         for (text, offset) in sentences(in: block.text) {
-            for (piece, pieceOffset) in split(text, at: offset) {
-                let normalized = normalizer.normalize(piece)
-                guard !normalized.spoken.isEmpty else { continue }
-                var position = block.position
-                position.charOffset = block.position.charOffset.map { $0 + pieceOffset }
-                result.append(Utterance(
-                    position: position,
-                    source: piece,
-                    spoken: normalized.spoken,
-                    spans: normalized.spans,
-                    duration: .estimated(DurationEstimator.estimate(spoken: normalized.spoken))
-                ))
+            pieces += split(text, at: offset)
+        }
+        var result: [Utterance] = []
+        for (source, offset) in packed(pieces, in: block.text) {
+            let normalized = normalizer.normalize(source)
+            guard !normalized.spoken.isEmpty else { continue }
+            var position = block.position
+            position.charOffset = block.position.charOffset.map { $0 + offset }
+            result.append(Utterance(
+                position: position,
+                source: source,
+                spoken: normalized.spoken,
+                spans: normalized.spans,
+                duration: .estimated(DurationEstimator.estimate(spoken: normalized.spoken))
+            ))
+        }
+        return result
+    }
+
+    /// Joins consecutive pieces into utterances no longer than `packLength` (UTF-16 units of the
+    /// block, first piece's start to last piece's end, the original text between them included). A
+    /// piece longer than `packLength` on its own is its own utterance. Offsets are UTF-16 into the block.
+    private func packed(_ pieces: [(text: String, offset: Int)], in text: String) -> [(String, Int)] {
+        let ns = text as NSString
+        var result: [(String, Int)] = []
+        var start: Int?
+        var end = 0
+        func flush() {
+            if let s = start { result.append((ns.substring(with: NSRange(location: s, length: end - s)), s)) }
+            start = nil
+        }
+        for piece in pieces {
+            let pieceEnd = piece.offset + (piece.text as NSString).length
+            if let s = start, pieceEnd - s <= packLength {
+                end = pieceEnd
+            } else {
+                flush()
+                start = piece.offset
+                end = pieceEnd
             }
         }
+        flush()
         return result
     }
 

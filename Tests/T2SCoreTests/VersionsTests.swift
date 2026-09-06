@@ -4,7 +4,7 @@ import Testing
 @Suite struct VersionsTests {
     @Test func currentVersions() {
         #expect(Versions.schema == 1)
-        #expect(Versions.segmenter == 1)
+        #expect(Versions.segmenter == 2)
         #expect(Versions.normalizer == 2)
     }
 }

@@ -17,6 +17,11 @@ public final class ReaderModel {
     }
 
     public var activeHighlight: HighlightRange? { player.coordinator.highlight }
+    /// The whole utterance under the playhead, tinted `accentFaint` behind the word (spec §2.4.5).
+    public var activeSentence: HighlightRange? {
+        guard let timeline = player.coordinator.timeline else { return nil }
+        return Highlighter.sentence(at: player.coordinator.playhead, in: timeline)
+    }
     public var isCatchingUp: Bool { player.isCatchingUp }
 
     public var chapterTitle: String {

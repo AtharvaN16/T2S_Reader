@@ -44,4 +44,12 @@ public enum Highlighter {
         }
         return nil
     }
+
+    /// The whole utterance under the playhead, for the sentence-level tint (spec §2.4.5): the
+    /// entire `source`, not just the spoken word. `nil` once the playhead has run off the end.
+    public static func sentence(at ph: Playhead, in t: Timeline) -> HighlightRange? {
+        guard ph.utteranceIndex >= 0, ph.utteranceIndex < t.utteranceCount else { return nil }
+        let u = t[utterance: ph.utteranceIndex]
+        return HighlightRange(utteranceIndex: ph.utteranceIndex, position: u.position, sourceRange: 0..<u.source.utf16.count)
+    }
 }

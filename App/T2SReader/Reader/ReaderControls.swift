@@ -1,20 +1,27 @@
 import SwiftUI
 import T2SApp
 
-/// Back · play · forward · speed in the Reader bottom bar. Skip amounts stay synchronized with
-/// the reading preferences.
+/// Sleep timer · back 15 · play · forward 30 · speed — the Reader page's transport row (spec
+/// §2.4.5, after ElevenReader), evenly spaced across the width. Skip amounts stay synchronized
+/// with the reading preferences.
 struct ReaderControls: View {
     @Environment(AppEnvironment.self) private var env
+    var onSleepTimer: () -> Void
     var onSpeed: () -> Void
 
     var body: some View {
         let player = env.player
         let preferences = env.preferences
         HStack(spacing: 0) {
+            control(
+                env.sleepTimer.active == nil ? "moon.zzz" : "moon.zzz.fill", "Sleep timer",
+                action: onSleepTimer
+            )
             Spacer()
             control("gobackward.\(preferences.skipBackSeconds)", "Back \(preferences.skipBackSeconds) seconds") {
                 Task { await player.skip(by: -Double(preferences.skipBackSeconds)) }
             }
+            Spacer()
             Button {
                 Task { await player.togglePlay() }
             } label: {
@@ -31,6 +38,7 @@ struct ReaderControls: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+            Spacer()
             control("goforward.\(preferences.skipForwardSeconds)", "Forward \(preferences.skipForwardSeconds) seconds") {
                 Task { await player.skip(by: Double(preferences.skipForwardSeconds)) }
             }

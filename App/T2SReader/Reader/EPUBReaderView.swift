@@ -8,8 +8,9 @@ import T2SReadium
 import UIKit
 import WebKit
 
-/// Hosts Readium's EPUB navigator in scroll mode with Inter, decorates the active word with
-/// `accentSoft`, auto-scrolls while following, and reports taps as `SourceHit`s.
+/// Hosts Readium's EPUB navigator in scroll mode with Inter, decorates the active sentence with
+/// `accentFaint` and the active word with `accentSoft`, auto-scrolls while following (on word
+/// changes only), and reports taps as `SourceHit`s.
 struct EPUBReaderView: UIViewControllerRepresentable {
     let publication: Publication
     let reader: ReaderModel
@@ -21,12 +22,19 @@ struct EPUBReaderView: UIViewControllerRepresentable {
     let onTearDown: () -> Void
 
     static let decorationGroup: DecorationGroup = "t2s"
+    /// A custom style so the sentence tint gets its own opacity: `HTMLDecorationTemplate` bakes one
+    /// fixed `alpha` per style into its stylesheet and applies it to every decoration of that style,
+    /// discarding each `Decoration`'s own tint alpha — sharing `.highlight` with the word decoration
+    /// would render both at the same opacity regardless of which `Tokens` color is passed.
+    static let sentenceStyle: Decoration.Style.Id = "sentence"
 
     func makeUIViewController(context: Context) -> UIViewController {
         let initial = reader.activeHighlight.flatMap { LocatorMapping.locator(for: $0, in: timeline) }
-        let templates = HTMLDecorationTemplate.defaultTemplates(
-            defaultTint: UIColor(Tokens.accentSoft), cornerRadius: 4
-        )
+        let padding = UIEdgeInsets(top: 0, left: 1, bottom: 0, right: 1)
+        let templates: [Decoration.Style.Id: HTMLDecorationTemplate] = [
+            .highlight: .highlight(defaultTint: UIColor(Tokens.accentSoft), padding: padding, lineWeight: 2, cornerRadius: 4, alpha: 0.2),
+            Self.sentenceStyle: .highlight(defaultTint: UIColor(Tokens.accentFaint), padding: padding, lineWeight: 2, cornerRadius: 4, alpha: 0.08),
+        ]
         let config = EPUBNavigatorViewController.Configuration(
             preferences: Self.preferences(from: preferences, colorScheme: context.environment.colorScheme),
             contentInset: [.compact: (top: Spacing.margin, bottom: 120), .regular: (top: Spacing.margin, bottom: 120)],
@@ -56,18 +64,30 @@ struct EPUBReaderView: UIViewControllerRepresentable {
         }
 
         let highlight = reader.activeHighlight
+        let sentence = reader.activeSentence
         let locator = highlight.flatMap { LocatorMapping.locator(for: $0, in: timeline) }
-        if highlight != coordinator.lastHighlight {
+        let wordChanged = highlight != coordinator.lastHighlight
+        let sentenceChanged = sentence != coordinator.lastSentence
+        if wordChanged || sentenceChanged {
             coordinator.lastHighlight = highlight
+            coordinator.lastSentence = sentence
             var decorations: [Decoration] = []
+            if let sentence, let sentenceLocator = LocatorMapping.locator(for: sentence, in: timeline) {
+                decorations.append(Decoration(
+                    id: "sentence", locator: sentenceLocator,
+                    style: .init(id: Self.sentenceStyle, config: Decoration.Style.HighlightConfig(tint: UIColor(Tokens.accentFaint), isActive: false))
+                ))
+            }
             if let locator {
                 decorations.append(Decoration(
-                    id: "active", locator: locator,
+                    id: "word", locator: locator,
                     style: .highlight(tint: UIColor(Tokens.accentSoft), isActive: false)
                 ))
             }
             navigator.apply(decorations: decorations, in: Self.decorationGroup)
-            if reader.isFollowing, let locator {
+            // Auto-scroll tracks the word; a sentence-only change (a new sentence starting on the
+            // same word, or the reverse) must not re-trigger a scroll.
+            if wordChanged, reader.isFollowing, let locator {
                 coordinator.scrollToHighlight(locator)
             }
         } else if reader.isFollowing, !coordinator.wasFollowing, let locator {
@@ -84,14 +104,23 @@ struct EPUBReaderView: UIViewControllerRepresentable {
         coordinator.tearDown()
     }
 
-    /// Reader body: Inter 18 × scale, line height 1.5 by default (spec §2.4.1); theme from
-    /// preferences and colors from the design tokens.
+    /// Reader body: Inter 18pt × scale, line height 1.5 by default (spec §2.4.1); theme from
+    /// preferences and colors from the design tokens. `fontSize` is a ratio to Readium's own base
+    /// size (`CSSPercentLength`, 1.0 = 100%), so the spec's 18pt body is `18 / 16 = 1.125` at
+    /// scale 1.0 — not `18 * scale`, which renders at 1800%. `publisherStyles` off lets the theme,
+    /// font and alignment settings apply instead of the publisher's own CSS (many Readium settings
+    /// require it, per its own docs); `paragraphSpacing` is a rem length, not a ratio, and 1.0 sits
+    /// mid-way through Readium's 0…2 supported range.
     static func preferences(from preferences: ReaderPreferences, colorScheme: ColorScheme) -> EPUBPreferences {
         let dark = preferences.theme == .dark || (preferences.theme == .system && colorScheme == .dark)
         var result = EPUBPreferences()
         result.fontFamily = "Inter"
-        result.fontSize = 18 * preferences.textScale
+        result.fontSize = 1.125 * preferences.textScale
         result.lineHeight = preferences.lineHeight
+        result.publisherStyles = false
+        result.textAlign = .start
+        result.hyphens = false
+        result.paragraphSpacing = 1.0
         result.scroll = true
         result.theme = dark ? .dark : .light
         let traits = UITraitCollection(userInterfaceStyle: dark ? .dark : .light)
@@ -126,6 +155,7 @@ struct EPUBReaderView: UIViewControllerRepresentable {
         weak var navigator: EPUBNavigatorViewController?
         var lastPreferences: EPUBPreferences?
         var lastHighlight: HighlightRange?
+        var lastSentence: HighlightRange?
         var wasFollowing = true
         private var programmaticScrollUntil = Date.distantPast
         private var capturedTap: CapturedTap?

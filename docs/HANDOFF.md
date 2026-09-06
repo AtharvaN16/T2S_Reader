@@ -1,6 +1,6 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-06 (Plan 9 — the first listen's fixes — is on `plan-9-voice-quality-readalong`, merged to `dev` once its final review is clean; the phone is unplugged, so the listen that proves it is the next thing to do). Written for whoever picks up the coding next._
+_Last updated 2026-09-06 (Plan 9 — the first listen's fixes — is merged into `dev` and pushed; its final review was clean after one fix wave. The phone was unplugged, so the listen that proves it is the next thing to do). Written for whoever picks up the coding next._
 
 ## Resume here (2026-09-06) — Plan 9
 
@@ -58,7 +58,7 @@ and commit message per task. The roadmap is
 
 | Branch | State | Notes |
 |---|---|---|
-| `dev` | integration branch | Plans 1–6 and 8 merged (3b77b0f); Plan 9 fast-forwards on top once its final review is clean (root `swift test` 354 tests / 75 suites; `Packages/T2SKokoro` 92 / 14). Earlier notes: Plan 5 Tasks 5–6 were fast-forwarded from `plan-5-task-5-kokoro` on 2026-09-03 (`938c8b8 … ba207ed`, twelve commits, every task reviewed plus a whole-branch review). Root package: **309 tests in 72 suites** (`swift test`). `Packages/T2SKokoro`: **56 tests in 7 suites** (`scripts/test-kokoro.sh`; seven of them are gated on the real model files being installed — four load the 327 MB model and two of those synthesize audio). `Packages/T2SReadium`: **12 tests in 3 suites** (`scripts/test-readium.sh`, on the iPhone simulator). The everyday app builds, launches, imports an EPUB, and plays it on the simulator and on an iPhone 11 Pro. |
+| `dev` | integration branch | Plans 1–6, 8 and 9 merged (root `swift test` 356 tests / 75 suites; `Packages/T2SKokoro` 93 / 14; `scripts/test-readium.sh` not re-run for Plan 9). Earlier notes: Plan 5 Tasks 5–6 were fast-forwarded from `plan-5-task-5-kokoro` on 2026-09-03 (`938c8b8 … ba207ed`, twelve commits, every task reviewed plus a whole-branch review). Root package: **309 tests in 72 suites** (`swift test`). `Packages/T2SKokoro`: **56 tests in 7 suites** (`scripts/test-kokoro.sh`; seven of them are gated on the real model files being installed — four load the 327 MB model and two of those synthesize audio). `Packages/T2SReadium`: **12 tests in 3 suites** (`scripts/test-readium.sh`, on the iPhone simulator). The everyday app builds, launches, imports an EPUB, and plays it on the simulator and on an iPhone 11 Pro. |
 | `main` | stale: only the initial spec commit | Not used for integration yet; fast-forward it to `dev` when you want a release point. |
 
 Plan branches are short-lived: each plan runs on its own branch off `dev` (locally in a git

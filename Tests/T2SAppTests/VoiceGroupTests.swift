@@ -5,7 +5,7 @@ import T2SAudio
 @Suite struct VoiceGroupTests {
     @Test func everyOptionCarriesThePickerSectionItBelongsIn() {
         #expect(VoiceOption.systemDefault.group == .system)
-        #expect(VoiceGroup.allCases.map(\.title) == ["System", "Kokoro (beta)", "Cloud"])
+        #expect(VoiceGroup.allCases.map(\.title) == ["System", "On-device voices", "Cloud"])
 
         let store = CloudVoiceConfigurationStore(configuration: .example)
         let voices = CloudVoiceCatalog(base: BaseCatalog(), configurationStore: store).voices()

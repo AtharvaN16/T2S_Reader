@@ -1,9 +1,14 @@
 import T2SAudio
 
-/// The bundled English Kokoro voices, listed under "Kokoro (beta)" whether or not the route is
+/// The bundled English Kokoro voices, listed under "On-device voices" whether or not the route is
 /// available on this device: the choice persists, and an unavailable route falls back per
 /// `VoiceRouteResolving`. Only a build that links the engine installs this catalog, so the everyday
 /// build lists no Kokoro voices.
+///
+/// The owner's ask was Kokoro-only: once this build lists at least one engine, the base catalog's
+/// system rows (including `systemDefault`) are dropped from `voices()` — there is nothing left to
+/// preview or route to on a phone that speaks Kokoro. A base cloud row is kept; the reader's own BYO
+/// key is not a "default voice" this catalog gets to remove.
 public struct KokoroVoiceCatalog: VoiceCatalog {
     /// The 28 English voice names, in picker order — `af_heart`, the model's reference voice, leads.
     /// One list for both runtimes: the same voices ship as rows of `voices.npz` on the MLX route and
@@ -42,22 +47,36 @@ public struct KokoroVoiceCatalog: VoiceCatalog {
     }
 
     public func voices() -> [VoiceOption] {
-        base.voices() + engines().flatMap { engine in
+        let activeEngines = engines()
+        // No engine yet (the everyday build, or a Kokoro build before its first probe answers):
+        // the base rows — system voices included — pass through exactly as they always have.
+        let baseVoices = activeEngines.isEmpty ? base.voices() : base.voices().filter { $0.group != .system }
+        return baseVoices + activeEngines.flatMap { engine in
             Self.voiceNames.map { name in
                 let language = Self.language(for: name)
                 let qualifier = engine.label.isEmpty ? "" : " · \(engine.label)"
                 return VoiceOption(id: KokoroVoiceID(engineID: engine.identity, voice: name).rawValue,
-                                   name: "\(Self.displayName(for: name)) · \(language)\(qualifier)",
+                                   name: Self.displayName(for: name),
+                                   detail: "\(Self.detail(for: name))\(qualifier)",
                                    language: language,
                                    group: .kokoro)
             }
         }
     }
 
-    /// `af_heart` → `Heart`: the prefix encodes accent and gender, which the row shows separately.
+    /// `af_heart` → `Heart`: the prefix encodes accent and gender, which the row's detail line
+    /// carries separately (`detail(for:)`).
     private static func displayName(for name: String) -> String {
         let stem = name.split(separator: "_").last.map(String.init) ?? name
         return stem.prefix(1).uppercased() + stem.dropFirst()
+    }
+
+    /// The row's second line: `af_heart` → "American · Female", `bm_george` → "British · Male".
+    private static func detail(for name: String) -> String {
+        let prefix = name.split(separator: "_").first.map(String.init) ?? name
+        let accent = prefix.hasPrefix("b") ? "British" : "American"
+        let gender = prefix.hasSuffix("m") ? "Male" : "Female"
+        return "\(accent) · \(gender)"
     }
 
     /// A leading `b` marks Kokoro's British voices; the rest are American.

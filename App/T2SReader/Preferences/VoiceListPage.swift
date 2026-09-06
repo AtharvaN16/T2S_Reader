@@ -7,6 +7,10 @@ struct VoiceListPage: View {
     @Environment(AppEnvironment.self) private var env
     var selection: String?
     var onSelect: (VoiceOption) -> Void
+    /// What "no override" resolves to on this device, loaded once so the right row starts checked —
+    /// Kokoro Heart on the phone build, "default" itself (which matches no row) on the simulator.
+    /// Until it loads, `option.isDefault` marks a row instead (spec §6).
+    @State private var resolvedDefault: String?
 
     var body: some View {
         let options = env.voices.voices()
@@ -19,8 +23,10 @@ struct VoiceListPage: View {
                         SectionHeader(title: group.title)
                             .padding(.top, Spacing.section)
                             .padding(.bottom, Spacing.grid)
-                        ForEach(groupOptions) { option in
-                            row(option)
+                        if group == .kokoro {
+                            kokoroRows(groupOptions)
+                        } else {
+                            ForEach(groupOptions) { option in row(option) }
                         }
                         if group == .kokoro {
                             VStack(alignment: .leading, spacing: 4) {
@@ -35,25 +41,71 @@ struct VoiceListPage: View {
                         }
                     }
                 }
+                if let error = env.voicePreview.lastError {
+                    Text(error)
+                        .typeRole(.meta)
+                        .foregroundStyle(Tokens.destructive)
+                        .padding(.top, Spacing.section)
+                }
                 Color.clear.frame(height: 120)
             }
             .padding(.horizontal, Spacing.margin)
         }
         .background(Tokens.ground)
         .navigationBarBackButtonHidden(false)
-        .onDisappear { env.audioSession.stopPreview() }
+        .onDisappear { env.voicePreview.stop() }
+        .task {
+            resolvedDefault = await env.voiceRouting.effectiveVoiceID(VoiceOption.systemDefault.id)
+        }
+    }
+
+    /// The Kokoro section reads as two sub-sections by language, under the one group header above
+    /// them (spec: Plan 9 voice quality) — "American English" leads because the default route's
+    /// default voice is American (Heart).
+    private func kokoroRows(_ options: [VoiceOption]) -> some View {
+        let american = options.filter { $0.language == "en-US" }
+        let british = options.filter { $0.language == "en-GB" }
+        return VStack(alignment: .leading, spacing: 0) {
+            if !american.isEmpty {
+                subsectionHeader("American English")
+                ForEach(american) { row($0) }
+            }
+            if !british.isEmpty {
+                subsectionHeader("British English")
+                ForEach(british) { row($0) }
+            }
+        }
+    }
+
+    private func subsectionHeader(_ title: String) -> some View {
+        Text(title)
+            .typeRole(.meta)
+            .foregroundStyle(Tokens.ink2)
+            .padding(.top, Spacing.grid)
+            .padding(.bottom, 4)
     }
 
     private func row(_ option: VoiceOption) -> some View {
-        HStack(spacing: 12) {
+        let isSelected = option.id == selection
+            || (selection == nil && (resolvedDefault.map { $0 == option.id } ?? option.isDefault))
+        return HStack(spacing: 12) {
             Button { onSelect(option) } label: {
-                HStack {
-                    Text(option.name)
-                        .typeRole(.rowTitle)
-                        .foregroundStyle(Tokens.ink)
-                        .lineLimit(1)
+                HStack(spacing: 12) {
+                    avatar(for: option)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(option.name)
+                            .typeRole(.rowTitle)
+                            .foregroundStyle(Tokens.ink)
+                            .lineLimit(1)
+                        if let detail = option.detail {
+                            Text(detail)
+                                .typeRole(.meta)
+                                .foregroundStyle(Tokens.ink2)
+                                .lineLimit(1)
+                        }
+                    }
                     Spacer()
-                    if (selection ?? VoiceOption.systemDefault.id) == option.id {
+                    if isSelected {
                         Image(systemName: "checkmark")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(Tokens.ink)
@@ -63,30 +115,45 @@ struct VoiceListPage: View {
             }
             .buttonStyle(.plain)
 
-            // Only the system voices preview: a cloud voice would spend the reader's quota, and a
-            // Kokoro voice would load 340 MB of weights to say one line.
-            switch option.group {
-            case .cloud:
-                Image(systemName: "cloud")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(Tokens.ink2)
-                    .accessibilityLabel("Preview this voice from Cloud voices")
-            case .kokoro:
-                Image(systemName: "waveform")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(Tokens.ink2)
-                    .accessibilityLabel("Kokoro voice")
-            case .system:
-                Button { SystemVoiceCatalog.preview(option, through: env.audioSession) } label: {
-                    Image(systemName: "play.circle")
-                        .font(.system(size: 20))
-                        .foregroundStyle(Tokens.ink2)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Preview")
-            }
+            previewButton(for: option)
         }
-        .frame(height: 44)
+        .frame(minHeight: 56)
+    }
+
+    /// Every row previews — Kokoro, system and cloud alike (spec: Plan 9 voice quality) — through
+    /// the one model `RoutedEngine` already knows how to route any of their IDs to.
+    private func previewButton(for option: VoiceOption) -> some View {
+        let previewing = env.voicePreview.previewing == option.id
+        let rendering = previewing && env.voicePreview.isRendering
+        return Button { env.voicePreview.toggle(option.id) } label: {
+            Group {
+                if rendering {
+                    ProgressView()
+                } else {
+                    Image(systemName: previewing ? "stop.circle" : "play.circle")
+                        .font(.system(size: 20))
+                }
+            }
+            .foregroundStyle(Tokens.ink2)
+            .frame(width: 24, height: 24)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(previewing ? "Stop preview" : "Preview \(option.name)")
+    }
+
+    /// A neutral `surface` disc with the voice's initial: the spec allows one accent element per
+    /// screen and keeps `positive`/`destructive` for states and confirmations, so a coloured orb per
+    /// row is not on the table. The initial is enough to scan the list by.
+    private func avatar(for option: VoiceOption) -> some View {
+        Circle()
+            .fill(Tokens.surface)
+            .frame(width: 36, height: 36)
+            .overlay(
+                Text(option.name.prefix(1).uppercased())
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Tokens.ink)
+            )
+            .accessibilityHidden(true)
     }
 
     /// The Kokoro section is only rendered by a build that links the engine, so this is only ever

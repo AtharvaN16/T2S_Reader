@@ -6,33 +6,49 @@ import T2SAudio
 @Suite struct KokoroVoiceCatalogTests {
     private let identity = "kokoro-4e9ecdf0-mlx-misaki1.0.6"
 
-    @Test func appendsTheBundledVoicesAfterTheBaseCatalogUnderThisBuildsIdentity() throws {
+    @Test func withOneEngineTheListIsTwentyEightKokoroOnlyRows() throws {
         let catalog = KokoroVoiceCatalog(base: BaseCatalog(), engineIdentity: identity)
         let voices = catalog.voices()
 
-        #expect(voices.first == .systemDefault)
-        let kokoro = Array(voices.dropFirst())
-        #expect(kokoro.count == 28)
-        #expect(kokoro.allSatisfy { $0.group == .kokoro })
-        #expect(kokoro.map(\.id) == KokoroVoiceCatalog.voiceNames.map {
+        #expect(voices.count == 28)
+        #expect(voices.allSatisfy { $0.group == .kokoro })
+        #expect(voices.map(\.id) == KokoroVoiceCatalog.voiceNames.map {
             KokoroVoiceID(engineID: identity, voice: $0).rawValue
         })
-        for option in kokoro {
+        for option in voices {
             let parsed = try #require(KokoroVoiceID(rawValue: option.id))
             #expect(parsed.engineID == identity)
         }
-    }
 
-    @Test func namesAndLanguagesReadAsAPickerRow() throws {
-        let kokoro = Array(KokoroVoiceCatalog(base: BaseCatalog(), engineIdentity: identity).voices().dropFirst())
-
-        let heart = try #require(kokoro.first)
-        #expect(heart.name == "Heart · en-US")
+        let heart = try #require(voices.first)
+        #expect(heart.name == "Heart")
+        #expect(heart.detail == "American · Female")
         #expect(heart.language == "en-US")
 
-        let emma = try #require(kokoro.first { KokoroVoiceID(rawValue: $0.id)?.voice == "bf_emma" })
-        #expect(emma.name == "Emma · en-GB")
+        let emma = try #require(voices.first { KokoroVoiceID(rawValue: $0.id)?.voice == "bf_emma" })
+        #expect(emma.name == "Emma")
+        #expect(emma.detail == "British · Female")
         #expect(emma.language == "en-GB")
+
+        let george = try #require(voices.first { KokoroVoiceID(rawValue: $0.id)?.voice == "bm_george" })
+        #expect(george.detail == "British · Male")
+    }
+
+    @Test func withNoEnginesTheBaseRowsIncludingSystemDefaultPassThroughUnchanged() {
+        let base = BaseCatalog()
+        let catalog = KokoroVoiceCatalog(base: base, engines: [])
+        #expect(catalog.voices() == base.voices())
+    }
+
+    @Test func aCloudRowInTheBaseSurvivesTheFilterWhileSystemRowsAreHidden() {
+        let cloud = VoiceOption(id: "cloud:fp:v", name: "Astra · Cloud", language: "Cloud", group: .cloud)
+        let base = BaseCatalog(extra: [cloud])
+        let catalog = KokoroVoiceCatalog(base: base, engineIdentity: identity)
+        let voices = catalog.voices()
+
+        #expect(voices.count == 29)
+        #expect(!voices.contains { $0.group == .system })
+        #expect(voices.contains(cloud))
     }
 
     @Test func everyLinkedEngineListsAllTwentyEightVoicesAndOnlyALabelledOneSaysSo() throws {
@@ -40,22 +56,23 @@ import T2SAudio
         let catalog = KokoroVoiceCatalog(base: BaseCatalog(), engines: [(coreML, ""), (identity, "MLX")])
         let voices = catalog.voices()
 
-        #expect(voices.first == .systemDefault)
-        let kokoro = Array(voices.dropFirst())
-        #expect(kokoro.count == 56)
+        #expect(voices.count == 56)
+        #expect(!voices.contains { $0.group == .system })
         // The default route leads, so the picker's first Kokoro row is the one the reader gets by
         // default (spec §2.2).
-        #expect(kokoro.prefix(28).allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == coreML })
-        #expect(kokoro.dropFirst(28).allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == identity })
+        #expect(voices.prefix(28).allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == coreML })
+        #expect(voices.dropFirst(28).allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == identity })
 
         // The label is a runtime qualifier: the everyday route reads as it always has, and only the
         // second runtime has to name itself to be told apart.
-        #expect(kokoro.first?.name == "Heart · en-US")
-        #expect(kokoro.dropFirst(28).first?.name == "Heart · en-US · MLX")
-        let mlxEmma = try #require(kokoro.dropFirst(28).first { KokoroVoiceID(rawValue: $0.id)?.voice == "bf_emma" })
-        #expect(mlxEmma.name == "Emma · en-GB · MLX")
+        #expect(voices.first?.name == "Heart")
+        #expect(voices.first?.detail == "American · Female")
+        #expect(voices.dropFirst(28).first?.name == "Heart")
+        #expect(voices.dropFirst(28).first?.detail == "American · Female · MLX")
+        let mlxEmma = try #require(voices.dropFirst(28).first { KokoroVoiceID(rawValue: $0.id)?.voice == "bf_emma" })
+        #expect(mlxEmma.detail == "British · Female · MLX")
         #expect(mlxEmma.language == "en-GB")
-        #expect(kokoro.allSatisfy { $0.group == .kokoro })
+        #expect(voices.allSatisfy { $0.group == .kokoro })
     }
 
     /// A runtime whose availability probe answers after the catalog was built must still reach the
@@ -70,19 +87,20 @@ import T2SAudio
             return engines
         }
 
-        let beforeTheProbe = Array(catalog.voices().dropFirst())
+        let beforeTheProbe = catalog.voices()
         #expect(beforeTheProbe.count == 28)
         #expect(beforeTheProbe.allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == coreML })
 
         mlxAvailable.withLock { $0 = true }
 
-        let afterTheProbe = Array(catalog.voices().dropFirst())
+        let afterTheProbe = catalog.voices()
         #expect(afterTheProbe.count == 56)
         #expect(afterTheProbe.dropFirst(28).allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == mlx })
-        #expect(afterTheProbe.dropFirst(28).first?.name == "Heart · en-US · MLX")
+        #expect(afterTheProbe.dropFirst(28).first?.detail == "American · Female · MLX")
     }
 }
 
 private struct BaseCatalog: VoiceCatalog {
-    func voices() -> [VoiceOption] { [.systemDefault] }
+    var extra: [VoiceOption] = []
+    func voices() -> [VoiceOption] { [.systemDefault] + extra }
 }

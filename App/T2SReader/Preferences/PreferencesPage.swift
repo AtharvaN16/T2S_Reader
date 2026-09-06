@@ -127,7 +127,9 @@ struct PreferencesPage: View {
     private var defaultVoiceSubtitle: String {
         let chosen = env.preferences.defaultVoiceID ?? VoiceOption.systemDefault.id
         let effective = chosen == VoiceOption.systemDefault.id ? (resolvedDefaultVoiceID ?? chosen) : chosen
-        return env.voices.voices().first { $0.id == effective }?.name ?? "System default"
+        guard let option = env.voices.voices().first(where: { $0.id == effective }) else { return "System default" }
+        guard let detail = option.detail else { return option.name }
+        return "\(option.name) · \(detail)"
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

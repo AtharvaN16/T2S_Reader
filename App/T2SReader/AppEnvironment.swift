@@ -28,6 +28,10 @@ final class AppEnvironment {
     let cloudVoiceSecrets: any SecretStoring
     let cloudRouter: RoutedEngine
     let voices: any VoiceCatalog
+    /// Renders and plays one sample sentence for whichever voice a picker row previews (spec:
+    /// Plan 9 voice quality) — the same model for every group, since `cloudRouter` already knows
+    /// how to route any voice ID.
+    let voicePreview: VoicePreviewModel
     /// The same resolver the player and Prepare use, so Preferences can show what "default" means
     /// on this device rather than guessing (spec §6).
     let voiceRouting: any VoiceRouteResolving
@@ -83,6 +87,20 @@ final class AppEnvironment {
         coordinator.setRate(preferences.defaultRate)
         self.importModel = importModel
         deviceMonitor = DeviceMonitor(audioStore: audioStore)
+        // Last: capturing `player` in `beforePreview` is only safe once every stored property has
+        // a value, which is what makes `self` usable inside an escaping closure at all.
+        voicePreview = VoicePreviewModel(
+            engine: cloudRouter,
+            makePlayer: { rate -> any AudioPlaying in
+                if let player = try? AudioPlayer(sampleRate: rate) { return player }
+                return NullAudioPlaying()
+            },
+            beforePreview: { [player] in
+                // A preview is never heard over the book: pause it first, exactly as a listener's
+                // own pause would, so resuming afterward is the listener's call, not this one's.
+                if player.isPlaying { await player.togglePlay() }
+            }
+        )
     }
 
     static func live() throws -> AppEnvironment {
@@ -115,4 +133,21 @@ final class AppEnvironment {
                               cloudVoiceSecrets: cloudVoiceSecrets, cloudRouter: cloudRouter,
                               kokoro: kokoro)
     }
+}
+
+/// `AudioPlayer`'s init can throw — a real `AVAudioEngine` failing to start, not something a preview
+/// button tap should crash over. This silently does nothing instead; a reader sees the preview
+/// button return to "play" without ever having heard anything, which is the honest outcome when the
+/// device's audio engine itself would not come up.
+@MainActor
+private final class NullAudioPlaying: AudioPlaying {
+    var rate: Double = 1
+    let isPlaying = false
+    let consumedSeconds: TimeInterval = 0
+    var onSegmentFinished: ((Int) -> Void)?
+    func enqueue(_ audio: PCMAudio, tag: Int) {}
+    func play() {}
+    func pause() {}
+    func reset() {}
+    func rebuildAfterMediaServicesReset() {}
 }

@@ -41,6 +41,8 @@ public final class VoicePreviewModel {
             return
         }
         stop()
+        // A failure belongs to the preview that failed, not to the next one.
+        lastError = nil
         previewing = voiceID
         isRendering = true
         task = Task { [weak self] in
@@ -59,6 +61,8 @@ public final class VoicePreviewModel {
 
     private func render(_ voiceID: String) async {
         await beforePreview()
+        // Stopped while the book was being paused: do not pay for a synthesis nobody will hear.
+        guard !Task.isCancelled, previewing == voiceID else { return }
         let outcome: Result<SynthesisResult, Error>
         do {
             outcome = .success(try await engine.synthesize(SynthesisRequest(spoken: Self.sampleText, voiceID: voiceID)))

@@ -85,6 +85,38 @@ import T2SCore
         #expect(factory.made.isEmpty)
     }
 
+    @Test func theNextToggleClearsAnEarlierFailure() async throws {
+        let engine = FakeEngine(secondsPerCharacter: 0.05)
+        await engine.fail(on: VoicePreviewModel.sampleText)
+        let factory = PlayerFactory()
+        let model = VoicePreviewModel(engine: engine, makePlayer: { factory.make($0) }, beforePreview: {})
+
+        model.toggle(voiceA)
+        while model.isRendering { await Task.yield() }
+        #expect(model.lastError != nil)
+
+        model.toggle(voiceB)
+        #expect(model.lastError == nil)
+    }
+
+    @Test func stoppingWhileTheBookIsBeingPausedNeverAsksTheEngine() async throws {
+        let engine = FakeEngine(secondsPerCharacter: 0.05)
+        let gate = Gate()
+        let factory = PlayerFactory()
+        let model = VoicePreviewModel(engine: engine, makePlayer: { factory.make($0) }, beforePreview: { await gate.wait() })
+
+        model.toggle(voiceA)
+        await Task.yield()
+        model.stop()
+        await gate.open()
+        await Task.yield()
+        await Task.yield()
+
+        #expect(await engine.requests.isEmpty)
+        #expect(factory.made.isEmpty)
+        #expect(model.previewing == nil)
+    }
+
     @Test func beforePreviewIsAwaitedBeforeTheEngineIsAsked() async throws {
         let engine = FakeEngine(secondsPerCharacter: 0.05)
         let gate = Gate()

@@ -8,8 +8,8 @@ struct VoiceListPage: View {
     var selection: String?
     var onSelect: (VoiceOption) -> Void
     /// What "no override" resolves to on this device, loaded once so the right row starts checked —
-    /// Kokoro Heart on the phone build, "default" itself (which matches no row) on the simulator.
-    /// Until it loads, `option.isDefault` marks a row instead (spec §6).
+    /// Kokoro Heart on the phone build; on the simulator the routing echoes "default" back, which is
+    /// the `systemDefault` row's own id. Until it loads, `option.isDefault` marks a row instead (spec §6).
     @State private var resolvedDefault: String?
 
     var body: some View {

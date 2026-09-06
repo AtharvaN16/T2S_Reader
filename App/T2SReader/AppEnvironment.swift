@@ -136,18 +136,24 @@ final class AppEnvironment {
 }
 
 /// `AudioPlayer`'s init can throw — a real `AVAudioEngine` failing to start, not something a preview
-/// button tap should crash over. This silently does nothing instead; a reader sees the preview
-/// button return to "play" without ever having heard anything, which is the honest outcome when the
-/// device's audio engine itself would not come up.
+/// button tap should crash over. This plays nothing and reports every segment finished the moment
+/// `play()` is called, so the preview button returns to "play" at once rather than sitting on "stop"
+/// for audio that will never come — the honest outcome when the device's audio engine itself would
+/// not come up.
 @MainActor
 private final class NullAudioPlaying: AudioPlaying {
     var rate: Double = 1
     let isPlaying = false
     let consumedSeconds: TimeInterval = 0
     var onSegmentFinished: ((Int) -> Void)?
-    func enqueue(_ audio: PCMAudio, tag: Int) {}
-    func play() {}
+    private var queued: [Int] = []
+    func enqueue(_ audio: PCMAudio, tag: Int) { queued.append(tag) }
+    func play() {
+        let tags = queued
+        queued.removeAll()
+        for tag in tags { onSegmentFinished?(tag) }
+    }
     func pause() {}
-    func reset() {}
+    func reset() { queued.removeAll() }
     func rebuildAfterMediaServicesReset() {}
 }

@@ -1,18 +1,16 @@
-import ReadiumShared
 import SwiftUI
 import T2SApp
 import T2SCore
 import T2SStore
 
-/// Full-screen read-along page. The navigator and audio player share the same ReaderModel, so
+/// Full-screen read-along page. The text view and audio player share the same ReaderModel, so
 /// closing the page never stops playback.
 struct ReaderPage: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     var summary: DocumentSummary
 
-    @State private var publication: Publication?
-    @State private var timeline: Timeline?
+    @State private var text: ReaderText?
     @State private var error: String?
     @State private var chromeVisible = true
     @State private var showChapters = false
@@ -29,29 +27,17 @@ struct ReaderPage: View {
         let reader = env.readerModel
         ZStack {
             Tokens.ground.ignoresSafeArea()
-            if let publication, let timeline {
-                Group {
-                    if summary.document.sourceType == .pdf {
-                        PDFReaderView(
-                            publication: publication, reader: reader, timeline: timeline,
-                            onTap: handleTap,
-                            onError: handleReaderError,
-                            onTearDown: releasePublication
-                        )
-                    } else {
-                        EPUBReaderView(
-                            publication: publication,
-                            reader: reader,
-                            preferences: env.preferences,
-                            timeline: timeline,
-                            httpServer: env.publications.httpServer,
-                            onTap: handleTap,
-                            onError: handleReaderError,
-                            onTearDown: releasePublication
-                        )
-                    }
-                }
-                .ignoresSafeArea(edges: .bottom)
+            if let text {
+                ReaderTextView(
+                    text: text,
+                    textScale: env.preferences.textScale,
+                    lineHeight: env.preferences.lineHeight,
+                    highlight: reader.activeHighlight,
+                    isFollowing: reader.isFollowing,
+                    onTap: handleTap,
+                    onUserScroll: { reader.suspendFollowing() }
+                )
+                .ignoresSafeArea()
             } else if let error {
                 Text(error).typeRole(.meta).foregroundStyle(Tokens.destructive).padding(Spacing.margin)
             } else {
@@ -215,41 +201,30 @@ struct ReaderPage: View {
         .accessibilityLabel(label)
     }
 
-    private func handleTap(_ hit: SourceHit?) {
+    private func handleTap(_ tap: ReaderTextView.Tap) {
         Task {
-            if let hit, await env.readerModel.seek(to: hit) { return }
+            if case .word(let index, let offset) = tap, await env.readerModel.seek(toUtterance: index, sourceOffset: offset) {
+                return
+            }
             withAnimation { chromeVisible.toggle() }
         }
     }
 
-    /// Readium rejects restricted publications at navigator construction. Keep the failure in the
-    /// SwiftUI page instead of allowing an initializer failure to terminate the app.
-    private func handleReaderError(_ message: String) {
-        releasePublication()
-        publication = nil
-        timeline = nil
-        error = message
-    }
-
-    private func releasePublication() {
-        env.publications.release(summary.id)
-    }
-
-    /// Loads and starts the requested document when necessary, then opens its cached Readium
-    /// publication. `Position` remains the only persisted location; Readium locators stay here.
+    /// Loads and starts the requested document when necessary, then draws its timeline's text
+    /// (spec 2026-09-07 §5). The model is built off the main actor; a 24-hour book is about a
+    /// million characters.
     private func open() async {
         if env.player.current?.id != summary.id {
             await env.player.load(summary, play: true)
         }
-        timeline = env.player.coordinator.timeline
-        do {
-            publication = try await env.publications.publication(
-                for: summary.id,
-                at: env.paths.sourceURL(summary.id, type: summary.document.sourceType)
-            )
-        } catch {
-            self.error = "This document can't be displayed: \(error)"
+        guard let timeline = env.player.coordinator.timeline, timeline.utteranceCount > 0 else {
+            error = "This document has no readable text."
+            return
         }
+        let document = summary.document
+        text = await Task.detached(priority: .userInitiated) {
+            ReaderText(documentID: document.id, timeline: timeline, title: document.title, author: document.author)
+        }.value
     }
 
     /// The voice chip's name: not necessarily the document's stored voice, but the one actually

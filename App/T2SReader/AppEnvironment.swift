@@ -22,7 +22,6 @@ final class AppEnvironment {
     let libraryModel: LibraryModel
     let player: PlayerModel
     let importModel: ImportModel
-    let publications = PublicationCache()
     let preferences: ReaderPreferences
     let cloudVoiceSettings: CloudVoiceSettings
     let cloudVoiceSecrets: any SecretStoring

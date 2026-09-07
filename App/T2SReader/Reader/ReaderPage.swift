@@ -225,9 +225,12 @@ struct ReaderPage: View {
             return
         }
         let document = summary.document
-        text = await Task.detached(priority: .userInitiated) {
+        let model = await Task.detached(priority: .userInitiated) {
             ReaderText(documentID: document.id, timeline: timeline, title: document.title, author: document.author)
         }.value
+        // The page was dismissed, or moved to another document, while the model was building.
+        guard !Task.isCancelled else { return }
+        text = model
     }
 
     /// The voice chip's name: not necessarily the document's stored voice, but the one actually

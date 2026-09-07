@@ -6,7 +6,9 @@ import UIKit
 /// text uses — `ink` everywhere, `ink2` on the byline. Both are dynamic `UIColor`s resolved at draw
 /// time, so a theme change recolours without a rebuild. (They are attributes rather than the view's
 /// `textColor` because that property applies to the whole string and would flatten the byline.)
-/// Nonisolated and pure so the page can build it off the main actor.
+/// Nonisolated and pure so the page can build it off the main actor, and cancellable a paragraph at
+/// a time: a slider drag emits a dozen scales, and each superseded typeset must stop rather than
+/// finish a whole book beside the TTS inference.
 enum ReaderTypesetter {
     static let bodySize: CGFloat = 18
 
@@ -14,11 +16,13 @@ enum ReaderTypesetter {
         UIFont(name: name, size: size) ?? .systemFont(ofSize: size, weight: fallback)
     }
 
+    /// nil when the task building it was cancelled: the caller's string is superseded.
     static func attributedString(for text: ReaderText, scale: Double, lineHeight: Double,
-                                 inkColor: UIColor, bylineColor: UIColor) -> NSAttributedString {
+                                 inkColor: UIColor, bylineColor: UIColor) -> NSAttributedString? {
         let body = bodySize * scale
         let result = NSMutableAttributedString()
         for (i, paragraph) in text.paragraphs.enumerated() {
+            if Task.isCancelled { return nil }
             let font: UIFont
             var tracking: CGFloat = 0
             var before: CGFloat = 0

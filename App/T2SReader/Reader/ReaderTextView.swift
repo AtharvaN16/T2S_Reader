@@ -102,6 +102,11 @@ struct ReaderTextView: UIViewRepresentable {
             self.onUserScroll = onUserScroll
         }
 
+        /// The page went away mid-typeset: stop it rather than finish a book nobody will read.
+        deinit {
+            buildTask?.cancel()
+        }
+
         func attach(_ view: UITextView) {
             self.view = view
             overlay.isUserInteractionEnabled = false
@@ -122,9 +127,10 @@ struct ReaderTextView: UIViewRepresentable {
             let inkColor = UIColor(Tokens.ink)
             let bylineColor = UIColor(Tokens.ink2)
             buildTask = Task.detached(priority: .userInitiated) { [text] in
-                let typeset = Typeset(string: ReaderTypesetter.attributedString(
-                    for: text, scale: scale, lineHeight: lineHeight, inkColor: inkColor, bylineColor: bylineColor))
-                guard !Task.isCancelled else { return }
+                guard let string = ReaderTypesetter.attributedString(
+                    for: text, scale: scale, lineHeight: lineHeight, inkColor: inkColor, bylineColor: bylineColor)
+                else { return }
+                let typeset = Typeset(string: string)
                 await MainActor.run { [weak self] in
                     guard let self, self.styleKey == key, let view = self.view else { return }
                     self.text = text
@@ -152,7 +158,9 @@ struct ReaderTextView: UIViewRepresentable {
                 redrawHighlight()
             }
             if following, changed || !wasFollowing {
-                centreIfNeeded(animated: true)
+                // A centre still pending from the rebuild is the opening one: land on the word
+                // rather than flinging to it from the top.
+                centreIfNeeded(animated: !pendingCentre)
             }
             wasFollowing = following
         }

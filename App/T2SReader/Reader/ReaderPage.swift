@@ -37,7 +37,7 @@ struct ReaderPage: View {
                     onTap: handleTap,
                     onUserScroll: { reader.suspendFollowing() }
                 )
-                .ignoresSafeArea()
+                .ignoresSafeArea(edges: .bottom)
             } else if let error {
                 Text(error).typeRole(.meta).foregroundStyle(Tokens.destructive).padding(Spacing.margin)
             } else {
@@ -214,6 +214,9 @@ struct ReaderPage: View {
     /// (spec 2026-09-07 §5). The model is built off the main actor; a 24-hour book is about a
     /// million characters.
     private func open() async {
+        // A page reopened on another document starts blank rather than showing the last one's text.
+        text = nil
+        error = nil
         if env.player.current?.id != summary.id {
             await env.player.load(summary, play: true)
         }

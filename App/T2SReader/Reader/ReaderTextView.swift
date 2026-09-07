@@ -22,8 +22,12 @@ struct ReaderTextView: UIViewRepresentable {
     let onTap: (Tap) -> Void
     let onUserScroll: () -> Void
 
-    /// Room for the floating top circles and the three-row bottom block (as the old page had).
-    static let insets = UIEdgeInsets(top: 72, left: Spacing.margin, bottom: 240, right: Spacing.margin)
+    /// Room for the floating top circles and the three-row bottom block. The page gives the view
+    /// `.ignoresSafeArea(edges: .bottom)`, so the top is measured from the safe-area top and the
+    /// bottom from the window's: 96 (12 × 8) clears the top band's 150 pt on an iPhone 16 Pro
+    /// (59 + 96) and leaves only the last few points of its fade over the first line on an
+    /// iPhone 11 Pro (44 + 96); 240 clears the scrubber, times, transport and tool rows.
+    static let insets = UIEdgeInsets(top: 96, left: Spacing.margin, bottom: 240, right: Spacing.margin)
     static let cornerRadius: CGFloat = 4
 
     func makeUIView(context: Context) -> UITextView {

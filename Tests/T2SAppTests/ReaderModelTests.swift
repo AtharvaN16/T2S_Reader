@@ -135,4 +135,39 @@ import T2SStore
         #expect(await reader.seek(to: SourceHit(resourceHref: "nope", blockText: "x", offsetInBlock: 0)) == false)
         #expect(reader.activeHighlight?.utteranceIndex == 2)
     }
+
+    // MARK: Seeks by utterance (Plan 10: the native reader knows the utterance it drew)
+
+    @Test func anOffsetInTheSecondSentenceSeeksToThatWordsStart() {
+        let t = packedTimeline   // "First sentence. Second sentence here.", one timing per word, 0.5 s apart
+        // "Second" is the third word (source offset 16): starts at 1.0 s; "here." is the fifth: 2.0 s.
+        #expect(ReaderModel.playhead(utteranceIndex: 0, sourceOffset: 18, in: t) == Playhead(utteranceIndex: 0, offset: 1.0))
+        #expect(ReaderModel.playhead(utteranceIndex: 0, sourceOffset: 34, in: t) == Playhead(utteranceIndex: 0, offset: 2.0))
+        #expect(ReaderModel.playhead(utteranceIndex: 0, sourceOffset: 2, in: t) == Playhead(utteranceIndex: 0, offset: 0))
+    }
+
+    @Test func offsetsAreClampedAndTimingsOptional() {
+        let t = epubTimeline   // no word timings → utterance start
+        #expect(ReaderModel.playhead(utteranceIndex: 1, sourceOffset: 5, in: t) == Playhead(utteranceIndex: 1))
+        #expect(ReaderModel.playhead(utteranceIndex: 1, sourceOffset: 999, in: t) == Playhead(utteranceIndex: 1))
+        #expect(ReaderModel.playhead(utteranceIndex: 3, sourceOffset: 0, in: t) == nil)
+        #expect(ReaderModel.playhead(utteranceIndex: -1, sourceOffset: 0, in: t) == nil)
+    }
+
+    @Test func seekingByUtteranceResumesFollowing() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let coordinator = PlaybackCoordinator(engine: FakeEngine(secondsPerCharacter: 0.05), store: f.audio,
+                                              player: try AudioPlayer(manualRendering: true), playheadStore: f.store,
+                                              timeSource: SystemTimeSource())
+        let player = PlayerModel(coordinator: coordinator, library: f.library)
+        await player.load(try #require(try await f.store.summary(id: id)), play: false)
+        let reader = ReaderModel(player: player)
+        reader.suspendFollowing()
+        #expect(await reader.seek(toUtterance: 2, sourceOffset: 3))
+        #expect(player.coordinator.playhead.utteranceIndex == 2)
+        #expect(reader.isFollowing)
+        #expect(await reader.seek(toUtterance: 99, sourceOffset: 0) == false)
+        #expect(reader.activeHighlight?.utteranceIndex == 2)
+    }
 }

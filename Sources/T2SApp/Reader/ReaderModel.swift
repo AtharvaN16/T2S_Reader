@@ -52,6 +52,31 @@ public final class ReaderModel {
         return true
     }
 
+    /// Tap on a word the Reader drew itself (spec 2026-09-07 §5): seek to that word's timing inside
+    /// its utterance and re-engage following. False when the index is out of range.
+    public func seek(toUtterance index: Int, sourceOffset: Int) async -> Bool {
+        guard let timeline = player.coordinator.timeline,
+              let playhead = Self.playhead(utteranceIndex: index, sourceOffset: sourceOffset, in: timeline)
+        else { return false }
+        await player.coordinator.seek(to: playhead)
+        isFollowing = true
+        return true
+    }
+
+    /// Where an offset into an utterance's `source` lands: the start of the word whose timing covers
+    /// it, or the utterance start when it carries no timings yet. Offsets are clamped into the source.
+    public static func playhead(utteranceIndex: Int, sourceOffset: Int, in timeline: Timeline) -> Playhead? {
+        guard utteranceIndex >= 0, utteranceIndex < timeline.utteranceCount else { return nil }
+        let utterance = timeline[utterance: utteranceIndex]
+        guard let timings = utterance.wordTimings, !timings.isEmpty else { return Playhead(utteranceIndex: utteranceIndex) }
+        let sourceLength = utterance.source.utf16.count
+        let clamped = min(max(0, sourceOffset), max(0, sourceLength - 1))
+        let spoken = utterance.normalized.spokenRange(forSource: clamped ..< min(sourceLength, clamped + 1)).lowerBound
+        let word = timings.first { $0.spokenRange.contains(spoken) }
+            ?? timings.first { $0.spokenRange.lowerBound >= spoken }
+        return Playhead(utteranceIndex: utteranceIndex, offset: word?.start ?? 0)
+    }
+
     /// Where a tap lands: the utterance under it and, when that utterance carries word timings, the
     /// start of the tapped word inside it — an utterance can hold two or three sentences since the
     /// segmenter began packing them (`Segmenter.packLength`), so the utterance start alone could be
@@ -59,17 +84,10 @@ public final class ReaderModel {
     public static func playhead(for hit: SourceHit, in timeline: Timeline) -> Playhead? {
         guard let located = locate(hit, in: timeline) else { return nil }
         guard let sourceOffset = located.sourceOffset else { return Playhead(utteranceIndex: located.index) }
-        let utterance = timeline[utterance: located.index]
-        guard let timings = utterance.wordTimings, !timings.isEmpty else { return Playhead(utteranceIndex: located.index) }
-        let sourceLength = utterance.source.utf16.count
         // `sourceOffset` counts characters of the whitespace-collapsed text; a packed source keeps the
         // HTML's own runs of whitespace between its sentences, so map it onto the raw source first.
-        let raw = Self.rawOffset(forCollapsed: sourceOffset, in: utterance.source)
-        let clamped = min(max(0, raw), max(0, sourceLength - 1))
-        let spoken = utterance.normalized.spokenRange(forSource: clamped ..< min(sourceLength, clamped + 1)).lowerBound
-        let word = timings.first { $0.spokenRange.contains(spoken) }
-            ?? timings.first { $0.spokenRange.lowerBound >= spoken }
-        return Playhead(utteranceIndex: located.index, offset: word?.start ?? 0)
+        let raw = Self.rawOffset(forCollapsed: sourceOffset, in: timeline[utterance: located.index].source)
+        return playhead(utteranceIndex: located.index, sourceOffset: raw, in: timeline)
     }
 
     /// Whitespace runs collapse to one space and the ends are trimmed, the way Readium's segments are.

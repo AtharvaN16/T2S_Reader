@@ -23,7 +23,7 @@ struct AppearanceSheet: View {
                     .tint(Tokens.ink)
             }
             VStack(alignment: .leading, spacing: 12) {
-                Text("Theme").typeRole(.meta).foregroundStyle(Tokens.ink2)
+                Text("Theme · applies to the whole app").typeRole(.meta).foregroundStyle(Tokens.ink2)
                 HStack(spacing: Spacing.grid) {
                     ForEach(ReaderTheme.allCases, id: \.self) { theme in
                         Pill(label: theme.rawValue.capitalized, style: preferences.theme == theme ? .selected : .soft) {

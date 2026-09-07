@@ -64,7 +64,7 @@ struct PreferencesPage: View {
                     }
                     section("Reading") {
                         Button { showAppearance = true } label: {
-                            row("Appearance", subtitle: "Text size, line height, theme")
+                            row("Appearance", subtitle: "Text size, line height, theme for the whole app")
                         }
                         .buttonStyle(.plain)
                     }

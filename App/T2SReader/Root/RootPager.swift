@@ -77,6 +77,7 @@ struct RootPager: View {
             .padding(.bottom, Spacing.grid)
         }
         .background(Tokens.ground.ignoresSafeArea())
+        .appTheme()
         .sheet(isPresented: $showPlayer) {
             PlayerSheet()
                 .presentationCornerRadius(Spacing.sheetCorner)

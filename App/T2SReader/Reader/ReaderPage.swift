@@ -58,6 +58,7 @@ struct ReaderPage: View {
             .animation(.easeInOut(duration: 0.2), value: chromeVisible)
         }
         .task(id: summary.id) { await open() }
+        .appTheme()
         .task(id: summary.id) { await resolveVoiceName() }
         .onChange(of: showVoiceChange) { _, shown in
             if !shown { Task { await resolveVoiceName() } }

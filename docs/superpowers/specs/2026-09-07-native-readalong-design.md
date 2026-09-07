@@ -60,8 +60,10 @@ each edge, scrolling from the document's first word to its last:
 
 ## 3. The text model — `ReaderText` (T2SApp, pure, tested)
 
-`ReaderText(timeline:title:author:)` turns a `Timeline` into a list of paragraphs and one
-flattened string, and answers the three questions the view asks. It has no UIKit in it.
+`ReaderText(documentID:timeline:title:author:)` turns a `Timeline` into a list of paragraphs and
+one flattened string, and answers the three questions the view asks. It has no UIKit in it. The
+`documentID` is its identity: the view rebuilds its attributed text only when the id or a text
+setting changes, never on the ticks that redraw the highlight.
 
 **Paragraph.** `id` (its index), `kind` (`documentTitle`, `byline`, `chapterTitle`,
 `heading(level)`, `body`), `chapterIndex` (nil for the title and byline), `text`, `location` (the
@@ -103,8 +105,6 @@ its start in that string. `ReaderText.length` is the total.
   span contains the offset, with the offset inside its `source`; an offset in the gap between two
   spans of the same paragraph maps to the next span at source offset 0; nil for an offset in a
   paragraph with no spans or past the end.
-- `range(ofChapter:) -> Range<Int>?` — for the contents sheet, so a chapter tap can also be a scroll
-  target when the chapter is the one already playing.
 
 **Cost.** Linear in the timeline, built once per document off the main thread; a 24-hour book is
 roughly 1.2 million UTF-16 units and a few thousand paragraphs.
@@ -179,10 +179,11 @@ tests once the new view is verified in the simulator.
 
 ## 6. Theme, app-wide
 
-`ReaderTheme` gains `colorScheme: ColorScheme?` (`system` → nil). `T2SReaderApp` applies
-`.preferredColorScheme(preferences.theme.colorScheme)` to the root, so every screen, every sheet
-and the Reader's UIKit text view (through the window's trait collection) follow the choice
-together. The Appearance sheet and the Preferences page keep their Theme control; its caption
+An app-target extension gives `ReaderTheme` a `colorScheme: ColorScheme?` (`system` → nil; the
+`T2SApp` package stays free of SwiftUI). The root pager and the Reader page (a full-screen cover,
+its own presentation) apply `.preferredColorScheme(preferences.theme.colorScheme)`, so every
+screen, every sheet and the Reader's UIKit text view (through the window's trait collection)
+follow the choice together. The Appearance sheet and the Preferences page keep their Theme control; its caption
 says it applies to the whole app. The Reader-only theme path in the old web view goes with it.
 
 ## 7. Errors and edges
@@ -205,10 +206,9 @@ says it applies to the whole app. The Reader-only theme path in the old web view
   paragraph with utterance-level tints; heading levels from selectors, `#id` selectors staying
   body; the chapter-title merge rule in both directions and the document-title exclusion; the
   byline; `location`s and `length`; `wordRange`, `tintRange`, `hit(at:)` including gap and
-  never-spoken cases; `range(ofChapter:)`; whitespace shown as spaces without changing lengths.
+  never-spoken cases; whitespace shown as spaces without changing lengths.
 - `ReaderModelTests`: `playhead(utteranceIndex:sourceOffset:in:)` — the existing word-timing
   cases rewritten against the new entry point; `seek(toUtterance:sourceOffset:)` resumes following.
-- `ReaderPreferencesTests`: `ReaderTheme.colorScheme` for the three cases.
 - The UIKit view has no unit tests (the app target has none). Verification is silent simulator
   screenshots — `SIMCTL_CHILD_T2S_SILENT=1` — in light and dark and at text scale 1.6, checked
   against §2, and the owner's phone for taps and scrolling, which the Mac cannot drive.

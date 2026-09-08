@@ -424,6 +424,21 @@ import T2SCore
         #expect(result.wordTimings.count == 6)
     }
 
+    /// A slow voice can predict more speech than the 15 s bucket holds for one packed utterance —
+    /// `af_nicole` predicted 16.7 s for the first piece of the passage's 197-id utterance — and the
+    /// vendored pipeline used to assert (DEBUG builds) before the engine's overflow re-split could run,
+    /// taking a debug build, which is what the Phone scheme ships, down with it. Now the piece splits
+    /// and the utterance renders whole.
+    @Test(.enabled(if: KokoroTestSupport.haveCoreMLFiles))
+    func aSlowVoiceOnAPackedUtteranceRendersInsteadOfAsserting() async throws {
+        let engine = try await Self.engineWithRealResources()
+        let block = SourceBlock(text: KokoroAudioProbe.passage, position: Position(resourceHref: "probe", progression: 0, charOffset: 0))
+        let utterance = Segmenter(normalizer: TextNormalizer(), packLength: Segmenter.appPackLength).segment(block).map(\.spoken)[1]
+        let result = try await engine.synthesize(.init(spoken: utterance, voiceID: Self.voiceID("af_nicole")))
+        #expect(result.audio.duration > 15)
+        #expect(Self.rms(result.audio.samples) > 0.01)
+    }
+
     @Test(.enabled(if: KokoroTestSupport.haveCoreMLFiles))
     func rejectsAnUnknownVoice() async throws {
         let engine = try await Self.engineWithRealResources()

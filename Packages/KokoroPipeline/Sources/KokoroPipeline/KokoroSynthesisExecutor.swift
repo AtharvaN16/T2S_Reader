@@ -32,6 +32,11 @@ public struct KokoroSynthesisRequest {
     /// Upstream's default is every punctuation token; see ``PunctuationSuppression``.
     /// Vendored addition (t2s_reader).
     public let punctuationSuppression: PunctuationSuppression
+    /// How much the predicted pitch contour's movement is widened before the decoder sees it: the
+    /// voiced frames' log-F0 is scaled about its mean by this factor, so 1 leaves the model's own
+    /// intonation and 1.5 makes every rise and fall half again as large. Vendored addition
+    /// (t2s_reader, an experiment: `spikes/findings/2026-09-08-quality-levers.md`).
+    public let f0Spread: Float
 
     public init(
         inputIds: [Int32],
@@ -41,7 +46,8 @@ public struct KokoroSynthesisRequest {
         seed: UInt64 = 42,
         warmModelsBeforeTiming: Bool = false,
         bucketDurationOverrideSeconds: Double? = nil,
-        punctuationSuppression: PunctuationSuppression = .allPunctuation
+        punctuationSuppression: PunctuationSuppression = .allPunctuation,
+        f0Spread: Float = 1
     ) {
         self.inputIds = inputIds
         self.attentionMask = attentionMask
@@ -51,6 +57,7 @@ public struct KokoroSynthesisRequest {
         self.warmModelsBeforeTiming = warmModelsBeforeTiming
         self.bucketDurationOverrideSeconds = bucketDurationOverrideSeconds
         self.punctuationSuppression = punctuationSuppression
+        self.f0Spread = f0Spread
     }
 }
 
@@ -247,7 +254,7 @@ public func executeKokoroSynthesis(
     let t7 = CFAbsoluteTimeGetCurrent()
     timings.f0ntrainCoreML = t7 - t6
 
-    let f0Curve = floatValues(from: f0PredArray)
+    let f0Curve = spreadF0(floatValues(from: f0PredArray), by: request.f0Spread)
     let nCurve = floatValues(from: nPredArray)
 
     try tensorDump?.writeFloatArray(name: "f0", values: f0Curve, shape: [1, f0Curve.count])
@@ -386,15 +393,12 @@ public func executeKokoroSynthesis(
     )
     let trimLen = min(waveformArray.count, targetLen)
     let rawAudio = floatValues(from: waveformArray, limit: trimLen)
-    let expectedAudioSamples = predDur.reduce(0, +) * PipelineConstants.samplesPerDurationFrame
-    #if DEBUG
-    if trimLen < expectedAudioSamples {
-        assertionFailure(
-            "Trimmed waveform (\(trimLen) samples) is shorter than pred_dur span " +
-            "(\(expectedAudioSamples) samples); punctuation suppression may be partial"
-        )
-    }
-    #endif
+    // Upstream asserted here (DEBUG only) when the predicted span overran the bucket. Vendored
+    // change (t2s_reader, 2026-09-08): the caller checks `predictedDurationFrames` against
+    // `bucketSeconds` on every result and re-splits an overflowing piece (`KokoroCoreMLEngine`,
+    // Plan 9 Task 1), so the condition is handled, not a bug — and a debug build on a phone is a
+    // real reader's build. A slow voice (`af_nicole`) on one 160-character utterance predicted 16.7 s
+    // for the 15 s bucket and took the whole process down with the assertion.
     let audio = suppressPunctuationTokenAudio(
         rawAudio,
         inputIds: Array(request.inputIds.prefix(predDur.count)),
@@ -610,4 +614,22 @@ private func warmModels(
 
 private func decoderPreFrameCount(fullF0Len: Int) -> Int {
     (fullF0Len - 1) / 2 + 1
+}
+
+/// Widens (or narrows) the pitch contour's movement about its own mean: every voiced frame's log-F0
+/// distance from the mean log-F0 is multiplied by `factor`; unvoiced frames (at or under the
+/// harmonic source's voiced threshold) are left alone, so voicing decisions do not change. Vendored
+/// addition (t2s_reader); `factor == 1` returns the curve untouched.
+func spreadF0(_ f0: [Float], by factor: Float) -> [Float] {
+    guard factor != 1, !f0.isEmpty else { return f0 }
+    let threshold = HarmonicConstants.voicedThreshold
+    var sum: Double = 0
+    var count = 0
+    for value in f0 where value > threshold { sum += log(Double(value)); count += 1 }
+    guard count > 0 else { return f0 }
+    let mean = sum / Double(count)
+    return f0.map { value in
+        guard value > threshold else { return value }
+        return Float(exp(mean + Double(factor) * (log(Double(value)) - mean)))
+    }
 }

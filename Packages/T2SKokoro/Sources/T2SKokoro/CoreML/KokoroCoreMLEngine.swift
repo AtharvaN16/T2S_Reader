@@ -69,13 +69,18 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         /// that made it. The app ships `true`: with the tail click gone, a seam measured 400–820 ms
         /// against the 25–420 ms the model puts at the same boundary inside one call.
         public var trimSeams: Bool
+        /// An experiment (`spikes/findings/2026-09-08-quality-levers.md`): how much the predicted
+        /// pitch contour's movement is widened before the decoder, 1 being the model's own. The app
+        /// ships 1 until the owner's ears say otherwise.
+        public var f0Spread: Float
 
         public init(punctuationSuppression: PunctuationSuppression = .allPunctuation, crossfadePieces: Bool = false,
-                    removeTailClick: Bool = false, trimSeams: Bool = false) {
+                    removeTailClick: Bool = false, trimSeams: Bool = false, f0Spread: Float = 1) {
             self.punctuationSuppression = punctuationSuppression
             self.crossfadePieces = crossfadePieces
             self.removeTailClick = removeTailClick
             self.trimSeams = trimSeams
+            self.f0Spread = f0Spread
         }
 
         /// What the app ships with — not this initializer's own defaults, which are upstream's. See
@@ -366,7 +371,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                         + Array(repeating: 0, count: padding),
                     refS: tokenizer.refS(phonemeUTF16Count: piece.phonemeUTF16Count),
                     speed: 1.0,
-                    punctuationSuppression: options.punctuationSuppression
+                    punctuationSuppression: options.punctuationSuppression,
+                    f0Spread: options.f0Spread
                 ),
                 modelProvider: loaded.models,
                 linearWeights: loaded.linearWeights,

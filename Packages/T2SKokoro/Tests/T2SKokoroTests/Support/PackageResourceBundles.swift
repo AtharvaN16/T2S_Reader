@@ -62,7 +62,33 @@ enum KokoroTestSupport {
     static func compiledCoreMLResources() async throws -> KokoroCoreMLResources.Located {
         if let compiledCoreMLResources { return compiledCoreMLResources }
         let staged = try KokoroCoreMLResources.locate(inDirectory: KokoroCoreMLResources.developmentDirectory).get()
-        let stages = try await KokoroCoreMLModels.compileStages(staged)
+        // `MLModel.compileModel` writes every stage to a fixed name in the per-user temporary
+        // directory, which every checkout and every session on this Mac shares: two test runs at once
+        // compile onto and sweep out from under each other ("The model is not found at URL …" at the
+        // first load, seen 2026-09-08). So each process keeps its own copy under its package's `.build`
+        // — an APFS clone, so it costs no time and no disk — and loads from there.
+        // The copy is keyed by the model revision and kept between runs, so a second run in the same
+        // checkout skips the five-minute compile as well.
+        let privateDirectory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appending(path: ".build/compiled-stages-\(KokoroCoreMLResources.revisionPrefix)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: privateDirectory, withIntermediateDirectories: true)
+        var stages: [String: URL] = [:]
+        let kept = KokoroCoreMLResources.stageNames().reduce(into: [String: URL]()) { result, name in
+            let url = privateDirectory.appending(path: "\(name).mlmodelc", directoryHint: .isDirectory)
+            if FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) { result[name] = url }
+        }
+        if kept.count == KokoroCoreMLResources.stageNames().count {
+            stages = kept
+        } else {
+            let shared = try await KokoroCoreMLModels.compileStages(staged)
+            for (name, url) in shared {
+                let mine = privateDirectory.appending(path: "\(name).mlmodelc", directoryHint: .isDirectory)
+                try? FileManager.default.removeItem(at: mine)
+                try FileManager.default.copyItem(at: url, to: mine)
+                stages[name] = mine
+            }
+        }
         let compiled = KokoroCoreMLResources.Located(
             stages: stages, voices: staged.voices, vocab: staged.vocab, hnsfWeights: staged.hnsfWeights,
             isPrecompiled: true

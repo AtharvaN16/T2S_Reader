@@ -108,6 +108,20 @@ public final class PrepareRunner {
         Task { await scheduler?.cancel() }
     }
 
+    /// Claims the one run slot — the flags every pass starts from. The caller has already checked
+    /// `isRunning`; a pass and a prime share this slot, which is why neither can start under the other.
+    private func beginRun() {
+        isRunning = true
+        cancelRequested = false
+        lastError = nil
+    }
+
+    /// Releases the slot, however the pass left.
+    private func endRun() {
+        isRunning = false
+        currentScheduler = nil
+    }
+
     /// Spec §3.4.1 tier 2 (`RenderPolicy`'s `primeSeconds`).
     public static let primeSeconds: TimeInterval = 30
 
@@ -120,13 +134,8 @@ public final class PrepareRunner {
         guard !isRunning else {
             return finish(PrepareRunResult(reason: .prime, stopReason: .skipped(.alreadyRunning)))
         }
-        isRunning = true
-        cancelRequested = false
-        lastError = nil
-        defer {
-            isRunning = false
-            currentScheduler = nil
-        }
+        beginRun()
+        defer { endRun() }
 
         let documents = await loadDocuments(lastPlayed: documentID, queue: [])
         guard let document = documents.first else {
@@ -168,13 +177,8 @@ public final class PrepareRunner {
             return finish(PrepareRunResult(reason: reason, stopReason: .skipped(.unsafeDevice)))
         }
 
-        isRunning = true
-        cancelRequested = false
-        lastError = nil
-        defer {
-            isRunning = false
-            currentScheduler = nil
-        }
+        beginRun()
+        defer { endRun() }
 
         let documents = await loadDocuments(lastPlayed: lastPlayed, queue: queue)
         guard !documents.isEmpty else {

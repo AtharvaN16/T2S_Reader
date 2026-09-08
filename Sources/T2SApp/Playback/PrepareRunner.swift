@@ -9,6 +9,8 @@ import T2SStore
 public enum PrepareRunReason: Hashable, Sendable {
     case foreground
     case backgroundProcessing
+    /// Spec §3.4.1 tier 2: the first ~30 s of one document, any power state.
+    case prime
 }
 
 public enum PrepareSkipReason: Hashable, Sendable {
@@ -104,6 +106,58 @@ public final class PrepareRunner {
         cancelRequested = true
         let scheduler = currentScheduler
         Task { await scheduler?.cancel() }
+    }
+
+    /// Spec §3.4.1 tier 2 (`RenderPolicy`'s `primeSeconds`).
+    public static let primeSeconds: TimeInterval = 30
+
+    /// Renders the first ``primeSeconds`` of `documentID` from its resume position, in any power
+    /// state, so its next tap plays with no spin-up: after an import (from the start) and at launch
+    /// for the continue-document (from where the reader left it). Refused while a Prepare pass runs —
+    /// `.skipped(.alreadyRunning)` — since the two share one scheduler slot; a prime is three
+    /// utterances, so nothing waits long. Never records a Prepare run.
+    public func prime(_ documentID: UUID) async -> PrepareRunResult {
+        guard !isRunning else {
+            return finish(PrepareRunResult(reason: .prime, stopReason: .skipped(.alreadyRunning)))
+        }
+        isRunning = true
+        cancelRequested = false
+        lastError = nil
+        defer {
+            isRunning = false
+            currentScheduler = nil
+        }
+
+        let documents = await loadDocuments(lastPlayed: documentID, queue: [])
+        guard let document = documents.first else {
+            return finish(PrepareRunResult(reason: .prime, stopReason: .completed))
+        }
+        var input = PolicyInput(documents: [document.id: document.snapshot], primes: [document.id], device: .unplugged)
+        input.primeSeconds = Self.primeSeconds
+        let jobs = RenderPolicy.plan(input).filter { $0.tier == .prime }
+
+        var result = PrepareRunResult(reason: .prime, stopReason: .completed)
+        guard !jobs.isEmpty else { return finish(result) }
+        let groupResult = await render(jobs, document: document)
+        result.renderedUtterances = groupResult.renderedUtterances
+        result.preparedSeconds = groupResult.preparedSeconds
+        if groupResult.renderedUtterances > 0 { result.documentIDs = [document.id] }
+        if groupResult.storageFull {
+            result.stopReason = .storageFull
+        } else if cancelRequested || Task.isCancelled {
+            result.stopReason = .cancelled
+        }
+        return finish(result)
+    }
+
+    /// ``prime(_:)`` for the continue-document — the one played most recently — so the mini-player's
+    /// first tap after a launch is instant. Nothing played yet means nothing to do.
+    public func primeContinueDocument() async -> PrepareRunResult {
+        let summaries = (try? await store.summaries()) ?? []
+        guard let last = summaries.filter({ $0.lastPlayedAt != nil })
+            .max(by: { $0.lastPlayedAt! < $1.lastPlayedAt! })?.id
+        else { return finish(PrepareRunResult(reason: .prime, stopReason: .completed)) }
+        return await prime(last)
     }
 
     private func run(reason: PrepareRunReason, lastPlayed: UUID?, queue: [UUID], device: DeviceState) async -> PrepareRunResult {

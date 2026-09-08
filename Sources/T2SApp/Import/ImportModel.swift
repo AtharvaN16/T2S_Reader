@@ -35,6 +35,10 @@ public final class ImportModel {
 
     public private(set) var phase: ImportPhase = .idle
     public private(set) var fileRows: [FileRow] = []
+    /// Called on the main actor with every document an import produced, after `phase` is `.done`.
+    /// The app primes them (spec §3.4.1 tier 2); a test counts them. Nil in the Share Extension,
+    /// which imports and hands off.
+    public var afterImport: (@MainActor ([DocumentSummary]) -> Void)?
 
     private let library: Library
     private let extractor: any ArticleExtracting
@@ -133,6 +137,7 @@ public final class ImportModel {
             }
         }
         phase = imported.isEmpty ? .failed("Nothing could be imported.") : .done(imported)
+        if !imported.isEmpty { afterImport?(imported) }
     }
 
     // MARK: Internals
@@ -145,6 +150,7 @@ public final class ImportModel {
                 return
             }
             phase = .done([summary])
+            afterImport?([summary])
         } catch {
             phase = .failed(Self.message(for: error))
         }

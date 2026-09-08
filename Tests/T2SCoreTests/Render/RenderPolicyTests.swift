@@ -41,6 +41,12 @@ import Testing
         #expect(indices(jobs, b, .prime) == [0, 1, 2])
     }
 
+    /// The continue-document is primed at launch from where the reader left it, not from page one.
+    @Test func primeStartsAtTheResumeIndex() {
+        let jobs = RenderPolicy.plan(input(primes: [b], docs: [snap(b, resume: 50)]))
+        #expect(indices(jobs, b, .prime) == [50, 51, 52])
+    }
+
     @Test func prepareOnlyWhileCharging() {
         let off = RenderPolicy.plan(input(lastPlayed: a, queue: [a, b], docs: [snap(a), snap(b)]))
         #expect(off.isEmpty)

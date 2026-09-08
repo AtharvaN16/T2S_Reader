@@ -36,6 +36,13 @@ struct T2SReaderApp: App {
                         environment.deviceMonitor.start()
                         PrepareTask.schedule()
                     }
+                    .task {
+                        // The continue-document's next 30 s, from where the reader left it, so the
+                        // mini-player's first tap after a launch is instant (spec §3.4.1 tier 2).
+                        // Here and not in `AppEnvironment.init`: the background Prepare task builds an
+                        // environment too, and a prime there would race the prepare for the one slot.
+                        _ = await environment.prepareRunner.primeContinueDocument()
+                    }
             } else {
                 Text("The library could not be opened.")
                     .typeRole(.rowTitle)

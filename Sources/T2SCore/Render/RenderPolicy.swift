@@ -122,9 +122,10 @@ public enum RenderPolicy {
         if let p = input.playing, let doc = input.documents[p.documentID] {
             walk(doc, from: p.playhead.utteranceIndex, budget: input.windowSeconds * p.rate, tier: .playAhead)
         }
-        // Tier 2: prime newly imported documents.
+        // Tier 2: prime — a newly imported document from its start, the continue-document from where
+        // the reader left it (spec §3.4.1; `resumeIndex` is 0 for a new import).
         for id in input.primes {
-            if let doc = input.documents[id] { walk(doc, from: 0, budget: input.primeSeconds, tier: .prime) }
+            if let doc = input.documents[id] { walk(doc, from: doc.resumeIndex, budget: input.primeSeconds, tier: .prime) }
         }
         // Tier 3: prepare while charging — continue-document first, then queue order, one shared budget.
         let d = input.device

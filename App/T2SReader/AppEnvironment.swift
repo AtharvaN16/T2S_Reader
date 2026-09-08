@@ -83,6 +83,12 @@ final class AppEnvironment {
         // played now, prepared in the background, or described in Preferences (spec §6).
         player.voiceRouting = voiceRouting
         prepareRunner.voiceRouting = voiceRouting
+        // Spec §3.4.1 tier 2: a new document's first 30 s render now, on any power state, so its
+        // first tap plays with no spin-up. One at a time, behind whatever the player is rendering —
+        // the arbiter gives play-ahead the next utterance.
+        importModel.afterImport = { [prepareRunner] documents in
+            Task { for document in documents { _ = await prepareRunner.prime(document.id) } }
+        }
         coordinator.setRate(preferences.defaultRate)
         self.importModel = importModel
         deviceMonitor = DeviceMonitor(audioStore: audioStore)

@@ -88,4 +88,20 @@ import T2SStore
         await model.importFiles([bad])
         #expect(model.phase == .failed("Nothing could be imported."))
     }
+
+    /// Whoever wires the model — the app — primes the new documents so their first tap plays at once;
+    /// the hook carries the summaries so it need not look them up again.
+    @Test func afterImportReceivesEveryImportedDocument() async throws {
+        let f = try AppFixtures()
+        let model = ImportModel(library: f.library, extractor: FakeExtractor())
+        var received: [[UUID]] = []
+        model.afterImport = { docs in received.append(docs.map(\.id)) }
+
+        await model.importText(title: "", body: "A pasted note.")
+        guard case .done(let docs) = model.phase else { Issue.record("expected done, got \(model.phase)"); return }
+        #expect(received == [[docs[0].id]])
+
+        await model.importText(title: "", body: "   ")                       // fails before importing
+        #expect(received.count == 1)
+    }
 }

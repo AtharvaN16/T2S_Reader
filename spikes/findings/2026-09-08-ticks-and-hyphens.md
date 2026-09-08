@@ -1,7 +1,7 @@
 # The tick before a sentence resumes, and the pause inside "commander-in-chief" — measured
 
 _2026-09-08, on this Mac. Probe: `Packages/T2SKokoro/Tests/T2SKokoroTests/CoreML/KokoroQualityProbe.swift`
-(runs only while `spikes/findings/audio-probe/quality/` exists; WAVs and `report.md` land there,
+(runs only while `spikes/findings/quality-probe/` exists; WAVs and `report.md` land there,
 git-ignored), fed by a test-only utterance trace in `KokoroCoreMLEngine` that places every sample of the
 output on the token that owns it. The owner's second listen on the iPhone 11 Pro reported: "sometimes mid
 sentence I can hear a tick or a clap, before the sentence resumes", and "commander-in-chief, cost-cutting:
@@ -124,5 +124,5 @@ piece before and the BOS frames of the piece after, so no word timing moves.
 ## Not done here
 
 - The mechanism of the burst (tensor dump at the trim point; compare `waveform_full` to the reference).
-- Listening. Every number above is a proxy; `spikes/findings/audio-probe/quality/*.wav` are for the
+- Listening. Every number above is a proxy; `spikes/findings/quality-probe/*.wav` are for the
   owner's ears — `packed-1.wav` at 10.9 s is the click before the seam.

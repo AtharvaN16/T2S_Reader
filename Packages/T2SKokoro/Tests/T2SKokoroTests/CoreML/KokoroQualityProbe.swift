@@ -13,12 +13,13 @@ import T2SCore
 /// piece seam; measures what the hyphen becomes and how long the model pauses on it; and checks the
 /// join between two consecutive app utterances after the AAC round trip the player actually hears.
 ///
-/// Not a test: `.enabled` only while `spikes/findings/audio-probe/quality` exists.
+/// Not a test: `.enabled` only while `spikes/findings/quality-probe` exists — its own directory, not
+/// one under `audio-probe/`, so neither probe's output enables the other.
 @Suite(.serialized) struct KokoroQualityProbe {
     static let outputDirectory: URL = {
         var root = URL(fileURLWithPath: #filePath)
         for _ in 0 ..< 6 { root.deleteLastPathComponent() }
-        return root.appending(path: "spikes/findings/audio-probe/quality", directoryHint: .isDirectory)
+        return root.appending(path: "spikes/findings/quality-probe", directoryHint: .isDirectory)
     }()
 
     static var isRequested: Bool {

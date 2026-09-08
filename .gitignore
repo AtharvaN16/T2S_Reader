@@ -39,3 +39,5 @@ __pycache__/
 
 # Audio probe output (scripts/audio-probe.sh writes WAVs here)
 spikes/findings/audio-probe/
+# Quality probe output (scripts/quality-probe.sh writes WAVs and report.md here)
+spikes/findings/quality-probe/

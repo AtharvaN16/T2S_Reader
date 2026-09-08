@@ -104,7 +104,7 @@ swift scripts/make-app-icon.swift  # regenerate the app icon PNG after editing t
 scripts/build-device.sh        # compile proof of the Kokoro target for a device (Release, unsigned)
 scripts/audio-probe.sh         # render one passage nine ways (Core ML variants + MLX control) into spikes/findings/audio-probe/
 swift scripts/analyze-wav.swift spikes/findings/audio-probe/*.wav   # pitch spread, pauses, impulses per WAV
-scripts/quality-probe.sh       # place every impulse on its token, measure seams, tails and hyphens, into spikes/findings/audio-probe/quality/
+scripts/quality-probe.sh       # place every impulse on its token, measure seams, tails and hyphens, into spikes/findings/quality-probe/
 open App/T2SReader.xcodeproj   # after scripts/build-app.sh has generated it
 scripts/fetch-readability.sh   # re-vendor Readability.js (committed under App/Resources/Readability)
 ```

@@ -69,29 +69,4 @@ import Testing
         #expect(Highlighter.highlight(at: Playhead(utteranceIndex: 0, offset: 0.1), in: t)?.sourceRange == 0..<5)
     }
 
-    // MARK: - sentence
-
-    private func twoUtterances() -> Timeline {
-        let u0 = Utterance(position: Position(resourceHref: "c.xhtml", progression: 0, charOffset: 0),
-                            source: "Dr. Smith paid $5.", spoken: "Doctor Smith paid five dollars.",
-                            spans: [], duration: .actual(2.4))
-        let u1 = Utterance(position: Position(resourceHref: "c.xhtml", progression: 0.5, charOffset: 20),
-                            source: "He left quickly.", spoken: "He left quickly.",
-                            spans: [], duration: .actual(1.2))
-        return makeTimeline([[u0, u1]])
-    }
-
-    @Test func sentenceCoversWholeUtteranceSource() {
-        let t = twoUtterances()
-        let h = Highlighter.sentence(at: Playhead(utteranceIndex: 1, offset: 0.3), in: t)
-        #expect(h?.utteranceIndex == 1)
-        #expect(h?.sourceRange == 0..<t[utterance: 1].source.utf16.count)
-        #expect(h?.position.charOffset == 20)
-    }
-
-    @Test func sentenceNilPastEnd() {
-        let t = twoUtterances()
-        #expect(Highlighter.sentence(at: Playhead(utteranceIndex: 2, offset: 0), in: t) == nil)
-        #expect(Highlighter.sentence(at: Playhead(utteranceIndex: -1, offset: 0), in: t) == nil)
-    }
 }

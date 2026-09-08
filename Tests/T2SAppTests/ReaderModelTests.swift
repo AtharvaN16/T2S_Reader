@@ -22,30 +22,6 @@ import T2SStore
         ])])
     }
 
-    @Test func resolvesTheUtteranceUnderTheTap() {
-        let t = epubTimeline
-        let block = "First sentence. Second sentence here."
-        #expect(ReaderModel.utteranceIndex(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: block, offsetInBlock: 3), in: t) == 0)
-        #expect(ReaderModel.utteranceIndex(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: block, offsetInBlock: 20), in: t) == 1)
-        #expect(ReaderModel.utteranceIndex(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: block, offsetInBlock: 15), in: t) == 1) // on the gap: next start ≤ offset wins
-        #expect(ReaderModel.utteranceIndex(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: "Another block.", offsetInBlock: 5), in: t) == 2)
-    }
-
-    @Test func whitespaceIsNormalizedOnBothSides() {
-        let t = epubTimeline
-        let raw = "  First   sentence.\n\n  Second\tsentence here.  "
-        #expect(ReaderModel.normalized(raw) == "First sentence. Second sentence here.")
-        #expect(ReaderModel.utteranceIndex(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: raw, offsetInBlock: 4), in: t) == 0)
-        #expect(ReaderModel.utteranceIndex(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: raw, offsetInBlock: 26), in: t) == 1)
-    }
-
-    @Test func unknownTextOrResourceYieldsNil() {
-        let t = epubTimeline
-        #expect(ReaderModel.utteranceIndex(for: SourceHit(resourceHref: "OEBPS/ch9.xhtml", blockText: "First sentence.", offsetInBlock: 0), in: t) == nil)
-        #expect(ReaderModel.utteranceIndex(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: "Not in the book.", offsetInBlock: 0), in: t) == nil)
-        #expect(ReaderModel.utteranceIndex(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: "", offsetInBlock: 0), in: t) == nil)
-    }
-
     // MARK: Word-precise seeks inside a packed utterance (Plan 9 Task 2)
 
     /// "First sentence. Second sentence here." as one utterance, with a timing per word.
@@ -63,77 +39,6 @@ import T2SStore
         }
         u.wordTimings = timings
         return Timeline(chapters: [Chapter(title: "One", position: Position(resourceHref: "OEBPS/ch1.xhtml", progression: 0), utterances: [u])])
-    }
-
-    @Test func aTapInTheSecondSentenceSeeksToThatWordsStart() {
-        let t = packedTimeline
-        let block = "First sentence. Second sentence here."
-        // "Second" is the third word: starts at 1.0 s.
-        let ph = ReaderModel.playhead(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: block, offsetInBlock: 18), in: t)
-        #expect(ph == Playhead(utteranceIndex: 0, offset: 1.0))
-        // "here." is the fifth word: 2.0 s.
-        let last = ReaderModel.playhead(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: block, offsetInBlock: 34), in: t)
-        #expect(last == Playhead(utteranceIndex: 0, offset: 2.0))
-    }
-
-    @Test func aTapInTheFirstWordSeeksToTheStart() {
-        let t = packedTimeline
-        let block = "First sentence. Second sentence here."
-        #expect(ReaderModel.playhead(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: block, offsetInBlock: 2), in: t)
-                == Playhead(utteranceIndex: 0, offset: 0))
-    }
-
-    /// A packed source keeps the HTML's whitespace runs between its sentences; the tap offset counts
-    /// them as one space, the way the block text was compared, so it has to be mapped back.
-    @Test func collapsedOffsetsMapOntoTheRawSource() {
-        let source = "First.\n    Second here."
-        #expect(ReaderModel.rawOffset(forCollapsed: 0, in: source) == 0)
-        #expect(ReaderModel.rawOffset(forCollapsed: 6, in: source) == 6)      // the first newline of the run
-        #expect(ReaderModel.rawOffset(forCollapsed: 7, in: source) == 11)     // "S" of Second
-        #expect(ReaderModel.rawOffset(forCollapsed: 14, in: source) == 18)    // "h" of here
-        #expect(ReaderModel.rawOffset(forCollapsed: 99, in: source) == source.utf16.count)
-    }
-
-    @Test func withoutWordTimingsATapSeeksToTheUtteranceStart() {
-        let t = epubTimeline
-        let block = "First sentence. Second sentence here."
-        #expect(ReaderModel.playhead(for: SourceHit(resourceHref: "OEBPS/ch1.xhtml", blockText: block, offsetInBlock: 20), in: t)
-                == Playhead(utteranceIndex: 1, offset: 0))
-        #expect(ReaderModel.playhead(for: SourceHit(resourceHref: "OEBPS/ch9.xhtml", blockText: block, offsetInBlock: 0), in: t) == nil)
-    }
-
-    @Test func pdfTapsResolveByPage() {
-        let href = PDFDocumentReader.resourceHref
-        let t = Timeline(chapters: [Chapter(title: "Doc", position: Position(resourceHref: href, progression: 0), utterances: [
-            utterance("Page one.", href: href, offset: 0, progression: 0),
-            utterance("Page two, first.", href: href, offset: 10, progression: 0.5),
-            utterance("Page two, second.", href: href, offset: 27, progression: 0.5),
-        ])])
-        #expect(ReaderModel.utteranceIndex(for: SourceHit(resourceHref: href, blockText: "", offsetInBlock: 0, pageIndex: 1), in: t) == 1)
-        #expect(ReaderModel.utteranceIndex(for: SourceHit(resourceHref: href, blockText: "", offsetInBlock: 0, pageIndex: 0), in: t) == 0)
-        #expect(ReaderModel.utteranceIndex(for: SourceHit(resourceHref: href, blockText: "", offsetInBlock: 0, pageIndex: 5), in: t) == nil)
-    }
-
-    @Test func seekingAndFollowing() async throws {
-        let f = try AppFixtures()
-        let id = try await f.importFake()
-        let coordinator = PlaybackCoordinator(engine: FakeEngine(secondsPerCharacter: 0.05), store: f.audio,
-                                              player: try AudioPlayer(manualRendering: true), playheadStore: f.store,
-                                              timeSource: SystemTimeSource())
-        let player = PlayerModel(coordinator: coordinator, library: f.library)
-        await player.load(try #require(try await f.store.summary(id: id)), play: false)
-        let reader = ReaderModel(player: player)
-        #expect(reader.isFollowing)
-        #expect(reader.chapterTitle == "Chapter 1")
-        reader.suspendFollowing()
-        #expect(!reader.isFollowing)
-        let hit = SourceHit(resourceHref: "OEBPS/ch2.xhtml", blockText: "Sentence number 2 here.", offsetInBlock: 3)
-        #expect(await reader.seek(to: hit))
-        #expect(player.coordinator.playhead.utteranceIndex == 2)
-        #expect(reader.isFollowing)                                         // a tap re-engages following
-        #expect(reader.chapterTitle == "Chapter 2")
-        #expect(await reader.seek(to: SourceHit(resourceHref: "nope", blockText: "x", offsetInBlock: 0)) == false)
-        #expect(reader.activeHighlight?.utteranceIndex == 2)
     }
 
     // MARK: Seeks by utterance (Plan 10: the native reader knows the utterance it drew)
@@ -163,10 +68,12 @@ import T2SStore
         let player = PlayerModel(coordinator: coordinator, library: f.library)
         await player.load(try #require(try await f.store.summary(id: id)), play: false)
         let reader = ReaderModel(player: player)
+        #expect(reader.chapterTitle == "Chapter 1")
         reader.suspendFollowing()
         #expect(await reader.seek(toUtterance: 2, sourceOffset: 3))
         #expect(player.coordinator.playhead.utteranceIndex == 2)
         #expect(reader.isFollowing)
+        #expect(reader.chapterTitle == "Chapter 2")
         #expect(await reader.seek(toUtterance: 99, sourceOffset: 0) == false)
         #expect(reader.activeHighlight?.utteranceIndex == 2)
     }

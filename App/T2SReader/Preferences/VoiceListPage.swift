@@ -14,6 +14,7 @@ struct VoiceListPage: View {
 
     var body: some View {
         let options = env.voices.voices()
+        let hasDefaultRow = options.contains(where: \.isDefault)
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 PageTitle(text: "Voice")
@@ -24,9 +25,9 @@ struct VoiceListPage: View {
                             .padding(.top, Spacing.section)
                             .padding(.bottom, Spacing.grid)
                         if group == .kokoro {
-                            kokoroRows(groupOptions)
+                            kokoroRows(groupOptions, options: options, hasDefaultRow: hasDefaultRow)
                         } else {
-                            ForEach(groupOptions) { option in row(option) }
+                            ForEach(groupOptions) { option in row(option, options: options, hasDefaultRow: hasDefaultRow) }
                         }
                         if group == .kokoro {
                             VStack(alignment: .leading, spacing: 4) {
@@ -62,19 +63,19 @@ struct VoiceListPage: View {
     /// The Kokoro section reads as two sub-sections by language, under the one group header above
     /// them (spec: Plan 9 voice quality) — "American English" leads because the default route's
     /// default voice is American (Heart).
-    private func kokoroRows(_ options: [VoiceOption]) -> some View {
-        let defaults = options.filter(\.isDefault)
-        let american = options.filter { !$0.isDefault && $0.language == "en-US" }
-        let british = options.filter { !$0.isDefault && $0.language == "en-GB" }
+    private func kokoroRows(_ groupOptions: [VoiceOption], options: [VoiceOption], hasDefaultRow: Bool) -> some View {
+        let defaults = groupOptions.filter(\.isDefault)
+        let american = groupOptions.filter { !$0.isDefault && $0.language == "en-US" }
+        let british = groupOptions.filter { !$0.isDefault && $0.language == "en-GB" }
         return VStack(alignment: .leading, spacing: 0) {
-            ForEach(defaults) { row($0) }
+            ForEach(defaults) { row($0, options: options, hasDefaultRow: hasDefaultRow) }
             if !american.isEmpty {
                 subsectionHeader("American English")
-                ForEach(american) { row($0) }
+                ForEach(american) { row($0, options: options, hasDefaultRow: hasDefaultRow) }
             }
             if !british.isEmpty {
                 subsectionHeader("British English")
-                ForEach(british) { row($0) }
+                ForEach(british) { row($0, options: options, hasDefaultRow: hasDefaultRow) }
             }
         }
     }
@@ -87,10 +88,9 @@ struct VoiceListPage: View {
             .padding(.bottom, 4)
     }
 
-    private func row(_ option: VoiceOption) -> some View {
+    private func row(_ option: VoiceOption, options: [VoiceOption], hasDefaultRow: Bool) -> some View {
         // No override chosen: the "Default" row is the one checked wherever the list has one; where it
         // has none (the simulator's system list), the resolved default's own row is.
-        let hasDefaultRow = env.voices.voices().contains(where: \.isDefault)
         let isSelected = option.id == selection
             || (selection == nil && (hasDefaultRow ? option.isDefault : (resolvedDefault.map { $0 == option.id } ?? false)))
         return HStack(spacing: 12) {
@@ -102,7 +102,7 @@ struct VoiceListPage: View {
                             .typeRole(.rowTitle)
                             .foregroundStyle(Tokens.ink)
                             .lineLimit(1)
-                        if let detail = detailText(for: option) {
+                        if let detail = detailText(for: option, options: options) {
                             Text(detail)
                                 .typeRole(.meta)
                                 .foregroundStyle(Tokens.ink2)
@@ -130,9 +130,9 @@ struct VoiceListPage: View {
     }
 
     /// The "Default" row says which voice it currently means, once the routing has answered.
-    private func detailText(for option: VoiceOption) -> String? {
+    private func detailText(for option: VoiceOption, options: [VoiceOption]) -> String? {
         guard option.isDefault, option.group == .kokoro else { return option.detail }
-        if let resolvedDefault, let resolved = env.voices.voices().first(where: { $0.id == resolvedDefault }) {
+        if let resolvedDefault, let resolved = options.first(where: { $0.id == resolvedDefault }) {
             return "Currently \(resolved.name)"
         }
         return option.detail

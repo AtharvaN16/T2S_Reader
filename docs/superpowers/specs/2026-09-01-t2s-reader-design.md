@@ -1,7 +1,7 @@
 # t2s_reader — Design Spec
 
 **Date:** 2026-09-01
-**Revised:** 2026-09-08 (rev 13 — see §11 changelog)
+**Revised:** 2026-09-08 (rev 14 — see §11 changelog)
 **Status:** Draft for review
 **Working name:** t2s_reader (TBD)
 
@@ -457,7 +457,7 @@ charger.
 | Tier | Job | When | Order |
 |---|---|---|---|
 | 1 **Play-ahead** | The playing document, a window ahead of the playhead sized per §3.6 | Whenever playing | Always first |
-| 2 **Prime** | The first ~30 s of audio from a document's resume position: a new import from its start, the continue-document from where the reader left it (rev 13) | On import; at launch | After play-ahead |
+| 2 **Prime** | The first ~30 s of audio from a document's resume position: a new import from its start, the continue-document from where the reader left it (rev 14) | On import; at launch | After play-ahead |
 | 3 **Prepare** | Continue-document, then queue order, each from its resume position, until the budget is spent | Only while charging | After prime |
 | 4 **Manual** | "Render whole document" | User-initiated, any power state, with a battery note | A prepare job whose budget is the whole document |
 
@@ -525,7 +525,7 @@ Therefore:
 - The engine reports **measured RTF**, updated as a rolling average.
 - Rates whose sustained demand exceeds a safety threshold are **disabled
   in the UI**, with an explanation, rather than offered and then stuttering.
-- **Rate follows the measured RTF, both ways (rev 13).** A rate the
+- **Rate follows the measured RTF, both ways (rev 14).** A rate the
   measured RTF can no longer sustain is lowered to the highest rate it
   can, and raised again — never above what the listener asked for — as the
   RTF recovers. The coordinator publishes `rateLoweredTo` while the cap
@@ -904,7 +904,7 @@ against a pipeline that is already proven.
 
 ## 11. Changelog
 
-**rev 13 (2026-09-08)** — Plan 13: first sound
+**rev 14 (2026-09-08)** — Plan 13: first sound
 - **§3.4.1** the prime tier is planned at last — after an import and at launch for the
   continue-document, from the resume index; it had existed in `RenderPolicy` since Plan 2 with no
   caller. The rendered-audio cache gains a memory tier for the last few renders (`RecentAudioStore`)

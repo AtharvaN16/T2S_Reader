@@ -60,15 +60,22 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         /// (`PcmJoiner`, 5 ms) instead of butted together. The app ships `true`: a long sentence cut
         /// at a word boundary and butted to the next piece left an audible seam.
         public var crossfadePieces: Bool
+        /// Whether the click the pipeline leaves at the tail of every call is zeroed
+        /// (``KokoroCoreMLTailClick``). The app ships `true`: the owner's second listen heard it as "a
+        /// tick before the sentence resumes" wherever a call ends inside a sentence
+        /// (`spikes/findings/2026-09-08-ticks-and-hyphens.md`).
+        public var removeTailClick: Bool
 
-        public init(punctuationSuppression: PunctuationSuppression = .allPunctuation, crossfadePieces: Bool = false) {
+        public init(punctuationSuppression: PunctuationSuppression = .allPunctuation, crossfadePieces: Bool = false,
+                    removeTailClick: Bool = false) {
             self.punctuationSuppression = punctuationSuppression
             self.crossfadePieces = crossfadePieces
+            self.removeTailClick = removeTailClick
         }
 
         /// What the app ships with — not this initializer's own defaults, which are upstream's. See
         /// the property docs above and `spikes/findings/2026-09-05-coreml-audio-quality.md`.
-        public static let `default` = Options(punctuationSuppression: .none, crossfadePieces: true)
+        public static let `default` = Options(punctuationSuppression: .none, crossfadePieces: true, removeTailClick: true)
     }
 
     private let resources: KokoroCoreMLResources.Located
@@ -107,6 +114,39 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// of the loaded stages. The app decides its options once, at construction.
     func setOptions(_ options: Options) {
         self.options = options
+    }
+
+    /// Diagnostic trace of one `synthesize` call, for the quality probe
+    /// (`Tests/T2SKokoroTests/CoreML/KokoroQualityProbe.swift`): the Misaki tokens, the ids they
+    /// became and every rendered piece with its duration frames and its offset in the joined audio —
+    /// enough to place any sample of the output on the token that owns it and to find the seams.
+    /// Internal and never set by the app.
+    struct UtteranceTrace: Sendable {
+        struct Word: Sendable {
+            var text: String
+            var phonemes: String?
+            var whitespace: String
+        }
+        struct Piece: Sendable {
+            var ids: [Int32]
+            var owners: [Int]
+            /// `KokoroPipeline.SynthesisResult.tokenDurationFrames`: one per framed id (BOS + ids + EOS).
+            var frames: [Int]
+            var offsetSamples: Int
+            var sampleCount: Int
+            var bucketSeconds: Int
+        }
+        var words: [Word]
+        var phonemes: String
+        var ids: [Int32]
+        var owners: [Int]
+        var pieces: [Piece]
+    }
+    private var utteranceTrace: (@Sendable (UtteranceTrace) -> Void)?
+
+    /// Installs (or removes) the diagnostic trace. Tests only.
+    func setUtteranceTrace(_ trace: (@Sendable (UtteranceTrace) -> Void)?) {
+        utteranceTrace = trace
     }
 
     /// Loads the eight stages, compiling them first when the staging is not precompiled, and the
@@ -213,6 +253,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         let pieces = try Self.pieces(ids: tokenization.ids, owners: tokenization.owners, words: words)
         var samples: [Float] = []
         var folds: [KokoroCoreMLTimingFold.Piece] = []
+        var tracedPieces: [UtteranceTrace.Piece] = []
         for (index, piece) in pieces.enumerated() {
             try Task.checkCancellation()
             // A piece whose predicted audio overflows its bucket is split and rendered in halves
@@ -223,22 +264,33 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                 piece, isFinal: index == pieces.count - 1, words: words, tokenizer: tokenizer, loaded: loaded
             )
             for (subPiece, result) in rendered {
+                let audio = options.removeTailClick ? KokoroCoreMLTailClick.removed(from: result.audio) : result.audio
                 // With a crossfade the join overlaps the last 5 ms of the previous piece, so the
                 // piece's audio starts that much earlier than a plain append would put it.
                 let joined = options.crossfadePieces && !samples.isEmpty
-                    ? PcmJoiner.join(segments: [samples, result.audio], sampleRate: PipelineConstants.sampleRate)
-                    : samples + result.audio
-                let offsetSamples = joined.count - result.audio.count
+                    ? PcmJoiner.join(segments: [samples, audio], sampleRate: PipelineConstants.sampleRate)
+                    : samples + audio
+                let offsetSamples = joined.count - audio.count
                 folds.append(KokoroCoreMLTimingFold.Piece(
                     owners: subPiece.owners,
                     frames: result.tokenDurationFrames,
                     offsetSeconds: Double(offsetSamples) / Double(PipelineConstants.sampleRate)
                 ))
+                if utteranceTrace != nil {
+                    tracedPieces.append(UtteranceTrace.Piece(
+                        ids: subPiece.ids, owners: subPiece.owners, frames: result.tokenDurationFrames,
+                        offsetSamples: offsetSamples, sampleCount: audio.count, bucketSeconds: result.bucketSeconds
+                    ))
+                }
                 samples = joined
             }
         }
 
         guard !samples.isEmpty, samples.allSatisfy(\.isFinite) else { throw KokoroCoreMLError.emptyAudio }
+        utteranceTrace?(UtteranceTrace(
+            words: words.map { UtteranceTrace.Word(text: $0.text, phonemes: $0.phonemes, whitespace: $0.whitespace) },
+            phonemes: phonemes, ids: tokenization.ids, owners: tokenization.owners, pieces: tracedPieces
+        ))
         let audio = PCMAudio(sampleRate: Double(PipelineConstants.sampleRate), samples: samples)
         let timed = KokoroCoreMLTimingFold.timedTokens(
             words.map { KokoroToken(text: $0.text, whitespace: $0.whitespace, start: nil, end: nil) },

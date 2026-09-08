@@ -1,7 +1,7 @@
 # t2s_reader — Design Spec
 
 **Date:** 2026-09-01
-**Revised:** 2026-09-07 (rev 11 — see §11 changelog)
+**Revised:** 2026-09-08 (rev 12 — see §11 changelog)
 **Status:** Draft for review
 **Working name:** t2s_reader (TBD)
 
@@ -647,6 +647,12 @@ Rules, applied in order:
    "bracket fourteen"
 4. Collapse URLs to a readable form — before any numeral expansion, or a
    URL containing digits (`/2024/05/…`, a DOI) is destroyed
+4b. Split a hyphen between two words into a space (rev 12) —
+   "commander-in-chief" → "commander in chief". MisakiSwift reads every
+   hyphen as Kokoro's `—` and pauses on it; the Python reference keeps an
+   intra-word hyphen silent. After URLs (a host keeps its hyphen long
+   enough to be recognised), before numerals. Spaced dashes, `--`, em and
+   en dashes and digit–digit ranges stay.
 5. Expand abbreviations, ordinals, numerals, units, currency
 6. Apply the user's pronunciation dictionary, last, immediately before G2P
 
@@ -890,6 +896,24 @@ against a pipeline that is already proven.
 ---
 
 ## 11. Changelog
+
+**rev 12 (2026-09-08)** — Plan 11: the second listen's fixes
+(`spikes/findings/2026-09-08-ticks-and-hyphens.md`).
+
+- **§4.1** rule 4b: a hyphen between two words becomes a space;
+  `Versions.normalizer` 3 (every stored timeline re-derives on its next
+  play). The dictionary matches a term typed with a hyphen against the
+  spoken form.
+- Core ML engine: the click the pipeline leaves 60–40 ms before the end of
+  every call — a 20 ms island between two runs of digital silence, absent
+  from the MLX reference — is zeroed (`KokoroCoreMLTailClick`,
+  `Options.removeTailClick`). Upstream hid it by zeroing whole punctuation
+  spans, which rev 10 switched off because it cut speech.
+- Core ML engine: the silence across a seam between two pipeline calls —
+  the model's end-of-input pause plus the next call's lead-in, 400–820 ms
+  measured — is trimmed to the model's own pause for the cut (60 ms after
+  a bare word, 320 ms after a clause mark, 500 ms after a sentence mark),
+  the timing fold moving with it (`KokoroCoreMLSeam`, `Options.trimSeams`).
 
 **rev 11 (2026-09-07)** — Plan 10: the native read-along.
 

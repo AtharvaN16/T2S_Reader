@@ -32,6 +32,10 @@ public final class PlaybackCoordinator {
     public private(set) var rate: Double = 1
     public private(set) var availableRates: [Double] = RateLimits.allRates
     public private(set) var measuredRTF: Double?
+    /// Set when the measured RTF made the current rate unsustainable and the coordinator lowered it
+    /// (spec §3.6: never offered-then-stuttering; audit §3.5: never left in place until "catching
+    /// up"). The Reader shows it once; `setRate` — the listener's own choice — and `load` clear it.
+    public private(set) var rateLoweredTo: Double?
     /// Set from the most recent `.failed` render event; cleared on `load`.
     public private(set) var lastRenderError: String?
     public private(set) var document: Document?
@@ -115,6 +119,7 @@ public final class PlaybackCoordinator {
         manualRequested = false
         lastPlayed = document.id
         lastRenderError = nil
+        rateLoweredTo = nil
         player.reset()
         playhead = timeIndex.clamp(document.resumePosition.map { PositionResolver.resolve($0, in: timeline) } ?? Playhead(utteranceIndex: 0))
         headIndex = playhead.utteranceIndex
@@ -220,6 +225,7 @@ public final class PlaybackCoordinator {
         let clamped = min(max(r, RateLimits.allRates.first!), RateLimits.maxSustainableRate(rtf: measuredRTF))
         rate = clamped
         player.rate = clamped
+        rateLoweredTo = nil
         replan()
     }
 
@@ -370,6 +376,19 @@ public final class PlaybackCoordinator {
         }
     }
 
+    /// Re-reads the scheduler's rolling RTF and, when the current rate is no longer sustainable,
+    /// steps it down to the highest rate that is — a smaller window replans from here.
+    private func refreshRates() async {
+        measuredRTF = await scheduler.measuredRTF
+        availableRates = RateLimits.availableRates(rtf: measuredRTF)
+        let cap = RateLimits.maxSustainableRate(rtf: measuredRTF)
+        guard rate > cap + 1e-9 else { return }
+        rate = cap
+        player.rate = cap
+        rateLoweredTo = cap
+        replan()
+    }
+
     private func apply(_ event: RenderEvent) {
         switch event {
         case .rendered(let r):
@@ -386,6 +405,8 @@ public final class PlaybackCoordinator {
             rendered[r.utteranceIndex] = true
             timeIndex = TimeIndex(timeline!)
             refreshHighlight()
+            // The RTF moves with every render, and a throttling phone shows it here first (§3.6).
+            chain { await self.refreshRates() }
             if awaitingIndex == r.utteranceIndex {
                 chain {
                     await self.fill()
@@ -402,11 +423,7 @@ public final class PlaybackCoordinator {
         case .idle:
             expectedIdles = max(0, expectedIdles - 1)
             releaseIdleWaitersIfSettled()
-            let scheduler = self.scheduler
-            chain {
-                self.measuredRTF = await scheduler.measuredRTF
-                self.availableRates = RateLimits.availableRates(rtf: self.measuredRTF)
-            }
+            chain { await self.refreshRates() }
         }
     }
 

@@ -112,6 +112,33 @@ import T2SCore
         #expect(c.rate == 4.0)
     }
 
+    /// Spec §3.6 gates the rates *offered*; a rate chosen while the RTF was unknown, or a phone that
+    /// throttles mid-book, still left the current rate in place until the window drained and playback
+    /// paused on "catching up" (audit §3.5). Now the rate follows the cap down, and says so once.
+    @Test func rateStepsDownWhenTheMeasuredRTFCannotSustainIt() async throws {
+        let block = SourceBlock(text: "Alpha one. Beta two. Gamma three.", position: Position(resourceHref: "c.xhtml", progression: 0, charOffset: 0))
+        let timeline = TimelineBuilder.build(chapters: [ChapterInput(title: "C", position: block.position, blocks: [block])],
+                                             segmenter: Segmenter(normalizer: TextNormalizer()))
+        let clock = ManualTimeSource()
+        let engine = FakeEngine(secondsPerCharacter: 0.1, simulatedRTF: 0.5, timeSource: clock)   // 0.5 sustains 1.5x, not 3x
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let player = FakePlayer()
+        let c = PlaybackCoordinator(engine: engine, store: store, player: player, playheadStore: MemoryPlayheadStore(), timeSource: clock,
+                                    configuration: CoordinatorConfiguration(windowSeconds: 60, primeSeconds: 30, prepareBudgetSeconds: 300, queuedSegments: 2))
+        c.load(Document(title: "T", sourceType: .article), timeline: timeline)
+        c.setRate(3.0)                                                   // RTF unknown: allowed
+        #expect(c.rate == 3.0 && c.rateLoweredTo == nil)
+
+        await c.waitForRenderIdle()                                      // three renders at RTF 0.5
+
+        #expect(c.measuredRTF == 0.5)
+        #expect(c.availableRates == [0.5, 0.75, 1.0, 1.25, 1.5])
+        #expect(c.rate == 1.5 && player.rate == 1.5)
+        #expect(c.rateLoweredTo == 1.5)
+        c.setRate(1.0)
+        #expect(c.rateLoweredTo == nil)                                  // the listener's own choice clears the notice
+    }
+
     @Test func pauseSavesPosition() async throws {
         let (c, player, _, _, saves, doc, timeline) = fixture()
         c.load(doc, timeline: timeline)

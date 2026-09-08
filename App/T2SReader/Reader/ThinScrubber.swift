@@ -2,11 +2,10 @@
 import SwiftUI
 import T2SApp
 
-/// The Reader page's progress bar (spec §2.4.5, after ElevenReader): a thin continuous track
-/// rather than the Player sheet's tick marks (`TickScrubber`, which stays there unchanged). Each
-/// of `tickCount` segments still marks the render frontier — rendered `ink`, unrendered `ink3` —
-/// so it stays visible without a legend; a small knob follows the fraction. Drag anywhere across
-/// the 44pt hit area to scrub; the seek fires on release.
+/// The Reader page's progress bar (spec §2.4.5, after ElevenReader): a thin continuous track,
+/// the app's only scrubber. Each of `tickCount` segments still marks the render frontier —
+/// rendered `ink`, unrendered `ink3` — so it stays visible without a legend; a small knob follows
+/// the fraction. Drag anywhere across the 44pt hit area to scrub; the seek fires on release.
 struct ThinScrubber: View {
     var model: ScrubberModel
     var onSeek: (Double) -> Void

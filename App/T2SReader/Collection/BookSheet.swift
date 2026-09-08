@@ -13,7 +13,6 @@ struct BookSheet: View {
     var summary: DocumentSummary
 
     @State private var chapters: [ChapterEntry] = []
-    @State private var showPlayer = false
     @State private var bookmarks: BookmarkListModel?
 
     private var live: DocumentSummary { env.libraryModel.summaries.first { $0.id == summary.id } ?? summary }
@@ -41,12 +40,9 @@ struct BookSheet: View {
                 HStack(spacing: 8) {
                     Pill(label: "Play", glyph: "play.fill", style: .accent) {
                         Task {
-                            if isCurrent {
-                                if !env.player.isPlaying { await env.player.togglePlay() }
-                            } else {
-                                await env.player.load(live, play: true)
-                            }
-                            showPlayer = true
+                            if isCurrent, !env.player.isPlaying { await env.player.togglePlay() }
+                            dismiss()
+                            readerRoute.open(live)
                         }
                     }
                     if isQueued {
@@ -103,10 +99,6 @@ struct BookSheet: View {
         .background(Tokens.raised)
         .presentationCornerRadius(Spacing.sheetCorner)
         .task { await reload() }
-        .onChange(of: showPlayer) { _, shown in if !shown { Task { await reload() } } }
-        .sheet(isPresented: $showPlayer) {
-            PlayerSheet().presentationCornerRadius(Spacing.sheetCorner).presentationBackground(Tokens.raised)
-        }
     }
 
     /// Positions are saved by the coordinator straight to the store, so the library model is

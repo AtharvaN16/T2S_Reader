@@ -26,8 +26,8 @@ enum RootPage: Hashable, CaseIterable {
 }
 
 /// Every Reader entry point goes through this closure (spec §2.4.5 lists Queue, book chapters,
-/// PlayerSheet, and imports). It keeps page presentation owned by the root rather than duplicated
-/// in each source view.
+/// the mini-player, and imports). It keeps page presentation owned by the root rather than
+/// duplicated in each source view.
 struct ReaderRoute: Sendable {
     var open: @MainActor @Sendable (DocumentSummary) -> Void
 }
@@ -49,7 +49,6 @@ struct RootPager: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
     @State private var page: RootPage = .queue
-    @State private var showPlayer = false
     /// A file handed to us by another app (`onOpenURL`), shown through the Add sheet like any other
     /// import rather than imported invisibly.
     @State private var openedFiles: [URL]?
@@ -70,7 +69,7 @@ struct RootPager: View {
 
             VStack(spacing: 12) {
                 if !env.libraryModel.isQueueEmpty || env.player.current != nil {
-                    MiniPlayer { showPlayer = true }
+                    MiniPlayer { readerDocument = $0 }
                 }
                 PageIndicator(page: $page)
             }
@@ -78,11 +77,6 @@ struct RootPager: View {
         }
         .background(Tokens.ground.ignoresSafeArea())
         .appTheme()
-        .sheet(isPresented: $showPlayer) {
-            PlayerSheet()
-                .presentationCornerRadius(Spacing.sheetCorner)
-                .presentationBackground(Tokens.raised)
-        }
         .onOpenURL { url in
             if let id = LibraryHandoff.documentID(from: url) {
                 Task { @MainActor in await openSharedDocument(id) }

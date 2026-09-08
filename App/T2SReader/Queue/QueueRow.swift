@@ -49,7 +49,9 @@ struct QueueRow: View {
                      glyph: isPlayingHere ? "pause.fill" : "play.fill",
                      style: .soft) {
                     Task {
-                        if isCurrent { await env.player.togglePlay() } else { await env.player.load(summary, play: true) }
+                        if isPlayingHere { await env.player.togglePlay(); return }   // Pause stays in place
+                        if isCurrent { await env.player.togglePlay() }                // resume, then read along
+                        onOpen()                                                       // the Reader loads and plays a non-current document itself
                     }
                 }
                 Pill(label: "Archive", glyph: "archivebox", style: .soft) {

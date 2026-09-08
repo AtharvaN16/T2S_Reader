@@ -3,10 +3,10 @@ import SwiftUI
 import T2SStore
 
 /// Spec §2.4.4: artwork, title, play/pause, skip-forward. Shows the playing item, or the next
-/// queued item with "Play" when idle. Tap expands to the player sheet.
+/// queued item with "Play" when idle. Tap opens the Reader on the shown item.
 struct MiniPlayer: View {
     @Environment(AppEnvironment.self) private var env
-    var onExpand: () -> Void
+    var onExpand: (DocumentSummary) -> Void
 
     private var shown: DocumentSummary? { env.player.current ?? env.libraryModel.queue.first }
 
@@ -14,7 +14,7 @@ struct MiniPlayer: View {
         if let shown {
             HStack(spacing: 12) {
                 Artwork(relativePath: shown.document.coverImagePath, paths: env.paths, size: 36, radius: Spacing.artworkSmall)
-                Button(action: onExpand) {
+                Button { onExpand(shown) } label: {
                     Text(shown.document.title)
                         .typeRole(.rowTitle)
                         .lineLimit(1)
@@ -22,7 +22,7 @@ struct MiniPlayer: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Now playing: \(shown.document.title)")
-                .accessibilityHint("Opens the player")
+                .accessibilityHint("Opens the reader")
                 Spacer(minLength: 8)
                 Button {
                     Task { await togglePlay(shown) }
@@ -54,7 +54,7 @@ struct MiniPlayer: View {
             .shadow(color: Tokens.ink.opacity(0.08), radius: 12, y: 4)
             .padding(.horizontal, Spacing.margin)
             .contentShape(Capsule())
-            .onTapGesture(perform: onExpand)
+            .onTapGesture { onExpand(shown) }
         }
     }
 

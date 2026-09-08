@@ -154,7 +154,10 @@ public final class PrepareRunner {
 
         var result = PrepareRunResult(reason: .prime, stopReason: .completed)
         guard !jobs.isEmpty else { return finish(result) }
-        let groupResult = await render(jobs, document: document)
+        // Every utterance, not coalesced: a prime is three of them, and the coordinator may load
+        // this document a moment later — a cache hit then carries no word timings, so anything the
+        // prime has not flushed is lost (the Plan 13 final review, finding 2).
+        let groupResult = await render(jobs, document: document, writeEveryUtterance: true)
         result.renderedUtterances = groupResult.renderedUtterances
         result.preparedSeconds = groupResult.preparedSeconds
         if groupResult.renderedUtterances > 0 { result.documentIDs = [document.id] }
@@ -266,7 +269,9 @@ public final class PrepareRunner {
         return documents
     }
 
-    private func render(_ jobs: [RenderJob], document: PreparedDocument) async -> GroupResult {
+    /// `writeEveryUtterance` flushes after every rendered event instead of coalescing (spec §5.2):
+    /// a prime is a handful of utterances whose timings must be on disk before the next load.
+    private func render(_ jobs: [RenderJob], document: PreparedDocument, writeEveryUtterance: Bool = false) async -> GroupResult {
         guard !jobs.isEmpty else { return GroupResult() }
         let scheduler = RenderScheduler(engine: engine, store: audioStore, timeSource: timeSource, arbiter: arbiter)
         currentScheduler = scheduler
@@ -325,7 +330,7 @@ public final class PrepareRunner {
                 // never per utterance (audit §5.2).
                 let movedToAnotherChapter = !dirtyChapters.isEmpty && !dirtyChapters.contains(chapterIndex)
                 dirtyChapters.insert(chapterIndex)
-                if movedToAnotherChapter || timeSource.now() - lastWrite >= chapterWriteInterval {
+                if writeEveryUtterance || movedToAnotherChapter || timeSource.now() - lastWrite >= chapterWriteInterval {
                     await flush()
                 }
             case .failed(_, _, let message):

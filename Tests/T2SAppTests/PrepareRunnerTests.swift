@@ -112,6 +112,10 @@ import T2SCore
         #expect(result.documentIDs == [id])
         #expect(result.recordedAt == nil)                                       // a prime is not a Prepare run
         #expect(defaults.object(forKey: StorageModel.lastPrepareRunKey) == nil)
+        // A prime is three utterances, so it flushes each one: the coordinator may load this
+        // document a moment later and a cache hit carries no word timings to write back
+        // (the Plan 13 final review, finding 2). No amplification worth coalescing away.
+        #expect(runner.chapterWrites == 3)
         let stored = try #require(try await fixtures.store.timeline(for: id)).timeline
         let refs = stored.chapters.flatMap(\.utterances).map(\.audioRef)
         #expect(refs.allSatisfy { $0 != nil })

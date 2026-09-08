@@ -227,7 +227,13 @@ public final class PlayerModel {
             let hash = chapter.hashValue
             if c < persistedChapterHashes.count, persistedChapterHashes[c] == hash { continue }
             do {
-                try await library.store.saveChapter(chapter, at: c, of: current.id)
+                // Merge before writing: a cache-hit `.rendered` carries no word timings
+                // (`RenderScheduler`), so an utterance this coordinator "rendered" straight from the
+                // cache has none in memory while a prime or a Prepare pass wrote the real ones to
+                // the store. Saving unmerged erased them (the Plan 13 final review, finding 2).
+                let stored = try await library.store.chapter(c, of: current.id)
+                let merged = stored.map { Self.merging(stored: $0, into: chapter) } ?? chapter
+                try await library.store.saveChapter(merged, at: c, of: current.id)
                 if c < persistedChapterHashes.count { persistedChapterHashes[c] = hash } else { persistedChapterHashes.append(hash) }
             } catch {
                 localError = "\(error)"
@@ -235,5 +241,23 @@ public final class PlayerModel {
             }
         }
         if !failed { localError = nil }
+    }
+
+    /// Copies word timings — and an actual duration where memory only has an estimate — from the
+    /// chapter the store already holds into the one about to overwrite it, for every utterance whose
+    /// in-memory timings are missing and whose `audioRef` matches the stored one. The matching ref is
+    /// what makes it safe: same key, same clip, so the stored timings describe the same audio.
+    /// O(chapter), and it copies nothing when memory has timings of its own.
+    static func merging(stored: Chapter, into chapter: Chapter) -> Chapter {
+        var merged = chapter
+        for i in merged.utterances.indices where i < stored.utterances.count {
+            let mine = merged.utterances[i], theirs = stored.utterances[i]
+            guard (mine.wordTimings ?? []).isEmpty, !(theirs.wordTimings ?? []).isEmpty,
+                  let ref = mine.audioRef, ref == theirs.audioRef
+            else { continue }
+            merged.utterances[i].wordTimings = theirs.wordTimings
+            if !mine.duration.isActual, theirs.duration.isActual { merged.utterances[i].duration = theirs.duration }
+        }
+        return merged
     }
 }

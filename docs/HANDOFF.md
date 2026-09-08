@@ -37,7 +37,8 @@ another session ran Plan 12 (the Player sheet retired) in the main checkout:
 
 **The phone listen.** Install with the Phone scheme (Release now). Listen for: a new import's first
 tap starting at once; the mini-player's first tap after a launch starting at once; a book that has
-never been played starting within ~2–3 s (that wait is Plan 14's — streaming the first sound).
+never been played starting within ~2–3 s (that wait is Plan 14's — streaming the first sound);
+word-level highlighting in the first 30 s after an import.
 
 **Next (Plan 14):** streaming the head utterance's first piece to the player — audit #2 — with the
 quality probe on the seam a short first piece makes. Then the open path's `play()` gate and

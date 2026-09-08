@@ -80,6 +80,41 @@ import T2SStore
         #expect(player.renderError == nil)
     }
 
+    /// A cache-hit `.rendered` carries no word timings (`RenderScheduler`), so a document the
+    /// coordinator loaded before a prime flushed plays from the cache with empty timings in memory —
+    /// and the next persist used to write that emptiness over the timings the prime had stored, so
+    /// the first 30 s after an import highlighted nothing (the Plan 13 final review, finding 2).
+    @Test func persistKeepsWordTimingsThePrimeStored() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let summary = try #require(try await f.store.summary(id: id))
+        let engine = FakeEngine(secondsPerCharacter: 0.05)
+        await engine.hold()                                                 // the coordinator renders nothing yet
+        let player = try makePlayer(f, engine: engine)
+        await player.load(summary, play: false)                             // estimates: no refs, no timings
+
+        // Meanwhile a prime fills the audio cache and writes real word timings to the store.
+        let runner = PrepareRunner(library: f.library, store: f.store, audioStore: f.audio,
+                                   engine: FakeEngine(secondsPerCharacter: 0.05),
+                                   defaults: UserDefaults(suiteName: "prepare-\(UUID())")!, arbiter: RenderArbiter())
+        _ = await runner.prime(id)
+        let primed = try #require(try await f.store.timeline(for: id)).timeline
+        #expect(primed[utterance: 1].wordTimings?.isEmpty == false)
+
+        await engine.release()
+        await player.coordinator.waitForRenderIdle()                        // utterances 1 and 2 are cache hits
+        #expect((player.coordinator.timeline?[utterance: 1].wordTimings ?? []).isEmpty)
+        #expect(player.coordinator.timeline?[utterance: 1].audioRef == primed[utterance: 1].audioRef)
+
+        await player.persistRenderedChapters()
+
+        let stored = try #require(try await f.store.timeline(for: id)).timeline
+        #expect(stored[utterance: 1].wordTimings == primed[utterance: 1].wordTimings)
+        #expect(stored[utterance: 2].wordTimings == primed[utterance: 2].wordTimings)
+        #expect(stored.isFullyRendered)
+        #expect(player.renderError == nil)
+    }
+
     @Test func destructiveChangePersistsThenReloadsTheCurrentDocument() async throws {
         let f = try AppFixtures()
         let id = try await f.importFake()

@@ -335,6 +335,8 @@ public final class PrepareRunner {
                 if writeEveryUtterance || movedToAnotherChapter || timeSource.now() - lastWrite >= chapterWriteInterval {
                     await flush()
                 }
+            case .piece:
+                continue                                            // Prepare never streams (Plan 14)
             case .failed(_, _, let message):
                 lastError = message
             case .storeFull:

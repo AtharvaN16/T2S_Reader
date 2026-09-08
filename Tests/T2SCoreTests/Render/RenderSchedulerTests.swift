@@ -5,8 +5,8 @@ import Testing
 @Suite struct RenderSchedulerTests {
     let doc = UUID()
     func key(_ i: Int) -> RenderKey { RenderKey(documentID: doc, utteranceIndex: i, voiceID: "v", engineID: "fake", normalizerVersion: 1, segmenterVersion: 1) }
-    func request(_ i: Int, _ spoken: String) -> RenderRequest {
-        RenderRequest(job: RenderJob(documentID: doc, utteranceIndex: i, tier: .playAhead), key: key(i), spoken: spoken, voiceID: "v")
+    func request(_ i: Int, _ spoken: String, stream: Bool = false) -> RenderRequest {
+        RenderRequest(job: RenderJob(documentID: doc, utteranceIndex: i, tier: .playAhead), key: key(i), spoken: spoken, voiceID: "v", stream: stream)
     }
 
     /// Encodes successfully except for the very first call, which throws.
@@ -149,5 +149,50 @@ import Testing
         await s.setPlan([request(1, "bbbbbbbb")])
         _ = await second
         #expect(abs((await s.measuredRTF ?? 0) - 0.25) < 1e-9)
+    }
+
+    /// A streaming request yields its pieces as they finish, then the same `.rendered` a whole
+    /// render would, and the store holds the concatenation (Plan 14).
+    @Test func aStreamingRequestForwardsPiecesThenRenders() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let s = RenderScheduler(engine: FakeEngine(secondsPerCharacter: 0.1, pieceCount: 3), store: store, timeSource: ManualTimeSource())
+        async let events = collect(s)
+        await s.setPlan([request(0, "abcdefghi", stream: true)])
+        let got = await events
+        #expect(got.count == 5)                                       // 3 pieces, rendered, idle
+        for (i, e) in got.prefix(3).enumerated() {
+            guard case .piece(let d, let index, let audio, let ordinal, let isLast) = e else { Issue.record("piece \(i): \(e)"); continue }
+            #expect(d == doc && index == 0 && ordinal == i && isLast == (i == 2))
+            #expect(abs(audio.duration - 0.3) < 1e-9)
+        }
+        guard case .rendered(let r) = got[3] else { Issue.record("no rendered: \(got[3])"); return }
+        #expect(abs(r.duration - 0.9) < 1e-9 && r.wordTimings.count == 1)
+        #expect(try await store.read(key(0))?.duration == 0.9)
+    }
+
+    /// A cache hit never streams: the clip is on disk, the player reads it from there.
+    @Test func aStreamingRequestThatIsACacheHitYieldsNoPieces() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        try await store.write(.silence(seconds: 1), for: key(0))
+        let s = RenderScheduler(engine: FakeEngine(pieceCount: 2), store: store, timeSource: ManualTimeSource())
+        async let events = collect(s)
+        await s.setPlan([request(0, "already", stream: true)])
+        let got = await events
+        #expect(got.count == 2)                                       // rendered (from cache), idle
+    }
+
+    /// An engine that fails before its first piece: the key gets the failure silence, and `.failed`
+    /// then `.rendered` follow as for any failure (spec §6).
+    @Test func aStreamThatFailsStillRendersTheFailureSilence() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let engine = FakeEngine(secondsPerCharacter: 0.1, pieceCount: 2)
+        await engine.fail(on: "boom")
+        let s = RenderScheduler(engine: engine, store: store, timeSource: ManualTimeSource())
+        async let events = collect(s)
+        await s.setPlan([request(0, "boom", stream: true)])
+        let got = await events
+        #expect(got.count == 3)                                       // failed, rendered(silence), idle
+        guard case .failed = got[0], case .rendered(let r) = got[1] else { Issue.record("\(got)"); return }
+        #expect(abs(r.duration - RenderScheduler.failureSilenceSeconds) < 1e-9)
     }
 }

@@ -5,11 +5,15 @@ public struct RenderRequest: Hashable, Sendable {
     public var key: RenderKey
     public var spoken: String
     public var voiceID: String
-    public init(job: RenderJob, key: RenderKey, spoken: String, voiceID: String) {
+    /// Render in pieces and forward each as a `.piece` event: the utterance the player is waiting on
+    /// (Plan 14). Everything else renders whole.
+    public var stream: Bool
+    public init(job: RenderJob, key: RenderKey, spoken: String, voiceID: String, stream: Bool = false) {
         self.job = job
         self.key = key
         self.spoken = spoken
         self.voiceID = voiceID
+        self.stream = stream
     }
 }
 
@@ -30,6 +34,9 @@ public struct RenderedUtterance: Hashable, Sendable {
 }
 
 public enum RenderEvent: Hashable, Sendable {
+    /// A piece of a streaming render, in order, before its `.rendered`; the pieces concatenate to
+    /// the clip stored under the key. `isLast` marks the piece the player's completion belongs to.
+    case piece(documentID: UUID, utteranceIndex: Int, audio: PCMAudio, ordinal: Int, isLast: Bool)
     /// A cache hit (the store already held the key) also produces this, with empty word timings.
     case rendered(RenderedUtterance)
     /// Spec §6: logged; 200 ms of silence is stored under the key and a `.rendered` follows,
@@ -150,7 +157,9 @@ public actor RenderScheduler {
         let t0 = timeSource.now()
         var result: SynthesisResult
         do {
-            result = try await engine.synthesize(SynthesisRequest(spoken: request.spoken, voiceID: request.voiceID))
+            result = request.stream
+                ? try await streamed(request)
+                : try await engine.synthesize(SynthesisRequest(spoken: request.spoken, voiceID: request.voiceID))
             let synthSeconds = timeSource.now() - t0
             if result.audio.duration > 0 { record(rtf: synthSeconds / result.audio.duration) }
         } catch {
@@ -180,6 +189,26 @@ public actor RenderScheduler {
             documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, key: request.key,
             duration: result.audio.duration, wordTimings: result.wordTimings)))
         return .events(events)
+    }
+
+    /// Renders in pieces, yielding each to the events stream the moment it arrives — the player is
+    /// waiting on this utterance — and returns the whole for the store: the pieces' concatenation
+    /// and the timings the engine folded over it.
+    private func streamed(_ request: RenderRequest) async throws -> SynthesisResult {
+        var pieces: [PCMAudio] = []
+        var timings: [WordTiming] = []
+        for try await chunk in engine.synthesizeStreaming(SynthesisRequest(spoken: request.spoken, voiceID: request.voiceID)) {
+            switch chunk {
+            case .piece(let audio, let ordinal, let isLast):
+                pieces.append(audio)
+                continuation.yield(.piece(documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex,
+                                          audio: audio, ordinal: ordinal, isLast: isLast))
+            case .finished(let wordTimings):
+                timings = wordTimings
+            }
+        }
+        let sampleRate = pieces.first?.sampleRate ?? PCMAudio.defaultSampleRate
+        return SynthesisResult(audio: PCMAudio(sampleRate: sampleRate, samples: pieces.flatMap(\.samples)), wordTimings: timings)
     }
 
     private func record(rtf: Double) {

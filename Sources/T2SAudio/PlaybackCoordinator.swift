@@ -400,6 +400,8 @@ public final class PlaybackCoordinator {
 
     private func apply(_ event: RenderEvent) {
         switch event {
+        case .piece:
+            break                                                   // Plan 14 Task 4 enqueues these
         case .rendered(let r):
             guard let document, document.id == r.documentID, timeline != nil, r.utteranceIndex < rendered.count else { return }
             var u = timeline![utterance: r.utteranceIndex]

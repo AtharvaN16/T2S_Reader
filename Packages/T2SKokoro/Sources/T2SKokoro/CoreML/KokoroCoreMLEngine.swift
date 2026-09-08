@@ -93,6 +93,9 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// How many times this engine has begun loading its stages. Internal for one test: "loaded once"
     /// and "compiled and loaded twice" differ only in this number and several minutes of Core ML.
     private(set) var loadCount = 0
+    /// Whether the American G2P has been built. Internal for one test: `preload()` must build it, or
+    /// the first sentence of a session pays for two lexicons and a network after the tap.
+    var isG2PLoaded: Bool { americanG2P != nil }
     /// One per voice: the style table is the voice, and the vocabulary beside it is 114 entries.
     private var tokenizers: [String: KokoroTokenizer] = [:]
     private var americanG2P: EnglishG2P?
@@ -160,9 +163,9 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         utteranceTrace = trace
     }
 
-    /// Loads the eight stages, compiling them first when the staging is not precompiled, and the
-    /// vocoder weights. `synthesize` calls it lazily on first use; a caller that would rather pay the
-    /// seconds before playback starts can call it itself.
+    /// Loads the eight stages, compiling them first when the staging is not precompiled, the
+    /// vocoder weights, and the American G2P. `synthesize` calls it lazily on first use; a caller
+    /// that would rather pay the seconds before playback starts can call it itself.
     public func preload() async throws {
         _ = try await load()
     }
@@ -191,6 +194,11 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                                 linearWeights: weights.linear_weights,
                                 linearBias: weights.linear_bias)
             self.loaded = loaded
+            // The G2P's lexicons (two 3 MB JSON files, merged) and its fallback network are the other
+            // thing the first sentence would otherwise wait for; build the American one here so the
+            // launch warm-up pays it. The British G2P stays lazy: a `b*` voice is a choice, not the
+            // default, and its lexicon is another 9 MB.
+            _ = g2p(british: false)
             return loaded
         } catch is CancellationError {
             // A render cancelled while the stages were compiling is not an engine failure. Wrapping

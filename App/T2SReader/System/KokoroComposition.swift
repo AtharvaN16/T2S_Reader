@@ -101,8 +101,9 @@ struct KokoroComposition {
         case .available(let decision, _):
             coreMLRouteOpen.withLock { $0 = true }
             log.notice("Kokoro Core ML route available (\(decision.runtime, privacy: .public), RTF \(decision.measuredRTF, format: .fixed(precision: 3), privacy: .public))")
-            // Loading eight stages takes seconds on a modern phone and minutes on an A13. Pay them
-            // now, while the reader is still choosing a book, rather than at the first utterance.
+            // Loading eight stages takes seconds on a modern phone and minutes on an A13, and the
+            // G2P's lexicons a few hundred milliseconds more. Pay them now, while the reader is still
+            // choosing a book, rather than at the first utterance.
             status.update(.preparing)
             Task { await warmUp(coreMLEngine, routeOpen: coreMLRouteOpen, status: status, log: log) }
         case .unavailable(let reason):

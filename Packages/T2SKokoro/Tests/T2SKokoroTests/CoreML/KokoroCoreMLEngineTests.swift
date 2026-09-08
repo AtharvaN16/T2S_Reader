@@ -455,6 +455,18 @@ import T2SCore
         #expect(Self.rms(result.audio.samples) > 0.01)
     }
 
+    /// The launch warm-up loads the stages so the first utterance does not wait for them; the G2P's
+    /// two 3 MB lexicons and its fallback network are built the same way, or the first sentence a
+    /// reader hears pays for them after the tap
+    /// (`docs/superpowers/specs/2026-09-08-performance-audit.md` §3.2).
+    @Test(.enabled(if: KokoroTestSupport.haveCoreMLFiles))
+    func preloadBuildsTheG2P() async throws {
+        let engine = try await Self.engineWithRealResources()
+        #expect(await engine.isG2PLoaded == false)
+        try await engine.preload()
+        #expect(await engine.isG2PLoaded)
+    }
+
     /// The app's segmenter allows 300 characters of source, which is more speech than the pipeline's
     /// largest bucket holds — so the engine splits the utterance at Misaki-token boundaries and
     /// concatenates the pieces. The seam has to be invisible in the timings: one timing per word, in

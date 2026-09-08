@@ -19,6 +19,9 @@ public enum AudioStoreError: Error, Equatable, Sendable {
 /// Rendered audio is cache, never truth (spec §3.7.3). LRU against a user-configurable cap (spec §3.4).
 public protocol AudioStore: Sendable {
     func contains(_ key: RenderKey) async -> Bool
+    /// `contains` for many keys in one hop, in order. The coordinator asks about every rendered
+    /// utterance of a document when it loads; one call, not one per utterance.
+    func contains(_ keys: [RenderKey]) async -> [Bool]
     /// Evicts least-recently-used entries until the entry fits; throws when it never can.
     func write(_ pcm: PCMAudio, for key: RenderKey) async throws
     /// Refreshes the entry's recency.
@@ -27,6 +30,15 @@ public protocol AudioStore: Sendable {
     func stats() async -> AudioStoreStats
     /// Evicts immediately if the new cap is below current usage.
     func setCapacity(bytes: Int) async
+}
+
+public extension AudioStore {
+    func contains(_ keys: [RenderKey]) async -> [Bool] {
+        var out: [Bool] = []
+        out.reserveCapacity(keys.count)
+        for key in keys { out.append(await contains(key)) }
+        return out
+    }
 }
 
 /// Shared LRU bookkeeping for the two stores: keys ordered oldest → newest with their sizes.

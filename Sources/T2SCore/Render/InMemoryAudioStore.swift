@@ -13,6 +13,8 @@ public actor InMemoryAudioStore: AudioStore {
 
     public func contains(_ key: RenderKey) -> Bool { blobs[key] != nil }
 
+    public func contains(_ keys: [RenderKey]) -> [Bool] { keys.map { blobs[$0] != nil } }
+
     public func write(_ pcm: PCMAudio, for key: RenderKey) throws {
         let data = try codec.encode(pcm)
         // Guard before touching any state: a rejected overwrite must leave the old entry intact.

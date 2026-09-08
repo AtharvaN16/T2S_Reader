@@ -14,7 +14,7 @@ import T2SStore
 final class AppEnvironment {
     let paths: LibraryPaths
     let store: LibraryStore
-    let audioStore: FileAudioStore
+    let audioStore: any AudioStore
     let library: Library
     let coordinator: PlaybackCoordinator
     /// The one inference lease shared by the live player and Prepare.
@@ -47,7 +47,7 @@ final class AppEnvironment {
     /// What Preferences tells the reader about the on-device engine on this device.
     let kokoroStatus: KokoroStatusModel
 
-    init(paths: LibraryPaths, store: LibraryStore, audioStore: FileAudioStore, library: Library,
+    init(paths: LibraryPaths, store: LibraryStore, audioStore: any AudioStore, library: Library,
          importModel: ImportModel, coordinator: PlaybackCoordinator, engine: any SynthesisEngine,
          renderArbiter: RenderArbiter, cloudVoiceSettings: CloudVoiceSettings,
          cloudVoiceSecrets: any SecretStoring, cloudRouter: RoutedEngine,

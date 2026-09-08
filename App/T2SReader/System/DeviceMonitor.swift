@@ -11,13 +11,13 @@ import UIKit
 @Observable
 final class DeviceMonitor {
     private(set) var signals = DeviceSignals(batteryState: .unknown, thermal: .nominal, lowPowerMode: false, storeBytes: 0, storeCapacityBytes: 1)
-    private let audioStore: FileAudioStore
+    private let audioStore: any AudioStore
     private var observers: [NSObjectProtocol] = []
     /// `.onAppear` can fire more than once for a `WindowGroup`'s root; registering twice would run
     /// `refresh()` once per duplicate observer on every notification.
     private var started = false
 
-    init(audioStore: FileAudioStore) { self.audioStore = audioStore }
+    init(audioStore: any AudioStore) { self.audioStore = audioStore }
 
     var deviceState: DeviceState { DeviceStateMapping.deviceState(signals) }
 

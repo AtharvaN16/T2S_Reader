@@ -239,13 +239,20 @@ public final class PrepareRunner {
             else { continue }
 
             let voiceID = await voiceRouting.effectiveVoiceID(document.voiceID ?? defaultVoiceID ?? "default")
+            // Only an utterance whose reference already matches can be rendered; those are checked
+            // against the store in one hop, the rest are unrendered without asking (audit §5.4).
+            var candidates: [(index: Int, key: RenderKey)] = []
             for index in snapshot.rendered.indices {
                 let expected = renderKey(documentID: id, utteranceIndex: index, voiceID: voiceID, timeline: timeline)
-                let hasExpectedReference = timeline[utterance: index].audioRef == expected.rawValue
-                let existsInCache = await audioStore.contains(expected)
-                if !hasExpectedReference || !existsInCache {
+                if timeline[utterance: index].audioRef == expected.rawValue {
+                    candidates.append((index, expected))
+                } else {
                     snapshot.rendered[index] = false
                 }
+            }
+            let present = await audioStore.contains(candidates.map(\.key))
+            for (candidate, isPresent) in zip(candidates, present) where !isPresent {
+                snapshot.rendered[candidate.index] = false
             }
             documents.append(PreparedDocument(document: document, timeline: timeline, snapshot: snapshot, voiceID: voiceID))
         }

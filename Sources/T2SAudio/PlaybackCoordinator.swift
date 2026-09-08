@@ -136,14 +136,17 @@ public final class PlaybackCoordinator {
         guard !staleCandidates.isEmpty else { return }
         let store = self.store
         chain {
+            // One hop for the whole document, not one per rendered utterance (audit §5.4).
+            let keyed = staleCandidates.compactMap { i -> (index: Int, key: RenderKey)? in
+                guard let ref = self.timeline?[utterance: i].audioRef else { return nil }
+                return (i, RenderKey(rawValue: ref))
+            }
+            let present = await store.contains(keyed.map(\.key))
             var flipped = false
-            for i in staleCandidates {
-                guard let ref = self.timeline?[utterance: i].audioRef else { continue }
-                if await store.contains(RenderKey(rawValue: ref)) == false {
-                    self.rendered[i] = false
-                    self.timeline?[utterance: i].audioRef = nil
-                    flipped = true
-                }
+            for (entry, isPresent) in zip(keyed, present) where !isPresent {
+                self.rendered[entry.index] = false
+                self.timeline?[utterance: entry.index].audioRef = nil
+                flipped = true
             }
             if flipped { self.replan() }
         }

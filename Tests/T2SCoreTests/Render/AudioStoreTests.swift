@@ -125,6 +125,15 @@ import Testing
         #expect(await s.stats().entries == 0)
     }
 
+    @Test func containsManyAnswersInOrder() async throws {
+        for (name, s) in stores() {
+            try await s.write(pcm(1), for: key(1))
+            try await s.write(pcm(1), for: key(3))
+            #expect(await s.contains([key(1), key(2), key(3)]) == [true, false, true], "\(name)")
+            #expect(await s.contains([]) == [], "\(name)")
+        }
+    }
+
     @Test func runningByteTotalMatchesEntries() async throws {
         for (name, s) in stores() {
             try await s.write(pcm(1), for: key(1))

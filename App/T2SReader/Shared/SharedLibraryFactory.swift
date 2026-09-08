@@ -11,7 +11,7 @@ import T2SStore
 @MainActor
 enum SharedLibraryFactory {
     static func make(capacityBytes: Int = AppPaths.defaultAudioCapacityBytes)
-        throws -> (paths: LibraryPaths, store: LibraryStore, audioStore: FileAudioStore,
+        throws -> (paths: LibraryPaths, store: LibraryStore, audioStore: any AudioStore,
                    library: Library, importModel: ImportModel) {
         let paths = LibraryPaths(root: try AppPaths.sharedContainerRoot())
         try FileManager.default.createDirectory(at: paths.audioDirectory, withIntermediateDirectories: true)
@@ -21,7 +21,11 @@ enum SharedLibraryFactory {
         try audioDirectory.setResourceValues(values)
 
         let store = try LibraryStore.onDisk(at: paths.databaseURL)
-        let audioStore = FileAudioStore(directory: paths.audioDirectory, codec: AACCodec(), capacityBytes: capacityBytes)
+        // The last few renders stay in memory so the live path plays the render, not the AAC cache
+        // read back through a temporary file (audit §3.3); the file store stays the truth.
+        let audioStore: any AudioStore = RecentAudioStore(
+            base: FileAudioStore(directory: paths.audioDirectory, codec: AACCodec(), capacityBytes: capacityBytes)
+        )
         let library = Library(paths: paths, store: store, audioStore: audioStore,
                               readers: [PDFDocumentReader(), ReadiumDocumentReader()])
         let importModel = ImportModel(library: library, extractor: ArticleExtractor())

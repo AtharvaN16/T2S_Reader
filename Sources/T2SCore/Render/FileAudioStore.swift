@@ -67,6 +67,11 @@ public actor FileAudioStore: AudioStore {
         return lru.sizes[key] != nil
     }
 
+    public func contains(_ keys: [RenderKey]) -> [Bool] {
+        ensureIndexed()
+        return keys.map { lru.sizes[$0] != nil }
+    }
+
     public func write(_ pcm: PCMAudio, for key: RenderKey) throws {
         ensureIndexed()
         let data = try codec.encode(pcm)

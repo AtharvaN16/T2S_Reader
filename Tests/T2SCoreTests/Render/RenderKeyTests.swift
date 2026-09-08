@@ -29,4 +29,9 @@ import Testing
     @Test func roundTripsThroughRawValue() {
         #expect(RenderKey(rawValue: key().rawValue) == key())
     }
+
+    /// The digest is the file name on disk: it must never move when the encoding does.
+    @Test func digestIsPinned() {
+        #expect(key().rawValue == "c1b30d0954935e8bc636cb7e8768cce031292b9ea66e5e4d544459d8cf44bfc3")
+    }
 }

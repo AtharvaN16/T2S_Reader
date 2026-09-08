@@ -128,6 +128,20 @@ import T2SCore
         #expect(await mlxEngine.requests.isEmpty)
         #expect(await system.requests.isEmpty)
     }
+
+    /// Streaming is routed like synthesis: the engine that owns the voice answers, in pieces.
+    @Test func streamingIsForwardedToTheRoutedEngine() async throws {
+        let system = RecordingEngine()
+        let routed = RoutedEngine(system: system, configuration: { nil }, key: { nil })
+
+        // The system route: the `system:` prefix strips to the bare identifier before forwarding.
+        var ordinals: [Int] = []
+        for try await chunk in routed.synthesizeStreaming(SynthesisRequest(spoken: "abcdef", voiceID: "system:v")) {
+            if case .piece(_, let ordinal, _) = chunk { ordinals.append(ordinal) }
+        }
+        #expect(ordinals == [0])                                     // the system fake streams one piece
+        #expect(await system.requests.map(\.voiceID) == ["v"])
+    }
 }
 
 private actor RecordingEngine: SynthesisEngine {

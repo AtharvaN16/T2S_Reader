@@ -43,12 +43,37 @@ public actor RoutedEngine: SynthesisEngine {
     }
 
     public func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
+        let routed = try await engine(for: request)
+        return try await routed.engine.synthesize(routed.request)
+    }
+
+    /// Streaming is routed exactly as synthesis is: the engine that owns the voice answers.
+    public nonisolated func synthesizeStreaming(_ request: SynthesisRequest) -> AsyncThrowingStream<SynthesisChunk, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    let routed = try await self.engine(for: request)
+                    for try await chunk in routed.engine.synthesizeStreaming(routed.request) {
+                        continuation.yield(chunk)
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// Resolves which engine owns `request`'s voice and the request to hand it — shared by
+    /// `synthesize` and `synthesizeStreaming` so the routing rules live in exactly one place.
+    private func engine(for request: SynthesisRequest) async throws -> (engine: any SynthesisEngine, request: SynthesisRequest) {
         if let kokoroID = KokoroVoiceID(rawValue: request.voiceID) {
             guard let kokoro = kokoro[kokoroID.engineID] else {
                 throw KokoroRouteError.unavailable(engineID: kokoroID.engineID)
             }
             // Unchanged: the engine reads its own voice out of the ID.
-            return try await kokoro.synthesize(request)
+            return (kokoro, request)
         }
 
         if let cloudID = CloudVoiceID(rawValue: request.voiceID) {
@@ -65,16 +90,16 @@ public actor RoutedEngine: SynthesisEngine {
                 cloudEngines[cacheKey] = created
                 engine = created
             }
-            return try await engine.synthesize(request)
+            return (engine, request)
         }
 
         if request.voiceID.hasPrefix("system:") {
             let identifier = String(request.voiceID.dropFirst("system:".count))
-            return try await system.synthesize(.init(spoken: request.spoken, voiceID: identifier))
+            return (system, .init(spoken: request.spoken, voiceID: identifier))
         }
 
         // Existing documents used bare AVSpeech voice identifiers before routes existed. Preserve
         // their compatibility while all new system choices use the explicit `system:` route.
-        return try await system.synthesize(request)
+        return (system, request)
     }
 }

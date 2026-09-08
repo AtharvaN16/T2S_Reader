@@ -64,6 +64,13 @@ public final class PrepareRunner {
     /// Resolves an unavailable route to the system default for the whole document before planning,
     /// so Prepare renders the audio playback will actually ask for (spec §6). Mirrors `PlayerModel`.
     public var voiceRouting: any VoiceRouteResolving = PassthroughVoiceRouting()
+    /// How long a chapter's rendered metadata may sit unwritten while the pass stays in that chapter.
+    /// Rendered audio is already on disk under its key; a lost write self-heals on the next load
+    /// (`PlaybackCoordinator.reconcileWithStore`), so this bounds a crash's loss, not correctness.
+    public var chapterWriteInterval: TimeInterval = 10
+    /// Chapter blobs written by this runner. Internal for one test: coalesced and per-utterance
+    /// writes produce the same timeline, minutes of flash I/O apart.
+    private(set) var chapterWrites = 0
 
     private let library: Library
     private let store: LibraryStore
@@ -275,6 +282,22 @@ public final class PrepareRunner {
 
         var timeline = document.timeline
         var outcome = GroupResult()
+        var dirtyChapters: Set<Int> = []
+        var lastWrite = timeSource.now()
+
+        func flush() async {
+            for chapterIndex in dirtyChapters.sorted() {
+                do {
+                    try await store.saveChapter(timeline.chapters[chapterIndex], at: chapterIndex, of: document.id)
+                    chapterWrites += 1
+                } catch {
+                    lastError = "\(error)"
+                }
+            }
+            dirtyChapters.removeAll()
+            lastWrite = timeSource.now()
+        }
+
         for await event in scheduler.events {
             if Task.isCancelled, !cancelRequested { cancel() }
             switch event {
@@ -294,12 +317,15 @@ public final class PrepareRunner {
                 utterance.duration = .actual(rendered.duration)
                 if useNewTimings { utterance.wordTimings = rendered.wordTimings }
                 timeline[utterance: rendered.utteranceIndex] = utterance
-                do {
-                    try await store.saveChapter(timeline.chapters[chapterIndex], at: chapterIndex, of: document.id)
-                    outcome.renderedUtterances += 1
-                    outcome.preparedSeconds += rendered.duration
-                } catch {
-                    lastError = "\(error)"
+                outcome.renderedUtterances += 1
+                outcome.preparedSeconds += rendered.duration
+
+                // Write when the pass leaves a chapter, or when the interval has passed inside one —
+                // never per utterance (audit §5.2).
+                let movedToAnotherChapter = !dirtyChapters.isEmpty && !dirtyChapters.contains(chapterIndex)
+                dirtyChapters.insert(chapterIndex)
+                if movedToAnotherChapter || timeSource.now() - lastWrite >= chapterWriteInterval {
+                    await flush()
                 }
             case .failed(_, _, let message):
                 lastError = message
@@ -307,10 +333,12 @@ public final class PrepareRunner {
                 outcome.storageFull = true
                 await scheduler.cancel()
             case .idle:
+                await flush()
                 currentScheduler = nil
                 return outcome
             }
         }
+        await flush()
         currentScheduler = nil
         return outcome
     }

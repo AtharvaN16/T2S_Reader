@@ -136,4 +136,26 @@ import T2SCore
         #expect(primed.renderedUtterances > 0)
         _ = first
     }
+
+    /// Every `.rendered` event used to re-encode and rewrite the whole chapter blob — 100–300× write
+    /// amplification for a 3 h prepare (audit §5.2). Now a chapter is written when the pass moves to
+    /// another chapter, when `chapterWriteInterval` has elapsed, and at the end.
+    @Test func aChapterIsWrittenOnceNotPerUtterance() async throws {
+        let fixtures = try AppFixtures(readers: [FakeReader(chapterCount: 1)])   // one chapter, two utterances
+        let id = try await fixtures.importFake()
+        let defaults = UserDefaults(suiteName: "prepare-\(UUID())")!
+        let clock = ManualTimeSource()                                            // never advances: no interval flush
+        let runner = PrepareRunner(library: fixtures.library, store: fixtures.store, audioStore: fixtures.audio,
+                                   engine: FakeEngine(secondsPerCharacter: 0.05), defaults: defaults,
+                                   arbiter: RenderArbiter(), timeSource: clock)
+
+        let result = await runner.run(lastPlayed: id, queue: [id],
+                                      device: DeviceState(charging: true, thermalSerious: false,
+                                                          lowPowerMode: false, storeFull: false))
+
+        #expect(result.renderedUtterances == 2)
+        #expect(runner.chapterWrites == 1)
+        let stored = try #require(try await fixtures.store.timeline(for: id)).timeline
+        #expect(stored.chapters[0].utterances.allSatisfy { $0.audioRef != nil && $0.duration.isActual })
+    }
 }

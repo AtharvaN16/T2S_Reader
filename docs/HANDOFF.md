@@ -2,6 +2,20 @@
 
 _Last updated 2026-09-08 (Plan 11 — the second listen's fixes — on `plan-11-voice-quality-2`, rebased onto `dev` @ 6344993 where Plan 10 is merged; fold it into `dev` from the main folder, see below). Written for whoever picks up the coding next._
 
+## Performance audit (2026-09-08)
+
+`docs/superpowers/specs/2026-09-08-performance-audit.md` — a desk audit of `dev` @ 3bca4b1 against
+"as smooth as a cloud voice", with fourteen ranked recommendations and the measurements still missing.
+Headlines: the phone scheme runs Debug (`run: config: Debug` in `App/project.yml`; the by-hand flip to
+Release does not survive `xcodegen`); tap-to-first-sound is 2.5–4.5 s on an A13 because nothing streams
+inside an utterance and the live path plays the AAC cache back through two temp files; the prime tier
+(spec §3.4.1) is never planned and the G2P is built on the first sentence, not in the warm-up; a version
+bump re-derives the whole book on the first tap (and from the Book sheet, Bookmarks and Prepare);
+Prepare rewrites a whole chapter blob per rendered utterance; the UI updates Now Playing ~20×/s and
+writes `nowPlayingInfo = nil` 4×/s while idle. The MLX launch probe was checked and is cheap (it
+short-circuits on the nil decision). Next: pick the first plan from its §2 table — #1 (Release) and #3
+(G2P warm-up + prime) are single tasks; #2 (streaming the first sound) is the one that closes the gap.
+
 ## Resume here (2026-09-08) — Plan 11
 
 The owner's second listen (2026-09-08) reported two things: "sometimes mid sentence I can hear a tick

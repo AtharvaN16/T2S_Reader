@@ -233,9 +233,11 @@ system voices there, with the same previews.
 
 ### Reader, speed picker, and sleep timer
 
-Every way of starting playback — Play on a Queue row, the mini-player, and Play
-or a chapter in a book — opens the full-screen Reader; there is no separate
-player screen. The paragraph being read is tinted lightly and
+Every way of starting playback from a document — Play on a Queue row, a tap
+on the mini-player, and Play or a chapter in a book — opens the full-screen
+Reader; there is no separate player screen. (The mini-player's own
+play/pause button and the lock-screen controls still act in place.) The
+paragraph being read is tinted lightly and
 the spoken word more strongly (on a PDF, the utterance rather than the
 paragraph); the page follows the word while audio plays, scrolling pauses
 following until **Back to current** is tapped, and tapping a word seeks to it.

@@ -137,6 +137,10 @@ struct ReaderPage: View {
                     Text(player.totalText)
                 }
                 .typeRole(.mono).foregroundStyle(Tokens.ink2)
+                if let error = player.renderError {
+                    Text(error).typeRole(.meta).foregroundStyle(Tokens.destructive).lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             ReaderControls(onSleepTimer: { showSleepTimer = true }, onSpeed: { showSpeed = true })
             toolRow
@@ -222,7 +226,7 @@ struct ReaderPage: View {
             await env.player.load(summary, play: true)
         }
         guard let timeline = env.player.coordinator.timeline, timeline.utteranceCount > 0 else {
-            error = "This document has no readable text."
+            error = env.player.renderError ?? "This document has no readable text."
             return
         }
         let document = summary.document

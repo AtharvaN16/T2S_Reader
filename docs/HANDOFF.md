@@ -67,7 +67,8 @@ instead.
 
 1. Play on a Queue row opens the Reader and starts playback.
 2. Pause on the playing row's pill pauses in place — it does not navigate anywhere.
-3. Tapping the mini-player's title or capsule opens the Reader on the item it shows.
+3. Tapping the mini-player's title or capsule opens the Reader on the item it shows —
+   if nothing is playing, this also starts the next queued document playing.
 4. Play in a book sheet opens the Reader (a chapter already did, from Plan 10).
 5. The Reader's own controls (scrubber, transport, sleep timer, speed, voice, chapters) cover
    everything the Player sheet had — check that nothing feels missing now that it is gone.
@@ -122,7 +123,11 @@ reading it like a full word — solve it once, or is there a standard?". Plan 11
   one term at a time. MisakiSwift's dash rule (map `.dash` to `—` only when the dash stands alone, as
   the reference does) is worth an upstream patch; the app does not wait on it.
 
-**Folding it back.** Plan 10 was being committed in the main checkout while this ran, so Plan 11
+**Folding it back — done.** This has since happened: Plan 11 merged into `dev` (commit `3bca4b1`)
+and the worktree and branch were removed; `git worktree list` no longer shows them. The instructions
+below are kept as the record of how.
+
+Plan 10 was being committed in the main checkout while this ran, so Plan 11
 lives in the worktree `.worktrees/plan-11-voice-quality-2`; it has since been rebased onto `dev` @
 6344993 (Plan 10 merged, spec rev 11; this plan is rev 12). From the main folder:
 `git merge --ff-only plan-11-voice-quality-2 && git push && git worktree remove
@@ -315,7 +320,7 @@ phonemizer without MLX).
 An iOS app that turns EPUBs, web articles, and text PDFs into read-along audiobooks
 synthesized on the phone. The design spec is the source of truth:
 [docs/superpowers/specs/2026-09-01-t2s-reader-design.md](superpowers/specs/2026-09-01-t2s-reader-design.md)
-(rev 11). Work is organised as numbered plans under
+(rev 13). Work is organised as numbered plans under
 [docs/superpowers/plans/](superpowers/plans/), each a list of tasks with the exact code, tests,
 and commit message per task. The roadmap is
 [2026-09-02-t2s-reader-roadmap.md](superpowers/plans/2026-09-02-t2s-reader-roadmap.md).
@@ -368,7 +373,7 @@ Everything here is on `dev`.
 - **T2SLibrary** — `Library` facade (import file / article, delete, re-derive stale timelines, evict audio), `PDFDocumentReader` (PDFKit), stored-only ZIP writer, `ArticleEPUBWriter`, container layout `LibraryPaths`. Plan 3.
 - **Packages/T2SReadium** (iOS only) — `ReadiumDocumentReader` (EPUB → chapters with stable `Position`s) and `LocatorMapping` (`Position` ↔ Readium `Locator`, word-highlight quotes). Plan 3.
 - **T2SApp** (root package target, testable on macOS) — the app's models: `LibraryModel`, `PlayerModel`, `ScrubberModel`, `ImportModel`, `DurationFormatter`, `AppPaths`, `DeviceStateMapping`. Plan 4a.
-- **App/** — the SwiftUI app `T2SReader`: design tokens and type roles (Inter, bundled), composition root, three-page pager with mini-player, Queue page, Collection page + book sheet, player sheet with the tick scrubber — retired in Plan 12 — Add sheet (paste a link → WKWebView + Readability.js extraction preview, open a file, paste text), audio session + device monitor. Plan 4a. Plan 5 added the Now Playing controller and remote commands, Preferences → Cloud voices, the Prepare task boundary, and the `T2SReaderShare` Share Extension.
+- **App/** — the SwiftUI app `T2SReader`: design tokens and type roles (Inter, bundled), composition root, three-page pager with mini-player, Queue page, Collection page + book sheet, player sheet with the tick scrubber (retired in Plan 12), Add sheet (paste a link → WKWebView + Readability.js extraction preview, open a file, paste text), audio session + device monitor. Plan 4a. Plan 5 added the Now Playing controller and remote commands, Preferences → Cloud voices, the Prepare task boundary, and the `T2SReaderShare` Share Extension.
 - **Packages/T2SKokoro** (tested on macOS, links only into the device target) — `KokoroResources`
   (the checksummed model-file contract), `KokoroEngine` (an actor over kokoro-ios/MLX; identity
   `kokoro-4e9ecdf0-mlx-misaki1.0.6`), `KokoroTokenTimingMapper`, `KokoroRuntimeDecision` and
@@ -482,7 +487,7 @@ install is under "Resume here" below, and it is the last thing between Plan 6 an
 | Cloud voice: missing key, 401, 429, network loss, configuration change | Plan 5 Task 4 (PR #13) unit coverage inside `swift test` | **pending hardware** — no real provider key has been exercised end to end |
 | Plan 0 Kokoro metrics §7.3, §7.4, §7.5 — Core ML route | iPhone 11 Pro (A13): CPU-only Core ML, RTF 0.18 flat out and 0.16 over 20 min at 4x, 119 MB flat, word-onset error ≤ 55 ms; thermal state 2 after 150 s at 4x on charge with no speed collapse (`spikes/findings/2026-09-04-pre-a14-runtime.md`) | **passes (hardware)**; unplugged thermal/battery run pending |
 | Plan 0 Kokoro metrics §7.2, §7.3, §7.5, §7.7 — MLX route | needs an A14+ phone; nothing measured | **pending hardware** (the 17 Pro, protocol below) |
-| Bookmarks: add in Player/Reader, list in Book sheet and overflow, jump, swipe-delete | wired in Plan 8 Tasks 2–3; `BookmarkListModelTests`/`BookmarkSnippetTests` cover the model, the Book sheet section is hidden until a document has a bookmark, `scripts/build-app.sh` — `** BUILD SUCCEEDED **`; nobody has tapped it | **pending simulator** |
+| Bookmarks: add in the Reader, list in Book sheet and overflow, jump, swipe-delete | wired in Plan 8 Tasks 2–3; `BookmarkListModelTests`/`BookmarkSnippetTests` cover the model, the Book sheet section is hidden until a document has a bookmark, `scripts/build-app.sh` — `** BUILD SUCCEEDED **`; nobody has tapped it | **pending simulator** |
 | App icon on the home screen | `scripts/make-app-icon.swift` draws it deterministically (byte-identical shasum across two runs), `Assets.car` is produced and `CFBundleIconName` resolves to `AppIcon` in the built Info.plist (Plan 8 Task 1); no home screen has been looked at | **pending simulator** |
 | VoiceOver: Queue row / Collection cell / bookmark row / mini-player title read as one element each | wired in Plan 8 Task 4 — `.accessibilityElement(children: .combine)` on the Queue row's meta line, a combined label on the Collection cell, `BookmarkRow`'s own combined label, the mini-player title wrapped in an activatable `Button`; `scripts/build-app.sh` — `** BUILD SUCCEEDED **`; never run under VoiceOver | **pending hardware** |
 

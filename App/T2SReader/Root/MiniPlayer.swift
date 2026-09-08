@@ -6,7 +6,7 @@ import T2SStore
 /// queued item with "Play" when idle. Tap opens the Reader on the shown item.
 struct MiniPlayer: View {
     @Environment(AppEnvironment.self) private var env
-    var onExpand: (DocumentSummary) -> Void
+    var onOpen: (DocumentSummary) -> Void
 
     private var shown: DocumentSummary? { env.player.current ?? env.libraryModel.queue.first }
 
@@ -14,7 +14,7 @@ struct MiniPlayer: View {
         if let shown {
             HStack(spacing: 12) {
                 Artwork(relativePath: shown.document.coverImagePath, paths: env.paths, size: 36, radius: Spacing.artworkSmall)
-                Button { onExpand(shown) } label: {
+                Button { onOpen(shown) } label: {
                     Text(shown.document.title)
                         .typeRole(.rowTitle)
                         .lineLimit(1)
@@ -54,7 +54,7 @@ struct MiniPlayer: View {
             .shadow(color: Tokens.ink.opacity(0.08), radius: 12, y: 4)
             .padding(.horizontal, Spacing.margin)
             .contentShape(Capsule())
-            .onTapGesture { onExpand(shown) }
+            .onTapGesture { onOpen(shown) }
         }
     }
 

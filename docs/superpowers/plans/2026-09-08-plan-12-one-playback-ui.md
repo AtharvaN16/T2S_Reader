@@ -18,7 +18,7 @@ retired and every way of starting playback opens the Reader.
 | # | Task | Owns | Verification |
 |---|---|---|---|
 | 1 | **Every playback entry opens the Reader; the Player sheet goes.** Queue row Play → the Reader (Pause on the playing row pauses in place); mini-player tap → the Reader on the shown item; book-sheet Play → the Reader; `PlayerSheet`, `TickScrubber` and `ControlPill` deleted; comments that named them updated. | `App/T2SReader/Root/{RootPager,MiniPlayer}.swift`, `App/T2SReader/Queue/QueueRow.swift`, `App/T2SReader/Collection/BookSheet.swift`, `App/T2SReader/Reader/ThinScrubber.swift` (comment), deletions under `App/T2SReader/Player/` | `swift test` (regression); `scripts/build-app.sh` |
-| 2 | **Docs.** Main spec rev 12 (§2.3 one playback UI; §2.4.4 mini-player tap; §2.4.5 Queue Play, book sheet Play, the Player sheet paragraph retired, the Reader's entry points; changelog); HANDOFF (a Plan 11 section, the retired "Player sheet styling" deferral, the App layout line, the phone checklist); roadmap row. | `docs/` | review |
+| 2 | **Docs.** Main spec rev 13 (§2.3 one playback UI; §2.4.4 mini-player tap; §2.4.5 Queue Play, book sheet Play, the Player sheet paragraph retired, the Reader's entry points; changelog); HANDOFF (a Plan 12 section, the retired "Player sheet styling" deferral, the App layout line, the phone checklist); roadmap row. | `docs/` | review |
 
 Sequential; one review per task; a short whole-branch look before `dev` fast-forwards.
 

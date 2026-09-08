@@ -54,6 +54,7 @@ struct QueueRow: View {
                         onOpen()                                                       // the Reader loads and plays a non-current document itself
                     }
                 }
+                .accessibilityHint(isPlayingHere ? "Pauses" : "Plays and opens the reader")
                 Pill(label: "Archive", glyph: "archivebox", style: .soft) {
                     Task { await env.libraryModel.archive(summary.id) }
                 }

@@ -45,6 +45,7 @@ struct BookSheet: View {
                             readerRoute.open(live)
                         }
                     }
+                    .accessibilityHint("Plays and opens the reader")
                     if isQueued {
                         Pill(label: "In Queue", glyph: "checkmark", style: .selected) { Task { await env.libraryModel.archive(live.id) } }
                     } else {

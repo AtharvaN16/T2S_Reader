@@ -9,6 +9,7 @@ public struct TextNormalizer: Sendable {
             StripCitationsRule(),
             ExpandAbbreviationsRule(),
             CollapseURLsRule(),          // before numbers: a URL with digits must survive intact
+            SplitHyphenatedCompoundsRule(), // after URLs: a host keeps its hyphen long enough to be recognised
             ExpandNumbersRule(),
             CollapseWhitespaceRule(),
             PronunciationDictionaryRule(entries: dictionary),

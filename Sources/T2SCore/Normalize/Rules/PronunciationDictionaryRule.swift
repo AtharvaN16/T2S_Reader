@@ -8,7 +8,8 @@ public struct PronunciationDictionaryRule: NormalizerRule {
         // Lookarounds rather than \b: a term ending in a non-word character ("C++") has no
         // word boundary after it, so \b would never match.
         compiled = entries.map { e in
-            let escaped = NSRegularExpression.escapedPattern(for: e.term)
+            // The hyphen rule has already run: "commander-in-chief" in the text is "commander in chief".
+            let escaped = NSRegularExpression.escapedPattern(for: SplitHyphenatedCompoundsRule.spokenForm(of: e.term))
             let pattern = "(?<![\\p{L}\\p{N}_])\(escaped)(?![\\p{L}\\p{N}_])"
             return (Pattern(pattern, e.caseSensitive ? [] : [.caseInsensitive]), e.replacement)
         }

@@ -4,5 +4,6 @@ public enum Versions {
     public static let schema = 1
     /// 2 (2026-09-06): consecutive sentences of a block pack into one utterance (`Segmenter.packLength`).
     public static let segmenter = 2
-    public static let normalizer = 2
+    /// 3 (2026-09-08): a hyphen joining two words becomes a space (`SplitHyphenatedCompoundsRule`).
+    public static let normalizer = 3
 }

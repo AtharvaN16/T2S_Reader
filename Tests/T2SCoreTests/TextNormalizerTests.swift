@@ -14,6 +14,14 @@ import Testing
         #expect(TextNormalizer.version == Versions.normalizer)
     }
 
+    /// Rule 1 keeps a real hyphen; the pipeline still speaks it as a word break, after URLs are
+    /// collapsed (a host keeps its hyphen long enough to be recognised) and before numbers expand.
+    @Test func speaksHyphenatedCompoundsAsSeparateWords() {
+        let t = TextNormalizer().normalize("The well-known site https://foo-bar.com/x opened in mid-1990s style.")
+        #expect(t.spoken == "The well known site foo bar.com opened in mid nineteen nineties style.")
+        expectEveryWordMapsToSource(t)
+    }
+
     @Test(arguments: [
         ("see https://www.nytimes.com/2024/05/01/tech.html today", "see nytimes.com today"),
         ("cite https://doi.org/10.1038/s41586-021-03819-2 now.", "cite doi.org now."),

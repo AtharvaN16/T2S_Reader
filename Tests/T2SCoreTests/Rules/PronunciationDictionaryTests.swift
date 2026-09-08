@@ -29,3 +29,14 @@ import Testing
         expectEveryWordMapsToSource(t)
     }
 }
+
+/// The hyphen rule runs before the dictionary, so a term the reader typed with a hyphen has to match
+/// the text after the hyphen became a space.
+@Suite struct PronunciationDictionaryHyphenTests {
+    @Test func aHyphenatedTermMatchesTheSpokenForm() {
+        let n = TextNormalizer(dictionary: [PronunciationEntry(term: "commander-in-chief", replacement: "commander in cheef")])
+        let t = n.normalize("The commander-in-chief spoke.")
+        #expect(t.spoken == "The commander in cheef spoke.")
+        expectEveryWordMapsToSource(t)
+    }
+}

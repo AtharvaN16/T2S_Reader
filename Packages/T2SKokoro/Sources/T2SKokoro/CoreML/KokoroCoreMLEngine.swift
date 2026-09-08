@@ -254,7 +254,6 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// What every render starts from: the voice checked, the stages loaded, the text phonemized and
     /// tokenized. Shared by `synthesize` and `stream`.
     private struct Prepared {
-        let id: KokoroVoiceID
         let loaded: Loaded
         let tokenizer: KokoroTokenizer
         let words: [MToken]
@@ -288,7 +287,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         }
         let (phonemes, ownersByCharacter) = Self.phonemeWalk(words)
         let tokenization = tokenizer.tokenize(phonemes: phonemes, ownersByCharacter: ownersByCharacter)
-        return Prepared(id: id, loaded: loaded, tokenizer: tokenizer, words: words, phonemes: phonemes,
+        return Prepared(loaded: loaded, tokenizer: tokenizer, words: words, phonemes: phonemes,
                         ids: tokenization.ids, owners: tokenization.owners)
     }
 

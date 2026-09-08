@@ -197,15 +197,23 @@ public actor RenderScheduler {
     private func streamed(_ request: RenderRequest) async throws -> SynthesisResult {
         var pieces: [PCMAudio] = []
         var timings: [WordTiming] = []
-        for try await chunk in engine.synthesizeStreaming(SynthesisRequest(spoken: request.spoken, voiceID: request.voiceID)) {
-            switch chunk {
-            case .piece(let audio, let ordinal, let isLast):
-                pieces.append(audio)
-                continuation.yield(.piece(documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex,
-                                          audio: audio, ordinal: ordinal, isLast: isLast))
-            case .finished(let wordTimings):
-                timings = wordTimings
+        do {
+            for try await chunk in engine.synthesizeStreaming(SynthesisRequest(spoken: request.spoken, voiceID: request.voiceID)) {
+                switch chunk {
+                case .piece(let audio, let ordinal, let isLast):
+                    pieces.append(audio)
+                    continuation.yield(.piece(documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex,
+                                              audio: audio, ordinal: ordinal, isLast: isLast))
+                case .finished(let wordTimings):
+                    timings = wordTimings
+                }
             }
+        } catch {
+            // Pieces already forwarded are in the player and were heard: the clip under the key must
+            // be exactly those, not the failure silence, or the timeline's duration would disagree
+            // with the audio for good. Nothing forwarded yet is an ordinary failure.
+            guard !pieces.isEmpty else { throw error }
+            continuation.yield(.failed(documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, message: "\(error)"))
         }
         let sampleRate = pieces.first?.sampleRate ?? PCMAudio.defaultSampleRate
         return SynthesisResult(audio: PCMAudio(sampleRate: sampleRate, samples: pieces.flatMap(\.samples)), wordTimings: timings)

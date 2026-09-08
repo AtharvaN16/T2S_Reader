@@ -30,6 +30,10 @@ public actor FakeEngine: SynthesisEngine {
 
     public func fail(on spoken: String) { failures.insert(spoken) }
 
+    /// The streamed render throws after yielding piece `ordinal` (a mid-stream engine failure).
+    public func fail(afterPiece ordinal: Int) { failAfterPiece = ordinal }
+    private var failAfterPiece: Int?
+
     /// Changes the simulated machine mid-run: a phone that was throttling and is not any more, or
     /// the other way about.
     public func setSimulatedRTF(_ rtf: Double?) { simulatedRTF = rtf }
@@ -115,6 +119,9 @@ public actor FakeEngine: SynthesisEngine {
                         let end = ordinal == count - 1 ? samples.count : start + size
                         continuation.yield(.piece(PCMAudio(sampleRate: whole.audio.sampleRate, samples: Array(samples[start ..< end])),
                                                   ordinal: ordinal, isLast: ordinal == count - 1))
+                        if let failAfterPiece = await self.failAfterPiece, ordinal == failAfterPiece {
+                            throw SynthesisError.failed("failed after piece \(ordinal)")
+                        }
                     }
                     continuation.yield(.finished(wordTimings: whole.wordTimings))
                     continuation.finish()

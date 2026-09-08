@@ -445,12 +445,7 @@ public final class PlaybackCoordinator {
             }
         case .rendered(let r):
             guard let document, document.id == r.documentID, timeline != nil, r.utteranceIndex < rendered.count else { return }
-            if streaming?.index == r.utteranceIndex {
-                // The engine stopped before its last piece (spec §6: silence under the key). Close the
-                // segment so the player's completion can fire and the next utterance follows.
-                streaming = nil
-                player.enqueue(PCMAudio(sampleRate: PCMAudio.defaultSampleRate, samples: []), tag: r.utteranceIndex, isFinal: true)
-            }
+            if streaming?.index == r.utteranceIndex { closeStream(r.utteranceIndex) }
             var u = timeline![utterance: r.utteranceIndex]
             u.duration = .actual(r.duration)
             // A cache-hit `.rendered` carries empty word timings (spec: RenderScheduler); don't
@@ -476,8 +471,10 @@ public final class PlaybackCoordinator {
             }
         case .failed(_, let utteranceIndex, let message):
             lastRenderError = "utterance \(utteranceIndex): \(message)"   // spec §6: logged; silence follows as .rendered
+            if streaming?.index == utteranceIndex { closeStream(utteranceIndex) }
         case .storeFull:
             device.storeFull = true                                 // surfaces the storage manager (spec §6)
+            if let streaming { closeStream(streaming.index) }      // no `.rendered` will follow a refused write
         case .idle:
             expectedIdles = max(0, expectedIdles - 1)
             releaseIdleWaitersIfSettled()
@@ -497,6 +494,14 @@ public final class PlaybackCoordinator {
     }
 
     // MARK: Helpers
+
+    /// A stream that will get no last piece — the engine failed, or the store refused the clip — is
+    /// closed with an empty final buffer, so the player's completion still fires behind the pieces it
+    /// holds and the next utterance follows.
+    private func closeStream(_ index: Int) {
+        streaming = nil
+        player.enqueue(PCMAudio(sampleRate: PCMAudio.defaultSampleRate, samples: []), tag: index, isFinal: true)
+    }
 
     private func refreshHighlight() {
         guard let timeline else { highlight = nil; return }

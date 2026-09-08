@@ -22,6 +22,11 @@ the first sentence after a tap should flow into its second piece without a hole 
 first sentence sounds cut in two, the streamed join's tail budget (`KokoroCoreMLSeam.budgetSamples`)
 is the knob; if the highlight drifts in the first sentence only, the fold's `offsetSeconds` for the
 streamed pieces is.
+Also listen for a hole *inside* the first sentence after a tap on a hot phone: a streamed utterance
+has no "catching up" of its own between its pieces (spec §3.6's underrun rule fires only between
+utterances), and after such a hole the highlight can jump ahead by the hole's length for the rest of
+that sentence. If you hear it, the next plan gives the player a queued-frames accessor so the
+coordinator can pause between pieces as it does between utterances.
 
 **Next:** the 3 s bucket (audit #9) to halve the first sound again; then the open path (#5) and the
 tick churn (#7).

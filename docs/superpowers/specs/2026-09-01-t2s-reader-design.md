@@ -509,6 +509,9 @@ import.
 
 Buffers are scheduled per utterance for gapless playback. A streamed head is several buffers under
 one tag; the segment's completion fires after the buffer marked final (rev 16).
+§3.6's underrun rule applies between utterances, not between the pieces of a streamed head: if the
+second piece renders slower than the first plays, the player runs dry until it arrives (rev 16; a
+queued-frames accessor on the player is the planned remedy).
 `AVAudioUnitTimePitch.rate` provides 0.5x–4x **with pitch correction**;
 `AVQueuePlayer` was rejected because per-item boundaries are audible and
 rate handling across items is awkward. Playhead precision comes from

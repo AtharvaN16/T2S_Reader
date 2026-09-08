@@ -455,8 +455,9 @@ import T2SCore
         await c.play()
         await c.waitForRenderIdle()
         #expect(player.queuedRemaining > 0)
-        let head = player.queue.filter { $0.tag == 0 }.reduce(0) { $0 + $1.remaining }
-        #expect(abs(head - 0.4) < 1e-9)
+        let head = player.queue.filter { $0.tag == 0 }
+        #expect(head.count == 1)                                     // piece 0 (0.5 s) was consumed by the drop entirely; piece 1 carries the rest
+        #expect(abs(head.reduce(0) { $0 + $1.remaining } - 0.4) < 1e-9)
         player.advance(seconds: 0.3); c.tick()
         #expect(abs(c.playhead.offset - 0.9) < 1e-9)
     }

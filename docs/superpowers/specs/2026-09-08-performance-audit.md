@@ -32,7 +32,7 @@ warm-up, prime after import and at launch); #4 done as `RecentAudioStore` (the t
 decode paths stay); #5 partly (one store hop per load, cheaper keys — the `play()` gate,
 "stop hashing every chapter twice per open" and `LibraryModel.refresh` are all untouched); #8 done;
 #11 done (`rateLoweredTo`, and the rate is raised again as the RTF recovers; the Reader's line is the
-UI plan's). Open: #2, #6, #7, #9, #10, #12, #13, #14.
+UI plan's). Open (after Plan 14): #6, #7, #9, #10, #12, #13, #14.
 
 **Progress (Plan 14, 2026-09-08):** #2 done — the head streams; first sound after the first ~3 s piece
 (~1 s on an A13 in the 7 s bucket). The 3 s bucket (#9) would halve that.

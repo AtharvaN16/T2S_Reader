@@ -195,4 +195,23 @@ import Testing
         guard case .failed = got[0], case .rendered(let r) = got[1] else { Issue.record("\(got)"); return }
         #expect(abs(r.duration - RenderScheduler.failureSilenceSeconds) < 1e-9)
     }
+
+    /// An engine that fails after a piece the player already heard: the store gets exactly the
+    /// pieces forwarded, `.failed` is reported, and `.rendered` carries their duration.
+    @Test func aStreamThatFailsAfterAPieceStoresWhatWasHeard() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let engine = FakeEngine(secondsPerCharacter: 0.1, pieceCount: 3)
+        await engine.fail(afterPiece: 0)
+        let s = RenderScheduler(engine: engine, store: store, timeSource: ManualTimeSource())
+        async let events = collect(s)
+        await s.setPlan([request(0, "abcdefghi", stream: true)])
+        let got = await events
+        #expect(got.count == 4)                                       // piece 0, failed, rendered(piece 0), idle
+        guard case .piece(_, 0, let audio, 0, false) = got[0], case .failed = got[1], case .rendered(let r) = got[2] else {
+            Issue.record("\(got)"); return
+        }
+        #expect(abs(audio.duration - 0.3) < 1e-9)
+        #expect(abs(r.duration - 0.3) < 1e-9 && r.wordTimings.isEmpty)
+        #expect(try await store.read(key(0))?.duration == 0.3)
+    }
 }

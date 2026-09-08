@@ -290,11 +290,12 @@ public final class PrepareRunner {
                 do {
                     try await store.saveChapter(timeline.chapters[chapterIndex], at: chapterIndex, of: document.id)
                     chapterWrites += 1
+                    dirtyChapters.remove(chapterIndex)
                 } catch {
+                    // Stays dirty: the next flush retries it. The audio is on disk either way (spec §3.7.3).
                     lastError = "\(error)"
                 }
             }
-            dirtyChapters.removeAll()
             lastWrite = timeSource.now()
         }
 

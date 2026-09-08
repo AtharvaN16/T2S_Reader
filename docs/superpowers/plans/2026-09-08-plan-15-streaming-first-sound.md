@@ -1,4 +1,6 @@
-# Plan 14 — Streaming the first sound
+# Plan 15 — Streaming the first sound
+
+_Numbered 14 when it was written; the other session's Plan 14 (the delivery spread) landed first, so this is 15. The branch `plan-14-streaming` and its worktree keep the old number._
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

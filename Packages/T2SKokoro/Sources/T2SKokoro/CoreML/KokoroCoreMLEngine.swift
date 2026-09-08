@@ -255,6 +255,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// tokenized. Shared by `synthesize` and `stream`.
     private struct Prepared {
         let loaded: Loaded
+        /// The delivery the route asks for, else the engine's own (`Options.f0Spread`, 1 by default).
+        let spread: Float
         let tokenizer: KokoroTokenizer
         let words: [MToken]
         let phonemes: String
@@ -287,7 +289,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         }
         let (phonemes, ownersByCharacter) = Self.phonemeWalk(words)
         let tokenization = tokenizer.tokenize(phonemes: phonemes, ownersByCharacter: ownersByCharacter)
-        return Prepared(loaded: loaded, tokenizer: tokenizer, words: words, phonemes: phonemes,
+        let spread = id.spread ?? options.f0Spread
+        return Prepared(loaded: loaded, spread: spread, tokenizer: tokenizer, words: words, phonemes: phonemes,
                         ids: tokenization.ids, owners: tokenization.owners)
     }
 
@@ -300,8 +303,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         let tokenization = (ids: prepared.ids, owners: prepared.owners)
 
         let pieces = try Self.pieces(ids: tokenization.ids, owners: tokenization.owners, words: words)
-        // The delivery the route asks for, else the engine's own (`Options.f0Spread`, 1 by default).
-        let spread = id.spread ?? options.f0Spread
+        let spread = prepared.spread
         var samples: [Float] = []
         var folds: [KokoroCoreMLTimingFold.Piece] = []
         var tracedPieces: [UtteranceTrace.Piece] = []
@@ -311,13 +313,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             // rather than losing the sentence to 200 ms of silence (spec §6; Task 3,
             // `spikes/findings/2026-09-05-coreml-audio-quality.md`), so one piece from `pieces` may
             // become several rendered pieces here.
-<<<<<<< HEAD
-            let rendered = try renderWithSplitting(
-                piece, isFinal: index == pieces.count - 1, words: words, tokenizer: tokenizer, loaded: loaded, spread: spread
-=======
             let rendered = try renderedPieces(
-                piece, isFinal: index == pieces.count - 1, words: words, tokenizer: tokenizer, loaded: loaded
->>>>>>> d401604 (Plan 14 Task 5: the Kokoro engine streams — a short first piece, every piece finalized before it is emitted, the timings folded over the concatenation)
+                piece, isFinal: index == pieces.count - 1, words: words, tokenizer: tokenizer, loaded: loaded, spread: spread
             )
             for (subPiece, result, cleaned) in rendered {
                 var previous = samples
@@ -441,7 +438,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         for (index, piece) in pieces.enumerated() {
             try Task.checkCancellation()
             pending += try renderedPieces(
-                piece, isFinal: index == pieces.count - 1, words: prepared.words, tokenizer: prepared.tokenizer, loaded: prepared.loaded
+                piece, isFinal: index == pieces.count - 1, words: prepared.words, tokenizer: prepared.tokenizer, loaded: prepared.loaded,
+                spread: prepared.spread
             )
             // A sub-piece is final once the cut after it is known — as soon as the next sub-piece
             // exists, or now for the utterance's last. Emit everything that qualifies.
@@ -465,9 +463,9 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
 
     /// One piece of an utterance rendered — split on overflow — with the tail click removed from
     /// every rendered sub-piece: what both `synthesize` and `stream` start from.
-    private func renderedPieces(_ piece: Piece, isFinal: Bool, words: [MToken], tokenizer: KokoroTokenizer, loaded: Loaded)
+    private func renderedPieces(_ piece: Piece, isFinal: Bool, words: [MToken], tokenizer: KokoroTokenizer, loaded: Loaded, spread: Float)
         throws -> [(piece: Piece, result: KokoroPipelineResult, audio: [Float])] {
-        try renderWithSplitting(piece, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: loaded).map { subPiece, result in
+        try renderWithSplitting(piece, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: loaded, spread: spread).map { subPiece, result in
             (subPiece, result, options.removeTailClick ? KokoroCoreMLTailClick.removed(from: result.audio) : result.audio)
         }
     }

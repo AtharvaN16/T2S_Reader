@@ -1,10 +1,10 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-08 (Plan 14 — streaming the first sound — on `plan-14-streaming`, in the worktree `.worktrees/plan-14-streaming` off `origin/dev` @ 4056ccd). Written for whoever picks up the coding next._
+_Last updated 2026-09-08 (Plan 15 — streaming the first sound — on `plan-14-streaming`, in the worktree `.worktrees/plan-14-streaming`, both named before the other session's Plan 14 landed, off `origin/dev` @ 4056ccd). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-08) — Plan 14
+## Resume here (2026-09-08) — Plan 15
 
-Plan 14 (`docs/superpowers/plans/2026-09-08-plan-14-streaming-first-sound.md`) streams the head
+Plan 15 (`docs/superpowers/plans/2026-09-08-plan-15-streaming-first-sound.md`) streams the head
 utterance: `SynthesisEngine.synthesizeStreaming` (Task 2; default wraps `synthesize`),
 `RenderRequest.stream` + `RenderEvent.piece` (Task 3), `AudioPlaying.enqueue(_:tag:isFinal:)` (Task 1),
 `PlaybackCoordinator` enqueuing pieces as they arrive and starting playback on the first (Task 4), and
@@ -118,10 +118,10 @@ another session ran Plan 12 (the Player sheet retired) in the main checkout:
 
 **The phone listen.** Install with the Phone scheme (Release now). Listen for: a new import's first
 tap starting at once; the mini-player's first tap after a launch starting at once; a book that has
-never been played starting within ~2–3 s (that wait is Plan 14's — streaming the first sound);
+never been played starting within ~2–3 s (that wait is Plan 15's — streaming the first sound);
 word-level highlighting in the first 30 s after an import.
 
-**Next (Plan 14):** streaming the head utterance's first piece to the player — audit #2 — with the
+**Next (Plan 15):** streaming the head utterance's first piece to the player — audit #2 — with the
 quality probe on the seam a short first piece makes. Then the open path's `play()` gate and
 `LibraryModel.refresh` (#5), and, once the UI plan has merged, the tick churn (#7).
 

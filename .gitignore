@@ -41,3 +41,5 @@ __pycache__/
 spikes/findings/audio-probe/
 # Quality probe output (scripts/quality-probe.sh writes WAVs and report.md here)
 spikes/findings/quality-probe/
+# Lever probe output (blends, pitch spread, codec round trips — WAVs for the owner's ears)
+spikes/findings/lever-probe/

@@ -1,6 +1,114 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-06 (Plan 9 — the first listen's fixes — is merged into `dev` and pushed; its final review was clean after one fix wave. The phone was unplugged, so the listen that proves it is the next thing to do). Written for whoever picks up the coding next._
+_Last updated 2026-09-08 (Plan 10 — the native read-along and app-wide theme — is merged into `dev` and pushed; every task's review was clean. The owner's phone listen is the next thing to do — taps and drags in the Reader are the two things the Mac could not verify). Written for whoever picks up the coding next._
+
+## Resume here (2026-09-08) — Plan 10
+
+The owner's report on 2026-09-07: the Reader page was a black page under light chrome — "it looks
+like pages from a PDF, not our UI"; ElevenReader was the reference ("beautiful text UI … they don't
+display a page"); and "I want theme app wide". Reproduced in the simulator: the Reader-only Theme
+preference themed only Readium's web view and nothing else —
+`xcrun simctl spawn <udid> defaults write com.t2s.reader reader.theme -string dark` turns the
+Reader black while the rest of the app stays light. Plan 10
+(`docs/superpowers/plans/2026-09-07-plan-10-native-readalong.md`, design
+`docs/superpowers/specs/2026-09-07-native-readalong-design.md`) answered both: the Reader now draws
+the timeline's text itself, after ElevenReader, and the theme choice applies to the whole app.
+
+- **Task 1** — `Sources/T2SApp/Reader/ReaderText.swift` (new): a pure model that turns a `Timeline`
+  into paragraphs (document title, byline, chapter titles, headings, body) with exact UTF-16
+  offsets into one flattened string, plus `hit(at:)` for taps and `wordRange`/`tintRange` for
+  highlighting. `ReaderModel.swift` gained `seek(toUtterance:sourceOffset:)`, the new tap entry
+  point, alongside the old `playhead(for:in:)` kept for now as a thin wrapper.
+- **Task 2** — `App/T2SReader/Reader/ReaderTypesetter.swift` and `ReaderTextView.swift` (new): the
+  Reader draws its own text on a `UITextView` backed by TextKit 2 — paragraph and word tints as
+  rounded rectangles from `NSTextLayoutManager` segment rects, taps mapped through
+  `textLayoutFragment(for:)`, following that re-centres the active word. `ReaderPage.swift` builds
+  `ReaderText` off the coordinator's timeline instead of opening a Readium publication. Removed:
+  `EPUBReaderView.swift`, `PDFReaderView.swift`, `ReaderScripts.swift`, `PublicationCache.swift`,
+  `ReaderError.swift`, `AppEnvironment.publications`, and the `ReadiumNavigator` /
+  `ReadiumAdapterGCDWebServer` products from `App/project.yml` — Readium's navigators leave the
+  app; `T2SReadium` itself (import, positions, `LocatorMapping`) is untouched.
+- **Task 3** — `App/T2SReader/Design/Theme.swift` (new): `ReaderTheme.colorScheme` and an
+  `.appTheme()` modifier applied to the root pager and to the Reader page, so System/Light/Dark now
+  covers every screen, sheet and the Reader's UIKit text view together. The Appearance sheet and
+  Preferences page captions say so.
+- **Task 4** — deleted the tap-matching path Plan 9 built, once the new view no longer needed it:
+  `SourceHit.swift`; `ReaderModel`'s `activeSentence`, `seek(to: SourceHit)`, the old
+  `playhead(for:in:)`, `normalized(_:)`, `utteranceIndex(for:in:)`, `locate(_:in:)`,
+  `rawOffset(forCollapsed:in:)`, `pageCount(from:)`; `Highlighter.sentence(at:in:)`; their tests
+  (11 fewer, 371 → 360).
+
+Three rulings from Task 2's review amend the design spec
+(`docs/superpowers/specs/2026-09-07-native-readalong-design.md`), each a line or two in place:
+the top inset is 96 pt measured from the safe-area top, not 72 from the view's own top (the view
+ignores only the bottom safe area); every text run carries `ink`/`ink2` as an explicit colour
+attribute, because `UITextView.textColor` applies to the whole string and flattened the byline;
+and an empty timeline shows the message only, not the title. Two more amendments landed with
+Task 2's fix round: a superseded typeset now stops at the next paragraph boundary and the
+coordinator cancels its build on disappearance; and the first centre after content arrives is
+never animated even when the first highlight lands later, because audio is usually still
+rendering at open.
+
+**Deferred** (the plan's own list, plus the minors the ledger recorded along the way):
+
+- Import-time block roles (headings, quotes) once Readium or our own HTML pass provides them;
+  images inline; text selection, notes, sharing a quote; removing
+  `LocatorMapping.locator(for:in:)` and its tests from `T2SReadium`.
+- `syncOverlay()` isn't called on a pure bounds change (rotation while paused).
+- Three `rects(for:)` calls per word tick where one pass could feed both the redraw and the
+  centring; `view.textColor = UIColor(Tokens.ink)` in `makeUIView` is now dead code.
+- Every `open()` failure reads "This document has no readable text.", including a load failure
+  that isn't really that.
+- The tap anchor and TextKit's own line samples use slightly different offsets into an element
+  that happen to coincide for `NSTextContentStorage`.
+- A newline inside a raw document/chapter title would split the paragraph element (untested,
+  Task 1 territory); the typesetter's length-invariant `assert` traps the Debug app if it's ever
+  wrong, on the open path.
+
+**Dev rule from the owner: never play audio on the Mac.** Simulator runs only as
+`SIMCTL_CHILD_T2S_SILENT=1 xcrun simctl launch <udid> com.t2s.reader` (the app mutes every player
+when `T2S_SILENT` is set). Never change the Mac's volume.
+
+**Incident, morning of 2026-09-08.** The simulator's `coreaudiod` deadlocked for about forty
+minutes — every launch aborted inside `AVAudioEngine` init on a `coreaudiod` RPC timeout,
+reproduced across a full `simctl erase`, so the fault was the host daemon, not app or guest state.
+It cleared by itself. Nobody restarted it: `coreaudiod` is the Mac's shared audio service, and
+restarting a shared system daemon on the owner's Mac was not this task's call to make — leave it
+to the owner if it recurs.
+
+**The phone checklist.** Install with scheme **Phone**, your team on both targets (the recipe
+under "The iPhone 17 Pro run" below still applies). Open a book and check:
+
+1. The page is off-white in light mode, the document title at the top, and the paragraph and word
+   tints visible as the audio plays.
+2. Appearance → Text size and Line height change the page live while it is open.
+3. Theme → Dark darkens the whole app, including the Queue — not just the Reader.
+4. A tap on a word starts playback there.
+5. A drag stops following, and `Back to current` returns to the playhead.
+6. The contents sheet jumps chapters.
+7. A PDF reads along at the word, the same as an EPUB.
+
+Two things the Mac cannot verify at all and needs the phone for: **taps** (does a tap land on the
+word actually tapped) and **drags** (does a drag suspend following, and does `Back to current`
+return correctly). If taps land one line off, the fix is in
+`App/T2SReader/Reader/ReaderTextView.swift`'s `handleTap`: drop the `- line.typographicBounds.minY`
+term from the point conversion.
+
+**The simulator recipe, for the next person who needs to look at the Reader without a phone.**
+
+```bash
+U=<simulator-udid>
+xcrun simctl boot $U; xcrun simctl bootstatus $U -b
+xcrun simctl install $U .build/DerivedData-App/Build/Products/Debug-iphonesimulator/T2SReader.app
+SIMCTL_CHILD_T2S_SILENT=1 xcrun simctl launch $U com.t2s.reader
+C=$(xcrun simctl get_app_container $U com.t2s.reader data)
+cp <fixture>.epub "$C/Documents/Inbox/"
+xcrun simctl openurl $U "file://$C/Documents/Inbox/<fixture>.epub"
+```
+
+Open the `file://` path into the app container's `Documents/Inbox/` with `openurl`, not the
+`t2s://` scheme — the scheme shows a confirmation sheet nobody can tap on a script-driven
+simulator. The Inbox file is consumed per import, so copy it in again for a second run.
 
 ## Resume here (2026-09-06) — Plan 9
 
@@ -49,7 +157,7 @@ build); the Player sheet's styling; Kokoro in the Simulator build (needs a phone
 An iOS app that turns EPUBs, web articles, and text PDFs into read-along audiobooks
 synthesized on the phone. The design spec is the source of truth:
 [docs/superpowers/specs/2026-09-01-t2s-reader-design.md](superpowers/specs/2026-09-01-t2s-reader-design.md)
-(rev 10). Work is organised as numbered plans under
+(rev 11). Work is organised as numbered plans under
 [docs/superpowers/plans/](superpowers/plans/), each a list of tasks with the exact code, tests,
 and commit message per task. The roadmap is
 [2026-09-02-t2s-reader-roadmap.md](superpowers/plans/2026-09-02-t2s-reader-roadmap.md).
@@ -58,7 +166,7 @@ and commit message per task. The roadmap is
 
 | Branch | State | Notes |
 |---|---|---|
-| `dev` | integration branch | Plans 1–6, 8 and 9 merged (root `swift test` 356 tests / 75 suites; `Packages/T2SKokoro` 93 / 14; `scripts/test-readium.sh` not re-run for Plan 9). Earlier notes: Plan 5 Tasks 5–6 were fast-forwarded from `plan-5-task-5-kokoro` on 2026-09-03 (`938c8b8 … ba207ed`, twelve commits, every task reviewed plus a whole-branch review). Root package: **309 tests in 72 suites** (`swift test`). `Packages/T2SKokoro`: **56 tests in 7 suites** (`scripts/test-kokoro.sh`; seven of them are gated on the real model files being installed — four load the 327 MB model and two of those synthesize audio). `Packages/T2SReadium`: **12 tests in 3 suites** (`scripts/test-readium.sh`, on the iPhone simulator). The everyday app builds, launches, imports an EPUB, and plays it on the simulator and on an iPhone 11 Pro. |
+| `dev` | integration branch | Plans 1–6, 8, 9 and 10 merged (root `swift test` 360 tests / 76 suites; `Packages/T2SKokoro` 93 / 14; `scripts/test-readium.sh` not re-run for Plan 10 — the Readium package is untouched). Earlier notes: Plan 5 Tasks 5–6 were fast-forwarded from `plan-5-task-5-kokoro` on 2026-09-03 (`938c8b8 … ba207ed`, twelve commits, every task reviewed plus a whole-branch review). Root package: **309 tests in 72 suites** (`swift test`). `Packages/T2SKokoro`: **56 tests in 7 suites** (`scripts/test-kokoro.sh`; seven of them are gated on the real model files being installed — four load the 327 MB model and two of those synthesize audio). `Packages/T2SReadium`: **12 tests in 3 suites** (`scripts/test-readium.sh`, on the iPhone simulator). The everyday app builds, launches, imports an EPUB, and plays it on the simulator and on an iPhone 11 Pro. |
 | `main` | stale: only the initial spec commit | Not used for integration yet; fast-forward it to `dev` when you want a release point. |
 
 Plan branches are short-lived: each plan runs on its own branch off `dev` (locally in a git

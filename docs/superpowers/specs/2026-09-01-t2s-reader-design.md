@@ -1,7 +1,7 @@
 # t2s_reader — Design Spec
 
 **Date:** 2026-09-01
-**Revised:** 2026-09-06 (rev 10 — see §11 changelog)
+**Revised:** 2026-09-07 (rev 11 — see §11 changelog)
 **Status:** Draft for review
 **Working name:** t2s_reader (TBD)
 
@@ -66,7 +66,7 @@ conditions that keep it that way.
 |---|---|---|
 | **EPUB** (unencrypted) | Readium Streamer | Full — word-level |
 | **Web article** | Share sheet → Readability.js → minimal EPUB | Full — word-level |
-| **Text PDF** | PDFKit text extraction + normalizer; displayed in Readium's PDF navigator | Reduced — see §6.1 |
+| **Text PDF** | PDFKit text extraction + normalizer; drawn by the Reader like any document (rev 11) | Full — word-level (rev 11), no page layout — see §6.1 |
 
 Web articles are converted to a minimal EPUB at import so that everything
 downstream travels a single reflowable code path. PDFs remain PDFs.
@@ -74,9 +74,9 @@ downstream travels a single reflowable code path. PDFs remain PDFs.
 PDF text is extracted with PDFKit rather than the Readium streamer (rev 6).
 The Readium toolkit is iOS-only and cannot run under the macOS test suite,
 while PDFKit runs on both, so the PDF ingest path stays fully testable on a
-Mac and Readium is confined to EPUB reading and display (§7.6). Readium's
-PDF navigator still displays the pages; `Position.progression` carries the
-page.
+Mac and Readium is confined to EPUB import (§7.6). The Reader draws every
+document's text itself, PDFs included (rev 11, §2.4.5); `Position.progression`
+carries the page.
 
 **The originally fetched HTML is retained alongside the generated EPUB.**
 Extraction is lossy and irreversible; keeping the source means a future
@@ -177,7 +177,7 @@ one tunable (§10); the values below are starting points.
 | `ink3` | #C9C9C7 | #3A3A3A | disabled, unrendered scrubber ticks |
 | `accent` | #FF7A1A | #FF8C3A | the one primary action per screen |
 | `accentSoft` | accent @ 18% | accent @ 22% | read-along word highlight, soft pills |
-| `accentFaint` | accent @ 8% | accent @ 12% | read-along sentence tint behind the word (rev 10) |
+| `accentFaint` | accent @ 8% | accent @ 12% | read-along paragraph tint behind the word (rev 11; was the sentence) |
 | `positive` | #22A559 | #34C070 | rendered / finished states |
 | `destructive` | #E5453B | #FF5A50 | archive, delete, discard cache |
 
@@ -271,27 +271,7 @@ Times below in monospaced; total prefixed `~` until fully rendered.
 Control pill: overflow | back 15 · play · forward 30 | speed as a bare
 number.
 
-**Reader page (rev 10, after ElevenReader).** Separate full-screen page.
-Entered from a Queue row title, a chapter in the book sheet, or `Read
-along` in the player. No bar: floating 36pt `surface` circles over a
-`ground` fade — back top-left; bookmark and overflow (Chapters, Bookmarks,
-Appearance, Change voice, Sleep timer, Details, Render whole document)
-top-right. Body is the Readium navigator on `ground`, publisher styles
-off, Inter at the spec's 18pt (Readium's `fontSize` is a ratio: 1.125 ×
-the reader's text scale), start-aligned, unhyphenated. The utterance
-being read is tinted `accentFaint` and the active word `accentSoft`, 4pt
-radius; nothing else on the page uses accent. Auto-scroll keeps the
-active word in the middle third of the screen (only a word change
-scrolls); a manual scroll suspends it and shows a `Back to current` pill
-until tapped. Tap a word → seek to that word (utterances hold two or
-three sentences since rev 10, §3.1). Bottom block pinned over a `ground`
-fade: a 3pt progress bar whose segments show the render frontier (`ink`
-rendered, `ink3` not) with a knob, elapsed and total in monospaced
-beneath; then sleep timer · back 15 · play · forward 30 · speed; then
-appearance · a voice chip naming the routed voice (→ change voice) ·
-contents. During underrun (§3.6) the play glyph becomes a ring and a
-caption reads `catching up…`. PDF uses the same page with page-level
-highlight (§6.1). The Player sheet keeps its tick scrubber.
+**Reader page (rev 11, after ElevenReader).** Separate full-screen page. Entered from a Queue row title, a chapter in the book sheet, or `Read along` in the player. No bar: floating 36pt `surface` circles over a `ground` fade — back top-left; bookmark and overflow (Chapters, Bookmarks, Appearance, Change voice, Sleep timer, Details, Render whole document) top-right. The body is our own text, drawn from the timeline, never the document's layout (design `2026-09-07-native-readalong-design.md`): one column on `ground`, 24pt margins; the document title in the Page title role and a byline in Meta/`ink2`; chapter titles in the Player title role (a chapter's own first block that says its title is the title); headings in Inter SemiBold when the block's selector names an h1–h6; body in Inter 18pt × text scale, line height × the reader's setting, no indent, a paragraph gap of 0.75 × the body size; images, tables and footnotes are not drawn. The paragraph under the playhead is tinted `accentFaint` and the spoken word `accentSoft` as 4pt-rounded rectangles per line; on a PDF the tinted unit is the utterance. Auto-scroll keeps the word in the middle third (only a word change scrolls); a drag suspends it and shows `Back to current`. Tap a word → seek to that word. Bottom block pinned over a `ground` fade: a 3pt progress bar whose segments show the render frontier (`ink` rendered, `ink3` not) with a knob, elapsed and total in monospaced beneath; then sleep timer · back 15 · play · forward 30 · speed; then appearance · a voice chip naming the routed voice (→ change voice) · contents. During underrun (§3.6) the play glyph becomes a ring and a caption reads `catching up…`. Text size and line height apply live; theme is app-wide (§2.4.2). The Player sheet keeps its tick scrubber.
 
 **Speed picker.** Vertical list, 0.5x–4.0x in 0.1x steps. Rates whose
 sustained demand exceeds the §3.6 threshold are drawn in `ink3` with a
@@ -729,10 +709,7 @@ disabled, and stays buildable on a free Apple ID during development.
 
 ### 6.1 PDF read-along caveat
 
-**v1 ships PDF as audio-first with page-level sync.** Readium's PDF navigator
-does not support word decorations, so full word-level read-along is limited to
-EPUBs and web articles. Given PDFs are the third-ranked format, this is an
-acceptable v1 outcome and is called out here rather than discovered later.
+**PDF read-along shows the extracted text, not the page image** (rev 11). The Reader draws every document's timeline text itself, so PDFs get the same word-level tint as EPUBs; what they lose is the page's layout. Running headers and footers are filtered at import (§4.1 rule 2).
 
 ---
 
@@ -913,6 +890,12 @@ against a pipeline that is already proven.
 ---
 
 ## 11. Changelog
+
+**rev 11 (2026-09-07)** — Plan 10: the native read-along.
+
+- **§2.4.5** the Reader draws its own text from the timeline (paragraphs, chapter titles, headings, paragraph and word tints, taps, following) — Readium's navigators leave the app; the design is `2026-09-07-native-readalong-design.md`. **§2.4.2** `accentFaint` tints the paragraph. **§6.1** PDFs read along at the word, as text.
+- Theme (System / Light / Dark) applies to the whole app, not the Reader alone.
+- Why: the owner's 2026-09-07 report — a black Readium page under light chrome (the Reader-only theme), and "it looks like pages from a PDF, not our UI; ElevenReader shows the text as part of its UI".
 
 **rev 10 (2026-09-06)** — Plan 9: the first listen's fixes.
 

@@ -30,8 +30,8 @@ each edge, scrolling from the document's first word to its last:
 
 - **Document title** at the top in the Page title role (Inter Display Black 34), then a byline in
   the Meta role and `ink2` when the document has an author. Nothing else above the text — the
-  first line starts under the top circles' band (content inset 72 pt), the last line ends above
-  the bottom block (inset 240 pt).
+  first line starts under the top circles' band (content inset 96 pt from the safe-area top), the
+  last line ends above the bottom block (inset 240 pt).
 - **Chapter titles** in the Player title role (Inter Display ExtraBold 26), 40 pt above, 16 pt
   below. A chapter's own first block, when it says the same thing as its contents title, *is* the
   chapter title and is styled as one (and tinted while it is read); otherwise the contents title
@@ -122,9 +122,12 @@ what the Appearance sheet needs to work live.
 (`ReaderTypesetter.attributedString(for:scale:lineHeight:)`), on a background task, then assigned on
 the main actor. Fonts by name from the bundled faces (Inter-Regular, Inter-SemiBold,
 InterDisplay-ExtraBold, InterDisplay-Black); paragraph styles carry the line-height multiple,
-spacing before/after, and alignment. No colour in the attributes: `textView.textColor` is the
-dynamic `ink`, so a theme change recolours without a rebuild. The byline uses `ink2` as its one
-attribute colour (dynamic too).
+spacing before/after, and alignment. Every run carries the dynamic `ink` as its foreground colour
+and the byline `ink2` (UIKit's `textColor` applies to the whole string and would flatten the
+byline); the colours are dynamic `UIColor`s, so a theme change recolours without a rebuild —
+verified in the dark screenshots. A superseded typeset stops at the next paragraph boundary (the
+typesetter checks cancellation once per paragraph) and the coordinator cancels its build when it
+goes away.
 
 **Highlight overlay.** A `CALayer` under the text (a subview of the text view's container, behind
 the text container's drawing) holding two `CAShapeLayer`s: paragraph tint, word tint. On each
@@ -148,14 +151,19 @@ calls `onUserScroll`, which suspends following in `ReaderModel`; programmatic sc
 through that delegate, so no time window is needed. When `isFollowing` flips back to true the
 coordinator re-centres at once. On first layout with content the active word is centred without
 animation, and once more on the next run-loop turn, because TextKit 2 estimates the height of
-text it has not laid out and the first answer can be off.
+text it has not laid out and the first answer can be off. The first centre after content arrives
+is never animated even when the first highlight lands later than that layout (audio is still
+rendering at open, the common case); every centre after that first one animates.
 
 **Settings changes.** A new scale or line height rebuilds the attributed string; the coordinator
 remembers the active word's document range, assigns the new text, and re-centres that word without
 animation.
 
-**Insets.** `textContainerInset = (72, 24, 240, 24)`, `lineFragmentPadding = 0`, the scroll
-indicator inset to match the bottom block. Background clear (`ground` comes from the page).
+**Insets.** `textContainerInset = (96, 24, 240, 24)`, `lineFragmentPadding = 0`, the scroll
+indicator inset to match the bottom block. The top figure is measured from the safe-area top,
+not from the view's own top — the view ignores only the bottom safe area — so 96 pt is what
+clears the 150 pt top band of circles and fade; the original 72 assumed a view that also ignored
+the top safe area. Background clear (`ground` comes from the page).
 
 ## 5. The page, and what goes
 
@@ -188,8 +196,8 @@ says it applies to the whole app. The Reader-only theme path in the old web view
 
 ## 7. Errors and edges
 
-- A timeline with no utterances shows the title and the message the page shows today for an
-  unreadable document.
+- A timeline with no utterances shows the message only ("This document has no readable text."),
+  not the title.
 - A highlight whose utterance is not in the text (the playhead past the end) draws no tint.
 - Word timings absent (an utterance not yet rendered): the Highlighter's estimated word still
   maps to a range, so the tint follows the estimate as it does now.

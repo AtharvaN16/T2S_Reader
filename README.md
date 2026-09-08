@@ -12,9 +12,9 @@ Package.swift          Swift package "T2S". Targets: T2SCore (text pipeline), T2
                        T2SApp (models, formatters).
 Sources/<Target>/      library code, one directory per target
 Tests/<Target>Tests/   Swift Testing suites; run with `swift test` on macOS
-Packages/T2SReadium/   iOS-only package wrapping the Readium toolkit (EPUB reading, Locator
-                       mapping). Readium does not build for macOS, so it is tested on the iOS
-                       simulator with scripts/test-readium.sh.
+Packages/T2SReadium/   iOS-only package wrapping the Readium toolkit (EPUB import, positions,
+                       Locator mapping). Readium does not build for macOS, so it is tested on the
+                       iOS simulator with scripts/test-readium.sh.
 Packages/T2SKokoro/    the Kokoro engines, two runtimes side by side. Core ML (the default):
                        KokoroCoreMLResources, KokoroTokenizer, KokoroCoreMLEngine and the
                        measured KokoroCoreMLDecision; CPU-only, so it runs on every phone the
@@ -36,17 +36,19 @@ Packages/MLXUtilsLibrary/
                        version ranges, so Kokoro and Readium could not resolve together; the
                        local copy takes zip off the Kokoro path entirely. docs/HANDOFF.md
                        carries the accepted cost and the exit plan.
-App/                   the iOS app: project.yml → T2SReader.xcodeproj (generated, ignored) with
-                       two app targets from one template, T2SReader (simulator + any phone,
-                       no Kokoro) and T2SReaderKokoro (device only, and the app on a phone: it
-                       runs on any iPhone the app supports, because Core ML is CPU-only — only
-                       the MLX route inside it needs A14+); T2SReader/ (SwiftUI views,
-                       composition root), T2SReaderShare/ (the Share Extension), Resources/Fonts
-                       (Inter, OFL), Resources/Readability/ (Readability.js), Resources/Kokoro/
-                       (the MLX weights and voice styles — ~342 MB, git-ignored, installed by
+App/                   the iOS app: project.yml → T2SReader.xcodeproj (generated, ignored)
+                       with two app targets from one template, T2SReader (simulator + any
+                       phone, no Kokoro) and T2SReaderKokoro (device only, and the app on a
+                       phone: it runs on any iPhone the app supports, because Core ML is
+                       CPU-only — only the MLX route inside it needs A14+); T2SReader/
+                       (SwiftUI views, composition root; T2SReader/Reader/ draws the
+                       read-along text itself (ReaderTextView, TextKit 2)), T2SReaderShare/
+                       (the Share Extension), Resources/Fonts (Inter, OFL),
+                       Resources/Readability/ (Readability.js), Resources/Kokoro/ (the MLX
+                       weights and voice styles — ~342 MB, git-ignored, installed by
                        scripts/fetch-kokoro-model.sh), Resources/KokoroCoreML/ (the Core ML
-                       stages, the 28 English voices and the runtime JSON — 347 MB, git-ignored,
-                       installed by scripts/fetch-kokoro-coreml.sh --app)
+                       stages, the 28 English voices and the runtime JSON — 347 MB,
+                       git-ignored, installed by scripts/fetch-kokoro-coreml.sh --app)
 scripts/               build and CI helpers (check-licenses.sh, test-readium.sh, test-kokoro.sh,
                        build-app.sh, build-device.sh, fetch-kokoro-model.sh,
                        fetch-kokoro-coreml.sh, fetch-fonts.sh, fetch-readability.sh)

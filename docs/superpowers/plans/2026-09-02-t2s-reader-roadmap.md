@@ -18,6 +18,8 @@ working, tested software on its own. Order follows spec §9.
 | 7 | CloudKit sync behind `SyncProvider`, Live Activity, App Intents, Spotlight | 10–11 | — | after Plan 6 |
 | 8 | Bookmarks list, app icon, VoiceOver rows | 2.2 should-have, 2.4 | `2026-09-04-plan-8-bookmarks-icon-voiceover.md` | implemented 2026-09-04 (stacked on Plan 6; done before Plan 7 because it is Mac-only) |
 | 10 | Native read-along + app-wide theme (2026-09-07): the Reader draws the timeline's text itself, after ElevenReader; Readium stays for import; theme applies everywhere | 6, 8 | `2026-09-07-plan-10-native-readalong.md` | implemented 2026-09-07 (Tasks 1–4 each reviewed; Task 5 this documentation) on branch `plan-10-native-readalong`, off `dev` @ 93811aa |
+| 11 | Voice quality 2: the tail click and the hyphen pause — the second listen's fixes | 7 | `2026-09-08-plan-11-voice-quality-2.md` | done, merged 2026-09-08 |
+| 12 | One playback UI — the Reader: every way of starting playback (Queue Play, the mini-player, book-sheet Play) opens the Reader; the Player sheet retired | 8 | `2026-09-08-plan-12-one-playback-ui.md` | done, merged 2026-09-08 |
 
 **Dependencies.** Plans 0 and 1 are independent; run them in parallel.
 Plan 2 consumes Plan 1's types. The §7.2 spike result changes *when* the

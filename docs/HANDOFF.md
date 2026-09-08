@@ -1,6 +1,6 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-08 (Plan 11 — the second listen's fixes — on `plan-11-voice-quality-2`, rebased onto `dev` @ 6344993 where Plan 10 is merged; fold it into `dev` from the main folder, see below). Written for whoever picks up the coding next._
+_Last updated 2026-09-08 (Plan 12 Task 2 — docs for the one-playback-UI change — on `plan-12-one-playback-ui`, off `dev` @ b951d86 where Plan 11 is merged). Written for whoever picks up the coding next._
 
 ## Performance audit (2026-09-08)
 
@@ -15,6 +15,70 @@ Prepare rewrites a whole chapter blob per rendered utterance; the UI updates Now
 writes `nowPlayingInfo = nil` 4×/s while idle. The MLX launch probe was checked and is cheap (it
 short-circuits on the nil decision). Next: pick the first plan from its §2 table — #1 (Release) and #3
 (G2P warm-up + prime) are single tasks; #2 (streaming the first sound) is the one that closes the gap.
+
+## Resume here (2026-09-08) — Plan 12
+
+The owner's report after Plan 10: "If I play a document from the queue page, there is no way to see
+the text … There should not be 2 separate UIs for playback. Keep only one, with the text
+read-along." Approved in conversation ("ok"). Plan 12
+(`docs/superpowers/plans/2026-09-08-plan-12-one-playback-ui.md`, branch `plan-12-one-playback-ui` off
+`dev` @ b951d86, after the second session's Plan 11) retires the Player sheet from Plan 4a: the
+Reader already has everything the sheet had (scrubber with the render frontier, transport, sleep
+timer, speed, chapters, bookmarks, voice, details), so every way of starting playback now opens it
+instead.
+
+- **Task 1** (`d839f59`): every playback entry opens the Reader; the Player sheet, its tick
+  scrubber and control pill retire.
+  - `App/T2SReader/Queue/QueueRow.swift` — the row's Play pill: Pause on the playing row toggles
+    play and stays put; on the current-but-paused row it resumes first, then opens the Reader; on
+    any other row it just opens the Reader, which loads and plays the document itself.
+  - `App/T2SReader/Root/MiniPlayer.swift` — `onExpand` now carries the shown `DocumentSummary`;
+    tapping the title or the capsule opens the Reader on whichever item the mini-player is
+    showing (the playing one, or the next queued item when idle). Its accessibility hint changed
+    from "Opens the player" to "Opens the reader".
+  - `App/T2SReader/Root/RootPager.swift` — dropped the `showPlayer` state and the `.sheet` that
+    presented `PlayerSheet`; `MiniPlayer`'s tap now feeds `readerDocument` instead. The
+    `ReaderRoute` doc comment now lists the mini-player as an entry point in place of
+    `PlayerSheet`.
+  - `App/T2SReader/Collection/BookSheet.swift` — dropped `showPlayer` and the `PlayerSheet` sheet;
+    the Play pill resumes a current-but-paused document, dismisses the book sheet, and calls
+    `readerRoute.open(live)` (chapters already opened the Reader, from Plan 10).
+  - `App/T2SReader/Reader/ThinScrubber.swift` — doc comment only: it is now "the app's only
+    scrubber" rather than a contrast with `TickScrubber`.
+  - Deleted entirely: `App/T2SReader/Player/PlayerSheet.swift` (137 lines), `TickScrubber.swift`
+    (47 lines), `ControlPill.swift` (67 lines). `ChapterList`, `SleepTimerSheet`, `SpeedPicker`,
+    and `VoiceChangeSheet` stay under `App/T2SReader/Player/` — the Reader still presents them, and
+    moving them would be churn with no behaviour change.
+  - `swift test` 365 tests / 78 suites green; `scripts/build-app.sh` green.
+
+**Rulings taken without the owner** (each costed in the plan; ledger
+`.superpowers/sdd/2026-09-08-plan-12-one-playback-ui/progress.md`):
+
+- Play in the Queue navigates to the Reader rather than playing in place — the owner's own
+  expectation when they tapped it. Pause on the playing row stays in place. Cost if wrong: two
+  lines in `QueueRow`.
+- The Reader loads and plays a non-current document itself (`ReaderPage.open()` already does), so
+  the entry points only open it; a current-but-paused document is resumed before opening. Cost:
+  none.
+- The shared sheets stay under `App/T2SReader/Player/` (chapter list, sleep timer, speed picker,
+  voice change) — moving them is churn with no behaviour. Cost: a folder name that reads oddly.
+
+**The phone checklist** (not yet run — no device is attached to this Mac):
+
+1. Play on a Queue row opens the Reader and starts playback.
+2. Pause on the playing row's pill pauses in place — it does not navigate anywhere.
+3. Tapping the mini-player's title or capsule opens the Reader on the item it shows.
+4. Play in a book sheet opens the Reader (a chapter already did, from Plan 10).
+5. The Reader's own controls (scrubber, transport, sleep timer, speed, voice, chapters) cover
+   everything the Player sheet had — check that nothing feels missing now that it is gone.
+
+**Deferred** (the plan's own list): the Reader shows no artwork or source/age line — the Details
+sheet has them; add to the page only if missed. `PlayerModel` may keep a property or two that only
+the sheet read — a later tidy.
+
+**Dev rule from the owner: never play audio on the Mac.** Simulator runs only as
+`SIMCTL_CHILD_T2S_SILENT=1 xcrun simctl launch <udid> com.t2s.reader` (the app mutes every player
+when `T2S_SILENT` is set). Never change the Mac's volume.
 
 ## Resume here (2026-09-08) — Plan 11
 
@@ -243,7 +307,8 @@ tints. Delivery that still feels flat is the model — try Bella, Nicole, Sarah 
 
 **Deferred:** a 30 s Core ML bucket (whole paragraphs in one call, as the MLX reference does — needs the
 30 s decoder pair and the 512-token duration model staged; bigger bundle, longer first-launch plan
-build); the Player sheet's styling; Kokoro in the Simulator build (needs a phonemizer without MLX).
+build); the Player sheet's styling (retired in Plan 12); Kokoro in the Simulator build (needs a
+phonemizer without MLX).
 
 ## What this is
 
@@ -259,7 +324,7 @@ and commit message per task. The roadmap is
 
 | Branch | State | Notes |
 |---|---|---|
-| `dev` | integration branch | Plans 1–6, 8, 9 and 10 merged (root `swift test` 360 tests / 76 suites; `Packages/T2SKokoro` 93 / 14; `scripts/test-readium.sh` not re-run for Plan 10 — the Readium package is untouched). Earlier notes: Plan 5 Tasks 5–6 were fast-forwarded from `plan-5-task-5-kokoro` on 2026-09-03 (`938c8b8 … ba207ed`, twelve commits, every task reviewed plus a whole-branch review). Root package: **309 tests in 72 suites** (`swift test`). `Packages/T2SKokoro`: **56 tests in 7 suites** (`scripts/test-kokoro.sh`; seven of them are gated on the real model files being installed — four load the 327 MB model and two of those synthesize audio). `Packages/T2SReadium`: **12 tests in 3 suites** (`scripts/test-readium.sh`, on the iPhone simulator). The everyday app builds, launches, imports an EPUB, and plays it on the simulator and on an iPhone 11 Pro. |
+| `dev` | integration branch | Plans 1–6, 8–12 merged (root `swift test` 365 tests / 78 suites; `Packages/T2SKokoro` 93 / 14; `scripts/test-readium.sh` not re-run since Plan 10 — the Readium package is untouched). Earlier notes: Plan 5 Tasks 5–6 were fast-forwarded from `plan-5-task-5-kokoro` on 2026-09-03 (`938c8b8 … ba207ed`, twelve commits, every task reviewed plus a whole-branch review). Root package: **309 tests in 72 suites** (`swift test`). `Packages/T2SKokoro`: **56 tests in 7 suites** (`scripts/test-kokoro.sh`; seven of them are gated on the real model files being installed — four load the 327 MB model and two of those synthesize audio). `Packages/T2SReadium`: **12 tests in 3 suites** (`scripts/test-readium.sh`, on the iPhone simulator). The everyday app builds, launches, imports an EPUB, and plays it on the simulator and on an iPhone 11 Pro. |
 | `main` | stale: only the initial spec commit | Not used for integration yet; fast-forward it to `dev` when you want a release point. |
 
 Plan branches are short-lived: each plan runs on its own branch off `dev` (locally in a git
@@ -303,7 +368,7 @@ Everything here is on `dev`.
 - **T2SLibrary** — `Library` facade (import file / article, delete, re-derive stale timelines, evict audio), `PDFDocumentReader` (PDFKit), stored-only ZIP writer, `ArticleEPUBWriter`, container layout `LibraryPaths`. Plan 3.
 - **Packages/T2SReadium** (iOS only) — `ReadiumDocumentReader` (EPUB → chapters with stable `Position`s) and `LocatorMapping` (`Position` ↔ Readium `Locator`, word-highlight quotes). Plan 3.
 - **T2SApp** (root package target, testable on macOS) — the app's models: `LibraryModel`, `PlayerModel`, `ScrubberModel`, `ImportModel`, `DurationFormatter`, `AppPaths`, `DeviceStateMapping`. Plan 4a.
-- **App/** — the SwiftUI app `T2SReader`: design tokens and type roles (Inter, bundled), composition root, three-page pager with mini-player, Queue page, Collection page + book sheet, player sheet with the tick scrubber, Add sheet (paste a link → WKWebView + Readability.js extraction preview, open a file, paste text), audio session + device monitor. Plan 4a. Plan 5 added the Now Playing controller and remote commands, Preferences → Cloud voices, the Prepare task boundary, and the `T2SReaderShare` Share Extension.
+- **App/** — the SwiftUI app `T2SReader`: design tokens and type roles (Inter, bundled), composition root, three-page pager with mini-player, Queue page, Collection page + book sheet, player sheet with the tick scrubber — retired in Plan 12 — Add sheet (paste a link → WKWebView + Readability.js extraction preview, open a file, paste text), audio session + device monitor. Plan 4a. Plan 5 added the Now Playing controller and remote commands, Preferences → Cloud voices, the Prepare task boundary, and the `T2SReaderShare` Share Extension.
 - **Packages/T2SKokoro** (tested on macOS, links only into the device target) — `KokoroResources`
   (the checksummed model-file contract), `KokoroEngine` (an actor over kokoro-ios/MLX; identity
   `kokoro-4e9ecdf0-mlx-misaki1.0.6`), `KokoroTokenTimingMapper`, `KokoroRuntimeDecision` and

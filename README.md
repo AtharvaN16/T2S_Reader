@@ -233,8 +233,9 @@ system voices there, with the same previews.
 
 ### Reader, speed picker, and sleep timer
 
-Tap a Queue title, a chapter in a book, or **Read along →** in the player to
-open the full-screen Reader. The paragraph being read is tinted lightly and
+Every way of starting playback — Play on a Queue row, the mini-player, and Play
+or a chapter in a book — opens the full-screen Reader; there is no separate
+player screen. The paragraph being read is tinted lightly and
 the spoken word more strongly (on a PDF, the utterance rather than the
 paragraph); the page follows the word while audio plays, scrolling pauses
 following until **Back to current** is tapped, and tapping a word seeks to it.
@@ -249,10 +250,9 @@ unavailable. The sleep timer offers 10, 20, 30, 45, or 60 minutes, plus
 
 ### Bookmarks
 
-Save the current position with the bookmark button in the Player, or
-**Bookmark** in the Reader's overflow menu. See them in the Book sheet's
-**Bookmarks** section, shown once a document has any, or from **Bookmarks**
-in the Player or Reader overflow menu — newest first. Tapping a bookmark
-plays from there; long-press one for **Delete bookmark**, and in the
-Bookmarks list reached from the Player or Reader overflow you can also
-swipe it away.
+Save the current position with the Reader's bookmark button, or **Bookmark**
+in its overflow menu. See them in the Book sheet's **Bookmarks** section,
+shown once a document has any, or from **Bookmarks** in the Reader's overflow
+menu — newest first. Tapping a bookmark plays from there; long-press one for
+**Delete bookmark**, and in the Bookmarks list reached from the Reader's
+overflow you can also swipe it away.

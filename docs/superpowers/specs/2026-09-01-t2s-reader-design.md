@@ -1,7 +1,7 @@
 # t2s_reader — Design Spec
 
 **Date:** 2026-09-01
-**Revised:** 2026-09-08 (rev 12 — see §11 changelog)
+**Revised:** 2026-09-08 (rev 13 — see §11 changelog)
 **Status:** Draft for review
 **Working name:** t2s_reader (TBD)
 
@@ -130,10 +130,7 @@ articles and books as peers. Collection shows every EPUB/PDF as a cover
 grid regardless of queue state, so a book archived from the Queue stays
 findable. Archive removes from Queue; delete removes from both.
 
-**The Reader is a separate full-screen page, not a region of the player
-sheet.** The player sheet is audio chrome; the Reader is text with a
-compact control bar. Both observe the same `PlaybackCoordinator`, and
-leaving either never stops playback.
+**The Reader is the one playback UI (rev 13).** It is a separate full-screen page: the text with the control bar. There is no player sheet; every way of starting playback — Play on a Queue row, the mini-player, Play or a chapter in the book sheet — opens the Reader. It observes the same `PlaybackCoordinator` as the mini-player, and leaving it never stops playback.
 
 ### 2.4 Visual direction
 
@@ -205,8 +202,8 @@ indicator under the mini-player shows the current page and is
 tappable. A floating **mini-player pill** sits above the indicator on
 all three pages: artwork, title, play/pause, skip-forward. It shows the
 playing item, or the next queued item with "Play" when idle, and is
-hidden only when the Queue is empty. Tap expands it to the player
-sheet.
+hidden only when the Queue is empty. Tap opens the Reader on the shown
+item.
 
 Page titles are dropdowns where a page has views: `Queue ▾` switches
 between *Queue* and *Finished*.
@@ -219,7 +216,8 @@ item count and remaining time (`14 items · ~6h 20m`). Each row: 16pt
 source mark, source name, added-age, and a `positive` check once fully
 rendered; row title; then a pill row — `▶ Play  ~12m` (remaining time;
 becomes `❚❚ Pause` on the playing row), archive pill, overflow. Tap the
-title → Reader page. Tap Play → plays in place. Swipe → Archive. Books
+title → Reader page. Tap Play → opens the Reader and plays; Pause on
+the playing row pauses in place. Swipe → Archive. Books
 show `Chapter 4 of 12` in the meta line. Empty state: title, a grey
 paragraph explaining the share sheet, an "Import" pill (opens the Add sheet, rev 7).
 
@@ -258,20 +256,14 @@ sheet in `destructive`, never as a system alert. The Share Extension
 Add sheet). 3-up cover grid, 16pt radius, thin progress bar under each
 cover. Tap → **book sheet**: large floating cover, title in Player
 style, author, stat row (Chapters · Length `~5h 10m` · Rendered `42%`),
-accent "Play" pill, `+ Add to Queue` / `✓ In Queue` pill, then the
+accent "Play" pill (→ the Reader), `+ Add to Queue` / `✓ In Queue` pill, then the
 chapter list with per-chapter play and progress.
 
-**Player sheet.** Top: 56pt artwork; bookmark, sleep-timer, and
-overflow buttons. Source and age line. Player title. Author. A row
-`Chapter 3 ▾` opens the chapter list (title and duration per chapter).
-A row `Read along →` dismisses the sheet and opens the Reader page.
-Scrubber: uniform tick marks — rendered ticks in `ink`, unrendered in
-`ink3`, so the render frontier (§3.3) is visible without a legend.
-Times below in monospaced; total prefixed `~` until fully rendered.
-Control pill: overflow | back 15 · play · forward 30 | speed as a bare
-number.
+**Player sheet.** Retired in rev 13: the Reader is the one playback UI
+(§2.3). Its tick scrubber went with it; the Reader's thin scrubber
+shows the render frontier.
 
-**Reader page (rev 11, after ElevenReader).** Separate full-screen page. Entered from a Queue row title, a chapter in the book sheet, or `Read along` in the player. No bar: floating 36pt `surface` circles over a `ground` fade — back top-left; bookmark and overflow (Chapters, Bookmarks, Appearance, Change voice, Sleep timer, Details, Render whole document) top-right. The body is our own text, drawn from the timeline, never the document's layout (design `2026-09-07-native-readalong-design.md`): one column on `ground`, 24pt margins; the document title in the Page title role and a byline in Meta/`ink2`; chapter titles in the Player title role (a chapter's own first block that says its title is the title); headings in Inter SemiBold when the block's selector names an h1–h6; body in Inter 18pt × text scale, line height × the reader's setting, no indent, a paragraph gap of 0.75 × the body size; images, tables and footnotes are not drawn. The paragraph under the playhead is tinted `accentFaint` and the spoken word `accentSoft` as 4pt-rounded rectangles per line; on a PDF the tinted unit is the utterance. Auto-scroll keeps the word in the middle third (only a word change scrolls); a drag suspends it and shows `Back to current`. Tap a word → seek to that word. Bottom block pinned over a `ground` fade: a 3pt progress bar whose segments show the render frontier (`ink` rendered, `ink3` not) with a knob, elapsed and total in monospaced beneath; then sleep timer · back 15 · play · forward 30 · speed; then appearance · a voice chip naming the routed voice (→ change voice) · contents. During underrun (§3.6) the play glyph becomes a ring and a caption reads `catching up…`. Text size and line height apply live; theme is app-wide (§11, rev 11). The Player sheet keeps its tick scrubber.
+**Reader page (rev 11, after ElevenReader).** Separate full-screen page. Entered from a Queue row's title or Play, the mini-player, and Play or a chapter in the book sheet. No bar: floating 36pt `surface` circles over a `ground` fade — back top-left; bookmark and overflow (Chapters, Bookmarks, Appearance, Change voice, Sleep timer, Details, Render whole document) top-right. The body is our own text, drawn from the timeline, never the document's layout (design `2026-09-07-native-readalong-design.md`): one column on `ground`, 24pt margins; the document title in the Page title role and a byline in Meta/`ink2`; chapter titles in the Player title role (a chapter's own first block that says its title is the title); headings in Inter SemiBold when the block's selector names an h1–h6; body in Inter 18pt × text scale, line height × the reader's setting, no indent, a paragraph gap of 0.75 × the body size; images, tables and footnotes are not drawn. The paragraph under the playhead is tinted `accentFaint` and the spoken word `accentSoft` as 4pt-rounded rectangles per line; on a PDF the tinted unit is the utterance. Auto-scroll keeps the word in the middle third (only a word change scrolls); a drag suspends it and shows `Back to current`. Tap a word → seek to that word. Bottom block pinned over a `ground` fade: a 3pt progress bar whose segments show the render frontier (`ink` rendered, `ink3` not) with a knob, elapsed and total in monospaced beneath; then sleep timer · back 15 · play · forward 30 · speed; then appearance · a voice chip naming the routed voice (→ change voice) · contents. During underrun (§3.6) the play glyph becomes a ring and a caption reads `catching up…`. Text size and line height apply live; theme is app-wide (§11, rev 11).
 
 **Speed picker.** Vertical list, 0.5x–4.0x in 0.1x steps. Rates whose
 sustained demand exceeds the §3.6 threshold are drawn in `ink3` with a
@@ -896,6 +888,16 @@ against a pipeline that is already proven.
 ---
 
 ## 11. Changelog
+
+**rev 13 (2026-09-08)** — Plan 12: one playback UI.
+
+- **§2.3, §2.4.4, §2.4.5** the Player sheet is retired; every playback
+  entry point opens the Reader instead — Play on a Queue row, the
+  mini-player, and Play or a chapter in the book sheet.
+- Why: the owner's report after Plan 10 — "If I play a document from
+  the queue page, there is no way to see the text … There should not
+  be 2 separate UIs for playback. Keep only one, with the text
+  read-along."
 
 **rev 12 (2026-09-08)** — Plan 11: the second listen's fixes
 (`spikes/findings/2026-09-08-ticks-and-hyphens.md`).

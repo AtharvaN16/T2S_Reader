@@ -1,9 +1,12 @@
 import SwiftUI
 import T2SApp
 
-/// Reader-specific appearance controls, also reached from the Reader overflow menu.
+/// Reader-specific appearance controls, also reached from the Reader overflow menu. Text size and
+/// line height only apply while reading, so the Preferences (Settings) presentation hides them and
+/// shows just the app-wide theme picker.
 struct AppearanceSheet: View {
     @Environment(AppEnvironment.self) private var env
+    var showsTextControls: Bool = true
 
     var body: some View {
         @Bindable var preferences = env.preferences
@@ -12,15 +15,17 @@ struct AppearanceSheet: View {
                 .typeRole(.sectionHeader)
                 .foregroundStyle(Tokens.ink)
                 .padding(.top, Spacing.section)
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Text size").typeRole(.meta).foregroundStyle(Tokens.ink2)
-                Slider(value: $preferences.textScale, in: ReaderPreferences.textScaleRange, step: 0.1)
-                    .tint(Tokens.ink)
-            }
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Line height").typeRole(.meta).foregroundStyle(Tokens.ink2)
-                Slider(value: $preferences.lineHeight, in: ReaderPreferences.lineHeightRange, step: 0.1)
-                    .tint(Tokens.ink)
+            if showsTextControls {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Text size").typeRole(.meta).foregroundStyle(Tokens.ink2)
+                    Slider(value: $preferences.textScale, in: ReaderPreferences.textScaleRange, step: 0.1)
+                        .tint(Tokens.ink)
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Line height").typeRole(.meta).foregroundStyle(Tokens.ink2)
+                    Slider(value: $preferences.lineHeight, in: ReaderPreferences.lineHeightRange, step: 0.1)
+                        .tint(Tokens.ink)
+                }
             }
             VStack(alignment: .leading, spacing: 12) {
                 Text("Theme · applies to the whole app").typeRole(.meta).foregroundStyle(Tokens.ink2)
@@ -38,5 +43,6 @@ struct AppearanceSheet: View {
         .background(Tokens.raised)
         .presentationDetents([.medium])
         .presentationCornerRadius(Spacing.sheetCorner)
+        .appTheme()
     }
 }

@@ -64,7 +64,7 @@ struct PreferencesPage: View {
                     }
                     section("Reading") {
                         Button { showAppearance = true } label: {
-                            row("Appearance", subtitle: "Text size, line height, theme for the whole app")
+                            row("Appearance", subtitle: "Theme for the whole app")
                         }
                         .buttonStyle(.plain)
                     }
@@ -112,7 +112,7 @@ struct PreferencesPage: View {
             .background(Tokens.ground)
             .toolbar(.hidden, for: .navigationBar)
         }
-        .sheet(isPresented: $showAppearance) { AppearanceSheet() }
+        .sheet(isPresented: $showAppearance) { AppearanceSheet(showsTextControls: false) }
         .task {
             resolvedDefaultVoiceID = await env.voiceRouting.effectiveVoiceID(VoiceOption.systemDefault.id)
             await env.pronunciation.refresh()

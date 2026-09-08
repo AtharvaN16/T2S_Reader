@@ -42,8 +42,8 @@ turns an intra-word hyphen into a space before the G2P sees it (`SplitHyphenated
 |---|---|---|---|---|
 | 1 | **Hyphenated compounds are spoken as words.** `SplitHyphenatedCompoundsRule` after `CollapseURLsRule`; `Versions.normalizer` → 3; dictionary terms match the spoken form. | `Sources/T2SCore/Normalize`, `Sources/T2SCore/Versions.swift`, tests | `swift test` (361 tests) | done, c79f00d |
 | 2 | **The tail click is removed.** `KokoroCoreMLTailClick.removed(from:)` on every pipeline call's audio, behind `Options.removeTailClick` (`.default` true); the utterance trace and `KokoroQualityProbe` that measured it; the finding. | `Packages/T2SKokoro/Sources/T2SKokoro/CoreML`, its tests, `scripts/quality-probe.sh`, `spikes/findings` | `scripts/test-kokoro.sh`; the probe's tail table shows no island | done pending the probe re-run |
-| 3 | **A seam holds a beat, not a hole.** The silence across every seam — the previous piece's end-of-input tail plus the next piece's lead-in — is trimmed to a budget by the kind of cut (word 60 ms, clause 320 ms, sentence 500 ms), never past the previous piece's trailing pause frames or the next piece's BOS frames, and the fold offset moves back by what was dropped from the head. | `KokoroCoreMLEngine.swift`, new `KokoroCoreMLSeam.swift`, tests | `scripts/test-kokoro.sh`; the probe's seam lines | open |
-| 4 | **Docs.** HANDOFF resume section, README (the probe script), spec §4.1 rule list and changelog. | `docs/`, `README.md` | review | open |
+| 3 | **A seam holds a beat, not a hole.** The silence across every seam — the previous piece's end-of-input tail plus the next piece's lead-in — is trimmed to a budget by the kind of cut (word 60 ms, clause 320 ms, sentence 500 ms), the head never past the next piece's BOS frames (the fold offset moves back by what was dropped), the tail as far as the silence goes (the fold clamps the previous piece's last word to the audio that is left). | `KokoroCoreMLEngine.swift`, `KokoroCoreMLTimingFold.swift`, new `KokoroCoreMLSeam.swift`, tests | `scripts/test-kokoro.sh`; the probe's seam lines | done: 740 → 60 ms, 820 → 320 ms, 400 → 310 ms |
+| 4 | **Docs.** HANDOFF resume section, README (the probe script), spec §4.1 rule list and changelog. | `docs/`, `README.md` | review | done |
 
 ## Decisions taken without the owner (each with its cost if wrong)
 
@@ -59,8 +59,10 @@ turns an intra-word hyphen into a space before the G2P sees it (`SplitHyphenated
   740 ms across a bare-word cut and 400–820 ms across comma cuts: every call ends with the model's
   end-of-input pause, whatever the cut. Budgets are the model's own pauses inside one call — 25–75 ms
   between words, 320–420 ms at a comma, 230–740 ms at a full stop. The head is trimmed first (BOS
-  lead-in is pure silence), the tail only within its pause frames, so no word timing moves. Cost: three
-  constants if the phone listen disagrees.
+  lead-in is pure silence) and the fold offset moves back with it, so no word start moves. The tail
+  is silence the model rendered inside the last word's own frames once the cut made it utterance-final
+  (a bare-word cut measured 460 ms of it against 150 ms of pause frames), so the trim takes it and the
+  fold clamps that word's end to the audio left. Cost: three constants if the phone listen disagrees.
 
 ## Deferred
 
@@ -82,9 +84,9 @@ turns an intra-word hyphen into a space before the G2P sees it (`SplitHyphenated
 
 **Interfaces:**
 - Consumes: `KokoroCoreMLTailClick.removed(from:)` (Task 2); `KokoroCoreMLTimingFold.Piece(owners:frames:offsetSeconds:)` and `KokoroCoreMLTimingFold.noOwner`; `KokoroVocabulary.sentenceFinalPunctuationTokenIds`, `.clauseBoundaryPunctuationTokenIds`, `.silentPunctuationTokenIds`; `PipelineConstants.sampleRate`, `.samplesPerDurationFrame`.
-- Produces: `KokoroCoreMLSeam.Cut` (`.none`, `.word`, `.clause`, `.sentence`); `KokoroCoreMLSeam.budgetSamples(for:)`; `KokoroCoreMLSeam.trimmed(previous:next:budget:tailCap:headCap:) -> (previous: [Float], next: [Float], droppedTail: Int, droppedHead: Int)`; `Piece.cut: KokoroCoreMLSeam.Cut`; `Options.trimSeams: Bool`.
+- Produces: `KokoroCoreMLSeam.Cut` (`.none`, `.word`, `.clause`, `.sentence`); `KokoroCoreMLSeam.budgetSamples(for:)`; `KokoroCoreMLSeam.trimmed(previous:next:budget:tailCap:headCap:) -> (previous: [Float], next: [Float], droppedTail: Int, droppedHead: Int)`; `Piece.cut: KokoroCoreMLSeam.Cut`; `Options.trimSeams: Bool`; `KokoroCoreMLTimingFold.Piece.trimmedTailSeconds: Double`.
 
-- [ ] **Step 1: Write the failing tests for the trim**
+- [x] **Step 1: Write the failing tests for the trim**
 
 ```swift
 // Packages/T2SKokoro/Tests/T2SKokoroTests/CoreML/KokoroCoreMLSeamTests.swift
@@ -98,8 +100,10 @@ import Testing
 @Suite struct KokoroCoreMLSeamTests {
     static let rate = 24_000
     static func ms(_ n: Int) -> Int { rate * n / 1000 }
+    /// "Speech": a square wave at −10 dBFS, so no sample of it — first or last — ever sits inside the
+    /// −50 dBFS silence threshold the way a sine's zero crossings do (a sine fixture failed by one sample).
     static func tone(ms n: Int) -> [Float] {
-        (0 ..< ms(n)).map { 0.3 * sin(Float($0) * 2 * .pi * 220 / Float(rate)) }
+        (0 ..< ms(n)).map { $0 % 2 == 0 ? 0.3 : -0.3 }
     }
     static func zeros(ms n: Int) -> [Float] { [Float](repeating: 0, count: ms(n)) }
 
@@ -150,12 +154,12 @@ import Testing
 }
 ```
 
-- [ ] **Step 2: Run them to verify they fail**
+- [x] **Step 2: Run them to verify they fail**
 
 Run: `cd Packages/T2SKokoro && xcodebuild test -scheme T2SKokoro -destination 'platform=macOS' -parallel-testing-enabled NO -derivedDataPath .build/DerivedData -only-testing:T2SKokoroTests/KokoroCoreMLSeamTests 2>&1 | grep -E "error:|passed|failed"`
 Expected: `error: cannot find 'KokoroCoreMLSeam' in scope`
 
-- [ ] **Step 3: Write the seam trim**
+- [x] **Step 3: Write the seam trim**
 
 ```swift
 // Packages/T2SKokoro/Sources/T2SKokoro/CoreML/KokoroCoreMLSeam.swift
@@ -184,8 +188,10 @@ enum KokoroCoreMLSeam {
         case sentence
     }
 
-    /// Below this magnitude a sample is silence: −80 dBFS.
-    static let silence: Float = 1e-4
+    /// Below this magnitude a sample is silence: −50 dBFS, the level every pause in the findings is
+    /// measured at. The model's decays below it — the tail of a word before a cut, the ramp into the
+    /// first word after it — are inaudible and are part of the hole the reader hears.
+    static let silence: Float = 0.00316
 
     /// The silence allowed across a seam, by the cut that made it.
     static func budgetSamples(for cut: Cut) -> Int {
@@ -208,7 +214,7 @@ enum KokoroCoreMLSeam {
         while head < next.count, abs(next[head]) < silence { head += 1 }
         var tail = 0
         while tail < previous.count, abs(previous[previous.count - 1 - tail]) < silence { tail += 1 }
-        guard head < next.count, tail < previous.count else { return (previous, next, 0, 0) }
+        guard head < next.count, tail < previous.count, budget < .max else { return (previous, next, 0, 0) }
         var excess = head + tail - budget
         guard excess > 0 else { return (previous, next, 0, 0) }
         let droppedHead = min(excess, head, max(0, headCap))
@@ -219,11 +225,11 @@ enum KokoroCoreMLSeam {
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: the Step 2 command. Expected: `Suite KokoroCoreMLSeamTests passed`, 6 tests.
 
-- [ ] **Step 5: Write the failing chunker test — a piece knows the cut before it**
+- [x] **Step 5: Write the failing chunker test — a piece knows the cut before it**
 
 Add to `KokoroCoreMLEngineTests`, beside `cutsAtTheLastWordWhenNoPunctuationBoundaryExists`:
 
@@ -257,12 +263,12 @@ Add to `KokoroCoreMLEngineTests`, beside `cutsAtTheLastWordWhenNoPunctuationBoun
     }
 ```
 
-- [ ] **Step 6: Run it to verify it fails**
+- [x] **Step 6: Run it to verify it fails**
 
 Run: `... -only-testing:T2SKokoroTests/KokoroCoreMLEngineTests/recordsTheKindOfCutBeforeEachPiece`
 Expected: `error: value of type 'KokoroCoreMLEngine.Piece' has no member 'cut'`
 
-- [ ] **Step 7: Record the cut on the piece**
+- [x] **Step 7: Record the cut on the piece**
 
 In `KokoroCoreMLEngine.swift`, the `Piece` struct gains:
 
@@ -306,50 +312,47 @@ In `splitPiece(groups:at:isFinal:words:)`, the second half:
         return (first, second)
 ```
 
-and the first half keeps the cut the whole piece had: `first.cut = piece.cut` requires passing `piece.cut` in — add a parameter `inheriting cut: KokoroCoreMLSeam.Cut` to `splitPiece` and pass `piece.cut` from both callers (`renderWithSplitting` and `renderSplittingOnOverflow`), then `first.cut = cut` after building `first` (make `first` a `var`).
+and the first half keeps the cut the whole piece had: add a parameter `inheriting cut: KokoroCoreMLSeam.Cut` to `splitPiece`, pass `piece.cut` from both callers (`renderWithSplitting` and `renderSplittingOnOverflow`), and set `first.cut = cut` after building `first` (make `first` a `var`).
 
-- [ ] **Step 8: Run the chunker tests to verify they pass**
+- [x] **Step 8: Run the chunker tests to verify they pass**
 
 Run: `... -only-testing:T2SKokoroTests/KokoroCoreMLEngineTests`. Expected: every chunking and splitting test passes, the new one included.
 
-- [ ] **Step 9: Wire the trim into the join**
+- [x] **Step 9: Wire the trim into the join**
 
 In `Options`:
 
 ```swift
         /// Whether the silence across a seam is trimmed to ``KokoroCoreMLSeam``'s budget for the cut
-        /// that made it. The app ships `true`: with the tail click gone, a seam measured 400–820 ms.
+        /// that made it. The app ships `true`: with the tail click gone, a seam measured 400–820 ms
+        /// against the 25–420 ms the model puts at the same boundary inside one call.
         public var trimSeams: Bool
 ```
 
 `trimSeams: Bool = false` in the initializer, `trimSeams: true` in `.default`. In `synthesize`, the
-join loop becomes:
+body of the `for (subPiece, result) in rendered` loop becomes:
 
 ```swift
-        var samples: [Float] = []
-        var folds: [KokoroCoreMLTimingFold.Piece] = []
-        var tracedPieces: [UtteranceTrace.Piece] = []
-        /// The previous piece's trailing pause, in samples: how far its tail may be trimmed at a seam.
-        var previousTrailingPause = 0
-        for (index, piece) in pieces.enumerated() {
-            try Task.checkCancellation()
-            let rendered = try renderWithSplitting(
-                piece, isFinal: index == pieces.count - 1, words: words, tokenizer: tokenizer, loaded: loaded
-            )
-            for (subPiece, result) in rendered {
                 let cleaned = options.removeTailClick ? KokoroCoreMLTailClick.removed(from: result.audio) : result.audio
                 var previous = samples
                 var next = cleaned
                 var droppedHead = 0
                 if options.trimSeams, !samples.isEmpty, subPiece.cut != .none {
+                    // The head is never trimmed past the BOS token's own span, so the first word's
+                    // fold time (offset + BOS frames) stays at or after the piece's first sample. The
+                    // tail is silence the model rendered inside the previous piece's last frames; the
+                    // fold clamps that piece's last word to what remains.
                     let bosSamples = (result.tokenDurationFrames.first ?? 0) * PipelineConstants.samplesPerDurationFrame
                     let trimmed = KokoroCoreMLSeam.trimmed(
                         previous: samples, next: cleaned, budget: KokoroCoreMLSeam.budgetSamples(for: subPiece.cut),
-                        tailCap: previousTrailingPause, headCap: bosSamples
+                        tailCap: .max, headCap: bosSamples
                     )
                     previous = trimmed.previous
                     next = trimmed.next
                     droppedHead = trimmed.droppedHead
+                    if trimmed.droppedTail > 0, !folds.isEmpty {
+                        folds[folds.count - 1].trimmedTailSeconds = Double(trimmed.droppedTail) / Double(PipelineConstants.sampleRate)
+                    }
                 }
                 // With a crossfade the join overlaps the last 5 ms of the previous piece, so the
                 // piece's audio starts that much earlier than a plain append would put it.
@@ -370,49 +373,59 @@ join loop becomes:
                         offsetSamples: offsetSamples, sampleCount: next.count, bucketSeconds: result.bucketSeconds
                     ))
                 }
-                previousTrailingPause = Self.trailingPauseSamples(ids: subPiece.ids, owners: subPiece.owners, frames: result.tokenDurationFrames)
                 samples = joined
-            }
-        }
 ```
 
-and the helper, static beside `groupEnds`:
+- [x] **Step 10: Write the failing fold test for a trimmed tail, then the clamp**
+
+Add to `KokoroCoreMLTimingFoldTests`:
 
 ```swift
-    /// The samples the trailing pause of a rendered piece occupies: the EOS frame plus the frames of
-    /// every trailing id that belongs to no word or is punctuation. A seam may trim the piece's tail
-    /// this far and no further, so its last word's timing stays inside the audio.
-    static func trailingPauseSamples(ids: [Int32], owners: [Int], frames: [Int]) -> Int {
-        // `frames` is aligned with BOS + ids + EOS.
-        var pause = frames.count > ids.count + 1 ? frames[ids.count + 1] : 0
-        var k = ids.count - 1
-        while k >= 0, owners[k] == KokoroCoreMLTimingFold.noOwner || KokoroVocabulary.silentPunctuationTokenIds.contains(ids[k]) {
-            pause += k + 1 < frames.count ? frames[k + 1] : 0
-            k -= 1
-        }
-        return pause * PipelineConstants.samplesPerDurationFrame
-    }
-```
-
-- [ ] **Step 10: Write the failing test for `trailingPauseSamples`**
-
-In `KokoroCoreMLEngineTests`:
-
-```swift
-    /// A seam may trim a piece's tail only through its trailing pause: the EOS frame plus the
-    /// whitespace and punctuation after the last word.
-    @Test func measuresThePauseAfterThePiecesLastWord() {
-        // ids: w w , ␣ ; frames: BOS 12, w 4, w 4, "," 8, ␣ 2, EOS 1.
-        let pause = KokoroCoreMLEngine.trailingPauseSamples(
-            ids: [20, 21, 3, 16], owners: [0, 0, 1, KokoroCoreMLTimingFold.noOwner], frames: [12, 4, 4, 8, 2, 1]
+    /// A seam may take silence the model rendered inside a piece's last frames; the word that owned
+    /// those frames then ends where the audio does, not past it (Plan 11 Task 3).
+    @Test func clampsTheLastWordToATrimmedTail() {
+        // BOS 0, "Hi" 8 frames (200 ms), EOS 4 frames: 300 ms of audio, 150 ms of it cut at the seam.
+        let tokens = KokoroCoreMLTimingFold.timedTokens(
+            [Self.token("Hi")],
+            pieces: [.init(owners: [0], frames: [0, 8, 4], offsetSeconds: 0, trimmedTailSeconds: 0.15)]
         )
-        #expect(pause == 11 * 600)
+        #expect(tokens[0].start == 0)
+        #expect(abs(tokens[0].end! - 0.15) < 1e-9)
     }
 ```
 
-Run it (expected before Step 9: `has no member 'trailingPauseSamples'`; after Step 9: passes).
+Run it: `error: extra argument 'trimmedTailSeconds' in call`. Then in `KokoroCoreMLTimingFold.Piece`:
 
-- [ ] **Step 11: Pin the fold contract for a trimmed head**
+```swift
+        /// Seconds cut from the end of this piece's audio at the seam after it (Plan 11 Task 3):
+        /// silence the model rendered inside its last frames. No token may end later than the audio
+        /// that is left, so the last word's end is clamped to it.
+        var trimmedTailSeconds: Double = 0
+
+        init(owners: [Int], frames: [Int], offsetSeconds: Double, trimmedTailSeconds: Double = 0) {
+            self.owners = owners
+            self.frames = frames
+            self.offsetSeconds = offsetSeconds
+            self.trimmedTailSeconds = trimmedTailSeconds
+        }
+```
+
+and in `spans(in:)`, the final `reduce`:
+
+```swift
+        // Where the piece's audio ends once the seam after it took its trimmed tail.
+        let audioEnd = piece.offsetSeconds + Double(piece.frames.reduce(0, +)) * secondsPerFrame - piece.trimmedTailSeconds
+        return first.reduce(into: [:]) { spans, entry in
+            let (owner, firstID) = entry
+            guard let lastID = last[owner] else { return }
+            let end = min(audioEnd, piece.offsetSeconds + Double(cumulative[lastID + 1]) * secondsPerFrame)
+            spans[owner] = (min(end, piece.offsetSeconds + Double(cumulative[firstID]) * secondsPerFrame), end)
+        }
+```
+
+Run the fold tests: all pass.
+
+- [x] **Step 11: Pin the fold contract for a trimmed head**
 
 Add to `KokoroCoreMLTimingFoldTests`:
 
@@ -432,7 +445,7 @@ Add to `KokoroCoreMLTimingFoldTests`:
 
 It passes as written: the fold needs no change. It pins the contract the engine now relies on.
 
-- [ ] **Step 12: Extend the model-backed seam test**
+- [x] **Step 12: Extend the model-backed seam test**
 
 In `KokoroCoreMLEngineTests.synthesizesALongPassageInPieces`, after the existing expectations:
 
@@ -451,15 +464,15 @@ In `KokoroCoreMLEngineTests.synthesizesALongPassageInPieces`, after the existing
         #expect(longestQuietMs <= 600)
 ```
 
-- [ ] **Step 13: Run the whole Kokoro suite**
+- [x] **Step 13: Run the whole Kokoro suite**
 
 Run: `scripts/test-kokoro.sh`. Expected: `** TEST SUCCEEDED **`, the model-backed tests included.
 
-- [ ] **Step 14: Re-run the probe and read the seam lines**
+- [x] **Step 14: Re-run the probe and read the seam lines**
 
 Run: `scripts/quality-probe.sh`. In `report.md` section 2, `seam 1` (a word cut) should show `quiet before` + `quiet after` ≤ 60 ms and `seam 2` (a comma cut) ≤ 320 ms; the `gaps` list should no longer hold 740 ms and 820 ms entries at 10.2 s and 20.2 s. Section 3's `packed-1` seam ≤ 320 ms.
 
-- [ ] **Step 15: Commit**
+- [x] **Step 15: Commit**
 
 ```bash
 git add Packages/T2SKokoro/Sources/T2SKokoro/CoreML/KokoroCoreMLSeam.swift Packages/T2SKokoro/Sources/T2SKokoro/CoreML/KokoroCoreMLEngine.swift Packages/T2SKokoro/Tests/T2SKokoroTests/CoreML/KokoroCoreMLSeamTests.swift Packages/T2SKokoro/Tests/T2SKokoroTests/CoreML/KokoroCoreMLEngineTests.swift Packages/T2SKokoro/Tests/T2SKokoroTests/CoreML/KokoroCoreMLTimingFoldTests.swift
@@ -471,13 +484,13 @@ git commit -m "Plan 11 Task 3: a seam holds a beat — the silence across it is 
 **Files:**
 - Modify: `docs/HANDOFF.md` (resume section), `README.md` (scripts), `docs/superpowers/specs/2026-09-01-t2s-reader-design.md` (§4.1 rule list, §11 changelog)
 
-- [ ] **Step 1: HANDOFF** — a "Resume here (2026-09-08) — Plan 11" section: the two findings in one
+- [x] **Step 1: HANDOFF** — a "Resume here (2026-09-08) — Plan 11" section: the two findings in one
   paragraph each, what Tasks 1–3 changed, the normalizer-3 upgrade cost, the phone checklist (listen
   for: no tick before a sentence resumes; "commander-in-chief" as one phrase; a two-piece sentence
   flowing through its seam), and the deferred list.
-- [ ] **Step 2: README** — `scripts/quality-probe.sh` beside `scripts/audio-probe.sh` in the scripts
+- [x] **Step 2: README** — `scripts/quality-probe.sh` beside `scripts/audio-probe.sh` in the scripts
   list, one line each.
-- [ ] **Step 3: Spec** — §4.1 list gains "4b. Split hyphenated compounds into words (after URLs, before
+- [x] **Step 3: Spec** — §4.1 list gains "4b. Split hyphenated compounds into words (after URLs, before
   numerals) — MisakiSwift reads a hyphen as a dash"; §11 changelog entry for this plan; the revision
   line at the top.
-- [ ] **Step 4: Commit** — `git commit -m "Plan 11 Task 4: docs — HANDOFF resume section, README, spec §4.1 rule 4b and changelog"`.
+- [x] **Step 4: Commit** — `git commit -m "Plan 11 Task 4: docs — HANDOFF resume section, README, spec §4.1 rule 4b and changelog"`.

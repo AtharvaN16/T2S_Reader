@@ -1,6 +1,70 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-08 (Plan 10 — the native read-along and app-wide theme — is merged into `dev` and pushed; Tasks 2 and 5 each took one fix round and the final review asked for this small fix set. The owner's phone listen is the next thing to do — taps and drags in the Reader are the two things the Mac could not verify). Written for whoever picks up the coding next._
+_Last updated 2026-09-08 (Plan 11 — the second listen's fixes — on `plan-11-voice-quality-2`, rebased onto `dev` @ 6344993 where Plan 10 is merged; fold it into `dev` from the main folder, see below). Written for whoever picks up the coding next._
+
+## Resume here (2026-09-08) — Plan 11
+
+The owner's second listen (2026-09-08) reported two things: "sometimes mid sentence I can hear a tick
+or a clap, before the sentence resumes", and "commander-in-chief, cost-cutting: it pauses instead of
+reading it like a full word — solve it once, or is there a standard?". Plan 11
+(`docs/superpowers/plans/2026-09-08-plan-11-voice-quality-2.md`, branch `plan-11-voice-quality-2` off
+`dev` in `.worktrees/plan-11-voice-quality-2`) measured both and fixed them:
+
+- **Diagnosis** (`spikes/findings/2026-09-08-ticks-and-hyphens.md`; probe `scripts/quality-probe.sh`
+  → `spikes/findings/quality-probe/`, git-ignored). The tick: every Core ML call ends with ~40 ms
+  of digital silence and, 60–40 ms before the end, a 20 ms burst bounded by silence — −10 to −15 dBFS
+  when speech ended just before the call (a comma, a closing quote, a bare-word cut), inaudible after a
+  long pause; the MLX reference never produces it. Any sentence past ~176 phoneme ids is two calls, so
+  the click lands mid-sentence: "…his eyes sparkled, [click] … and his breath smoked again". The hyphen:
+  `NLTagger` tags every hyphen `Dash` and MisakiSwift maps every `.dash` token to Kokoro's `—`, a
+  clause pause — `kəmˈændəɹ—ˈɪn—ʧˈif`, a 150 ms hole inside "cost—cutting", "in" stressed as its own
+  word. The Python reference keeps an intra-word hyphen silent. Neither is the model's.
+- **Task 1** (`c79f00d`): `SplitHyphenatedCompoundsRule` — a hyphen with a letter or digit on each side,
+  at least one a letter, becomes a space, after URLs collapse and before numbers expand; spaced dashes,
+  `--`, em/en dashes and digit–digit ranges stay; the dictionary matches a term typed with a hyphen
+  against the spoken form. `Versions.normalizer` **3**: every stored timeline re-derives on its next
+  play and its rendered audio is orphaned cache (spec §3.7.3), as with the Plan 5 bump.
+- **Task 2** (`3dbdda5`): `KokoroCoreMLTailClick.removed(from:)` zeroes the island — the last non-silent
+  stretch when it is under 30 ms, bounded by ≥ 10 ms of silence (under −80 dBFS) on both sides, within
+  the final 120 ms — on every pipeline call, behind `Options.removeTailClick` (`.default` true). The
+  probe's A/B: island gone from every packed utterance, zero samples changed where there was none.
+  The engine gained a test-only `UtteranceTrace` (tokens, ids, per-piece frames and offsets) that the
+  probe uses to place every sample on its token.
+- **Task 3** (the seam): with the click gone the probe measured 740 ms across a bare-word cut and
+  400–820 ms across comma cuts — every call ends with the model's end-of-input pause. `KokoroCoreMLSeam`
+  trims both sides of a seam to a budget by cut kind (word 60 ms, clause 320 ms, sentence 500 ms, the
+  model's own pauses inside one call, at −50 dBFS): the next piece's lead-in first, never past its BOS
+  frames (the fold offset moves back with it), then the previous piece's tail (the fold clamps its last
+  word's end to the audio left — `KokoroCoreMLTimingFold.Piece.trimmedTailSeconds`). Behind
+  `Options.trimSeams` (`.default` true). Probe after: 740 → 60 ms, 820 → 320 ms, 400 → 310 ms; the
+  long sentence 24.52 → 23.34 s.
+- **On "a standard".** SSML is what cloud voices accept; Kokoro takes phonemes and MisakiSwift's only
+  markup is the inline `[word](/phonemes/)` form. The normalizer (spec §4.1) is this app's markup
+  layer, and it is where hyphens are now resolved for every book. The pronunciation dictionary fixes
+  one term at a time. MisakiSwift's dash rule (map `.dash` to `—` only when the dash stands alone, as
+  the reference does) is worth an upstream patch; the app does not wait on it.
+
+**Folding it back.** Plan 10 was being committed in the main checkout while this ran, so Plan 11
+lives in the worktree `.worktrees/plan-11-voice-quality-2`; it has since been rebased onto `dev` @
+6344993 (Plan 10 merged, spec rev 11; this plan is rev 12). From the main folder:
+`git merge --ff-only plan-11-voice-quality-2 && git push && git worktree remove
+.worktrees/plan-11-voice-quality-2 && git branch -d plan-11-voice-quality-2`. The worktree holds
+clone copies (`cp -Rc`) of the model files and the build caches; `.build`'s PCH module cache had to be
+deleted after cloning (it is path-bound).
+`scripts/test-kokoro.sh` and both probes sweep Core ML's runtime cache and `$TMPDIR/kokoro_*.mlmodelc`,
+which are shared across checkouts: two sessions running them at once slow each other's model loads to
+many minutes.
+
+**The phone listen.** Same install recipe as below. Fresh play re-segments every document (normalizer
+3). Listen for: no tick before a sentence resumes or before a new sentence; "commander-in-chief",
+"cost-cutting", "well-known" read as one phrase; a long two-piece sentence flowing through its seam
+with a beat, not a stop. `spikes/findings/quality-probe/packed-1-unfixed.wav` at 10.9 s is the
+click as it was.
+
+**Deferred:** the 30 s Core ML bucket (a whole 300-character utterance in one call — the only cure for
+the sentence-final tune at a seam); the mechanism of the burst (a tensor dump at the trim point; the
+lead-in shortfall of 30–45 ms at every seam suggests the generator runs ahead of its frames); upstream
+patches to MisakiSwift and kokoro-coreml.
 
 ## Resume here (2026-09-08) — Plan 10
 

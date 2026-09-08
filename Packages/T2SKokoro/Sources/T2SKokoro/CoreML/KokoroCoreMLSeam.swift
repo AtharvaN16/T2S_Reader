@@ -40,6 +40,28 @@ enum KokoroCoreMLSeam {
         }
     }
 
+    /// The tail of a piece that is emitted before its successor exists (a streamed head, Plan 14):
+    /// its trailing silence cut to at most `budget` samples. Never emptied, never touched when the
+    /// piece is silence throughout.
+    static func trimmedTail(_ audio: [Float], budget: Int) -> (audio: [Float], dropped: Int) {
+        guard budget < .max else { return (audio, 0) }
+        var tail = 0
+        while tail < audio.count, abs(audio[audio.count - 1 - tail]) < silence { tail += 1 }
+        guard tail < audio.count, tail > budget else { return (audio, 0) }
+        let dropped = tail - budget
+        return (Array(audio.dropLast(dropped)), dropped)
+    }
+
+    /// The head of a piece that follows one already emitted: its lead-in silence cut, at most `cap`
+    /// samples (the BOS token's own frames — the fold counts from there). Never emptied.
+    static func trimmedHead(_ audio: [Float], cap: Int) -> (audio: [Float], dropped: Int) {
+        var head = 0
+        while head < audio.count, abs(audio[head]) < silence { head += 1 }
+        guard head < audio.count else { return (audio, 0) }
+        let dropped = min(head, max(0, cap))
+        return (Array(audio.dropFirst(dropped)), dropped)
+    }
+
     /// `previous` and `next` with the silence across their join cut to at most `budget` samples —
     /// from the head of `next` first (at most `headCap`), then from the tail of `previous` (at most
     /// `tailCap`) — and how much each side lost. Neither side is ever emptied.

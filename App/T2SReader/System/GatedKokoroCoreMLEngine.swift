@@ -43,6 +43,20 @@ actor GatedKokoroCoreMLEngine: SynthesisEngine {
         try await engine().synthesize(request)
     }
 
+    nonisolated func synthesizeStreaming(_ request: SynthesisRequest) -> AsyncThrowingStream<SynthesisChunk, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    for try await chunk in try await self.engine().synthesizeStreaming(request) { continuation.yield(chunk) }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     /// Constructing the engine only stores the resource URLs the verdict already vouched for, so
     /// there is nothing here that can fail transiently and nothing that suspends — which is why this
     /// needs no shared `Task`: the actor's own isolation is enough to make it happen once.

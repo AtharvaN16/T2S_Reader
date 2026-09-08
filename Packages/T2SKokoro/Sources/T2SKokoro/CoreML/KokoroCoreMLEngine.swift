@@ -42,6 +42,11 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// (`spikes/findings/2026-09-05-coreml-audio-quality.md`).
     static let maxPieceTokenCount = 176
 
+    /// How many ids the first piece of a *streamed* utterance may carry: about three seconds of
+    /// speech, which the 7 s bucket renders in about a second on an A13 — the first sound (Plan 14).
+    /// The pieces after it are cut at ``maxPieceTokenCount`` as usual.
+    static let streamingFirstPieceTokenCount = 48
+
     /// Misaki's marker for a word it could not transcribe. Passed to `EnglishG2P` explicitly so
     /// ``phonemeWalk(_:)`` provably reproduces the string `phonemize` returns.
     static let unknownPhoneme = "❓"
@@ -246,9 +251,19 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         }
     }
 
-    public func synthesize(_ request: SynthesisRequest) async throws -> T2SCore.SynthesisResult {
-        // Both checks come before the load, so a misrouted request costs nothing and the tests that
-        // pin them need no model.
+    /// What every render starts from: the voice checked, the stages loaded, the text phonemized and
+    /// tokenized. Shared by `synthesize` and `stream`.
+    private struct Prepared {
+        let id: KokoroVoiceID
+        let loaded: Loaded
+        let tokenizer: KokoroTokenizer
+        let words: [MToken]
+        let phonemes: String
+        let ids: [Int32]
+        let owners: [Int]
+    }
+
+    private func prepare(_ request: SynthesisRequest) async throws -> Prepared {
         guard let id = KokoroVoiceID(rawValue: request.voiceID), id.engineID == engineID else {
             throw KokoroCoreMLError.voiceNotForThisEngine(request.voiceID)
         }
@@ -273,6 +288,17 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         }
         let (phonemes, ownersByCharacter) = Self.phonemeWalk(words)
         let tokenization = tokenizer.tokenize(phonemes: phonemes, ownersByCharacter: ownersByCharacter)
+        return Prepared(id: id, loaded: loaded, tokenizer: tokenizer, words: words, phonemes: phonemes,
+                        ids: tokenization.ids, owners: tokenization.owners)
+    }
+
+    public func synthesize(_ request: SynthesisRequest) async throws -> T2SCore.SynthesisResult {
+        // Both checks come before the load, so a misrouted request costs nothing and the tests that
+        // pin them need no model.
+        let prepared = try await prepare(request)
+        let loaded = prepared.loaded, tokenizer = prepared.tokenizer, words = prepared.words
+        let phonemes = prepared.phonemes
+        let tokenization = (ids: prepared.ids, owners: prepared.owners)
 
         let pieces = try Self.pieces(ids: tokenization.ids, owners: tokenization.owners, words: words)
         // The delivery the route asks for, else the engine's own (`Options.f0Spread`, 1 by default).
@@ -286,11 +312,15 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             // rather than losing the sentence to 200 ms of silence (spec §6; Task 3,
             // `spikes/findings/2026-09-05-coreml-audio-quality.md`), so one piece from `pieces` may
             // become several rendered pieces here.
+<<<<<<< HEAD
             let rendered = try renderWithSplitting(
                 piece, isFinal: index == pieces.count - 1, words: words, tokenizer: tokenizer, loaded: loaded, spread: spread
+=======
+            let rendered = try renderedPieces(
+                piece, isFinal: index == pieces.count - 1, words: words, tokenizer: tokenizer, loaded: loaded
+>>>>>>> d401604 (Plan 14 Task 5: the Kokoro engine streams — a short first piece, every piece finalized before it is emitted, the timings folded over the concatenation)
             )
-            for (subPiece, result) in rendered {
-                let cleaned = options.removeTailClick ? KokoroCoreMLTailClick.removed(from: result.audio) : result.audio
+            for (subPiece, result, cleaned) in rendered {
                 var previous = samples
                 var next = cleaned
                 var droppedHead = 0
@@ -349,6 +379,98 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             audio: audio,
             wordTimings: KokoroTokenTimingMapper.map(timed, spoken: request.spoken, duration: audio.duration)
         )
+    }
+
+    public nonisolated func synthesizeStreaming(_ request: SynthesisRequest) -> AsyncThrowingStream<SynthesisChunk, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    try await self.stream(request) { continuation.yield($0) }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    /// `synthesize` in pieces, each finalized on its own — tail click gone, tail silence cut to the
+    /// budget of the cut that follows it, lead-in cut up to its BOS frames — and emitted the moment
+    /// it is, so the first sound needs the first small piece only (Plan 14). The pieces are butted,
+    /// not crossfaded: with both sides trimmed the join lands inside silence. The timings are folded
+    /// over the concatenation, exactly as `synthesize` folds over its join.
+    private func stream(_ request: SynthesisRequest, emit: @Sendable (SynthesisChunk) -> Void) async throws {
+        let prepared = try await prepare(request)
+        let pieces = try Self.pieces(ids: prepared.ids, owners: prepared.owners, words: prepared.words,
+                                     firstPieceCap: Self.streamingFirstPieceTokenCount)
+        let rate = PipelineConstants.sampleRate
+        var folds: [KokoroCoreMLTimingFold.Piece] = []
+        var emittedSamples = 0
+        var ordinal = 0
+        // Every rendered sub-piece, in order, waiting for the cut after it to be known.
+        var pending: [(piece: Piece, result: KokoroPipelineResult, audio: [Float])] = []
+
+        /// Emits `pending[k]`, whose successor's cut is `next` (nil for the utterance's last).
+        func emitPiece(_ k: Int, next: KokoroCoreMLSeam.Cut?) throws {
+            let (piece, result, cleaned) = pending[k]
+            var audio = cleaned
+            var droppedHead = 0
+            var droppedTail = 0
+            if options.trimSeams {
+                if piece.cut != .none {
+                    let bosSamples = (result.tokenDurationFrames.first ?? 0) * PipelineConstants.samplesPerDurationFrame
+                    (audio, droppedHead) = KokoroCoreMLSeam.trimmedHead(audio, cap: bosSamples)
+                }
+                if let next {
+                    (audio, droppedTail) = KokoroCoreMLSeam.trimmedTail(audio, budget: KokoroCoreMLSeam.budgetSamples(for: next))
+                }
+            }
+            guard !audio.isEmpty, audio.allSatisfy(\.isFinite) else { throw KokoroCoreMLError.emptyAudio }
+            // Where the piece's untrimmed audio would have begun: the fold counts BOS frames from
+            // here, and the dropped lead-in was inside them.
+            folds.append(KokoroCoreMLTimingFold.Piece(
+                owners: piece.owners, frames: result.tokenDurationFrames,
+                offsetSeconds: Double(emittedSamples - droppedHead) / Double(rate),
+                trimmedTailSeconds: Double(droppedTail) / Double(rate)
+            ))
+            emit(.piece(PCMAudio(sampleRate: Double(rate), samples: audio), ordinal: ordinal, isLast: next == nil))
+            emittedSamples += audio.count
+            ordinal += 1
+        }
+
+        for (index, piece) in pieces.enumerated() {
+            try Task.checkCancellation()
+            pending += try renderedPieces(
+                piece, isFinal: index == pieces.count - 1, words: prepared.words, tokenizer: prepared.tokenizer, loaded: prepared.loaded
+            )
+            // A sub-piece is final once the cut after it is known — as soon as the next sub-piece
+            // exists, or now for the utterance's last. Emit everything that qualifies.
+            let isUtteranceLast = index == pieces.count - 1
+            let emittable = isUtteranceLast ? pending.count : pending.count - 1
+            for k in 0 ..< emittable {
+                try emitPiece(k, next: k + 1 < pending.count ? pending[k + 1].piece.cut : nil)
+            }
+            pending.removeFirst(emittable)
+        }
+        guard emittedSamples > 0 else { throw KokoroCoreMLError.emptyAudio }
+
+        let timed = KokoroCoreMLTimingFold.timedTokens(
+            prepared.words.map { KokoroToken(text: $0.text, whitespace: $0.whitespace, start: nil, end: nil) },
+            pieces: folds
+        )
+        emit(.finished(wordTimings: KokoroTokenTimingMapper.map(
+            timed, spoken: request.spoken, duration: Double(emittedSamples) / Double(rate)
+        )))
+    }
+
+    /// One piece of an utterance rendered — split on overflow — with the tail click removed from
+    /// every rendered sub-piece: what both `synthesize` and `stream` start from.
+    private func renderedPieces(_ piece: Piece, isFinal: Bool, words: [MToken], tokenizer: KokoroTokenizer, loaded: Loaded)
+        throws -> [(piece: Piece, result: KokoroPipelineResult, audio: [Float])] {
+        try renderWithSplitting(piece, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: loaded).map { subPiece, result in
+            (subPiece, result, options.removeTailClick ? KokoroCoreMLTailClick.removed(from: result.audio) : result.audio)
+        }
     }
 
     /// One pipeline call. The duration models are static-shape, so the framed ids are padded with the
@@ -622,7 +744,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// butted to the next left an audible seam; cutting where the duration model already predicts a
     /// pause hides it (`spikes/findings/2026-09-05-coreml-audio-quality.md`). The groups after the
     /// returned index start the next piece.
-    private static func bestCutIndex(in current: [Group]) -> Int {
+    private static func bestCutIndex(in current: [Group], cap: Int = maxPieceTokenCount) -> Int {
         // A boundary is only worth taking when the piece it closes is at least half a call's worth of
         // ids: a comma twenty ids into a 250-id sentence would otherwise make a tiny first piece and
         // three calls where two would do — and every call ends with Kokoro's long predicted tail.
@@ -630,7 +752,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         var minimumIndex = current.count
         for (index, group) in current.enumerated() {
             idsThrough += group.ids.count
-            if idsThrough * 2 >= maxPieceTokenCount { minimumIndex = index; break }
+            if idsThrough * 2 >= cap { minimumIndex = index; break }
         }
         func lastBoundary(_ tokenIds: Set<Int32>) -> Int? {
             current.lastIndex(where: { Self.groupEnds($0, with: tokenIds) }).flatMap { $0 >= minimumIndex ? $0 : nil }
@@ -697,7 +819,9 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// Internal rather than private so the cut can be tested on synthetic ids, on a machine with no
     /// model files: end to end this rule is only visible in an utterance long enough to need two
     /// pipeline calls, which is a minute of Core ML per run.
-    static func pieces(ids: [Int32], owners: [Int], words: [MToken]) throws -> [Piece] {
+    /// `firstPieceCap`, when given, caps the first piece only (a streamed head, Plan 14); every later
+    /// piece is cut at ``maxPieceTokenCount``.
+    static func pieces(ids: [Int32], owners: [Int], words: [MToken], firstPieceCap: Int? = nil) throws -> [Piece] {
         let groups = Self.groups(ids: ids, owners: owners)
 
         var packed: [[Group]] = []
@@ -708,8 +832,11 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                 // One word longer than a whole pipeline input. Nothing to split it at.
                 throw KokoroCoreMLError.tooManyTokens(group.ids.count)
             }
-            while currentCount + group.ids.count > maxPieceTokenCount, !current.isEmpty {
-                let cutIndex = Self.bestCutIndex(in: current)
+            // The cap for the piece being packed: the first piece's own when one was given, the usual
+            // one after — re-read on every cut, since a cut is what fills `packed`.
+            func cap() -> Int { packed.isEmpty ? (firstPieceCap ?? maxPieceTokenCount) : maxPieceTokenCount }
+            while currentCount + group.ids.count > cap(), !current.isEmpty {
+                let cutIndex = Self.bestCutIndex(in: current, cap: cap())
                 packed.append(Array(current[0 ... cutIndex]))
                 current = Array(current[(cutIndex + 1)...])
                 currentCount = current.reduce(0) { $0 + $1.ids.count }

@@ -59,4 +59,21 @@ import Testing
         #expect(KokoroCoreMLSeam.budgetSamples(for: .clause) == Self.ms(320))
         #expect(KokoroCoreMLSeam.budgetSamples(for: .sentence) == Self.ms(500))
     }
+
+    /// Streaming finalizes a piece before the next exists: its tail silence is cut to the budget on
+    /// its own, and the next piece's lead-in is cut on its own, up to its BOS frames (Plan 14).
+    @Test func tailAndHeadAreTrimmedIndependently() {
+        let loud: [Float] = Array(repeating: 0.5, count: 100)
+        let quiet: [Float] = Array(repeating: 0.001, count: 1000)
+        let tail = KokoroCoreMLSeam.trimmedTail(loud + quiet, budget: 300)
+        #expect(tail.dropped == 700 && tail.audio.count == 400)
+        let untouched = KokoroCoreMLSeam.trimmedTail(loud + quiet, budget: .max)
+        #expect(untouched.dropped == 0)
+        let head = KokoroCoreMLSeam.trimmedHead(quiet + loud, cap: 250)
+        #expect(head.dropped == 250 && head.audio.count == 850)
+        let all = KokoroCoreMLSeam.trimmedHead(quiet + loud, cap: 5000)
+        #expect(all.dropped == 1000 && all.audio.first == 0.5)
+        let silentOnly = KokoroCoreMLSeam.trimmedTail(quiet, budget: 300)
+        #expect(silentOnly.dropped == 0)                             // never emptied: nothing but silence is left alone
+    }
 }

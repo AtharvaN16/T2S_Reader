@@ -159,6 +159,24 @@ import T2SCore
         }
     }
 
+    /// The streamed head's first piece is short — `streamingFirstPieceTokenCount` ids at most, cut at
+    /// the best boundary before that — so the first sound needs one small call; the pieces after it
+    /// are cut at the usual cap (Plan 14).
+    @Test func aFirstPieceCapMakesTheFirstPieceShort() throws {
+        var words: [MToken] = [], ids: [Int32] = [], owners: [Int] = []
+        Self.appendPlainWords(count: 60, startIndex: 0, words: &words, ids: &ids, owners: &owners)   // 5 ids per word: 300 ids
+        let whole = try KokoroCoreMLEngine.pieces(ids: ids, owners: owners, words: words)
+        let streamed = try KokoroCoreMLEngine.pieces(ids: ids, owners: owners, words: words,
+                                                     firstPieceCap: KokoroCoreMLEngine.streamingFirstPieceTokenCount)
+        #expect(whole.count == 2)
+        #expect(streamed.count == 3)
+        #expect(streamed[0].ids.count <= KokoroCoreMLEngine.streamingFirstPieceTokenCount)
+        #expect(streamed[0].ids.count == 45)                          // nine whole words of five ids
+        #expect(streamed.flatMap(\.ids) == ids)
+        #expect(streamed[1].cut == .word)
+        #expect(streamed[1].ids.count <= KokoroCoreMLEngine.maxPieceTokenCount)
+    }
+
     /// A full stop deep inside the window before the cap: the cutter must close the piece right
     /// after it rather than at the last word, because a real pause is already predicted there
     /// (`spikes/findings/2026-09-05-coreml-audio-quality.md`).
@@ -495,6 +513,31 @@ import T2SCore
         #expect(await engine.isG2PLoaded == false)
         try await engine.preload()
         #expect(await engine.isG2PLoaded)
+    }
+
+    /// The streamed render and the whole render of one long passage agree where it matters: the
+    /// same words timed within ±100 ms (spec §7.4), the pieces adding up to the whole, and a first
+    /// piece short enough to be the first sound (Plan 14).
+    @Test(.enabled(if: KokoroTestSupport.haveCoreMLFiles))
+    func streamsALongPassageInPiecesThatFoldToTheSameTimings() async throws {
+        let engine = try await Self.engineWithRealResources()
+        let spoken = "It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness, it was the epoch of belief, it was the epoch of incredulity."
+        let request = SynthesisRequest(spoken: spoken, voiceID: Self.voiceID("af_heart"))
+        var pieces: [PCMAudio] = []
+        var timings: [WordTiming] = []
+        for try await chunk in engine.synthesizeStreaming(request) {
+            switch chunk {
+            case .piece(let audio, _, _): pieces.append(audio)
+            case .finished(let t): timings = t
+            }
+        }
+        #expect(pieces.count >= 2)
+        #expect(pieces[0].duration < 5)                              // the first sound, not the whole passage
+        let whole = try await engine.synthesize(request)
+        #expect(timings.count == whole.wordTimings.count)
+        for (a, b) in zip(timings, whole.wordTimings) { #expect(abs(a.start - b.start) < 0.1) }
+        let total = pieces.reduce(0) { $0 + $1.duration }
+        #expect(abs(total - whole.audio.duration) < 0.5)
     }
 
     /// The app's segmenter allows 300 characters of source, which is more speech than the pipeline's

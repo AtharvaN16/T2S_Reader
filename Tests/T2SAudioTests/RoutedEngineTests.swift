@@ -129,9 +129,13 @@ import T2SCore
         #expect(await system.requests.isEmpty)
     }
 
-    /// Streaming is routed like synthesis: the engine that owns the voice answers, in pieces.
+    /// Streaming is routed like synthesis: the engine that owns the voice answers, in pieces. Uses a
+    /// `FakeEngine` that actually streams more than one piece (not `RecordingEngine`, which only ever
+    /// gets the protocol's one-piece default) so this test would fail if `RoutedEngine` stopped
+    /// forwarding to the routed engine's own `synthesizeStreaming` and fell back to wrapping its own
+    /// `synthesize` instead.
     @Test func streamingIsForwardedToTheRoutedEngine() async throws {
-        let system = RecordingEngine()
+        let system = FakeEngine(secondsPerCharacter: 0.1, pieceCount: 2)
         let routed = RoutedEngine(system: system, configuration: { nil }, key: { nil })
 
         // The system route: the `system:` prefix strips to the bare identifier before forwarding.
@@ -139,7 +143,7 @@ import T2SCore
         for try await chunk in routed.synthesizeStreaming(SynthesisRequest(spoken: "abcdef", voiceID: "system:v")) {
             if case .piece(_, let ordinal, _) = chunk { ordinals.append(ordinal) }
         }
-        #expect(ordinals == [0])                                     // the system fake streams one piece
+        #expect(ordinals == [0, 1])
         #expect(await system.requests.map(\.voiceID) == ["v"])
     }
 }

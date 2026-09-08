@@ -15,6 +15,10 @@ public actor FakeEngine: SynthesisEngine {
     private var parked: [CheckedContinuation<Void, Never>] = []
     private var holdingBetweenPieces = false
     private var pieceWaiters: [CheckedContinuation<Void, Never>] = []
+    /// A `releasePiece()` that arrives before anything has parked yet would otherwise be a lost
+    /// wakeup; it banks a credit here instead, which the next `waitBetweenPieces()` call consumes
+    /// rather than parking.
+    private var pieceReleases = 0
     public private(set) var requests: [SynthesisRequest] = []
 
     public init(secondsPerCharacter: TimeInterval = 0.05, simulatedRTF: Double? = nil, timeSource: ManualTimeSource? = nil, pieceCount: Int = 1) {
@@ -65,25 +69,44 @@ public actor FakeEngine: SynthesisEngine {
     /// between the first sound and the rest.
     public func holdBetweenPieces() { holdingBetweenPieces = true }
 
+    /// Releases exactly one parked piece — or, if none is parked yet, banks a credit so the next
+    /// piece to reach `waitBetweenPieces()` finds itself already released instead of parking. Without
+    /// the credit, a `releasePiece()` that wins the race against the piece actually parking would be a
+    /// lost wakeup, hanging the stream forever.
     public func releasePiece() {
+        if let next = pieceWaiters.first {
+            pieceWaiters.removeFirst()
+            next.resume()
+        } else {
+            pieceReleases += 1
+        }
+    }
+
+    /// How many pieces are currently parked between pieces — lets a test confirm a piece has actually
+    /// reached the park point (rather than racing `releasePiece()` against it) or drained back to zero
+    /// after a cancellation.
+    public var parkedPieceCount: Int { pieceWaiters.count }
+
+    /// Lets the rest of the pieces flow without parking again, for a test that only cares about
+    /// the first hold. Resumes everyone currently parked directly, rather than through
+    /// `releasePiece()`, which now only ever resumes one.
+    public func stopHoldingBetweenPieces() {
+        holdingBetweenPieces = false
         let waiting = pieceWaiters
         pieceWaiters.removeAll()
         waiting.forEach { $0.resume() }
     }
 
-    /// Lets the rest of the pieces flow without parking again, for a test that only cares about
-    /// the first hold.
-    public func stopHoldingBetweenPieces() { holdingBetweenPieces = false; releasePiece() }
-
     /// The whole render, cut into `pieceCount` near-equal pieces of whole samples — the last takes
-    /// the remainder — so the pieces concatenate to exactly `synthesize`'s audio.
+    /// the remainder — so the pieces concatenate to exactly `synthesize`'s audio. Clamped to the
+    /// sample count so no piece is empty unless the whole render is.
     public nonisolated func synthesizeStreaming(_ request: SynthesisRequest) -> AsyncThrowingStream<SynthesisChunk, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     let whole = try await self.synthesize(request)
-                    let count = max(1, await self.pieceCount)
                     let samples = whole.audio.samples
+                    let count = max(1, min(self.pieceCount, max(1, samples.count)))
                     let size = samples.count / count
                     for ordinal in 0 ..< count {
                         if ordinal > 0 { await self.waitBetweenPieces() }
@@ -107,8 +130,37 @@ public actor FakeEngine: SynthesisEngine {
     // returns, rather than re-checking the flag and parking again for the same piece — the flag
     // staying set is what makes the *next* piece's call park in turn (`while` here would re-park
     // the same piece forever after a single `releasePiece()`, since nothing ever clears the flag).
+    //
+    // Cancellation-aware (Task 2 review, finding 1): `withCheckedContinuation` alone is not
+    // cancellation-aware, so a consumer that stops iterating early — e.g. takes piece 0 and breaks
+    // out of the `for try await` — cancels this task (via `continuation.onTermination`) while it may
+    // be parked here, and nothing would otherwise ever resume it. `Task.isCancelled` is checked before
+    // parking so an already-cancelled task never parks at all, and `withTaskCancellationHandler` wraps
+    // the park so a *mid-park* cancellation also resumes it (from `resumeParkedPieces()`, hopping back
+    // onto the actor since `onCancel` itself runs outside actor isolation) — the resumed call then
+    // returns here, and the caller's `try Task.checkCancellation()` throws and ends the stream.
     private func waitBetweenPieces() async {
-        if holdingBetweenPieces { await withCheckedContinuation { pieceWaiters.append($0) } }
+        if Task.isCancelled { return }
+        guard holdingBetweenPieces else { return }
+        if pieceReleases > 0 {
+            pieceReleases -= 1
+            return
+        }
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                pieceWaiters.append(continuation)
+            }
+        } onCancel: {
+            Task { await self.resumeParkedPieces() }
+        }
+    }
+
+    /// Resumes every currently parked piece without touching `holdingBetweenPieces` — the cancellation
+    /// path for `waitBetweenPieces()`, called from its `onCancel` handler.
+    private func resumeParkedPieces() {
+        let waiting = pieceWaiters
+        pieceWaiters.removeAll()
+        waiting.forEach { $0.resume() }
     }
 
     private static let word = Pattern("\\S+")

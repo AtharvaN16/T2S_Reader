@@ -88,9 +88,45 @@ import Testing
         var iterator = stream.makeAsyncIterator()
         guard case .piece(_, 0, false)? = try await iterator.next() else { Issue.record("no first piece"); return }
         let second = Task { try await iterator.next() }
-        try await Task.sleep(for: .milliseconds(50))
+        // Poll (bounded) for the second piece to actually reach the park point, rather than a fixed
+        // sleep racing `releasePiece()` against it.
+        var parked = 0
+        for _ in 0 ..< 20 {
+            parked = await engine.parkedPieceCount
+            if parked == 1 { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(parked == 1)
         #expect(!second.isCancelled)
         await engine.releasePiece()
         guard case .piece(_, 1, true)? = try await second.value else { Issue.record("no second piece"); return }
+    }
+
+    /// Breaking out of the stream after the first piece cancels the underlying task
+    /// (`continuation.onTermination`); a piece parked between pieces must resume and let that task
+    /// observe cancellation and exit, rather than leak a parked continuation forever.
+    @Test func aCancelledStreamDoesNotLeaveAPieceParked() async throws {
+        let engine = FakeEngine(secondsPerCharacter: 0.1, pieceCount: 3)
+        await engine.holdBetweenPieces()
+        for try await chunk in engine.synthesizeStreaming(SynthesisRequest(spoken: "abcdefghi", voiceID: "v")) {
+            if case .piece(_, 0, _) = chunk { break }
+        }
+        var parked = -1
+        for _ in 0 ..< 20 {
+            parked = await engine.parkedPieceCount
+            if parked == 0 { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(parked == 0)
+        await engine.stopHoldingBetweenPieces()                           // must not hang
+    }
+
+    /// A failure surfaces through the stream exactly as it does through `synthesize`.
+    @Test func streamingSurfacesAFailure() async throws {
+        let engine = FakeEngine()
+        await engine.fail(on: "boom")
+        await #expect(throws: SynthesisError.failed("boom")) {
+            for try await _ in engine.synthesizeStreaming(SynthesisRequest(spoken: "boom", voiceID: "v")) {}
+        }
     }
 }

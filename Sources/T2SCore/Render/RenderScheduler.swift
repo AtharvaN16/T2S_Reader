@@ -61,6 +61,10 @@ public actor RenderScheduler {
     /// An already synthesizing/writing request is intentionally allowed to finish atomically.
     private var isCancelled = false
     private var rtfSamples: [Double] = []
+    /// The engine's first render carries its lazy load — the stages, the G2P's lexicons, the voice
+    /// table — so its ratio measures the warm-up, not the machine. One such sample (RTF 3–20 on a
+    /// cold A13) would pin the rate for a whole window, so the first is offered and dropped.
+    private var hasSkippedFirstSample = false
 
     public init(engine: any SynthesisEngine, store: any AudioStore, timeSource: any TimeSource,
                 rtfWindow: Int = 20, arbiter: RenderArbiter = RenderArbiter()) {
@@ -72,7 +76,8 @@ public actor RenderScheduler {
         (events, continuation) = AsyncStream.makeStream(of: RenderEvent.self, bufferingPolicy: .unbounded)
     }
 
-    /// Rolling mean of synth seconds per audio second over the last `rtfWindow` renders.
+    /// Rolling mean of synth seconds per audio second over the last `rtfWindow` renders, the first
+    /// of the session excluded (it carries the engine's lazy load). Nil until the second render.
     public var measuredRTF: Double? {
         rtfSamples.isEmpty ? nil : rtfSamples.reduce(0, +) / Double(rtfSamples.count)
     }
@@ -178,6 +183,10 @@ public actor RenderScheduler {
     }
 
     private func record(rtf: Double) {
+        guard hasSkippedFirstSample else {
+            hasSkippedFirstSample = true
+            return
+        }
         rtfSamples.append(rtf)
         if rtfSamples.count > rtfWindow { rtfSamples.removeFirst(rtfSamples.count - rtfWindow) }
     }

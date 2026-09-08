@@ -32,9 +32,9 @@ public final class PlaybackCoordinator {
     public private(set) var rate: Double = 1
     public private(set) var availableRates: [Double] = RateLimits.allRates
     public private(set) var measuredRTF: Double?
-    /// Set when the measured RTF made the current rate unsustainable and the coordinator lowered it
-    /// (spec §3.6: never offered-then-stuttering; audit §3.5: never left in place until "catching
-    /// up"). The Reader shows it once; `setRate` — the listener's own choice — and `load` clear it.
+    /// Set while the measured RTF holds the rate below what the listener asked for; nil once it
+    /// recovers or the listener chooses again (spec §3.6: never offered-then-stuttering; audit §3.5:
+    /// never left in place until "catching up"). The Reader shows it; `setRate` and `load` clear it.
     public private(set) var rateLoweredTo: Double?
     /// Set from the most recent `.failed` render event; cleared on `load`.
     public private(set) var lastRenderError: String?
@@ -58,6 +58,10 @@ public final class PlaybackCoordinator {
     private let configuration: CoordinatorConfiguration
     private var rendered: [Bool] = []
     private var manualRequested = false
+    /// The rate the listener last asked for, clamped to what was sustainable when they asked. The
+    /// ceiling `refreshRates` raises back towards as the measured RTF recovers; a load leaves it,
+    /// since the listener's choice of speed outlives the book.
+    private var requestedRate: Double = 1
     private var lastPlayed: UUID?
     /// Index of the segment at the head of the player and the player's consumed time when that
     /// segment started (negative right after a seek into the middle of an utterance). Index-anchored
@@ -223,6 +227,9 @@ public final class PlaybackCoordinator {
     public func setRate(_ r: Double) {
         guard r.isFinite else { return }
         let clamped = min(max(r, RateLimits.allRates.first!), RateLimits.maxSustainableRate(rtf: measuredRTF))
+        // What the listener asked for, remembered: `refreshRates` follows the cap in both directions
+        // and never raises the rate above this.
+        requestedRate = clamped
         rate = clamped
         player.rate = clamped
         rateLoweredTo = nil
@@ -376,16 +383,18 @@ public final class PlaybackCoordinator {
         }
     }
 
-    /// Re-reads the scheduler's rolling RTF and, when the current rate is no longer sustainable,
-    /// steps it down to the highest rate that is — a smaller window replans from here.
+    /// Re-reads the scheduler's rolling RTF and moves the rate to the highest the machine can hold
+    /// that the listener still wants — down when a phone throttles, back up when it recovers. A
+    /// changed rate resizes the window, so it replans from here.
     private func refreshRates() async {
         measuredRTF = await scheduler.measuredRTF
         availableRates = RateLimits.availableRates(rtf: measuredRTF)
         let cap = RateLimits.maxSustainableRate(rtf: measuredRTF)
-        guard rate > cap + 1e-9 else { return }
-        rate = cap
-        player.rate = cap
-        rateLoweredTo = cap
+        let target = min(requestedRate, cap)
+        guard abs(target - rate) > 1e-9 else { return }
+        rate = target
+        player.rate = target
+        rateLoweredTo = target < requestedRate - 1e-9 ? target : nil
         replan()
     }
 

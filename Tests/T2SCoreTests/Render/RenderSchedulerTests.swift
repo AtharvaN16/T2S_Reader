@@ -132,4 +132,22 @@ import Testing
         _ = await events
         #expect(abs((await s.measuredRTF ?? 0) - 0.25) < 1e-9)
     }
+
+    /// The engine's first render carries its lazy load — the stages, the G2P's lexicons, the voice
+    /// table — so its ratio is the warm-up's, not the machine's. One such sample would pin the rate
+    /// for a whole window, so it is offered and dropped: `measuredRTF` stays nil until the second.
+    @Test func firstSampleIsNotRecorded() async throws {
+        let clock = ManualTimeSource()
+        let engine = FakeEngine(secondsPerCharacter: 0.1, simulatedRTF: 0.25, timeSource: clock)
+        let s = RenderScheduler(engine: engine, store: InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000), timeSource: clock)
+        async let first = collect(s)
+        await s.setPlan([request(0, "aaaa")])
+        _ = await first
+        #expect(await s.measuredRTF == nil)
+
+        async let second = collect(s)
+        await s.setPlan([request(1, "bbbbbbbb")])
+        _ = await second
+        #expect(abs((await s.measuredRTF ?? 0) - 0.25) < 1e-9)
+    }
 }

@@ -131,12 +131,62 @@ import T2SCore
 
         await c.waitForRenderIdle()                                      // three renders at RTF 0.5
 
-        #expect(c.measuredRTF == 0.5)
+        #expect(abs((c.measuredRTF ?? 0) - 0.5) < 1e-9)                  // the mean of the two samples after the first, skipped, one
         #expect(c.availableRates == [0.5, 0.75, 1.0, 1.25, 1.5])
         #expect(c.rate == 1.5 && player.rate == 1.5)
         #expect(c.rateLoweredTo == 1.5)
         c.setRate(1.0)
         #expect(c.rateLoweredTo == nil)                                  // the listener's own choice clears the notice
+    }
+
+    /// A phone that stops throttling gets its rate back: the coordinator remembers what the listener
+    /// asked for and follows the cap in both directions, so a lowered rate is a notice, not a
+    /// sentence for the session (the Plan 13 final review, finding 1).
+    @Test func rateRecoversWhenTheMeasuredRTFImproves() async throws {
+        let (c, player, engine, doc, timeline) = throttledFixture()
+        c.load(doc, timeline: timeline)
+        c.setRate(3.0)                                                   // RTF unknown: allowed
+        await c.waitForRenderIdle()                                      // renders at RTF 0.5
+
+        #expect(c.rate == 1.5 && player.rate == 1.5)
+        #expect(c.rateLoweredTo == 1.5)
+
+        await engine.setSimulatedRTF(0.1)                                // the phone cools down
+        c.renderWholeDocument()
+        await c.waitForRenderIdle()                                      // a window of renders at RTF 0.1
+
+        #expect((c.measuredRTF ?? 1) < 0.2)
+        #expect(c.rate == 3.0 && player.rate == 3.0)                     // back to what the listener asked for
+        #expect(c.rateLoweredTo == nil)                                  // and the notice is gone
+    }
+
+    /// A rate the measured RTF can already sustain is left exactly where the listener put it — the
+    /// coordinator raises towards the request, never above it.
+    @Test func aSustainableRateIsNotRaisedAboveTheRequest() async throws {
+        let (c, player, _, doc, timeline) = throttledFixture(window: 4)
+        c.load(doc, timeline: timeline)
+        c.setRate(1.0)                                                   // well under the 1.5x cap RTF 0.5 allows
+        await c.waitForRenderIdle()
+
+        #expect(abs((c.measuredRTF ?? 0) - 0.5) < 1e-9)
+        #expect(c.rate == 1.0 && player.rate == 1.0)
+        #expect(c.rateLoweredTo == nil)
+    }
+
+    /// Forty one-sentence utterances and a one-second window: the play-ahead window renders a
+    /// handful, so the rest are left for a later plan to render at whatever RTF is current by then.
+    func throttledFixture(window: TimeInterval = 1) -> (PlaybackCoordinator, FakePlayer, FakeEngine, Document, Timeline) {
+        let text = (0..<40).map { "Sentence number \($0) here." }.joined(separator: " ")
+        let block = SourceBlock(text: text, position: Position(resourceHref: "c.xhtml", progression: 0, charOffset: 0))
+        let timeline = TimelineBuilder.build(chapters: [ChapterInput(title: "C", position: block.position, blocks: [block])],
+                                             segmenter: Segmenter(normalizer: TextNormalizer()))
+        let clock = ManualTimeSource()
+        let engine = FakeEngine(secondsPerCharacter: 0.04, simulatedRTF: 0.5, timeSource: clock)  // 0.5 sustains 1.5x, not 3x
+        let player = FakePlayer()
+        let c = PlaybackCoordinator(engine: engine, store: InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000),
+                                    player: player, playheadStore: MemoryPlayheadStore(), timeSource: clock,
+                                    configuration: CoordinatorConfiguration(windowSeconds: window, primeSeconds: 30, prepareBudgetSeconds: 300, queuedSegments: 2))
+        return (c, player, engine, Document(title: "T", sourceType: .article), timeline)
     }
 
     @Test func pauseSavesPosition() async throws {

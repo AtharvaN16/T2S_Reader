@@ -5,7 +5,7 @@ public actor FakeEngine: SynthesisEngine {
     public nonisolated let engineID = "fake"
     public let secondsPerCharacter: TimeInterval
     /// When set, each call advances `timeSource` by `simulatedRTF × audio seconds`.
-    public let simulatedRTF: Double?
+    public private(set) var simulatedRTF: Double?
     private let timeSource: ManualTimeSource?
     private var failures: Set<String> = []
     private var held = false
@@ -19,6 +19,10 @@ public actor FakeEngine: SynthesisEngine {
     }
 
     public func fail(on spoken: String) { failures.insert(spoken) }
+
+    /// Changes the simulated machine mid-run: a phone that was throttling and is not any more, or
+    /// the other way about.
+    public func setSimulatedRTF(_ rtf: Double?) { simulatedRTF = rtf }
 
     /// Every later `synthesize` parks until `release()`.
     public func hold() { held = true }

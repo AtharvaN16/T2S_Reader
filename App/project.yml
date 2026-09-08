@@ -187,12 +187,18 @@ targets:
 # install on an iPhone (the T2SReaderKokoro target); Simulator builds the Mac-only test build
 # (T2SReader). The build scripts and CI use the same two names.
 schemes:
+  # Phone runs Release: it is the build the owner listens to, and every Swift-side stage of the
+  # render — the hn-NSF DSP, the seam and tail-click scans, the crossfade, the tokenizer, the
+  # segmenter, the Reader's typesetter — runs -Onone under Debug, 10–50× slower for tight loops
+  # (docs/superpowers/specs/2026-09-08-performance-audit.md §6.1). The spike that measured RTF 0.18
+  # was a Release harness. The MLX development override (`T2S_KOKORO_DEBUG_OVERRIDE`) is compiled
+  # out of Release; set the Run configuration back to Debug by hand for that one experiment.
   Phone:
     build:
       targets:
         T2SReaderKokoro: all
     run:
-      config: Debug
+      config: Release
     archive:
       config: Release
   Simulator:

@@ -666,7 +666,7 @@ already signed in), or do the whole thing in the GUI instead —
 
 > `open App/T2SReader.xcodeproj` → scheme **Phone** (not **Simulator**) → Signing &
 > Capabilities → the team on **both** `T2SReaderKokoro` **and** `T2SReaderShare`, keeping the
-> `group.com.t2s.reader` app group on both → build configuration Release (Edit Scheme → Run → Info)
+> `group.com.t2s.reader` app group on both → build configuration Release — the Phone scheme's Run action is Release since Plan 13 (`App/project.yml`), so nothing to set
 > → Run on the phone. A free personal team allows three apps on a device and an app with an
 > extension counts twice; `MIFreeProfileValidatedAppTracker … ApplicationVerificationFailed` means
 > remove one.

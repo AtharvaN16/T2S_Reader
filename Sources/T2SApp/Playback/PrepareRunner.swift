@@ -285,12 +285,14 @@ public final class PrepareRunner {
                           spoken: document.timeline[utterance: job.utteranceIndex].spoken,
                           voiceID: document.voiceID)
         }
+        // The write interval counts from the start of the pass, before the first render can move the
+        // clock: stamped after `setPlan` it could miss the first flush under load.
+        var lastWrite = timeSource.now()
         _ = await scheduler.setPlan(requests)
 
         var timeline = document.timeline
         var outcome = GroupResult()
         var dirtyChapters: Set<Int> = []
-        var lastWrite = timeSource.now()
 
         func flush() async {
             for chapterIndex in dirtyChapters.sorted() {

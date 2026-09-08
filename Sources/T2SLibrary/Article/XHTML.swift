@@ -3,8 +3,8 @@ import Foundation
 /// The little XML the article writer needs: escaping, well-formedness through `XMLParser`, and
 /// plain text for the "little text" check (spec §6). Also the sanitization boundary: the fragment
 /// is attacker-influenced content (Share Extension Readability output, or worse), and it lands in a
-/// file Plan 4 renders in Readium's WKWebView, so scripts and event handlers are rejected outright
-/// rather than merely checked for well-formedness.
+/// file Readium parses at import (the Reader no longer renders it; Plan 10), so scripts and event
+/// handlers are rejected outright rather than merely checked for well-formedness.
 enum XHTML {
     static let namespace = "http://www.w3.org/1999/xhtml"
     static let epubNamespace = "http://www.idpf.org/2007/ops"

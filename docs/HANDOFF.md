@@ -1,6 +1,6 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-08 (Plan 10 — the native read-along and app-wide theme — is merged into `dev` and pushed; every task's review was clean. The owner's phone listen is the next thing to do — taps and drags in the Reader are the two things the Mac could not verify). Written for whoever picks up the coding next._
+_Last updated 2026-09-08 (Plan 10 — the native read-along and app-wide theme — is merged into `dev` and pushed; Tasks 2 and 5 each took one fix round and the final review asked for this small fix set. The owner's phone listen is the next thing to do — taps and drags in the Reader are the two things the Mac could not verify). Written for whoever picks up the coding next._
 
 ## Resume here (2026-09-08) — Plan 10
 
@@ -55,8 +55,10 @@ rendering at open.
   images inline; text selection, notes, sharing a quote; removing
   `LocatorMapping.locator(for:in:)` and its tests from `T2SReadium`.
 - `syncOverlay()` isn't called on a pure bounds change (rotation while paused).
-- Three `rects(for:)` calls per word tick where one pass could feed both the redraw and the
-  centring; `view.textColor = UIColor(Tokens.ink)` in `makeUIView` is now dead code.
+- `redrawHighlight` bridges the two tint colours from SwiftUI on every word tick, and calls
+  `rects(for:)` three times per tick where one pass could feed both the redraw and the centring —
+  hoist and share when next in the file; `view.textColor = UIColor(Tokens.ink)` in `makeUIView` is
+  now dead code.
 - Every `open()` failure reads "This document has no readable text.", including a load failure
   that isn't really that.
 - The tap anchor and TextKit's own line samples use slightly different offsets into an element
@@ -64,6 +66,16 @@ rendering at open.
 - A newline inside a raw document/chapter title would split the paragraph element (untested,
   Task 1 territory); the typesetter's length-invariant `assert` traps the Debug app if it's ever
   wrong, on the open path.
+- `ReaderText`: a spoken paragraph promoted to the document title keeps its chapter index (the doc
+  comment's "nil" is for the drawn title only), and paragraph assembly re-counts `utf16.count` per
+  span.
+- An unused `import T2SLibrary` in `Sources/T2SApp/Reader/ReaderModel.swift` and
+  `Tests/T2SAppTests/ReaderModelTests.swift`.
+- The paragraph tint runs to the container edge on every wrapped line but the last (`.highlight`
+  segments carry selection geometry) — check on the phone; intersect with the line's typographic
+  bounds if disliked.
+- Latent: an EPUB resource whose blocks carry neither a selector nor a progression would collapse
+  into one paragraph.
 
 **Dev rule from the owner: never play audio on the Mac.** Simulator runs only as
 `SIMCTL_CHILD_T2S_SILENT=1 xcrun simctl launch <udid> com.t2s.reader` (the app mutes every player
@@ -79,14 +91,17 @@ to the owner if it recurs.
 **The phone checklist.** Install with scheme **Phone**, your team on both targets (the recipe
 under "The iPhone 17 Pro run" below still applies). Open a book and check:
 
-1. The page is off-white in light mode, the document title at the top, and the paragraph and word
+1. Open a book you are an hour or more into, and jump to a late chapter from the contents sheet:
+   the page should appear without a stall and the tint should sit on the right words (every check
+   on the Mac was a book opened at page one).
+2. The page is off-white in light mode, the document title at the top, and the paragraph and word
    tints visible as the audio plays.
-2. Appearance → Text size and Line height change the page live while it is open.
-3. Theme → Dark darkens the whole app, including the Queue — not just the Reader.
-4. A tap on a word starts playback there.
-5. A drag stops following, and `Back to current` returns to the playhead.
-6. The contents sheet jumps chapters.
-7. A PDF reads along at the word, the same as an EPUB.
+3. Appearance → Text size and Line height change the page live while it is open.
+4. Theme → Dark darkens the whole app, including the Queue — not just the Reader.
+5. A tap on a word starts playback there.
+6. A drag stops following, and `Back to current` returns to the playhead.
+7. The contents sheet jumps chapters.
+8. A PDF reads along at the word, the same as an EPUB.
 
 Two things the Mac cannot verify at all and needs the phone for: **taps** (does a tap land on the
 word actually tapped) and **drags** (does a drag suspend following, and does `Back to current`

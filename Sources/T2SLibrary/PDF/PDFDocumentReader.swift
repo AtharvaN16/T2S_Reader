@@ -4,8 +4,8 @@ import T2SCore
 
 /// Text PDFs through PDFKit (spec §2.1 rev 6): one `SourceBlock` per page after the running
 /// header/footer filter (spec §4.1 rule 2); chapters from the outline when it has at least two
-/// entries, else one chapter. Display stays in Readium's PDF navigator (Plan 4), which addresses
-/// pages by `Position.progression`.
+/// entries, else one chapter. The Reader draws the page's text itself since Plan 10; pages still
+/// travel in `Position.progression`.
 public struct PDFDocumentReader: DocumentReader {
     /// A PDF is one resource; the page travels in `progression` (Global Constraints).
     public static let resourceHref = "source.pdf"

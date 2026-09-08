@@ -57,7 +57,7 @@ struct ReaderTextView: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.onTap = onTap
         coordinator.onUserScroll = onUserScroll
-        coordinator.setText(text, scale: textScale, lineHeight: lineHeight)
+        coordinator.setText(text, scale: textScale, lineHeight: lineHeight, following: isFollowing)
         coordinator.setHighlight(highlight, following: isFollowing)
     }
 
@@ -89,7 +89,9 @@ struct ReaderTextView: UIViewRepresentable {
         private var wasFollowing = true
         private var wordRange: Range<Int>?
         private var tintRange: Range<Int>?
-        /// Centre the word without animation as soon as content exists (opening, or a rebuild).
+        /// Centre the word without animation as soon as content exists: the initial build for a
+        /// document, or a settings rebuild made while following. A settings rebuild made while
+        /// following is suspended never sets this — the page stays where the reader left it.
         private var pendingCentre = true
         /// Sits under the text canvas (subview index 0); its bounds origin tracks the content offset so
         /// paths in content coordinates draw in place with no transforms.
@@ -119,9 +121,17 @@ struct ReaderTextView: UIViewRepresentable {
 
         // MARK: Text
 
-        func setText(_ text: ReaderText, scale: Double, lineHeight: Double) {
+        /// Builds the attributed text for a new document or for a text-setting change. The
+        /// **initial** build for a document — the coordinator had no text before, or the document
+        /// id changed — always centres the active word once content lands, as does a **rebuild**
+        /// made while `following`. A rebuild made while following is suspended (the `Back to
+        /// current` pill showing) leaves `pendingCentre` and the content offset alone, so a
+        /// text-size or line-height change does not yank the page back to the spoken word; the
+        /// tints still track the new layout because `recomputeRanges()`/`redrawHighlight()` always run.
+        func setText(_ text: ReaderText, scale: Double, lineHeight: Double, following: Bool) {
             let key = StyleKey(documentID: text.documentID, scale: scale, lineHeight: lineHeight)
             guard key != styleKey else { return }
+            let isInitial = self.text == nil || styleKey?.documentID != key.documentID
             styleKey = key
             buildTask?.cancel()
             let inkColor = UIColor(Tokens.ink)
@@ -135,9 +145,10 @@ struct ReaderTextView: UIViewRepresentable {
                     guard let self, self.styleKey == key, let view = self.view else { return }
                     self.text = text
                     view.attributedText = typeset.string
-                    self.pendingCentre = true
                     self.recomputeRanges()
                     self.redrawHighlight()
+                    guard isInitial || following else { return }
+                    self.pendingCentre = true
                     self.centreIfNeeded(animated: false)
                     // TextKit 2 estimates the height of text it has not laid out; the first answer can be off.
                     Task { @MainActor [weak self] in

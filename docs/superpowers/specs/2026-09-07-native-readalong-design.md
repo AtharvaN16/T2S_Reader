@@ -157,7 +157,7 @@ rendering at open, the common case); every centre after that first one animates.
 
 **Settings changes.** A new scale or line height rebuilds the attributed string; the coordinator
 remembers the active word's document range, assigns the new text, and re-centres that word without
-animation.
+animation when following; while following is suspended the page stays where the reader left it.
 
 **Insets.** `textContainerInset = (96, 24, 240, 24)`, `lineFragmentPadding = 0`, the scroll
 indicator inset to match the bottom block. The top figure is measured from the safe-area top,

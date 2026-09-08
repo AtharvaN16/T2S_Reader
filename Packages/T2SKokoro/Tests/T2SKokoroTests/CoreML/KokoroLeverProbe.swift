@@ -31,6 +31,8 @@ import T2SCore
         var name: String
         var voice: String
         var f0Spread: Float = 1
+        var removeTailClick = true
+        var trimSeams = true
     }
 
     @Test(.enabled(if: KokoroTestSupport.haveCoreMLFiles && KokoroLeverProbe.isRequested))
@@ -60,18 +62,18 @@ import T2SCore
         )
         let engine = KokoroCoreMLEngine(resources: resources)
 
+        // The spread check (2026-09-08, after the owner's listen chose 1.25 as the fixed default): the
+        // voices Heart was not — a wide natural range, a low male voice, a British voice, a breathy
+        // one — at the model's own delivery and at 1.25, to see that none saturates the way Heart did
+        // at 2.0. Heart's own pair is 01/09 from the first run.
+        // The post-processing A/B (2026-09-08, the owner hears clicks between sentences and abrupt
+        // endings in the fixed renders): the same passage as Plan 9 left it, with the tail-click
+        // removal only, and as the app renders today (both, plus the fixed 1.25 delivery).
         let variants: [Variant] = [
-            .init(name: "01-heart", voice: "af_heart"),
-            .init(name: "02-bella", voice: "af_bella"),
-            .init(name: "03-nicole", voice: "af_nicole"),
-            .init(name: "04-emma", voice: "bf_emma"),
-            .init(name: "05-heart-bella-50", voice: "af_heart_bella50"),
-            .init(name: "06-heart-bella-150", voice: "af_heart_bella150"),
-            .init(name: "07-heart-nicole-50", voice: "af_heart_nicole50"),
-            .init(name: "08-heart-emma-50", voice: "af_heart_emma50"),
-            .init(name: "09-heart-spread-1.25", voice: "af_heart", f0Spread: 1.25),
-            .init(name: "10-heart-spread-1.5", voice: "af_heart", f0Spread: 1.5),
-            .init(name: "11-heart-spread-2.0", voice: "af_heart", f0Spread: 2.0),
+            .init(name: "20-plan9-no-fixes", voice: "af_heart", removeTailClick: false, trimSeams: false),
+            .init(name: "21-click-removed-only", voice: "af_heart", removeTailClick: true, trimSeams: false),
+            .init(name: "22-both-fixes", voice: "af_heart", removeTailClick: true, trimSeams: true),
+            .init(name: "23-both-fixes-lively", voice: "af_heart", f0Spread: 1.25, removeTailClick: true, trimSeams: true),
         ]
 
         let segmenter = Segmenter(normalizer: TextNormalizer(), packLength: Segmenter.appPackLength)
@@ -83,6 +85,8 @@ import T2SCore
         for v in variants {
             var options = KokoroCoreMLEngine.Options.default
             options.f0Spread = v.f0Spread
+            options.removeTailClick = v.removeTailClick
+            options.trimSeams = v.trimSeams
             await engine.setOptions(options)
             let voiceID = KokoroVoiceID(engineID: KokoroCoreMLEngine.identity, voice: v.voice).rawValue
             var samples: [Float] = []
@@ -99,7 +103,7 @@ import T2SCore
             let impulses = KokoroQualityProbe.impulseReport(samples, nil, symbols: [:]).count - 1
             report.append(String(format: "| %@ | %.2f | %.1f | %.2f | %.2f | %.3f | %d |", v.name, duration, seconds, seconds / duration, peak, rms, impulses))
         }
-        try report.joined(separator: "\n").write(to: out.appending(path: "report.md"), atomically: true, encoding: .utf8)
+        try report.joined(separator: "\n").write(to: out.appending(path: "report-ab.md"), atomically: true, encoding: .utf8)
         print(report.joined(separator: "\n"))
     }
 

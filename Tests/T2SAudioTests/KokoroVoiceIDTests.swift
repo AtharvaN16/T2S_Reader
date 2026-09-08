@@ -32,6 +32,25 @@ import Testing
         #expect(KokoroVoiceID(rawValue: rawValue) == nil)
     }
 
+    /// The delivery (how far the pitch contour is widened before the decoder) rides on the voice
+    /// route, so it reaches every render key without touching the stored voice choice.
+    @Test func carriesTheDeliverySpreadAfterTheVoice() throws {
+        let plain = KokoroVoiceID(engineID: "e", voice: "af_heart")
+        #expect(plain.spread == nil && plain.rawValue == "kokoro:e:af_heart")
+        let lively = plain.withSpread(1.25)
+        #expect(lively.rawValue == "kokoro:e:af_heart@1.25")
+        #expect(lively.voice == "af_heart" && lively.engineID == "e" && lively.spread == 1.25)
+        let parsed = try #require(KokoroVoiceID(rawValue: "kokoro:e:af_heart@1.25"))
+        #expect(parsed == lively)
+        #expect(lively.withSpread(nil).rawValue == "kokoro:e:af_heart")
+        #expect(lively.withSpread(1).rawValue == "kokoro:e:af_heart")   // 1 is the model's own: not written
+    }
+
+    @Test(arguments: ["kokoro:e:af_heart@", "kokoro:e:af_heart@x", "kokoro:e:af_heart@0", "kokoro:e:af_heart@-1", "kokoro:e:af_heart@1.25@2", "kokoro:e:@1.25"])
+    func rejectsAMalformedDelivery(rawValue: String) {
+        #expect(KokoroVoiceID(rawValue: rawValue) == nil)
+    }
+
     @Test func advertisesThePrefixItParses() {
         #expect(KokoroVoiceID.prefix == "kokoro:")
         #expect(KokoroVoiceID(engineID: "e", voice: "v").rawValue.hasPrefix(KokoroVoiceID.prefix))

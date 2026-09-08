@@ -90,7 +90,7 @@ import T2SCore
         // The same render key playback will ask for, so the prepared audio is the audio it plays.
         #expect(result.renderedUtterances > 0)
         let requested = Set(await engine.requests.map(\.voiceID))
-        #expect(requested == [heart])
+        #expect(requested == [Delivery.applied(to: heart)])
         #expect(try await fixtures.store.document(id: id)?.voiceID == nil)
     }
 

@@ -208,6 +208,29 @@ import T2SStore
         #expect(try await f.store.document(id: id)?.voiceID == kokoroVoiceID)
     }
 
+    /// The fixed delivery is attached to the render, so every render key carries it and a book
+    /// re-renders consistently; the reader's stored choice stays the plain voice.
+    @Test func aKokoroVoiceRendersAtTheFixedDeliveryWhileTheStoredChoiceStaysPlain() async throws {
+        let coreMLIdentity = "kokoro-coreml-2e878c6a-misaki1.0.6"
+        let bella = "kokoro:kokoro-coreml-2e878c6a-misaki1.0.6:af_bella"
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        var stored = try #require(try await f.store.document(id: id))
+        stored.voiceID = bella
+        try await f.store.update(stored)
+
+        let engine = FakeEngine(secondsPerCharacter: 0.05)
+        let player = try makePlayer(f, engine: engine)
+        player.voiceRouting = KokoroVoiceRouting(routes: [.init(engineIdentity: coreMLIdentity, isAvailable: { true })], defaultVoice: nil)
+        await player.load(try #require(try await f.store.summary(id: id)), play: false)
+        await player.coordinator.waitForRenderIdle()
+
+        let requested = Set(await engine.requests.map(\.voiceID))
+        #expect(requested == ["\(bella)@1.25"])
+        #expect(player.coordinator.document?.voiceID == "\(bella)@1.25")
+        #expect(try await f.store.document(id: id)?.voiceID == bella)
+    }
+
     @Test func aDocumentWithNoVoiceOfItsOwnRendersWithTheKokoroDefaultVoice() async throws {
         let coreMLIdentity = "kokoro-coreml-2e878c6a-misaki1.0.6"
         let heart = "kokoro:kokoro-coreml-2e878c6a-misaki1.0.6:af_heart"
@@ -226,8 +249,8 @@ import T2SStore
 
         // Decided once, before planning, exactly like the fallback: the whole book renders on Kokoro.
         let requested = Set(await engine.requests.map(\.voiceID))
-        #expect(requested == [heart])
-        #expect(player.coordinator.document?.voiceID == heart)
+        #expect(requested == [Delivery.applied(to: heart)])
+        #expect(player.coordinator.document?.voiceID == Delivery.applied(to: heart))
         // Nothing is written back — the reader never chose a voice, and the default may change.
         #expect(try await f.store.document(id: id)?.voiceID == nil)
     }
@@ -258,8 +281,8 @@ import T2SStore
         // Not the system voice: a document pinned to a runtime this phone cannot run still speaks
         // with Kokoro, through the default voice's own route (spec §5, §6).
         let requested = Set(await engine.requests.map(\.voiceID))
-        #expect(requested == [heart])
-        #expect(player.coordinator.document?.voiceID == heart)
+        #expect(requested == [Delivery.applied(to: heart)])
+        #expect(player.coordinator.document?.voiceID == Delivery.applied(to: heart))
         // The stored choice is untouched, so the book returns to MLX on a phone that has it.
         #expect(try await f.store.document(id: id)?.voiceID == mlxVoiceID)
     }

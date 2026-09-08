@@ -154,13 +154,15 @@ public final class PlayerModel {
             // Local copy only: the coordinator reads this document for render keys and synthesis
             // requests, and never writes it back.
             let requestedVoiceID = document.voiceID ?? VoiceOption.systemDefault.id
-            document.voiceID = await voiceRouting.effectiveVoiceID(requestedVoiceID)
-            if let effective = document.voiceID, effective != requestedVoiceID {
+            let routed = await voiceRouting.effectiveVoiceID(requestedVoiceID)
+            if routed != requestedVoiceID {
                 // The route, never the voice: a voice ID can carry a provider's voice name, and the
                 // document's title must never reach the log.
                 let route = String(requestedVoiceID.prefix { $0 != ":" })
-                Self.log.notice("voice route resolved: \(route, privacy: .public) → \(effective, privacy: .public)")
+                Self.log.notice("voice route resolved: \(route, privacy: .public) → \(routed, privacy: .public)")
             }
+            // The delivery rides on the render's voice route, not on the stored choice (`Delivery`).
+            document.voiceID = Delivery.applied(to: routed)
             coordinator.load(document, timeline: timeline)
             current = summary
             persistedChapterHashes = timeline.chapters.map(\.hashValue)

@@ -19,7 +19,7 @@ import T2SCore
 
         #expect(model.previewing == voiceA)
         let requests = await engine.requests
-        #expect(requests.map(\.voiceID) == [voiceA])
+        #expect(requests.map(\.voiceID) == [Delivery.applied(to: voiceA)])
         #expect(requests.map(\.spoken) == [VoicePreviewModel.sampleText])
         #expect(factory.made.count == 1)
         #expect(factory.made[0].playCount == 1)
@@ -55,7 +55,7 @@ import T2SCore
         #expect(factory.made[0].resetCount == 1)
         #expect(factory.made.count == 2)
         let requests = await engine.requests
-        #expect(requests.map(\.voiceID) == [voiceA, voiceB])
+        #expect(requests.map(\.voiceID) == [Delivery.applied(to: voiceA), Delivery.applied(to: voiceB)])
     }
 
     @Test func thePlayersOnSegmentFinishedClearsPreviewing() async throws {
@@ -131,7 +131,7 @@ import T2SCore
         await gate.open()
         while model.isRendering { await Task.yield() }
         let requests = await engine.requests
-        #expect(requests.map(\.voiceID) == [voiceA])
+        #expect(requests.map(\.voiceID) == [Delivery.applied(to: voiceA)])
     }
 
     @Test func stopCancelsAnInFlightRenderSoItsAudioNeverPlays() async throws {

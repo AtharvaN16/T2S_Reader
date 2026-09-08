@@ -439,6 +439,21 @@ import T2SCore
         #expect(Self.rms(result.audio.samples) > 0.01)
     }
 
+    /// The delivery rides on the voice route (`@1.5` after the voice): the engine renders at it, and
+    /// the voice itself is still found under its plain name.
+    @Test(.enabled(if: KokoroTestSupport.haveCoreMLFiles))
+    func rendersAtTheDeliveryTheVoiceRouteCarries() async throws {
+        let engine = try await Self.engineWithRealResources()
+        let plain = try await engine.synthesize(.init(spoken: "Hello there, how are you today?", voiceID: Self.voiceID("af_heart")))
+        let lively = try await engine.synthesize(.init(
+            spoken: "Hello there, how are you today?",
+            voiceID: KokoroVoiceID(engineID: KokoroCoreMLEngine.identity, voice: "af_heart", spread: 1.5).rawValue
+        ))
+        #expect(lively.audio.samples != plain.audio.samples)
+        #expect(abs(lively.audio.duration - plain.audio.duration) < 0.05)   // the spread never touches timing
+        #expect(lively.wordTimings.count == plain.wordTimings.count)
+    }
+
     @Test(.enabled(if: KokoroTestSupport.haveCoreMLFiles))
     func rejectsAnUnknownVoice() async throws {
         let engine = try await Self.engineWithRealResources()

@@ -66,7 +66,8 @@ public final class VoicePreviewModel {
         guard !Task.isCancelled, previewing == voiceID else { return }
         let outcome: Result<SynthesisResult, Error>
         do {
-            outcome = .success(try await engine.synthesize(SynthesisRequest(spoken: Self.sampleText, voiceID: voiceID)))
+            // At the delivery the book will play with, so the picker previews what the reader gets.
+            outcome = .success(try await engine.synthesize(SynthesisRequest(spoken: Self.sampleText, voiceID: Delivery.applied(to: voiceID))))
         } catch {
             outcome = .failure(error)
         }

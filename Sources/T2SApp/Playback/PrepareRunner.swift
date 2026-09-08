@@ -248,7 +248,9 @@ public final class PrepareRunner {
                   var snapshot = try? await library.renderSnapshot(for: id)
             else { continue }
 
-            let voiceID = await voiceRouting.effectiveVoiceID(document.voiceID ?? defaultVoiceID ?? "default")
+            // The same voice route playback will render with, delivery included, so the prepared audio
+            // is the audio it plays (`Delivery`).
+            let voiceID = Delivery.applied(to: await voiceRouting.effectiveVoiceID(document.voiceID ?? defaultVoiceID ?? "default"))
             // Only an utterance whose reference already matches can be rendered; those are checked
             // against the store in one hop, the rest are unrendered without asking (audit §5.4).
             var candidates: [(index: Int, key: RenderKey)] = []

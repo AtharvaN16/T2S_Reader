@@ -275,6 +275,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         let tokenization = tokenizer.tokenize(phonemes: phonemes, ownersByCharacter: ownersByCharacter)
 
         let pieces = try Self.pieces(ids: tokenization.ids, owners: tokenization.owners, words: words)
+        // The delivery the route asks for, else the engine's own (`Options.f0Spread`, 1 by default).
+        let spread = id.spread ?? options.f0Spread
         var samples: [Float] = []
         var folds: [KokoroCoreMLTimingFold.Piece] = []
         var tracedPieces: [UtteranceTrace.Piece] = []
@@ -285,7 +287,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             // `spikes/findings/2026-09-05-coreml-audio-quality.md`), so one piece from `pieces` may
             // become several rendered pieces here.
             let rendered = try renderWithSplitting(
-                piece, isFinal: index == pieces.count - 1, words: words, tokenizer: tokenizer, loaded: loaded
+                piece, isFinal: index == pieces.count - 1, words: words, tokenizer: tokenizer, loaded: loaded, spread: spread
             )
             for (subPiece, result) in rendered {
                 let cleaned = options.removeTailClick ? KokoroCoreMLTailClick.removed(from: result.audio) : result.audio
@@ -354,7 +356,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// into an `MLMultiArray` it does not zero. Padding to the *largest* staged model and letting
     /// `selectDurationChoice` pick the smallest that fits is safe either way — it copies a prefix of
     /// the padded ids, and the mask's zeroes tell it where the real tokens end.
-    private func render(_ piece: Piece, tokenizer: KokoroTokenizer, loaded: Loaded) throws -> KokoroPipelineResult {
+    private func render(_ piece: Piece, tokenizer: KokoroTokenizer, loaded: Loaded, spread: Float) throws -> KokoroPipelineResult {
         let framed = [KokoroTokenizer.boundary] + piece.ids + [KokoroTokenizer.boundary]
         let padding = KokoroCoreMLModels.maxDurationTokenLength - framed.count
         // ``maxPieceTokenCount`` (176 + 2 frame tokens) is chosen to fit `maxDurationTokenLength`
@@ -372,7 +374,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                     refS: tokenizer.refS(phonemeUTF16Count: piece.phonemeUTF16Count),
                     speed: 1.0,
                     punctuationSuppression: options.punctuationSuppression,
-                    f0Spread: options.f0Spread
+                    f0Spread: spread
                 ),
                 modelProvider: loaded.models,
                 linearWeights: loaded.linearWeights,
@@ -419,18 +421,18 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// directly here, rather than through the shared closure-based helper, keeps the production
     /// path a plain same-actor call with no closure at all.
     private func renderWithSplitting(
-        _ piece: Piece, isFinal: Bool, words: [MToken], tokenizer: KokoroTokenizer, loaded: Loaded
+        _ piece: Piece, isFinal: Bool, words: [MToken], tokenizer: KokoroTokenizer, loaded: Loaded, spread: Float
     ) throws -> [(piece: Piece, result: KokoroPipelineResult)] {
         do {
-            return [(piece, try render(piece, tokenizer: tokenizer, loaded: loaded))]
+            return [(piece, try render(piece, tokenizer: tokenizer, loaded: loaded, spread: spread))]
         } catch let error as KokoroCoreMLError {
             guard case .audioTruncated = error else { throw error }
             let groups = Self.groups(ids: piece.ids, owners: piece.owners)
             guard groups.count > 1 else { throw error }
             let cutIndex = Self.middleCutIndex(in: groups)
             let (first, second) = Self.splitPiece(groups: groups, at: cutIndex, isFinal: isFinal, words: words, inheriting: piece.cut)
-            return try renderWithSplitting(first, isFinal: false, words: words, tokenizer: tokenizer, loaded: loaded)
-                + (try renderWithSplitting(second, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: loaded))
+            return try renderWithSplitting(first, isFinal: false, words: words, tokenizer: tokenizer, loaded: loaded, spread: spread)
+                + (try renderWithSplitting(second, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: loaded, spread: spread))
         }
     }
 

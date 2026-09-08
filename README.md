@@ -233,10 +233,11 @@ system voices there, with the same previews.
 ### Reader, speed picker, and sleep timer
 
 Tap a Queue title, a chapter in a book, or **Read along →** in the player to
-open the full-screen Reader. The sentence being read is tinted lightly and
-the spoken word more strongly; the page follows the word while audio plays,
-scrolling pauses following until **Back to current** is tapped, and tapping a
-word seeks to it. Floating buttons at the top: back, bookmark, and a menu
+open the full-screen Reader. The paragraph being read is tinted lightly and
+the spoken word more strongly (on a PDF, the utterance rather than the
+paragraph); the page follows the word while audio plays, scrolling pauses
+following until **Back to current** is tapped, and tapping a word seeks to it.
+Floating buttons at the top: back, bookmark, and a menu
 (chapters, bookmarks, appearance, change voice, sleep timer, details, render
 whole document). At the bottom: a thin progress bar with times (its darker
 segments are the rendered audio), sleep timer · back 15 · play · forward 30 ·

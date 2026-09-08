@@ -1,6 +1,30 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-08 (Plan 13 — first sound — on `plan-13-first-sound`, in the worktree `.worktrees/plan-13-first-sound` off `dev` @ b951d86). Written for whoever picks up the coding next._
+_Last updated 2026-09-08 (Plan 14 — streaming the first sound — on `plan-14-streaming`, in the worktree `.worktrees/plan-14-streaming` off `origin/dev` @ 4056ccd). Written for whoever picks up the coding next._
+
+## Resume here (2026-09-08) — Plan 14
+
+Plan 14 (`docs/superpowers/plans/2026-09-08-plan-14-streaming-first-sound.md`) streams the head
+utterance: `SynthesisEngine.synthesizeStreaming` (Task 2; default wraps `synthesize`),
+`RenderRequest.stream` + `RenderEvent.piece` (Task 3), `AudioPlaying.enqueue(_:tag:isFinal:)` (Task 1),
+`PlaybackCoordinator` enqueuing pieces as they arrive and starting playback on the first (Task 4), and
+the Kokoro engine rendering a 48-id first piece and finalizing each piece before emitting it (Task 5).
+Only the utterance the player is waiting on streams — at load as well, so a book opened and played a
+moment later starts at once; the cache, Prepare and the prime are unchanged. Tasks 3–6 were written by
+the controller directly, at the owner's request for speed; one whole-branch review precedes the merge.
+
+**Owed:** the model-backed streaming test (`streamsALongPassageInPiecesThatFoldToTheSameTimings()`)
+and the quality probe on the streamed join — this Mac cannot run either (disk); the phone is the test.
+
+**The phone listen.** Tap play on a book you have never played, skip forward 30 s twice, jump to a
+late chapter, tap a word far down the page: sound should start within about a second each time, and
+the first sentence after a tap should flow into its second piece without a hole or a tick. If the
+first sentence sounds cut in two, the streamed join's tail budget (`KokoroCoreMLSeam.budgetSamples`)
+is the knob; if the highlight drifts in the first sentence only, the fold's `offsetSeconds` for the
+streamed pieces is.
+
+**Next:** the 3 s bucket (audit #9) to halve the first sound again; then the open path (#5) and the
+tick churn (#7).
 
 ## Resume here (2026-09-08) — Plan 14
 

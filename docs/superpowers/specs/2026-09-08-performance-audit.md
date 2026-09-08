@@ -34,6 +34,9 @@ decode paths stay); #5 partly (one store hop per load, cheaper keys — the `pla
 #11 done (`rateLoweredTo`, and the rate is raised again as the RTF recovers; the Reader's line is the
 UI plan's). Open: #2, #6, #7, #9, #10, #12, #13, #14.
 
+**Progress (Plan 14, 2026-09-08):** #2 done — the head streams; first sound after the first ~3 s piece
+(~1 s on an A13 in the 7 s bucket). The 3 s bucket (#9) would halve that.
+
 | # | Recommendation | Listener-visible effect | Effort | Section |
 |---|---|---|---|---|
 | 1 | Ship the phone build as **Release** (`run: config: Release` on the Phone scheme; xcodegen regenerates the scheme, so the by-hand flip in HANDOFF does not stick) | every Swift-side stage (hn-NSF DSP, seam/tail-click scans, crossfade, tokenizer, segmentation, TextKit) runs `-O` instead of `-Onone`; the measured RTF 0.18 was a Release harness | S | §6.1 |

@@ -1,7 +1,7 @@
 # t2s_reader — Design Spec
 
 **Date:** 2026-09-01
-**Revised:** 2026-09-08 (rev 15 — see §11 changelog)
+**Revised:** 2026-09-08 (rev 16 — see §11 changelog)
 **Status:** Draft for review
 **Working name:** t2s_reader (TBD)
 
@@ -420,6 +420,12 @@ sample of audio exists**. Phase 2 fills it in. Seeking to an unrendered
 position re-prioritizes the render queue there and begins playback in
 roughly a second, at Kokoro's measured throughput.
 
+**The head streams (rev 16).** The utterance the player is waiting on is rendered in pieces — a first
+piece of about three seconds, then the rest at the usual cap — and each piece is enqueued the moment
+it is rendered, so the first sound follows one short synthesis call rather than the whole utterance
+(the performance audit's #2). Every other utterance in the window renders whole; the store holds the
+pieces' concatenation under the same key either way.
+
 **Estimates are not cosmetic.** A 10% error on a 12-hour book is 72
 minutes. Until a document is fully rendered, total duration and remaining
 time are displayed as approximate (`~12h`), and the scrubber is drawn with
@@ -501,7 +507,8 @@ import.
 
 `AVAudioEngine → AVAudioPlayerNode → AVAudioUnitTimePitch → mainMixer`
 
-Buffers are scheduled per utterance for gapless playback.
+Buffers are scheduled per utterance for gapless playback. A streamed head is several buffers under
+one tag; the segment's completion fires after the buffer marked final (rev 16).
 `AVAudioUnitTimePitch.rate` provides 0.5x–4x **with pitch correction**;
 `AVQueuePlayer` was rejected because per-item boundaries are audible and
 rate handling across items is awkward. Playhead precision comes from
@@ -906,6 +913,12 @@ against a pipeline that is already proven.
 ---
 
 ## 11. Changelog
+
+**rev 16 (2026-09-08)** — Plan 15: streaming the first sound
+- **§3.3, §3.5** the head utterance renders in pieces (`SynthesisEngine.synthesizeStreaming`,
+  `RenderEvent.piece`, `AudioPlaying.enqueue(_:tag:isFinal:)`); the first sound needs one short
+  call. The Kokoro engine's first streamed piece is 48 ids (~3 s), each piece finalized before it is
+  emitted (tail click, tail silence to the seam budget, lead-in to the BOS frames).
 
 **rev 15 (2026-09-08)** — Plan 14: sound quality without changing the model
 (`spikes/findings/2026-09-08-quality-levers.md`).

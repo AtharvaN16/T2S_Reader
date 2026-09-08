@@ -179,7 +179,7 @@ private final class FakePreviewPlayer: AudioPlaying {
     private(set) var playCount = 0
     private(set) var resetCount = 0
 
-    func enqueue(_ audio: PCMAudio, tag: Int) { enqueued.append((audio, tag)) }
+    func enqueue(_ audio: PCMAudio, tag: Int, isFinal: Bool) { enqueued.append((audio, tag)) }
     func play() { isPlaying = true; playCount += 1 }
     func pause() { isPlaying = false }
     func reset() { enqueued.removeAll(); isPlaying = false; resetCount += 1 }

@@ -159,7 +159,7 @@ private final class NullAudioPlaying: AudioPlaying {
     let consumedSeconds: TimeInterval = 0
     var onSegmentFinished: ((Int) -> Void)?
     private var queued: [Int] = []
-    func enqueue(_ audio: PCMAudio, tag: Int) { queued.append(tag) }
+    func enqueue(_ audio: PCMAudio, tag: Int, isFinal: Bool) { if isFinal { queued.append(tag) } }
     func play() {
         let tags = queued
         queued.removeAll()

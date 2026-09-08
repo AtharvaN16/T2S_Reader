@@ -11,8 +11,10 @@ public protocol AudioPlaying: AnyObject {
     var consumedSeconds: TimeInterval { get }
     /// Called with the segment's tag after its last frame has played.
     var onSegmentFinished: ((Int) -> Void)? { get set }
-    /// Appends a segment for gapless playback after whatever is queued.
-    func enqueue(_ audio: PCMAudio, tag: Int)
+    /// Appends audio for gapless playback after whatever is queued. A segment — one utterance, one
+    /// `tag` — may arrive as several buffers while it streams; `onSegmentFinished` fires once, after
+    /// the buffer enqueued with `isFinal`.
+    func enqueue(_ audio: PCMAudio, tag: Int, isFinal: Bool)
     func play()
     func pause()
     /// Stops, drops every queued segment, and zeroes `consumedSeconds`.
@@ -20,4 +22,9 @@ public protocol AudioPlaying: AnyObject {
     /// The only destructive hardware recovery operation. The coordinator immediately resets and
     /// refills from its persisted Position, so implementations must not retain scheduled buffers.
     func rebuildAfterMediaServicesReset()
+}
+
+public extension AudioPlaying {
+    /// A whole segment in one buffer.
+    func enqueue(_ audio: PCMAudio, tag: Int) { enqueue(audio, tag: tag, isFinal: true) }
 }

@@ -9,14 +9,14 @@ final class FakePlayer: AudioPlaying {
     private(set) var isPlaying = false
     private(set) var consumedSeconds: TimeInterval = 0
     var onSegmentFinished: ((Int) -> Void)?
-    private(set) var queue: [(tag: Int, remaining: TimeInterval)] = []
+    private(set) var queue: [(tag: Int, remaining: TimeInterval, isFinal: Bool)] = []
     private(set) var enqueuedTags: [Int] = []
     private(set) var resets = 0
     /// Seconds of audio still queued (the head clip's remainder plus every later segment).
     var queuedRemaining: TimeInterval { queue.reduce(0) { $0 + $1.remaining } }
 
-    func enqueue(_ audio: PCMAudio, tag: Int) {
-        queue.append((tag, audio.duration))
+    func enqueue(_ audio: PCMAudio, tag: Int, isFinal: Bool) {
+        queue.append((tag, audio.duration, isFinal))
         enqueuedTags.append(tag)
     }
     func play() { isPlaying = true }
@@ -33,8 +33,8 @@ final class FakePlayer: AudioPlaying {
             queue[0].remaining -= step
             left -= step
             if queue[0].remaining <= 1e-9 {
-                let tag = queue.removeFirst().tag
-                onSegmentFinished?(tag)
+                let done = queue.removeFirst()
+                if done.isFinal { onSegmentFinished?(done.tag) }
             }
         }
     }

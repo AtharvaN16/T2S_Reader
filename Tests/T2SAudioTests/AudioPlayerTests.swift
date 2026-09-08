@@ -97,4 +97,24 @@ import T2SCore
         #expect(finished == Array(0..<20))
         #expect(abs(p.consumedSeconds - 1.0) < 0.02)
     }
+
+    /// A streamed utterance is several buffers under one tag; the coordinator's `segmentFinished`
+    /// must fire once, after the last of them (spec §3.5: per-utterance completion).
+    @Test func severalBuffersUnderOneTagFinishOnce() throws {
+        let p = try AudioPlayer(manualRendering: true)
+        var finished: [Int] = []
+        p.onSegmentFinished = { finished.append($0) }
+        p.enqueue(.silence(seconds: 0.4), tag: 7, isFinal: false)
+        p.enqueue(.silence(seconds: 0.4), tag: 7, isFinal: false)
+        p.enqueue(.silence(seconds: 0.4), tag: 7, isFinal: true)
+        p.enqueue(.silence(seconds: 0.2), tag: 8)                    // the two-argument form is final
+        p.play()
+        try p.renderOffline(seconds: 0.9)
+        #expect(finished.isEmpty)                                    // two of three buffers played
+        try p.renderOffline(seconds: 0.4)
+        #expect(finished == [7])
+        #expect(abs(p.consumedSeconds - 1.3) < 0.05)
+        try p.renderOffline(seconds: 0.3)
+        #expect(finished == [7, 8])
+    }
 }

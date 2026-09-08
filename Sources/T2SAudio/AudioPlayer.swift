@@ -149,7 +149,7 @@ public final class AudioPlayer: AudioPlaying {
         return max(0, frames) / format.sampleRate
     }
 
-    public func enqueue(_ audio: PCMAudio, tag: Int) {
+    public func enqueue(_ audio: PCMAudio, tag: Int, isFinal: Bool) {
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(audio.samples.count)) else { return }
         buffer.frameLength = AVAudioFrameCount(audio.samples.count)
         if !audio.samples.isEmpty {
@@ -161,10 +161,10 @@ public final class AudioPlayer: AudioPlaying {
         if manual {
             // Manual mode computes completions from the render clock in `deliverManualCompletions()`
             // rather than observing AVAudioEngine's completion callback — see `manualSegments`'s doc
-            // comment. No completion handler is scheduled at all.
-            manualSegments.append((tag: tag, endSourceFrames: Double(scheduledFrames)))
+            // comment. Only a segment's final buffer marks where its completion falls.
+            if isFinal { manualSegments.append((tag: tag, endSourceFrames: Double(scheduledFrames))) }
             player.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)
-        } else {
+        } else if isFinal {
             let gen = generation
             // `.dataPlayedBack` fires when the buffer has reached real hardware presentation — the
             // correct "played" signal for real playback, where a functioning run loop / app event
@@ -175,6 +175,10 @@ public final class AudioPlayer: AudioPlaying {
                     self.onSegmentFinished?(tag)
                 }
             }
+        } else {
+            // A streamed piece that is not the segment's last: gapless behind the previous buffer,
+            // no completion of its own.
+            player.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)
         }
     }
 

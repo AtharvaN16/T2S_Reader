@@ -14,6 +14,9 @@ struct BookSheet: View {
 
     @State private var chapters: [ChapterEntry] = []
     @State private var bookmarks: BookmarkListModel?
+    /// True only while the Play pill's own tap is resuming a paused, already-current document —
+    /// the one branch that awaits playback before dismissing, otherwise silently.
+    @State private var isStarting = false
 
     private var live: DocumentSummary { env.libraryModel.summaries.first { $0.id == summary.id } ?? summary }
     private var isQueued: Bool { live.queueOrder != nil && !live.isFinished }
@@ -38,13 +41,18 @@ struct BookSheet: View {
                 }
                 .typeRole(.meta).foregroundStyle(Tokens.ink2)
                 HStack(spacing: 8) {
-                    Pill(label: "Play", glyph: "play.fill", style: .accent) {
+                    Pill(label: isStarting ? "Starting…" : "Play", glyph: isStarting ? nil : "play.fill", style: .accent) {
                         Task {
-                            if isCurrent, !env.player.isPlaying { await env.player.togglePlay() }
+                            if isCurrent, !env.player.isPlaying {
+                                isStarting = true
+                                await env.player.togglePlay()
+                                isStarting = false
+                            }
                             dismiss()
                             readerRoute.open(live)
                         }
                     }
+                    .disabled(isStarting)
                     .accessibilityHint("Plays and opens the reader")
                     if isQueued {
                         Pill(label: "In Queue", glyph: "checkmark", style: .selected) { Task { await env.libraryModel.archive(live.id) } }

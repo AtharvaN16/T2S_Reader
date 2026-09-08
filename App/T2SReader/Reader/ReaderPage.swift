@@ -40,6 +40,11 @@ struct ReaderPage: View {
                 .ignoresSafeArea(edges: .bottom)
             } else if let error {
                 Text(error).typeRole(.meta).foregroundStyle(Tokens.destructive).padding(Spacing.margin)
+            } else if env.kokoroStatus.status.isWarming {
+                VStack(spacing: 10) {
+                    WarmingDot()
+                    Text("Preparing the voice…").typeRole(.meta).foregroundStyle(Tokens.accent)
+                }
             } else {
                 ProgressView().tint(Tokens.ink)
             }
@@ -132,7 +137,11 @@ struct ReaderPage: View {
                 HStack {
                     Text(player.elapsedText)
                     Spacer()
-                    if player.isCatchingUp { Text("catching up…").typeRole(.meta) }
+                    if env.isWarmingUp {
+                        Text("preparing the voice…").typeRole(.meta).foregroundStyle(Tokens.accent)
+                    } else if player.isCatchingUp {
+                        Text("catching up…").typeRole(.meta)
+                    }
                     Spacer()
                     Text(player.totalText)
                 }

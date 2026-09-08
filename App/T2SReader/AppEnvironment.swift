@@ -47,6 +47,13 @@ final class AppEnvironment {
     /// What Preferences tells the reader about the on-device engine on this device.
     let kokoroStatus: KokoroStatusModel
 
+    /// Whether the transport is waiting on the voice's one-time warm-up rather than routine
+    /// buffering — the single definition every playback surface (Reader, its transport controls,
+    /// the mini-player) reads, so they can't drift into disagreeing about which of the two states
+    /// a stall is in. Lives here rather than on `PlayerModel`: `PlayerModel` is package code
+    /// (`T2SApp`) and cannot depend on `KokoroStatusModel`, which belongs to this app target.
+    var isWarmingUp: Bool { player.isCatchingUp && kokoroStatus.status.isWarming }
+
     init(paths: LibraryPaths, store: LibraryStore, audioStore: any AudioStore, library: Library,
          importModel: ImportModel, coordinator: PlaybackCoordinator, engine: any SynthesisEngine,
          renderArbiter: RenderArbiter, cloudVoiceSettings: CloudVoiceSettings,

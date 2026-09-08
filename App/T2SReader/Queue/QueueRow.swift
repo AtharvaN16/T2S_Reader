@@ -12,6 +12,9 @@ struct QueueRow: View {
     var onDetails: () -> Void
     @State private var showSleepTimer = false
     @State private var showVoiceChange = false
+    /// True only while the Play pill's own tap is resuming a paused, already-current document —
+    /// the one branch that awaits playback before opening the reader, otherwise silently.
+    @State private var isStarting = false
 
     private var progress: DocumentProgress? { env.libraryModel.progress(for: summary.id) }
     private var isCurrent: Bool { env.player.current?.id == summary.id }
@@ -45,15 +48,20 @@ struct QueueRow: View {
             .accessibilityHint("Opens the reader")
 
             HStack(spacing: 8) {
-                Pill(label: isPlayingHere ? "Pause" : "Play \(remainingText)",
-                     glyph: isPlayingHere ? "pause.fill" : "play.fill",
+                Pill(label: isPlayingHere ? "Pause" : (isStarting ? "Starting…" : "Play \(remainingText)"),
+                     glyph: isPlayingHere ? "pause.fill" : (isStarting ? nil : "play.fill"),
                      style: .soft) {
                     Task {
                         if isPlayingHere { await env.player.togglePlay(); return }   // Pause stays in place
-                        if isCurrent { await env.player.togglePlay() }                // resume, then read along
+                        if isCurrent {
+                            isStarting = true
+                            await env.player.togglePlay()                            // resume, then read along
+                            isStarting = false
+                        }
                         onOpen()                                                       // the Reader loads and plays a non-current document itself
                     }
                 }
+                .disabled(isStarting)
                 .accessibilityHint(isPlayingHere ? "Pauses" : "Plays and opens the reader")
                 Pill(label: "Archive", glyph: "archivebox", style: .soft) {
                     Task { await env.libraryModel.archive(summary.id) }

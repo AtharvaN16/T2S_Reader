@@ -21,6 +21,16 @@ enum KokoroStatus: Hashable, Sendable {
     case preparing
     case available(isDebugOverride: Bool)
     case unavailable(String)
+
+    /// True while the Core ML stages are still loading — the one-time warm-up a fresh launch pays,
+    /// up to minutes on an old phone. The playback UI shows this distinctly from routine buffering,
+    /// which resolves in seconds regardless of launch state.
+    var isWarming: Bool {
+        switch self {
+        case .checking, .preparing: true
+        case .notLinked, .available, .unavailable: false
+        }
+    }
 }
 
 @MainActor

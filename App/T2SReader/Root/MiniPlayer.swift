@@ -7,8 +7,15 @@ import T2SStore
 struct MiniPlayer: View {
     @Environment(AppEnvironment.self) private var env
     var onOpen: (DocumentSummary) -> Void
+    /// Set for the span of a tap that starts playback, so the button shows feedback even before
+    /// `env.player.current`/`isCatchingUp` catch up — `load()` awaits the timeline before either
+    /// changes, which is otherwise a silent gap between tap and any visible response.
+    @State private var startingID: DocumentSummary.ID?
 
     private var shown: DocumentSummary? { env.player.current ?? env.libraryModel.queue.first }
+    private func isBusy(_ shown: DocumentSummary) -> Bool {
+        startingID == shown.id || (env.player.current?.id == shown.id && env.player.isCatchingUp)
+    }
 
     var body: some View {
         if let shown {
@@ -25,15 +32,34 @@ struct MiniPlayer: View {
                 .accessibilityHint("Opens the reader")
                 Spacer(minLength: 8)
                 Button {
-                    Task { await togglePlay(shown) }
+                    let alreadyPlaying = env.player.current?.id == shown.id && env.player.isPlaying
+                    if !alreadyPlaying { startingID = shown.id }
+                    Task {
+                        await togglePlay(shown)
+                        if startingID == shown.id { startingID = nil }
+                    }
                 } label: {
-                    Image(systemName: env.player.current?.id == shown.id && env.player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .frame(width: 36, height: 36)
-                        .contentShape(Rectangle())
+                    let busy = isBusy(shown)
+                    Group {
+                        if busy, env.kokoroStatus.status.isWarming {
+                            WarmingDot()
+                        } else if busy {
+                            ProgressView().progressViewStyle(.circular).tint(Tokens.ink)
+                        } else {
+                            Image(systemName: env.player.current?.id == shown.id && env.player.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                        }
+                    }
+                    .frame(width: 36, height: 36)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(env.player.isPlaying ? "Pause" : "Play")
+                // Matches the `.disabled(isStarting)` guard BookSheet/QueueRow's Play pills already
+                // carry: without it, a double-tap during the busy window re-enters `togglePlay()`
+                // while `isPlaying` still reads true (it covers `.catchingUp`), which pauses
+                // playback that had just started resuming.
+                .disabled(isBusy(shown))
+                .accessibilityLabel(isBusy(shown) ? "Loading" : (env.player.isPlaying ? "Pause" : "Play"))
                 Button {
                     Task { await env.player.skip(by: 30) }
                 } label: {

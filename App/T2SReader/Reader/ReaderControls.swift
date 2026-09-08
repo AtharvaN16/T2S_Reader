@@ -26,7 +26,9 @@ struct ReaderControls: View {
                 Task { await player.togglePlay() }
             } label: {
                 Group {
-                    if player.isCatchingUp {
+                    if env.isWarmingUp {
+                        WarmingDot()
+                    } else if player.isCatchingUp {
                         ProgressView().progressViewStyle(.circular).tint(Tokens.ink)
                     } else {
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
@@ -38,6 +40,7 @@ struct ReaderControls: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+            .accessibilityValue(player.isCatchingUp ? (env.isWarmingUp ? "Preparing the voice" : "Buffering") : "")
             Spacer()
             control("goforward.\(preferences.skipForwardSeconds)", "Forward \(preferences.skipForwardSeconds) seconds") {
                 Task { await player.skip(by: Double(preferences.skipForwardSeconds)) }

@@ -130,6 +130,27 @@ struct ProgressBar: View {
     }
 }
 
+/// A pulsing accent dot for the one-time voice warm-up — visually distinct from the routine
+/// buffering spinner (`ProgressView`) so a reader can tell "this is the long one-time wait" from
+/// "this resolves in a second or two." Respects Reduce Motion with a static dot instead of a loop.
+struct WarmingDot: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var bright = false
+
+    var body: some View {
+        Circle()
+            .fill(Tokens.accent)
+            .frame(width: 10, height: 10)
+            .opacity(bright ? 1 : 0.35)
+            // Conditioned on `reduceMotion` here, not inside `onAppear`, so a live toggle of the
+            // setting (Control Center, during the up-to-minutes warm-up this represents) takes
+            // effect immediately rather than only at the next time this view appears.
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: bright)
+            .onAppear { bright = true }
+            .accessibilityHidden(true)
+    }
+}
+
 /// The `positive` check that means "ready": plays with no synthesis and no network (spec §3.4.1).
 struct PositiveCheck: View {
     var body: some View {

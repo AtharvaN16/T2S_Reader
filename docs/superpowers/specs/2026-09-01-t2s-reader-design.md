@@ -457,7 +457,7 @@ charger.
 | Tier | Job | When | Order |
 |---|---|---|---|
 | 1 **Play-ahead** | The playing document, a window ahead of the playhead sized per §3.6 | Whenever playing | Always first |
-| 2 **Prime** | The first ~30 s of audio of a newly imported document | Immediately on import | After play-ahead |
+| 2 **Prime** | The first ~30 s of audio from a document's resume position: a new import from its start, the continue-document from where the reader left it (rev 13) | On import; at launch | After play-ahead |
 | 3 **Prepare** | Continue-document, then queue order, each from its resume position, until the budget is spent | Only while charging | After prime |
 | 4 **Manual** | "Render whole document" | User-initiated, any power state, with a battery note | A prepare job whose budget is the whole document |
 
@@ -896,6 +896,14 @@ against a pipeline that is already proven.
 ---
 
 ## 11. Changelog
+
+**rev 13 (2026-09-08)** — Plan 13: first sound
+- **§3.4.1** the prime tier is planned at last — after an import and at launch for the
+  continue-document, from the resume index; it had existed in `RenderPolicy` since Plan 2 with no
+  caller. The rendered-audio cache gains a memory tier for the last few renders (`RecentAudioStore`)
+  so the live path plays the render (§3.3 of the performance audit).
+- **§3.6** a rate the measured RTF can no longer sustain is lowered to the highest one it can,
+  and the coordinator says so (`rateLoweredTo`), instead of the window draining into "catching up".
 
 **rev 13 (2026-09-08)** — Plan 12: one playback UI.
 

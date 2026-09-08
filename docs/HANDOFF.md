@@ -1,6 +1,37 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-08 (Plan 12 Task 2 — docs for the one-playback-UI change — on `plan-12-one-playback-ui`, off `dev` @ b951d86 where Plan 11 is merged). Written for whoever picks up the coding next._
+_Last updated 2026-09-08 (Plan 13 — first sound — on `plan-13-first-sound`, in the worktree `.worktrees/plan-13-first-sound` off `dev` @ 3bca4b1). Written for whoever picks up the coding next._
+
+## Resume here (2026-09-08) — Plan 13
+
+The owner said "you decide" after the performance audit; Plan 13
+(`docs/superpowers/plans/2026-09-08-plan-13-first-sound.md`, branch `plan-13-first-sound` off `dev`
+@ b951d86, worktree `.worktrees/plan-13-first-sound`) took the audit's single-task items while
+another session ran Plan 12 (the Player sheet retired) in the main checkout:
+
+- **Task 1** — the Phone scheme's Run action is Release (`App/project.yml`); the install recipe below
+  no longer needs the by-hand flip. Every listen before this may have been `-Onone`.
+- **Task 2** — `KokoroCoreMLEngine.load()` builds the American G2P after the stages, so the launch
+  warm-up pays it, not the first sentence.
+- **Task 3** — the prime tier runs: `RenderPolicy` primes from the resume index;
+  `PrepareRunner.prime(_:)` after every import (`ImportModel.afterImport`, wired in `AppEnvironment`)
+  and `primeContinueDocument()` from `T2SReaderApp`'s scene task at launch.
+- **Task 4** — `RecentAudioStore` keeps the last eight renders in memory in front of `FileAudioStore`
+  (`SharedLibraryFactory`); `AudioStore.contains(_ keys:)` makes the coordinator's and Prepare's
+  reconcile one hop; `RenderKey` hexes by table.
+- **Task 5** — Prepare writes a chapter when it leaves it, every 10 s inside it, and at the end.
+- **Task 6** — `PlaybackCoordinator.refreshRates()` on every render: a rate above the sustainable cap
+  steps down and `rateLoweredTo` is set for the Reader to show (deferred to the UI plan).
+- **Task 2's model-backed test** (`preloadBuildsTheG2P`) is being run as this is written; if HANDOFF says nothing more below, it passed. The run needs ~4 GB of free disk for Core ML's compute-plan cache; `scripts/test-kokoro.sh`'s comment estimate (~0.9 GB) is stale.
+- **Naming collision:** the other session's second worktree is also numbered 13 (`.worktrees/plan-13-quality-levers`, a Kokoro probe); this plan kept its name. The next plan is 14 either way.
+
+**The phone listen.** Install with the Phone scheme (Release now). Listen for: a new import's first
+tap starting at once; the mini-player's first tap after a launch starting at once; a book that has
+never been played starting within ~2–3 s (that wait is Plan 14's — streaming the first sound).
+
+**Next (Plan 14):** streaming the head utterance's first piece to the player — audit #2 — with the
+quality probe on the seam a short first piece makes. Then the open path's `play()` gate and
+`LibraryModel.refresh` (#5), and, once the UI plan has merged, the tick churn (#7).
 
 ## Performance audit (2026-09-08)
 

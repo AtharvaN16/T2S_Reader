@@ -27,6 +27,12 @@ ordered by what the listener will notice.
 
 Effort: S = a task, M = a plan of 2–4 tasks, L = a plan plus a measurement on a phone first.
 
+**Progress (Plan 13, 2026-09-08):** #1 done (Release on the Phone scheme); #3 done (G2P in the
+warm-up, prime after import and at launch); #4 done as `RecentAudioStore` (the temp-file encode and
+decode paths stay); #5 partly (one store hop per load, cheaper keys — the `play()` gate and
+`LibraryModel.refresh` remain); #8 done; #11 done (`rateLoweredTo`; the Reader's line is the UI
+plan's). Open: #2, #6, #7, #9, #10, #12, #13, #14.
+
 | # | Recommendation | Listener-visible effect | Effort | Section |
 |---|---|---|---|---|
 | 1 | Ship the phone build as **Release** (`run: config: Release` on the Phone scheme; xcodegen regenerates the scheme, so the by-hand flip in HANDOFF does not stick) | every Swift-side stage (hn-NSF DSP, seam/tail-click scans, crossfade, tokenizer, segmentation, TextKit) runs `-O` instead of `-Onone`; the measured RTF 0.18 was a Release harness | S | §6.1 |

@@ -22,7 +22,17 @@ another session ran Plan 12 (the Player sheet retired) in the main checkout:
 - **Task 5** — Prepare writes a chapter when it leaves it, every 10 s inside it, and at the end.
 - **Task 6** — `PlaybackCoordinator.refreshRates()` on every render: a rate above the sustainable cap
   steps down and `rateLoweredTo` is set for the Reader to show (deferred to the UI plan).
-- **Task 2's model-backed test** (`preloadBuildsTheG2P`) is being run as this is written; if HANDOFF says nothing more below, it passed. The run needs ~4 GB of free disk for Core ML's compute-plan cache; `scripts/test-kokoro.sh`'s comment estimate (~0.9 GB) is stale.
+- **Task 2's model-backed test did not run on this Mac.** `preloadBuildsTheG2P()` was started twice and
+  each time Core ML's compute-plan cache for the eight stages ate ~6 GB of the ~8 GB free within three
+  minutes, so the run was stopped before it filled the volume (`scripts/test-kokoro.sh`'s ~0.9 GB
+  estimate is stale by a factor of six). The change is three lines behind the existing `loadCount`
+  pattern and was reviewed on its diff; the captured RED (the compile failure without `isG2PLoaded`)
+  is in the plan's ledger. To run it: free ≥ 10 GB on the volume (it sits at 96 %), make sure no other
+  Kokoro test is running (`ps aux | grep '[x]codebuild' | grep -c T2SKokoro` → 0), then from the
+  checkout root `scripts/test-kokoro.sh '-only-testing:T2SKokoroTests/KokoroCoreMLEngineTests/preloadBuildsTheG2P()'`
+  (the parentheses matter: without them xcodebuild matches no test and still reports SUCCEEDED), then
+  the same for `loadsTheStagesOnceWhenAPreloadAndARenderArriveTogether()`. On the phone, a broken
+  warm-up shows as "The Kokoro voice could not be prepared." in Preferences → Voice, never as silence.
 - **Naming collision:** the other session's second worktree is also numbered 13 (`.worktrees/plan-13-quality-levers`, a Kokoro probe); this plan kept its name. The next plan is 14 either way.
 
 **The phone listen.** Install with the Phone scheme (Release now). Listen for: a new import's first

@@ -47,6 +47,11 @@ once the book has re-rendered (the first play after the update renders afresh). 
 rendered at 1.0 and 1.25 before the value became the default for every voice (the spread check in the
 finding).
 
+**Folding Plan 14 back** (from the main folder; the worktree keeps its old name):
+`git merge --ff-only plan-14-quality-levers && git push && git worktree remove .worktrees/plan-13-quality-levers && git branch -d plan-14-quality-levers`.
+A second worktree, `plan-14-streaming`, was opened under the same number while this branch was being
+verified; whichever of the two merges second renumbers (as Plan 12/13 did), spec revisions included.
+
 ## Resume here (2026-09-08) — Plan 13
 
 The owner said "you decide" after the performance audit; Plan 13

@@ -130,4 +130,17 @@ import T2SCore
         try p.renderOffline(seconds: 0.4)
         #expect(finished == [3])
     }
+
+    /// What is still queued: the coordinator reads it to notice a streamed head running dry (Plan 16).
+    @Test func queuedSecondsCountsDownToZero() throws {
+        let p = try AudioPlayer(manualRendering: true)
+        #expect(p.queuedSeconds == 0)
+        p.enqueue(.silence(seconds: 1), tag: 1)
+        #expect(abs(p.queuedSeconds - 1) < 1e-9)
+        p.play()
+        try p.renderOffline(seconds: 0.4)
+        #expect(abs(p.queuedSeconds - 0.6) < 0.05)
+        try p.renderOffline(seconds: 1.0)
+        #expect(p.queuedSeconds == 0)
+    }
 }

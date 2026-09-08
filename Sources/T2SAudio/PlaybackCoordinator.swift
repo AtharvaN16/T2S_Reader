@@ -261,6 +261,13 @@ public final class PlaybackCoordinator {
         let offset = max(0, player.consumedSeconds - headStartConsumed)
         playhead = timeIndex.clamp(Playhead(utteranceIndex: headIndex, offset: offset))
         refreshHighlight()
+        // A streamed head can run dry between its pieces — spec §3.6's underrun rule fires only
+        // between utterances. Pause until the next piece lands, so the player renders no silence
+        // and the playhead cannot run past the audio (Plan 16); `apply(.piece)` resumes.
+        if state == .playing, streaming != nil, player.queuedSeconds <= 0 {
+            player.pause()
+            state = .catchingUp
+        }
     }
 
     /// Awaits segment-feeding work started by a player callback or a render event.

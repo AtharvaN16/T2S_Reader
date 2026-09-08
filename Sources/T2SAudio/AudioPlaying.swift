@@ -9,6 +9,9 @@ public protocol AudioPlaying: AnyObject {
     var isPlaying: Bool { get }
     /// Audio consumed since the last `reset`, in seconds at 1x, independent of `rate`.
     var consumedSeconds: TimeInterval { get }
+    /// Audio scheduled but not yet consumed, in seconds at 1x: zero when the player has run dry —
+    /// which a streamed head can, between its pieces (Plan 16).
+    var queuedSeconds: TimeInterval { get }
     /// Called with the segment's tag after its last frame has played.
     var onSegmentFinished: ((Int) -> Void)? { get set }
     /// Appends audio for gapless playback after whatever is queued. A segment — one utterance, one

@@ -479,6 +479,28 @@ import T2SCore
         let head = player.queue.filter { $0.tag == 0 }
         #expect(head.count == 1 && head.first?.isFinal == true)      // one whole buffer from the store, not a stray piece
     }
+
+    /// Between the pieces of a streamed head the player can run dry; the coordinator pauses on
+    /// "catching up" until the next piece lands, so the playhead never runs past the audio (Plan 16).
+    @Test func aStreamedHeadThatRunsDryPausesUntilTheNextPiece() async throws {
+        let (c, player, engine, _, doc, timeline) = await streamingFixture(pieces: 2)
+        await engine.hold()
+        c.load(doc, timeline: timeline)
+        await c.play()
+        await engine.release()                                       // piece 0 (0.5 s) arrives; piece 1 parks
+        await waitForBuffers(player, 1)
+        await c.settle()
+        #expect(c.state == .playing)
+        player.advance(seconds: 0.5); c.tick()                       // piece 0 fully consumed: the player is dry
+        #expect(c.state == .catchingUp && !player.isPlaying)
+        #expect(abs(c.playhead.offset - 0.5) < 1e-9)
+        await engine.releasePiece()                                  // piece 1
+        await waitForBuffers(player, 2)
+        await c.settle()
+        #expect(c.state == .playing && player.isPlaying)
+        player.advance(seconds: 0.2); c.tick()
+        #expect(abs(c.playhead.offset - 0.7) < 1e-9)                 // no jump: the clock stood still while dry
+    }
 }
 
 private struct KeyRejectedEngine: SynthesisEngine {

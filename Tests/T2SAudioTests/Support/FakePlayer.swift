@@ -14,6 +14,7 @@ final class FakePlayer: AudioPlaying {
     private(set) var resets = 0
     /// Seconds of audio still queued (the head clip's remainder plus every later segment).
     var queuedRemaining: TimeInterval { queue.reduce(0) { $0 + $1.remaining } }
+    var queuedSeconds: TimeInterval { queuedRemaining }
 
     func enqueue(_ audio: PCMAudio, tag: Int, isFinal: Bool) {
         queue.append((tag, audio.duration, isFinal))

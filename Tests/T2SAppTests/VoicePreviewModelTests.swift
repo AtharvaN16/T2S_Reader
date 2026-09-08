@@ -171,6 +171,7 @@ private final class PlayerFactory {
 /// A minimal `AudioPlaying` double: no timing, just enough to see what the model asked of it.
 @MainActor
 private final class FakePreviewPlayer: AudioPlaying {
+    var queuedSeconds: TimeInterval = 0
     var rate: Double = 1
     private(set) var isPlaying = false
     var consumedSeconds: TimeInterval = 0

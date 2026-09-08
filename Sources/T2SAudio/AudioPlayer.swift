@@ -149,6 +149,10 @@ public final class AudioPlayer: AudioPlaying {
         return max(0, frames) / format.sampleRate
     }
 
+    public var queuedSeconds: TimeInterval {
+        max(0, Double(scheduledFrames) / format.sampleRate - consumedSeconds)
+    }
+
     public func enqueue(_ audio: PCMAudio, tag: Int, isFinal: Bool) {
         // A segment closed with nothing left to play (a stream that ended early, Plan 14) still needs
         // its completion, in order behind the pieces already queued: one silent frame carries it.

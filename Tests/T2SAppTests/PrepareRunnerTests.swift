@@ -162,4 +162,50 @@ import T2SCore
         let stored = try #require(try await fixtures.store.timeline(for: id)).timeline
         #expect(stored.chapters[0].utterances.allSatisfy { $0.audioRef != nil && $0.duration.isActual })
     }
+
+    /// The coalescing rule across a chapter boundary, which the one-chapter fixture above cannot
+    /// reach: a two-chapter pass writes each chapter once — the first when the pass moves on, the
+    /// second at the end — not once per utterance. (A count cannot tell "written on leaving" from
+    /// "both written at the end"; what it pins is that three utterances do not cost three writes.)
+    @Test func aTwoChapterPassWritesEachChapterOnce() async throws {
+        let fixtures = try AppFixtures()                                          // two chapters: 2 utterances, then 1
+        let id = try await fixtures.importFake()
+        let defaults = UserDefaults(suiteName: "prepare-\(UUID())")!
+        let clock = ManualTimeSource()                                            // never advances: no interval flush
+        let runner = PrepareRunner(library: fixtures.library, store: fixtures.store, audioStore: fixtures.audio,
+                                   engine: FakeEngine(secondsPerCharacter: 0.05), defaults: defaults,
+                                   arbiter: RenderArbiter(), timeSource: clock)
+
+        let result = await runner.run(lastPlayed: id, queue: [id],
+                                      device: DeviceState(charging: true, thermalSerious: false,
+                                                          lowPowerMode: false, storeFull: false))
+
+        #expect(result.renderedUtterances == 3)
+        #expect(runner.chapterWrites == 2)                                        // not 3, and not 1
+        let stored = try #require(try await fixtures.store.timeline(for: id)).timeline
+        #expect(stored.isFullyRendered)
+    }
+
+    /// And the third: a pass that stays inside one chapter still writes it every
+    /// `chapterWriteInterval`, so a book of 600-utterance chapters does not go twenty minutes with
+    /// nothing on disk. The simulated RTF advances the shared clock past the interval per render.
+    @Test func aLongStayInsideOneChapterStillWritesItEveryInterval() async throws {
+        let fixtures = try AppFixtures(readers: [FakeReader(chapterCount: 1)])   // one chapter, two utterances
+        let id = try await fixtures.importFake()
+        let defaults = UserDefaults(suiteName: "prepare-\(UUID())")!
+        let clock = ManualTimeSource()
+        let runner = PrepareRunner(library: fixtures.library, store: fixtures.store, audioStore: fixtures.audio,
+                                   engine: FakeEngine(secondsPerCharacter: 0.05, simulatedRTF: 20, timeSource: clock),
+                                   defaults: defaults, arbiter: RenderArbiter(), timeSource: clock)
+        runner.chapterWriteInterval = 10                                          // the default, named for the test
+
+        let result = await runner.run(lastPlayed: id, queue: [id],
+                                      device: DeviceState(charging: true, thermalSerious: false,
+                                                          lowPowerMode: false, storeFull: false))
+
+        #expect(result.renderedUtterances == 2)
+        #expect(runner.chapterWrites == 2)                                        // one per utterance: each took > 10 s
+        let stored = try #require(try await fixtures.store.timeline(for: id)).timeline
+        #expect(stored.isFullyRendered)
+    }
 }

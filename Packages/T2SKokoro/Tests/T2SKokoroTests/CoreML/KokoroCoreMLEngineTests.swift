@@ -248,6 +248,34 @@ import T2SCore
         #expect(noPieceLeadsWithAPause)
     }
 
+    /// The piece after a cut carries the kind of cut, which is what Task 3's seam budget keys on.
+    @Test func recordsTheKindOfCutBeforeEachPiece() throws {
+        var words: [MToken] = []
+        var ids: [Int32] = []
+        var owners: [Int] = []
+        Self.appendPlainWords(count: 60, startIndex: 0, words: &words, ids: &ids, owners: &owners)
+        let wordCut = try KokoroCoreMLEngine.pieces(ids: ids, owners: owners, words: words)
+        #expect(wordCut.map(\.cut) == [.none, .word])
+
+        words = []; ids = []; owners = []
+        Self.appendPlainWords(count: 20, startIndex: 0, words: &words, ids: &ids, owners: &owners)
+        words.append(Self.word(",", phonemes: ","))
+        ids += [3, 16]
+        owners += [20, KokoroCoreMLTimingFold.noOwner]
+        Self.appendPlainWords(count: 20, startIndex: 21, words: &words, ids: &ids, owners: &owners)
+        let commaCut = try KokoroCoreMLEngine.pieces(ids: ids, owners: owners, words: words)
+        #expect(commaCut.map(\.cut) == [.none, .clause])
+
+        words = []; ids = []; owners = []
+        Self.appendPlainWords(count: 20, startIndex: 0, words: &words, ids: &ids, owners: &owners)
+        words.append(Self.word(".", phonemes: "."))
+        ids += [4, 16]
+        owners += [20, KokoroCoreMLTimingFold.noOwner]
+        Self.appendPlainWords(count: 20, startIndex: 21, words: &words, ids: &ids, owners: &owners)
+        let stopCut = try KokoroCoreMLEngine.pieces(ids: ids, owners: owners, words: words)
+        #expect(stopCut.map(\.cut) == [.none, .sentence])
+    }
+
     // MARK: Splitting a piece that overflowed its bucket
 
     /// A minimal, plausible pipeline result: only what the splitting logic and its tests read
@@ -447,6 +475,19 @@ import T2SCore
         let biggestBackwardsStep = zip(result.wordTimings.dropFirst(), result.wordTimings)
             .map { $1.end - $0.start }.max() ?? 0
         #expect(biggestBackwardsStep <= 0.5)
+
+        // Seams hold a beat, not a hole: no quiet stretch in the audio longer than the model's own
+        // sentence pause. Before Plan 11 Task 3 the two seams measured 740 and 820 ms.
+        let window = 240
+        var longestQuietMs = 0
+        var run = 0
+        var i = 0
+        while i + window <= result.audio.samples.count {
+            let rms = (result.audio.samples[i ..< i + window].reduce(0) { $0 + $1 * $1 } / Float(window)).squareRoot()
+            if rms < 0.00316 { run += 1 } else { longestQuietMs = max(longestQuietMs, run * 10); run = 0 }
+            i += window
+        }
+        #expect(longestQuietMs <= 600)
 
         print(String(format: "kokoro-coreml long passage: %.2fs of audio, %d word timings",
                      result.audio.duration, result.wordTimings.count))

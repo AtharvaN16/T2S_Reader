@@ -65,17 +65,24 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         /// tick before the sentence resumes" wherever a call ends inside a sentence
         /// (`spikes/findings/2026-09-08-ticks-and-hyphens.md`).
         public var removeTailClick: Bool
+        /// Whether the silence across a seam is trimmed to ``KokoroCoreMLSeam``'s budget for the cut
+        /// that made it. The app ships `true`: with the tail click gone, a seam measured 400–820 ms
+        /// against the 25–420 ms the model puts at the same boundary inside one call.
+        public var trimSeams: Bool
 
         public init(punctuationSuppression: PunctuationSuppression = .allPunctuation, crossfadePieces: Bool = false,
-                    removeTailClick: Bool = false) {
+                    removeTailClick: Bool = false, trimSeams: Bool = false) {
             self.punctuationSuppression = punctuationSuppression
             self.crossfadePieces = crossfadePieces
             self.removeTailClick = removeTailClick
+            self.trimSeams = trimSeams
         }
 
         /// What the app ships with — not this initializer's own defaults, which are upstream's. See
         /// the property docs above and `spikes/findings/2026-09-05-coreml-audio-quality.md`.
-        public static let `default` = Options(punctuationSuppression: .none, crossfadePieces: true, removeTailClick: true)
+        public static let `default` = Options(
+            punctuationSuppression: .none, crossfadePieces: true, removeTailClick: true, trimSeams: true
+        )
     }
 
     private let resources: KokoroCoreMLResources.Located
@@ -132,7 +139,11 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             var owners: [Int]
             /// `KokoroPipeline.SynthesisResult.tokenDurationFrames`: one per framed id (BOS + ids + EOS).
             var frames: [Int]
+            /// Where the piece's untrimmed audio would have begun in the joined output — what the fold
+            /// counts BOS frames from; negative-shifted by the lead-in a seam trim dropped.
             var offsetSamples: Int
+            /// Where the piece's audio actually begins in the joined output: the seam.
+            var audioStartSamples: Int
             var sampleCount: Int
             var bucketSeconds: Int
         }
@@ -264,13 +275,35 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                 piece, isFinal: index == pieces.count - 1, words: words, tokenizer: tokenizer, loaded: loaded
             )
             for (subPiece, result) in rendered {
-                let audio = options.removeTailClick ? KokoroCoreMLTailClick.removed(from: result.audio) : result.audio
+                let cleaned = options.removeTailClick ? KokoroCoreMLTailClick.removed(from: result.audio) : result.audio
+                var previous = samples
+                var next = cleaned
+                var droppedHead = 0
+                if options.trimSeams, !samples.isEmpty, subPiece.cut != .none {
+                    // The head is never trimmed past the BOS token's own span, so the first word's
+                    // fold time (offset + BOS frames) stays at or after the piece's first sample. The
+                    // tail is silence the model rendered inside the previous piece's last frames; the
+                    // fold clamps that piece's last word to what remains.
+                    let bosSamples = (result.tokenDurationFrames.first ?? 0) * PipelineConstants.samplesPerDurationFrame
+                    let trimmed = KokoroCoreMLSeam.trimmed(
+                        previous: samples, next: cleaned, budget: KokoroCoreMLSeam.budgetSamples(for: subPiece.cut),
+                        tailCap: .max, headCap: bosSamples
+                    )
+                    previous = trimmed.previous
+                    next = trimmed.next
+                    droppedHead = trimmed.droppedHead
+                    if trimmed.droppedTail > 0, !folds.isEmpty {
+                        folds[folds.count - 1].trimmedTailSeconds = Double(trimmed.droppedTail) / Double(PipelineConstants.sampleRate)
+                    }
+                }
                 // With a crossfade the join overlaps the last 5 ms of the previous piece, so the
                 // piece's audio starts that much earlier than a plain append would put it.
-                let joined = options.crossfadePieces && !samples.isEmpty
-                    ? PcmJoiner.join(segments: [samples, audio], sampleRate: PipelineConstants.sampleRate)
-                    : samples + audio
-                let offsetSamples = joined.count - audio.count
+                let joined = options.crossfadePieces && !previous.isEmpty
+                    ? PcmJoiner.join(segments: [previous, next], sampleRate: PipelineConstants.sampleRate)
+                    : previous + next
+                // Where the piece's untrimmed audio would have begun: the fold counts BOS frames from
+                // here, and the dropped lead-in was inside them.
+                let offsetSamples = joined.count - next.count - droppedHead
                 folds.append(KokoroCoreMLTimingFold.Piece(
                     owners: subPiece.owners,
                     frames: result.tokenDurationFrames,
@@ -279,7 +312,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                 if utteranceTrace != nil {
                     tracedPieces.append(UtteranceTrace.Piece(
                         ids: subPiece.ids, owners: subPiece.owners, frames: result.tokenDurationFrames,
-                        offsetSamples: offsetSamples, sampleCount: audio.count, bucketSeconds: result.bucketSeconds
+                        offsetSamples: offsetSamples, audioStartSamples: offsetSamples + droppedHead,
+                        sampleCount: next.count, bucketSeconds: result.bucketSeconds
                     ))
                 }
                 samples = joined
@@ -380,7 +414,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             let groups = Self.groups(ids: piece.ids, owners: piece.owners)
             guard groups.count > 1 else { throw error }
             let cutIndex = Self.middleCutIndex(in: groups)
-            let (first, second) = Self.splitPiece(groups: groups, at: cutIndex, isFinal: isFinal, words: words)
+            let (first, second) = Self.splitPiece(groups: groups, at: cutIndex, isFinal: isFinal, words: words, inheriting: piece.cut)
             return try renderWithSplitting(first, isFinal: false, words: words, tokenizer: tokenizer, loaded: loaded)
                 + (try renderWithSplitting(second, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: loaded))
         }
@@ -402,7 +436,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             let groups = Self.groups(ids: piece.ids, owners: piece.owners)
             guard groups.count > 1 else { throw error }
             let cutIndex = Self.middleCutIndex(in: groups)
-            let (first, second) = Self.splitPiece(groups: groups, at: cutIndex, isFinal: isFinal, words: words)
+            let (first, second) = Self.splitPiece(groups: groups, at: cutIndex, isFinal: isFinal, words: words, inheriting: piece.cut)
             return try renderSplittingOnOverflow(first, isFinal: false, words: words, render: renderOne)
                 + (try renderSplittingOnOverflow(second, isFinal: isFinal, words: words, render: renderOne))
         }
@@ -416,16 +450,18 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// `extendToEnd` on the second half preserves the charge to trailing zero-id tokens when `piece`
     /// was the whole utterance's last.
     private static func splitPiece(
-        groups: [Group], at cutIndex: Int, isFinal: Bool, words: [MToken]
+        groups: [Group], at cutIndex: Int, isFinal: Bool, words: [MToken], inheriting cut: KokoroCoreMLSeam.Cut
     ) -> (first: Piece, second: Piece) {
         let firstGroups = groups[0 ... cutIndex]
         let secondGroups = groups[(cutIndex + 1)...]
-        let (first, _) = Self.piece(
+        var (first, _) = Self.piece(
             from: firstGroups, firstToken: firstGroups.first?.token ?? 0, words: words, extendToEnd: false
         )
-        let (second, _) = Self.piece(
+        first.cut = cut
+        var (second, _) = Self.piece(
             from: secondGroups, firstToken: secondGroups.first?.token ?? 0, words: words, extendToEnd: isFinal
         )
+        second.cut = Self.cut(after: groups[cutIndex])
         return (first, second)
     }
 
@@ -486,6 +522,9 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         /// a one-piece utterance this is exactly the whole phonemized string's length — the same
         /// number the §7.3 spike measured with.
         var phonemeUTF16Count = 0
+        /// How the piece before this one was closed — what the seam budget keys on. `.none` for the
+        /// first piece of an utterance.
+        var cut: KokoroCoreMLSeam.Cut = .none
     }
 
     /// One piece's render call, as ``renderSplittingOnOverflow(_:isFinal:words:render:)`` takes it —
@@ -552,6 +591,13 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             return tokenIds.contains(group.ids[index])
         }
         return false
+    }
+
+    /// The kind of seam a piece that closes with `group` leaves behind it.
+    private static func cut(after group: Group) -> KokoroCoreMLSeam.Cut {
+        if groupEnds(group, with: KokoroVocabulary.sentenceFinalPunctuationTokenIds) { return .sentence }
+        if groupEnds(group, with: KokoroVocabulary.clauseBoundaryPunctuationTokenIds) { return .clause }
+        return .word
     }
 
     /// Where to close the current piece when the next group would overflow the cap: the last group
@@ -663,9 +709,10 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         var pieces: [Piece] = []
         var firstToken = 0
         for (index, groupSlice) in packed.enumerated() {
-            let (piece, lastToken) = Self.piece(
+            var (piece, lastToken) = Self.piece(
                 from: groupSlice[...], firstToken: firstToken, words: words, extendToEnd: index == packed.count - 1
             )
+            if index > 0, let previousLast = packed[index - 1].last { piece.cut = Self.cut(after: previousLast) }
             pieces.append(piece)
             firstToken = lastToken + 1
         }

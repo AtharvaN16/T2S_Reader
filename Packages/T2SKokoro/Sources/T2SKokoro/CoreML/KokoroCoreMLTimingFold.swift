@@ -33,11 +33,16 @@ enum KokoroCoreMLTimingFold {
         var frames: [Int]
         /// Seconds of audio the earlier pieces already produced.
         var offsetSeconds: Double
+        /// Seconds cut from the end of this piece's audio at the seam after it (Plan 11 Task 3):
+        /// silence the model rendered inside its last frames. No token may end later than the audio
+        /// that is left, so the last word's end is clamped to it.
+        var trimmedTailSeconds: Double = 0
 
-        init(owners: [Int], frames: [Int], offsetSeconds: Double) {
+        init(owners: [Int], frames: [Int], offsetSeconds: Double, trimmedTailSeconds: Double = 0) {
             self.owners = owners
             self.frames = frames
             self.offsetSeconds = offsetSeconds
+            self.trimmedTailSeconds = trimmedTailSeconds
         }
     }
 
@@ -81,11 +86,13 @@ enum KokoroCoreMLTimingFold {
             last[owner] = k
         }
 
+        // Where the piece's audio ends once the seam after it took its trimmed tail.
+        let audioEnd = piece.offsetSeconds + Double(piece.frames.reduce(0, +)) * secondsPerFrame - piece.trimmedTailSeconds
         return first.reduce(into: [:]) { spans, entry in
             let (owner, firstID) = entry
             guard let lastID = last[owner] else { return }
-            spans[owner] = (piece.offsetSeconds + Double(cumulative[firstID]) * secondsPerFrame,
-                            piece.offsetSeconds + Double(cumulative[lastID + 1]) * secondsPerFrame)
+            let end = min(audioEnd, piece.offsetSeconds + Double(cumulative[lastID + 1]) * secondsPerFrame)
+            spans[owner] = (min(end, piece.offsetSeconds + Double(cumulative[firstID]) * secondsPerFrame), end)
         }
     }
 

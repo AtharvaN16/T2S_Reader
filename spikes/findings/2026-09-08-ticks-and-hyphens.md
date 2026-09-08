@@ -117,9 +117,24 @@ What the removal exposes: the seam holes are bigger than the click made them loo
 `long-two-pieces`, with the click gone, the quiet run before seam 1 (a bare-word cut) is 460 ms and the
 lead-in after it 280 ms — a 740 ms hole between "reading" and "tables"; seam 2 (a comma cut) is 490 +
 330 = 820 ms. Each call ends with the model's end-of-input pause (the first listen's "800 ms of dead
-air"), whatever the cut. `packed-1`'s comma seam is 80 + 320 = 400 ms, about a natural comma. So Plan 11
-Task 3 trims both sides of a seam to a budget by cut kind, capped at the trailing pause frames of the
-piece before and the BOS frames of the piece after, so no word timing moves.
+air"), whatever the cut. `packed-1`'s comma seam is 80 + 320 = 400 ms, about a natural comma.
+
+**Plan 11 Task 3** (`KokoroCoreMLSeam`) trims both sides of a seam to a budget by the kind of cut —
+60 ms after a bare word, 320 ms after a clause mark, 500 ms after a sentence mark, the model's own
+pauses inside one call — measuring silence at −50 dBFS like every pause above: the next piece's lead-in
+first (never past its BOS frames; the fold offset moves back with it, so no word start moves), then the
+previous piece's tail (silence the model rendered inside its last word's frames; the fold clamps that
+word's end to the audio left). The probe after it, seams measured at the actual join:
+
+| Seam | Before | After |
+|---|---|---|
+| `long-two-pieces` seam 1, bare-word cut ("reading ‖ tables") | 740 ms | 60 ms |
+| `long-two-pieces` seam 2, comma cut | 820 ms | 320 ms |
+| `packed-1` seam, comma cut ("sparkled, ‖ and his breath") | 400 ms | 310 ms |
+| `long-two-pieces` total | 24.52 s | 23.34 s |
+
+The longest quiet stretch left in the long sentence is 460 ms, a pause the model put at a comma inside
+a call; the word timings' assertion in `synthesizesALongPassageInPieces` bounds it at 600 ms.
 
 ## Not done here
 

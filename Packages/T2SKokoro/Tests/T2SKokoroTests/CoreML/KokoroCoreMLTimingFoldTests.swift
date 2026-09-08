@@ -71,6 +71,30 @@ import Testing
         #expect(tokens[1].start == 1.5 && tokens[1].end == 1.5 + 8 * Self.frame)
     }
 
+    /// A piece whose lead-in was trimmed reports where its untrimmed audio would have begun, so the
+    /// BOS frames still land the first word on the sample it actually starts at (Plan 11 Task 3).
+    @Test func aTrimmedLeadInMovesTheOffsetBackNotTheWord() {
+        // BOS 12 frames (300 ms); 240 ms of it were dropped, so the audio starts at 1.0 s and the
+        // offset is 0.76 s: the word starts at 0.76 + 0.3 = 1.06 s.
+        let tokens = KokoroCoreMLTimingFold.timedTokens(
+            [Self.token("Hi")],
+            pieces: [.init(owners: [0], frames: [12, 4], offsetSeconds: 0.76)]
+        )
+        #expect(abs(tokens[0].start! - 1.06) < 1e-9)
+    }
+
+    /// A seam may take silence the model rendered inside a piece's last frames; the word that owned
+    /// those frames then ends where the audio does, not past it (Plan 11 Task 3).
+    @Test func clampsTheLastWordToATrimmedTail() {
+        // BOS 0, "Hi" 8 frames (200 ms), EOS 4 frames: 300 ms of audio, 150 ms of it cut at the seam.
+        let tokens = KokoroCoreMLTimingFold.timedTokens(
+            [Self.token("Hi")],
+            pieces: [.init(owners: [0], frames: [0, 8, 4], offsetSeconds: 0, trimmedTailSeconds: 0.15)]
+        )
+        #expect(tokens[0].start == 0)
+        #expect(abs(tokens[0].end! - 0.15) < 1e-9)
+    }
+
     @Test func leavesEveryTokenUntimedForNoPieces() {
         let tokens = KokoroCoreMLTimingFold.timedTokens([Self.token("Hi")], pieces: [])
         #expect(tokens == [Self.token("Hi")])

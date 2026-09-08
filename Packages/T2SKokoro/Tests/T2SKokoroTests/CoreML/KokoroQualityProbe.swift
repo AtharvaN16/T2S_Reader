@@ -237,7 +237,7 @@ import T2SCore
         guard trace.pieces.count > 1 else { return ["One piece: no seam."] }
         var lines = ["Seams:"]
         for (p, piece) in trace.pieces.enumerated().dropFirst() {
-            let s = piece.offsetSamples
+            let s = piece.audioStartSamples
             let previous = trace.pieces[p - 1]
             let eosMs = (previous.frames.last ?? 0) * samplesPerFrame * 1000 / rate
             let lastReal = previous.frames.dropLast().last ?? 0
@@ -260,7 +260,7 @@ import T2SCore
     /// the framed id whose span holds it and measured against the nearest seam.
     static func impulseReport(_ x: [Float], _ trace: KokoroCoreMLEngine.UtteranceTrace?, symbols: [Int32: String], seams: [Int]? = nil) -> [String] {
         let spans = trace.map { self.spans($0, symbols: symbols) } ?? []
-        let seamOffsets = seams ?? (trace?.pieces.dropFirst().map(\.offsetSamples) ?? [])
+        let seamOffsets = seams ?? (trace?.pieces.dropFirst().map(\.audioStartSamples) ?? [])
         let half = rate * 20 / 1000
         let core = rate / 1000
         var lines = ["Impulses (> -20 dBFS and ≥ 6× the 40 ms neighbourhood):"]
@@ -295,7 +295,7 @@ import T2SCore
     /// lies between them — the shape of the tail click.
     static func tails(_ x: [Float], _ trace: KokoroCoreMLEngine.UtteranceTrace) -> [String] {
         var lines: [String] = []
-        let ends = trace.pieces.dropFirst().map { $0.offsetSamples + 120 } + [x.count]
+        let ends = trace.pieces.dropFirst().map { $0.audioStartSamples + 120 } + [x.count]
         for (p, end) in ends.enumerated() {
             let from = max(0, end - rate * 160 / 1000)
             var runs: [String] = []

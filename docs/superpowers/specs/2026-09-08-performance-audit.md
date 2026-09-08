@@ -29,9 +29,10 @@ Effort: S = a task, M = a plan of 2–4 tasks, L = a plan plus a measurement on 
 
 **Progress (Plan 13, 2026-09-08):** #1 done (Release on the Phone scheme); #3 done (G2P in the
 warm-up, prime after import and at launch); #4 done as `RecentAudioStore` (the temp-file encode and
-decode paths stay); #5 partly (one store hop per load, cheaper keys — the `play()` gate and
-`LibraryModel.refresh` remain); #8 done; #11 done (`rateLoweredTo`; the Reader's line is the UI
-plan's). Open: #2, #6, #7, #9, #10, #12, #13, #14.
+decode paths stay); #5 partly (one store hop per load, cheaper keys — the `play()` gate,
+"stop hashing every chapter twice per open" and `LibraryModel.refresh` are all untouched); #8 done;
+#11 done (`rateLoweredTo`, and the rate is raised again as the RTF recovers; the Reader's line is the
+UI plan's). Open: #2, #6, #7, #9, #10, #12, #13, #14.
 
 | # | Recommendation | Listener-visible effect | Effort | Section |
 |---|---|---|---|---|

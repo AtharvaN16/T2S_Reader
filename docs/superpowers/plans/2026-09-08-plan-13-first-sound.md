@@ -67,8 +67,13 @@ stepping the rate down when the measured RTF says the current one will stall.
   escape hatch and Debug-only asserts are off on the phone — both are development tools, not the
   owner's.
 - **Prime is refused while a Prepare pass runs, and vice versa** (`isRunning`). A launch prime is
-  three utterances; a prepare skipped at scene activation is rescheduled at the next one. Cost: on a
-  charging launch, Prepare waits a few seconds.
+  three utterances. But nothing retriggers a foreground Prepare pass that was refused because a prime
+  held the slot: `RootPager.startForegroundPrepareIfNeeded()` runs at scene activation, on a
+  device/queue/player-state change, and the background task runs on its own schedule — the prime's
+  completion is not one of those. So a pass refused on a charging launch waits for the next such
+  event, not for the prime to finish. Cost: on a charging launch that is never backgrounded and never
+  changes power state, Prepare may not run at all that session. The retrigger belongs to
+  `App/T2SReader/Root/RootPager.swift`, which is the other session's file.
 - **The memory tier holds the last eight renders** (~1 MB each at 24 kHz mono float for 10 s of
   speech, at most ~8 MB). It is consulted only when the base store still holds the key, so eviction
   and the "cache, never truth" rule are unchanged. Cost: 8 MB of resident memory while rendering.

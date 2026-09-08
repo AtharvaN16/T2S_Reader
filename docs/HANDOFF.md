@@ -1,6 +1,6 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-08 (Plan 13 — first sound — on `plan-13-first-sound`, in the worktree `.worktrees/plan-13-first-sound` off `dev` @ 3bca4b1). Written for whoever picks up the coding next._
+_Last updated 2026-09-08 (Plan 13 — first sound — on `plan-13-first-sound`, in the worktree `.worktrees/plan-13-first-sound` off `dev` @ b951d86). Written for whoever picks up the coding next._
 
 ## Resume here (2026-09-08) — Plan 13
 
@@ -10,7 +10,9 @@ The owner said "you decide" after the performance audit; Plan 13
 another session ran Plan 12 (the Player sheet retired) in the main checkout:
 
 - **Task 1** — the Phone scheme's Run action is Release (`App/project.yml`); the install recipe below
-  no longer needs the by-hand flip. Every listen before this may have been `-Onone`.
+  no longer needs the by-hand flip. Every listen before this may have been `-Onone`. For a debugging
+  session on the phone, set the Run action back to Debug (Edit Scheme → Run → Info): breakpoints and
+  `po` are degraded under Release, and incremental phone builds are slower.
 - **Task 2** — `KokoroCoreMLEngine.load()` builds the American G2P after the stages, so the launch
   warm-up pays it, not the first sentence.
 - **Task 3** — the prime tier runs: `RenderPolicy` primes from the resume index;

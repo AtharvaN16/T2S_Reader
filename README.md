@@ -163,7 +163,9 @@ scheme — **Phone** for an iPhone, **Simulator** for the Mac:
   `targetTemplates` entry in `App/project.yml`, so they cannot drift apart.
   Its Run action builds Release: the app you listen to is the optimised one, and the RTF the app
   measures is the one the spike measured (`docs/superpowers/specs/2026-09-08-performance-audit.md`
-  §6.1). The Simulator scheme stays Debug.
+  §6.1). The Simulator scheme stays Debug. For a debugging session on the phone, set the Run action
+  back to Debug (Edit Scheme → Run → Info): breakpoints and `po` are degraded under Release, and
+  incremental phone builds are slower.
 
 Import a document with the `+` button on the Queue page.
 

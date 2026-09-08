@@ -525,9 +525,16 @@ Therefore:
 - The engine reports **measured RTF**, updated as a rolling average.
 - Rates whose sustained demand exceeds a safety threshold are **disabled
   in the UI**, with an explanation, rather than offered and then stuttering.
-- **Underrun policy:** if the playhead reaches the render frontier,
-  playback pauses with a visible "catching up…" state. It does not
-  silently drop rate, and it does not stutter.
+- **Rate follows the measured RTF, both ways (rev 13).** A rate the
+  measured RTF can no longer sustain is lowered to the highest rate it
+  can, and raised again — never above what the listener asked for — as the
+  RTF recovers. The coordinator publishes `rateLoweredTo` while the cap
+  holds the rate under the request, for the Reader to show; it is nil once
+  the rate recovers or the listener chooses again. The first render of a
+  session is not measured: it carries the engine's lazy load.
+- **Underrun policy:** if the playhead reaches the render frontier anyway,
+  playback pauses with a visible "catching up…" state — the last resort,
+  not the first. It does not stutter.
 
 **Battery is a measured quantity, not an assumed one.** During background
 listening the screen is off, so synthesis is the *dominant* power draw,
@@ -904,6 +911,11 @@ against a pipeline that is already proven.
   so the live path plays the render (§3.3 of the performance audit).
 - **§3.6** a rate the measured RTF can no longer sustain is lowered to the highest one it can,
   and the coordinator says so (`rateLoweredTo`), instead of the window draining into "catching up".
+- **§3.6** the lowering is bidirectional: the coordinator remembers the rate the listener asked for
+  and raises the rate back towards it, clearing `rateLoweredTo`, as the measured RTF recovers — a
+  phone that throttles for one chapter no longer stays at 0.5x for the session. The engine's first
+  render of a session is not sampled at all: it carries the lazy load of the stages, the G2P and the
+  voice table, and one such ratio would pin the rate for a whole window.
 
 **rev 13 (2026-09-08)** — Plan 12: one playback UI.
 

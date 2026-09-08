@@ -1,9 +1,9 @@
-# Plan 13 — Sound quality without changing the model: blends, the voice list, pitch spread
+# Plan 14 — Sound quality without changing the model: blends, the voice list, pitch spread
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-_2026-09-08. Branch `plan-13-quality-levers` off `dev` @ b951d86, in the worktree
-`.worktrees/plan-13-quality-levers` (the main checkout is on Plan 12). Proposed after the owner's
+_2026-09-08. Branch `plan-14-quality-levers` (first commits say Plan 13; the number moved when another session's Plan 13 merged first) off `dev` @ b951d86, in the worktree
+`.worktrees/plan-13-quality-levers` (the folder keeps the old number; the main checkout carried Plans 12 and 13 meanwhile). Proposed after the owner's
 question "we cannot change the model — are there other ways to improve the sound quality?"; every
 lever below was measured first (`spikes/findings/2026-09-08-quality-levers.md`)._
 
@@ -43,9 +43,9 @@ argues from.
 | # | Task | Owns | Verification | State |
 |---|---|---|---|---|
 | 1 | **A slow voice no longer crashes a debug build.** The vendored pipeline's DEBUG assertion on an overflowing prediction is removed (the engine re-splits, Plan 9); a regression test renders `af_nicole` on the passage's 197-id utterance; the test support keeps a private, revision-keyed clone of the compiled stages so two sessions' runs cannot sweep each other's models. | `Packages/KokoroPipeline` (one comment block), `Packages/T2SKokoro` tests | `scripts/test-kokoro.sh`; the new test | done on this branch |
-| 2 | **Blended voices as catalog rows.** `KokoroVoiceCatalog` gains recipes (`Heart & Bella` = 0.5·heart + 0.5·bella, `Heart & Emma` = 0.5·heart + 0.5·emma); `KokoroCoreMLResources.Located` resolves a recipe name to its parents; `KokoroTokenizer` builds the blended table at load. Rows preview and render like any voice. | `Sources/T2SApp/Preferences/KokoroVoiceCatalog.swift`, `Sources/T2SAudio/KokoroVoiceID.swift`, `Packages/T2SKokoro/Sources/T2SKokoro/CoreML/{KokoroTokenizer,KokoroCoreMLResources,KokoroCoreMLEngine}.swift`, tests | `swift test`; `scripts/test-kokoro.sh`; the lever probe renders the rows | open |
-| 3 | **The voice list leads with the author's best.** Order: Heart, Bella, the blends, Emma, Nicole, then the C voices; the D and F voices under a "More voices" disclosure; each row's detail keeps accent and gender. | `KokoroVoiceCatalog.swift`, `App/T2SReader/Preferences`, tests | `swift test`; `scripts/build-app.sh` | open |
-| 4 | **Pitch spread as a setting — gated on the listen.** Only if the owner prefers `09-heart-spread-1.25.wav` (or `10-…-1.5.wav`) to `01-heart.wav`: `KokoroVoiceID` carries an optional spread (`kokoro:<engine>:<voice>@1.25`), Preferences → Voice gains "Delivery: Natural / Lively / Livelier" (1.0 / 1.25 / 1.5), and `RoutedEngine` hands the value to `Options`. Otherwise the hook stays at 1 and this task closes as "not taken". | `KokoroVoiceID.swift`, `VoiceRouting.swift`, `ReaderPreferences.swift`, `App/T2SReader/Preferences`, `KokoroCoreMLEngine.swift`, tests | `swift test`; `scripts/test-kokoro.sh`; the lever probe at the chosen value | waits on the owner |
+| 2 | **Blended voices as catalog rows.** `KokoroVoiceCatalog` gains recipes (`Heart & Bella` = 0.5·heart + 0.5·bella, `Heart & Emma` = 0.5·heart + 0.5·emma); `KokoroCoreMLResources.Located` resolves a recipe name to its parents; `KokoroTokenizer` builds the blended table at load. Rows preview and render like any voice. | `Sources/T2SApp/Preferences/KokoroVoiceCatalog.swift`, `Sources/T2SAudio/KokoroVoiceID.swift`, `Packages/T2SKokoro/Sources/T2SKokoro/CoreML/{KokoroTokenizer,KokoroCoreMLResources,KokoroCoreMLEngine}.swift`, tests | `swift test`; `scripts/test-kokoro.sh`; the lever probe renders the rows | **dropped** — the owner heard the blends as "all good, too subtle to tell apart" |
+| 3 | **The voice list leads with the author's best.** Order: Heart, Bella, the blends, Emma, Nicole, then the C voices; the D and F voices under a "More voices" disclosure; each row's detail keeps accent and gender. | `KokoroVoiceCatalog.swift`, `App/T2SReader/Preferences`, tests | `swift test`; `scripts/build-app.sh` | open, optional — the owner's call |
+| 4 | **Delivery 1.25 as the fixed default — no setting.** The owner's listen (2026-09-08): 1.25 "feels more alive", 1.5 "not wrong", and three presets "unnecessarily complicated". The value rides on the voice route (`kokoro:<engine>:<voice>@1.25`), attached where the effective voice is resolved for rendering (`PlayerModel`, `PrepareRunner`) and honoured by the engine per request, so every render key changes and the library re-renders consistently while every stored voice choice survives. Before it became the default for every voice: Bella, Michael, Emma and Nicole rendered at 1.0 and 1.25 (the spread check) to see that none saturates. | `Sources/T2SAudio/KokoroVoiceID.swift`, `Sources/T2SApp/Preferences/Delivery.swift` (new), `PlayerModel.swift`, `PrepareRunner.swift`, `KokoroCoreMLEngine.swift`, tests | `swift test`; `scripts/test-kokoro.sh`; the spread check | done — and the owner's A/B: the Plan 9 render clicks after "Humbug", "sparkled", "poor enough"; the fixed renders do not |
 | 5 | **Docs.** HANDOFF resume section, README (the lever probe), spec §2 (the voice list and, if taken, the delivery setting) with a changelog entry. | `docs/`, `README.md` | review | open |
 
 ## Decisions taken without the owner (each with its cost if wrong)
@@ -299,7 +299,7 @@ Run: `swift test` and `scripts/test-kokoro.sh`. Expected: green.
 
 ```bash
 git add Sources/T2SAudio/KokoroVoiceBlend.swift Tests/T2SAudioTests/KokoroVoiceBlendTests.swift Packages/T2SKokoro/Sources/T2SKokoro/CoreML/KokoroTokenizer.swift Packages/T2SKokoro/Sources/T2SKokoro/CoreML/KokoroCoreMLEngine.swift Packages/T2SKokoro/Tests/T2SKokoroTests/CoreML/KokoroTokenizerTests.swift Packages/T2SKokoro/Tests/T2SKokoroTests/CoreML/KokoroCoreMLEngineTests.swift Sources/T2SApp/Preferences/KokoroVoiceCatalog.swift Tests/T2SAppTests
-git commit -m "Plan 13 Task 2: two blended voices — Heart & Bella, Heart & Emma — as catalog rows, their tables summed from the parents' at load"
+git commit -m "Plan 14 Task 2: two blended voices — Heart & Bella, Heart & Emma — as catalog rows, their tables summed from the parents' at load"
 ```
 
 ### Task 3: The voice list leads with the author's best
@@ -336,7 +336,7 @@ selected voice is inside it.
 - [ ] **Step 3: Run the catalog tests, then `scripts/build-app.sh`.** Expected: green; the Preferences
 screen shows six rows, the C voices, and "More voices".
 
-- [ ] **Step 4: Commit** — `git commit -m "Plan 13 Task 3: the voice list leads with the author's graded voices and the blends; the D and F voices fold under More voices"`.
+- [ ] **Step 4: Commit** — `git commit -m "Plan 14 Task 3: the voice list leads with the author's graded voices and the blends; the D and F voices fold under More voices"`.
 
 ### Task 4: Pitch spread as a setting — only if the listen says so
 
@@ -369,11 +369,11 @@ control under the voice list. Changing it changes the render key through the voi
 re-renders (the existing "voice change discards rendered audio" warning applies — reuse it).
 
 - [ ] **Step 4: Run `swift test`, `scripts/test-kokoro.sh`, `scripts/build-app.sh`; the lever probe at
-the chosen value once more; commit** — `git commit -m "Plan 13 Task 4: Delivery — Natural, Lively, Livelier — widens the pitch contour before the decoder; part of the voice route so a change re-renders"`.
+the chosen value once more; commit** — `git commit -m "Plan 14 Task 4: Delivery — Natural, Lively, Livelier — widens the pitch contour before the decoder; part of the voice route so a change re-renders"`.
 
 ### Task 5: Docs
 
 - [ ] HANDOFF: a "Resume here — Plan 13" section (the finding in a paragraph, what shipped, the
   listen's outcome, deferred). README: the lever probe beside the other probes. Spec §2's voice list
   paragraph and, if Task 4 shipped, the Delivery setting; a changelog entry (rev 13).
-- [ ] Commit — `git commit -m "Plan 13 Task 5: docs — HANDOFF, README, spec voice list and changelog"`.
+- [ ] Commit — `git commit -m "Plan 14 Task 5: docs — HANDOFF, README, spec voice list and changelog"`.

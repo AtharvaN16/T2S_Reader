@@ -97,6 +97,36 @@ costs the other run a five-minute recompile that fills the disk. The test suppor
 APFS clone of the compiled stages under the package's `.build`, keyed by model revision, and reuses it
 across runs.
 
+### The spread check — 1.25 on the voices Heart is not
+
+Before 1.25 became the default for every voice, the four voices Heart is not: a wide natural range,
+a low male voice, a British voice, a breathy one. Same passage, model's own delivery against 1.25:
+
+| Voice | Spread (SD) | 5–95 % range | Top of range | Pauses | Impulses |
+|---|---|---|---|---|---|
+| Bella | 4.5 → 4.7 st | 17.6 → 18.7 st | 253 → 273 Hz | 16, identical | 1 → 1 |
+| Michael (male) | 3.4 → 3.9 st | 10.1 → 12.3 st | 160 → 176 Hz | 15, identical | 4 → 2 |
+| Emma (British) | 2.1 → 2.5 st | 5.9 → 7.4 st | 212 → 229 Hz | 13, identical | 8 → 7 |
+| Nicole (breathy) | 5.7 → 5.5 st | 17.0 → 17.0 st | 195 → 205 Hz | 20, identical | 13 → 10 |
+
+Nothing saturates (Heart at 2.0 pinned at 358 Hz; the highest top here is 273 Hz), no pause moves, no
+click count rises. The owner's listen: 1.25 "sounds good … feels more alive"; three presets
+"unnecessarily complicated" — so 1.25 is the fixed default (`Delivery`), not a setting.
+
+### The A/B — where the clicks the owner still heard come from
+
+After the fixes the owner heard "clicks between sentences and abrupt endings" in the app and in the
+first Desktop files. Every measure here said the fixed renders were clean, so the passage was rendered
+four ways for the owner's ears: as Plan 9 left it (no tail-click removal, no seam trim), with the
+removal only, as the app renders today, and today plus 1.25. The owner: **A has clicks after
+"Humbug", "sparkled" and "poor enough"** — the three tail bursts Plan 11 measured, to the word —
+**B, C and D have none.** So the fix works and the seam trim and the delivery add nothing; the app was
+playing audio the current engine did not render. Why that could happen: the render key's engine
+component is `RoutedEngine.engineID`, the constant `routed-v1`, and neither Plan 11 fix changed any
+component of the key. Audio rendered by a build without the fix is valid cache to a build with it.
+The delivery tag on the voice route changes every Kokoro key, so this update re-renders every book;
+the rule going forward is in spec §5: a change that alters an engine's audio must change the key.
+
 ## 3. The cache codec — Opus is not a lever on this platform
 
 The web comparison is real (Opus at 64 kbps is rated like AAC at 96 kbps for speech), and Plan 9's
@@ -149,13 +179,10 @@ blends are in, not before.
 
 - **Ship the crash fix** (this branch): the assertion removal, its regression test, the private
   compiled stages for tests.
-- **Make the pitch spread a setting, gated on the listen.** The hook is in (`Options.f0Spread`, default
-  1). If the owner prefers 1.25 over 1.0 on the WAVs, Plan 13 Task 2 wires it into the render identity
-  and Preferences as three steps (Natural / Lively / Livelier = 1.0 / 1.25 / 1.5); if not, the hook stays
-  at 1 and costs nothing.
-- **Ship blends as catalog rows, not as a slider yet**: `Heart & Bella` (Heart's placement, Bella's
-  range) and `Heart & Emma` (lower, calmer) computed at load from the two parents' tables — no new
-  files, previews and render keys work as for any voice. A "make your own" picker is a later plan.
+- **Delivery 1.25, fixed, on the voice route** (`Delivery`, `KokoroVoiceID.spread`): the owner chose it
+  over three presets. Every Kokoro render key changes; stored voice choices do not.
+- **Blends are not shipped**: the owner heard the curated ones as "all good, too subtle to tell apart".
+  The mechanism stays in the lever probe.
 - **Order the voice list by the author's grade**: the four B- and better voices first, the D and F voices
   under "More voices". The cheapest quality lever in the app.
 - **Not**: Opus through the system encoder; enhancement models; extrapolated blends.

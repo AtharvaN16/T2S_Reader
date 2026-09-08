@@ -1,7 +1,7 @@
 # t2s_reader — Design Spec
 
 **Date:** 2026-09-01
-**Revised:** 2026-09-08 (rev 14 — see §11 changelog)
+**Revised:** 2026-09-08 (rev 15 — see §11 changelog)
 **Status:** Draft for review
 **Working name:** t2s_reader (TBD)
 
@@ -687,7 +687,10 @@ documentID · utteranceIndex · voiceID · engineID
 
 This makes staleness structural: **changing voice automatically
 invalidates that document's audio** rather than silently serving the old
-voice. The UI must warn before a voice change discards a large rendered
+voice. The same must hold for the engine: **a change that alters an engine's
+audio changes the key** (rev 15) — for the on-device voice through the delivery tag on its voice
+route (`@1.25`), for anything else by bumping `RoutedEngine.engineID`. An engine fix that leaves the
+key alone is served stale from the cache to every book rendered before it. The UI must warn before a voice change discards a large rendered
 cache.
 
 **Sync is an optional module behind `SyncProvider` (§3.7.1).** CloudKit's
@@ -903,6 +906,19 @@ against a pipeline that is already proven.
 ---
 
 ## 11. Changelog
+
+**rev 15 (2026-09-08)** — Plan 14: sound quality without changing the model
+(`spikes/findings/2026-09-08-quality-levers.md`).
+
+- **§3** the on-device voice's delivery: the predicted pitch contour is widened by a fixed quarter
+  before the decoder (`Delivery.spread` 1.25, on the voice route of every render as `@1.25`, so it
+  is in every render key — spec §5 — and a book re-renders once; stored voice choices never carry it).
+  Chosen by the owner's listen; not a setting.
+- Core ML engine: an overflowing prediction on a slow voice no longer asserts in debug builds; the
+  engine's re-split handles it.
+- **§5** a change that alters an engine's audio must change the render key. Plan 11's fixes did
+  not (`routed-v1` and the voice route were untouched), so a book rendered before them kept its
+  clicks on a build that had them.
 
 **rev 14 (2026-09-08)** — Plan 13: first sound
 - **§3.4.1** the prime tier is planned at last — after an import and at launch for the

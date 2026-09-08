@@ -2,6 +2,51 @@
 
 _Last updated 2026-09-08 (Plan 13 — first sound — on `plan-13-first-sound`, in the worktree `.worktrees/plan-13-first-sound` off `dev` @ b951d86). Written for whoever picks up the coding next._
 
+## Resume here (2026-09-08) — Plan 14
+
+The owner asked, after Plan 11: "we cannot change the model — are there other ways to improve the
+sound quality?" Plan 14 (`docs/superpowers/plans/2026-09-08-plan-14-quality-levers.md`, branch
+`plan-14-quality-levers` in `.worktrees/plan-13-quality-levers` — the folder and the first commits say 13;
+the other session's Plan 13 merged first — off `dev` after Plan 12) measured the
+levers first (`spikes/findings/2026-09-08-quality-levers.md`; WAVs in `spikes/findings/lever-probe/`,
+copies in the owner's Desktop folder "Kokoro voice test") and shipped what the owner's ears chose:
+
+- **Delivery 1.25, fixed** (`Delivery.spread`): the F0Ntrain stage's pitch contour widened by a
+  quarter about its log-mean before decoder-pre and the harmonic source
+  (`KokoroSynthesisRequest.f0Spread`). Measured on Heart: spread 4.2 → 4.8 semitones, range 9.9 →
+  12.4, duration identical to the sample, every pause the same, no new clicks; the owner: "feels more
+  alive". Not a setting — three presets were "unnecessarily complicated". It rides on the voice route
+  of every render (`kokoro:<engine>:<voice>@1.25`, `KokoroVoiceID.spread`, attached in `PlayerModel`,
+  `PrepareRunner` and `VoicePreviewModel`) so every render key changed and **every book re-renders on
+  its next play**, while stored voice choices stay plain and untouched.
+- **A crash fixed**: the vendored pipeline's DEBUG assertion on an overflowing prediction took down
+  debug builds (the Phone scheme is Debug) on slow voices — `af_nicole` predicts 16.7 s for one packed
+  utterance in the 15 s bucket. The engine's re-split handles it; the assertion is gone, with a
+  model-backed regression test.
+- **Test hygiene**: `KokoroTestSupport` keeps a private, revision-keyed APFS clone of the compiled
+  stages under the package's `.build` and reuses it across runs — two sessions' test runs were
+  compiling onto and sweeping the same paths in the shared temporary directory.
+- **Not taken, by the listen**: blends ("all good, too subtle to tell apart" — the mechanism is in the
+  lever probe only); Opus (the system encoder ignores the bitrate and writes larger files than AAC);
+  speech-enhancement models (they remove noise and reverb; Kokoro's output has neither). Optional and
+  open: the voice list ordered by the author's grades (Heart A, Bella A-, Nicole B-, Emma B-; Emma
+  measured the flattest voice, Bella the widest — Plan 9's "the British voices move more" is wrong).
+
+- **The owner's A/B, and why the app still clicked**: the passage rendered as Plan 9 left it clicks
+  after "Humbug", "sparkled" and "poor enough" — the three tail bursts Plan 11 measured — and the
+  fixed renders do not. The clicks the owner heard in the app ("The Last Mughal") were audio the
+  current engine never rendered: the render key's engine component is `RoutedEngine.engineID`, the
+  constant `routed-v1`, and no Plan 11 fix changed any key component, so a build without the fix and
+  a build with it share the cache. The delivery tag changes every Kokoro key, so this update
+  re-renders every book; the rule is now in spec §5 — a change that alters an engine's audio must
+  change the key.
+
+**The phone listen** (same install recipe as below; every book re-renders once): does the book sound a
+touch more alive than before, with no shrillness on high phrases? The clicks after sentences must be gone
+once the book has re-rendered (the first play after the update renders afresh). Bella, Michael, Emma and Nicole were
+rendered at 1.0 and 1.25 before the value became the default for every voice (the spread check in the
+finding).
+
 ## Resume here (2026-09-08) — Plan 13
 
 The owner said "you decide" after the performance audit; Plan 13

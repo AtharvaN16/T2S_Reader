@@ -117,4 +117,17 @@ import T2SCore
         try p.renderOffline(seconds: 0.3)
         #expect(finished == [7, 8])
     }
+
+    /// A stream that ended early closes its segment with an empty final buffer; the completion still
+    /// fires, in order (Plan 14 Task 4's failure path).
+    @Test func anEmptyFinalBufferStillCompletes() throws {
+        let p = try AudioPlayer(manualRendering: true)
+        var finished: [Int] = []
+        p.onSegmentFinished = { finished.append($0) }
+        p.enqueue(.silence(seconds: 0.3), tag: 3, isFinal: false)
+        p.enqueue(PCMAudio(sampleRate: PCMAudio.defaultSampleRate, samples: []), tag: 3, isFinal: true)
+        p.play()
+        try p.renderOffline(seconds: 0.4)
+        #expect(finished == [3])
+    }
 }

@@ -70,6 +70,11 @@ public final class PlaybackCoordinator {
     private var headStartConsumed: TimeInterval = 0
     private var lastEnqueued: Int?
     private var awaitingIndex: Int?
+    /// The utterance whose pieces are being enqueued as the engine streams them (Plan 14): its index,
+    /// the ordinal the next piece must carry, and the samples still to drop from its front (a seek
+    /// into the middle of it). Nil when nothing streams — including a stream joined late, which is
+    /// ignored until its `.rendered` puts the whole clip in the store.
+    private var streaming: (index: Int, nextOrdinal: Int, pendingDropSamples: Int)?
     /// Re-entrancy guard for `fill()`: `play()` and a `.rendered` event's follow-up can both try
     /// to fill the queue around the same suspension point.
     private var filling = false
@@ -130,6 +135,7 @@ public final class PlaybackCoordinator {
         headStartConsumed = -playhead.offset
         lastEnqueued = nil
         awaitingIndex = nil
+        streaming = nil
         state = timeline.utteranceCount == 0 ? .finished : .paused
         refreshHighlight()
         replan()
@@ -198,6 +204,7 @@ public final class PlaybackCoordinator {
         headStartConsumed = -playhead.offset                       // consumed 0 ⇔ `offset` into the head segment
         lastEnqueued = nil
         awaitingIndex = nil
+        streaming = nil
         // A seek landing on or past the very end of the last utterance has nothing left to play.
         let pastEnd = playhead.utteranceIndex == timeline.utteranceCount - 1
             && playhead.offset >= timeIndex.duration(ofUtterance: playhead.utteranceIndex)
@@ -288,6 +295,9 @@ public final class PlaybackCoordinator {
         while let timeline, queuedCount < configuration.queuedSegments {
             let next = lastEnqueued.map { $0 + 1 } ?? headIndex
             guard next < timeline.utteranceCount else { break }
+            // A streaming utterance owns the player until its last piece: enqueueing the utterance
+            // after it now would play out of order, and the stream itself is enqueued by `apply`.
+            if let streaming, next >= streaming.index { return }
             guard rendered[next] else {
                 awaitingIndex = next
                 return
@@ -367,11 +377,15 @@ public final class PlaybackCoordinator {
         input.windowSeconds = configuration.windowSeconds
         input.primeSeconds = configuration.primeSeconds
         input.prepareBudgetSeconds = configuration.prepareBudgetSeconds
+        // Nothing queued: the next `fill()` will wait on the head, so the head renders in pieces and
+        // the first sound needs one short piece, not the whole utterance (audit #2, Plan 14).
+        let streamIndex = queuedCount == 0 && streaming == nil ? headIndex : nil
         let requests = RenderPolicy.plan(input).map { job in
             RenderRequest(job: job,
                           key: renderKey(for: document, timeline: timeline, utteranceIndex: job.utteranceIndex),
                           spoken: timeline[utterance: job.utteranceIndex].spoken,
-                          voiceID: document.voiceID ?? "default")
+                          voiceID: document.voiceID ?? "default",
+                          stream: job.utteranceIndex == streamIndex && job.tier == .playAhead)
         }
         submitsInFlight += 1
         let scheduler = self.scheduler
@@ -400,10 +414,43 @@ public final class PlaybackCoordinator {
 
     private func apply(_ event: RenderEvent) {
         switch event {
-        case .piece:
-            break                                                   // Plan 14 Task 4 enqueues these
+        case .piece(let documentID, let index, let audio, let ordinal, let isLast):
+            guard let document, document.id == documentID, timeline != nil, index < rendered.count else { return }
+            if streaming == nil {
+                // A stream starts only at its first piece, only for the head, only when the player
+                // holds nothing — otherwise the pieces would land behind or inside another segment.
+                guard ordinal == 0, index == headIndex, queuedCount == 0 else { return }
+                streaming = (index, 0, headStartConsumed < 0 ? Int((-headStartConsumed * audio.sampleRate).rounded()) : 0)
+            }
+            guard var s = streaming, s.index == index, s.nextOrdinal == ordinal else { return }
+            var clip = audio
+            if s.pendingDropSamples > 0 {
+                let drop = min(clip.samples.count, s.pendingDropSamples)
+                clip.samples.removeFirst(drop)
+                s.pendingDropSamples -= drop
+            }
+            s.nextOrdinal += 1
+            streaming = isLast ? nil : s
+            if !clip.samples.isEmpty || isLast {
+                player.enqueue(clip, tag: index, isFinal: isLast)
+            }
+            lastEnqueued = index
+            awaitingIndex = nil
+            if state == .catchingUp, !clip.samples.isEmpty {
+                player.play()
+                state = .playing
+            }
+            if isLast {
+                chain { await self.fill() }                          // the rest of the window may follow now
+            }
         case .rendered(let r):
             guard let document, document.id == r.documentID, timeline != nil, r.utteranceIndex < rendered.count else { return }
+            if streaming?.index == r.utteranceIndex {
+                // The engine stopped before its last piece (spec §6: silence under the key). Close the
+                // segment so the player's completion can fire and the next utterance follows.
+                streaming = nil
+                player.enqueue(PCMAudio(sampleRate: PCMAudio.defaultSampleRate, samples: []), tag: r.utteranceIndex, isFinal: true)
+            }
             var u = timeline![utterance: r.utteranceIndex]
             u.duration = .actual(r.duration)
             // A cache-hit `.rendered` carries empty word timings (spec: RenderScheduler); don't

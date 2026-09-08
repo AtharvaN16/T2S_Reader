@@ -150,14 +150,17 @@ public final class AudioPlayer: AudioPlaying {
     }
 
     public func enqueue(_ audio: PCMAudio, tag: Int, isFinal: Bool) {
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(audio.samples.count)) else { return }
-        buffer.frameLength = AVAudioFrameCount(audio.samples.count)
-        if !audio.samples.isEmpty {
-            audio.samples.withUnsafeBufferPointer { src in
-                buffer.floatChannelData![0].update(from: src.baseAddress!, count: audio.samples.count)
+        // A segment closed with nothing left to play (a stream that ended early, Plan 14) still needs
+        // its completion, in order behind the pieces already queued: one silent frame carries it.
+        let samples = audio.samples.isEmpty && isFinal ? [Float(0)] : audio.samples
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)) else { return }
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+        if !samples.isEmpty {
+            samples.withUnsafeBufferPointer { src in
+                buffer.floatChannelData![0].update(from: src.baseAddress!, count: samples.count)
             }
         }
-        scheduledFrames += AVAudioFramePosition(audio.samples.count)
+        scheduledFrames += AVAudioFramePosition(samples.count)
         if manual {
             // Manual mode computes completions from the render clock in `deliverManualCompletions()`
             // rather than observing AVAudioEngine's completion callback — see `manualSegments`'s doc

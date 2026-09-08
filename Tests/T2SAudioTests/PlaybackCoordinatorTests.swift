@@ -277,17 +277,19 @@ import T2SCore
         #expect(c.timeline?.isFullyRendered == true)
     }
 
-    @Test func evictedHeadClipRecovers() async throws {
+    /// The head streams into the player at load (Plan 14), so evicting *its* clip changes nothing;
+    /// the next utterance's clip is only in the store, and losing it must self-heal on the way in.
+    @Test func evictedClipRecovers() async throws {
         let (c, player, _, store, _, doc, timeline) = fixture()
         c.load(doc, timeline: timeline)
         await c.waitForRenderIdle()
-        let key0 = RenderKey(rawValue: c.timeline![utterance: 0].audioRef!)
-        await store.remove(key0)                                   // LRU eviction is normal (spec §3.7.3)
+        let key1 = RenderKey(rawValue: c.timeline![utterance: 1].audioRef!)
+        await store.remove(key1)                                   // LRU eviction is normal (spec §3.7.3)
         await c.play()
-        #expect(c.state == .catchingUp)
-        await c.waitForRenderIdle()
-        #expect(c.state == .playing)
-        #expect(player.enqueuedTags.first == 0)
+        #expect(c.state == .playing)                               // the head is already in the player
+        await c.waitForRenderIdle()                                // fill found 1 missing and had it re-rendered
+        #expect(player.enqueuedTags.prefix(2) == [0, 1])
+        #expect(c.timeline?[utterance: 1].audioRef != nil)
     }
 
     @Test func cachedAudioWithoutAudioRefDoesNotHang() async throws {
@@ -374,6 +376,107 @@ import T2SCore
         await coordinator.waitForRenderIdle()
 
         #expect(coordinator.lastRenderError?.contains("key was rejected") == true)
+    }
+
+    // MARK: Plan 14 — the head streams
+
+    /// The same three sentences, rendered by a fake that streams each utterance in `pieces` pieces
+    /// and parks between them, so a test can see the player start on the first piece.
+    func streamingFixture(pieces: Int = 3) async
+        -> (PlaybackCoordinator, FakePlayer, FakeEngine, InMemoryAudioStore, Document, Timeline) {
+        let block = SourceBlock(text: "Alpha one. Beta two. Gamma three.", position: Position(resourceHref: "c.xhtml", progression: 0, charOffset: 0))
+        let timeline = TimelineBuilder.build(chapters: [ChapterInput(title: "C", position: block.position, blocks: [block])],
+                                             segmenter: Segmenter(normalizer: TextNormalizer()))
+        let engine = FakeEngine(secondsPerCharacter: 0.1, pieceCount: pieces)
+        await engine.holdBetweenPieces()
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let player = FakePlayer()
+        let c = PlaybackCoordinator(engine: engine, store: store, player: player, playheadStore: MemoryPlayheadStore(), timeSource: ManualTimeSource(),
+                                    configuration: CoordinatorConfiguration(windowSeconds: 60, primeSeconds: 30, prepareBudgetSeconds: 300, queuedSegments: 2))
+        return (c, player, engine, store, Document(title: "T", sourceType: .article), timeline)
+    }
+
+    /// Waits until the player holds `count` buffers, or fails after a second.
+    func waitForBuffers(_ player: FakePlayer, _ count: Int) async {
+        for _ in 0 ..< 200 where player.enqueuedTags.count < count { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(player.enqueuedTags.count == count, "buffers: \(player.enqueuedTags)")
+    }
+
+    /// Audit #2: a tap on an unrendered position plays after the head's first piece, not after the
+    /// whole utterance — the player holds one buffer, is playing, and nothing else is queued.
+    @Test func playStartsOnTheHeadsFirstPiece() async throws {
+        let (c, player, engine, _, doc, timeline) = await streamingFixture()
+        await engine.hold()                                          // nothing renders until release
+        c.load(doc, timeline: timeline)
+        await c.play()
+        #expect(c.state == .catchingUp)
+        await engine.release()                                       // utterance 0 starts streaming; piece 0 arrives, piece 1 parks
+        await waitForBuffers(player, 1)
+        await c.settle()
+        #expect(c.state == .playing && player.isPlaying)
+        #expect(player.enqueuedTags == [0])
+        #expect(player.queue.first?.isFinal == false)
+        // The next utterance is never enqueued behind an unfinished stream.
+        await engine.releasePiece()                                  // piece 1
+        await waitForBuffers(player, 2)
+        #expect(player.enqueuedTags == [0, 0])
+        await engine.stopHoldingBetweenPieces()                      // piece 2 (last) and everything after
+        await c.waitForRenderIdle()
+        #expect(player.enqueuedTags.prefix(4) == [0, 0, 0, 1])       // the last piece, then utterance 1 whole (it was not streamed)
+        #expect(player.queue.filter { $0.tag == 0 }.last?.isFinal == true)
+        #expect(c.timeline?[utterance: 0].wordTimings?.isEmpty == false)
+    }
+
+    /// The playhead moves through a streamed head as the pieces play, and the segment finishes
+    /// once, after the last piece.
+    @Test func aStreamedHeadPlaysThroughAsOneSegment() async throws {
+        let (c, player, engine, _, doc, timeline) = await streamingFixture(pieces: 2)
+        await engine.stopHoldingBetweenPieces()                      // stream freely
+        c.load(doc, timeline: timeline)
+        await c.play()
+        await c.waitForRenderIdle()
+        #expect(c.state == .playing)
+        player.advance(seconds: 0.7); c.tick()
+        #expect(c.playhead == Playhead(utteranceIndex: 0, offset: 0.7))
+        player.advance(seconds: 0.4); await c.settle(); c.tick()     // past 1.0 s: utterance 1
+        #expect(c.playhead.utteranceIndex == 1)
+        #expect(abs(c.playhead.offset - 0.1) < 1e-9)
+    }
+
+    /// A seek into the middle of an unrendered utterance drops the offset from the streamed pieces,
+    /// so `consumedSeconds` still maps to the playhead.
+    @Test func aSeekIntoAStreamedHeadDropsTheOffset() async throws {
+        let (c, player, engine, _, doc, timeline) = await streamingFixture(pieces: 2)
+        await engine.stopHoldingBetweenPieces()
+        await engine.hold()                                          // nothing renders until the seek has happened
+        c.load(doc, timeline: timeline)
+        await c.seek(to: Playhead(utteranceIndex: 0, offset: 0.6))   // "Alpha one." is 1.0 s: 0.4 s remain
+        await engine.release()                                       // the head streams from its start; the coordinator drops 0.6 s
+        await c.play()
+        await c.waitForRenderIdle()
+        #expect(player.queuedRemaining > 0)
+        let head = player.queue.filter { $0.tag == 0 }.reduce(0) { $0 + $1.remaining }
+        #expect(abs(head - 0.4) < 1e-9)
+        player.advance(seconds: 0.3); c.tick()
+        #expect(abs(c.playhead.offset - 0.9) < 1e-9)
+    }
+
+    /// A stream the coordinator did not see from its first piece — the player was reset by a seek
+    /// while it ran — is ignored; the `.rendered` that follows plays from the store as before.
+    @Test func aStreamJoinedLateIsIgnoredAndTheStoreCopyPlays() async throws {
+        let (c, player, engine, _, doc, timeline) = await streamingFixture(pieces: 2)
+        await engine.hold()
+        c.load(doc, timeline: timeline)
+        await c.play()                                               // catching up on utterance 0
+        await engine.release()
+        await waitForBuffers(player, 1)                              // piece 0 in; piece 1 parked
+        await c.seek(to: Playhead(utteranceIndex: 0, offset: 0))     // resets the player mid-stream
+        #expect(player.queue.isEmpty)
+        await engine.stopHoldingBetweenPieces()                      // piece 1 arrives for a stream nobody follows
+        await c.waitForRenderIdle()
+        #expect(c.state == .playing)
+        let head = player.queue.filter { $0.tag == 0 }
+        #expect(head.count == 1 && head.first?.isFinal == true)      // one whole buffer from the store, not a stray piece
     }
 }
 

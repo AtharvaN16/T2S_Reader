@@ -2,6 +2,35 @@
 
 _Last updated 2026-09-08 (Plan 16 — steady streaming and the open path — on `plan-16-open-path`, in the worktree `.worktrees/plan-16-open-path`, off `origin/dev` @ 246065b). Written for whoever picks up the coding next._
 
+## Resume here (2026-09-08, later) — voice picker round 2
+
+The owner sent a second phone screenshot with five more asks, done on `dev` @ (this commit) and
+pushed:
+
+- **Personalities were guessed and wrong** (owner: "the personalities don't match the voices"). This
+  Mac has no audio path to check by ear, so the table in `KokoroVoiceCatalog.personalities` is now
+  grounded in independent listener write-ups (voicerankings.com's Kokoro-82M profiles) instead of a
+  name-based guess — still not first-hand verified, still worth re-checking on the phone, but no
+  longer invented from nothing.
+- **Play button colour reverted** — the owner only asked for it larger last time, not recoloured; it
+  reads `Tokens.ink2` again (only the glyph grew, to 32pt in a 44pt target).
+- **Favoriting exists now**: a heart per row, `ReaderPreferences.favoriteVoiceIDs` (a `Set<String>`
+  in `UserDefaults`, independent of `defaultVoiceID`). Setting the default is what it always was —
+  tap the row; the checkmark follows it. The heart is a separate, multi-select "keep track of these"
+  list, matching what the ElevenReader Mobbin flow showed under its own Favorites pill.
+- **Pill filters**: All / Favorites / Female / Male above the Kokoro rows, reusing the existing `Pill`
+  primitive (`Primitives.swift`) rather than a new component — this app already had the exact
+  selected/soft chip style the reference screenshot wanted. Scoped to Kokoro only: System and Cloud
+  rows carry no gender or favorite state to filter by.
+- **Row spacing increased** — `Spacing.grid` (8pt) added top and bottom per row, on top of the
+  existing 56pt tap-target minimum.
+
+Checked the ElevenReader voice-selection flow via the Mobbin MCP for reference (Voices tab: Explore /
+Recents / Favorites pills, a heart per row; the separate Filters sheet has Sort by / Languages / Best
+for / Age / Gender — we have no data for "Best for" or "Age", so only Gender + Favorites made the
+cut). Simulator scheme still builds; still no Kokoro rows outside the Phone build, so none of this is
+seen on screen yet — the phone listen owes a look at this alongside the personality lines.
+
 ## Resume here (2026-09-08, late) — the voice picker
 
 A UI-only pass on Preferences → Voice from the owner's phone screenshot, on `dev`: the row's second

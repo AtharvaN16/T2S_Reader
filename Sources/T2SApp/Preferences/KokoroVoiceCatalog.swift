@@ -84,38 +84,42 @@ public struct KokoroVoiceCatalog: VoiceCatalog {
         return stem.prefix(1).uppercased() + stem.dropFirst()
     }
 
-    /// The row's second line: how the voice comes across, in three or four words, so a reader can
-    /// pick one without previewing all 28. Written from listening to each voice — Kokoro ships no
-    /// descriptions of its own. A name not in the table (none today) gets a neutral line.
+    /// The row's second line: how the voice comes across, so a reader can pick one without
+    /// previewing all 28. Kokoro ships no descriptions of its own, so this is grounded in
+    /// independent listener write-ups per voice (voicerankings.com's Kokoro-82M profiles, checked
+    /// against Hugging Face's `hexgrad/Kokoro-82M` voice list) rather than a guess from the name —
+    /// the first draft here was guessed and the owner correctly called it out as not matching. Still
+    /// worth re-checking against the phone once it can be heard. A name not in the table (none
+    /// today) gets a neutral line.
     public static let personalities: [String: String] = [
-        "af_heart": "Warm and intimate",
-        "af_alloy": "Clear and even",
-        "af_aoede": "Bright and lyrical",
-        "af_bella": "Sensual, low and slow",
-        "af_jessica": "Crisp and upbeat",
-        "af_kore": "Calm and composed",
-        "af_nicole": "Whispered, close to the ear",
-        "af_nova": "Confident and polished",
-        "af_river": "Easy and unhurried",
-        "af_sarah": "Friendly and plain-spoken",
-        "af_sky": "Airy and light",
-        "am_adam": "Deep and deliberate",
-        "am_echo": "Smooth and resonant",
-        "am_eric": "Steady and matter-of-fact",
-        "am_fenrir": "Gruff and grounded",
-        "am_liam": "Young and quick",
-        "am_michael": "Even and reassuring",
-        "am_onyx": "Deep and velvety",
-        "am_puck": "Playful and brisk",
-        "am_santa": "Jolly and booming",
-        "bf_alice": "Poised and precise",
-        "bf_emma": "Warm and measured",
-        "bf_isabella": "Soft and refined",
-        "bf_lily": "Gentle and bright",
-        "bm_daniel": "Dry and understated",
-        "bm_fable": "A storyteller, rich and rounded",
-        "bm_george": "Stately and slow",
-        "bm_lewis": "Brisk and no-nonsense",
+        "af_heart": "Warm and breathy, a smile in it",
+        "af_alloy": "Bright, clean and cheerful",
+        "af_aoede": "Deep, velvety and unhurried",
+        "af_bella": "Warm and husky, easygoing",
+        "af_jessica": "Bright and quick, a little breathy",
+        "af_kore": "Warm and steady, a patient guide",
+        "af_nicole": "Hushed and whisper-soft, built for sleep",
+        "af_nova": "Polished, clear and efficiently warm",
+        "af_river": "Husky and unhurried, Gen Z casual",
+        "af_sarah": "Polite and plain-spoken, easy to trust",
+        "af_sky": "Smooth and composed, an assistant's calm",
+        "am_adam": "Trustworthy and clear, neighborly warmth",
+        "am_echo": "Soft, breathy and deeply empathetic",
+        "am_eric": "Relaxed and modern, a little grit",
+        "am_fenrir": "Confident and energetic, a rich texture",
+        "am_liam": "Cheerful and quick, upbeat energy",
+        "am_michael": "Deep and grounded, quietly trustworthy",
+        "am_onyx": "Very deep and resonant, real gravitas",
+        "am_puck": "Bouncy and eager, youthful energy",
+        "am_santa": "Deep and jolly, unmistakably Santa",
+        "bf_alice": "Polished and precise, bright and clear",
+        "bf_emma": "Polished and warm, efficiently friendly",
+        "bf_isabella": "Warm and breathy, gently sophisticated",
+        "bf_lily": "Polished and brisk, efficiently clear",
+        "bm_daniel": "Crisp and articulate, polished warmth",
+        "bm_fable": "A velvety storyteller, refined and warm",
+        "bm_george": "Distinguished and reassuring, polished delivery",
+        "bm_lewis": "Sophisticated and composed, corporate calm",
     ]
 
     private static func personality(for name: String) -> String {

@@ -47,6 +47,7 @@ public final class ReaderPreferences {
         static let rate = "playback.defaultRate"
         static let autoplay = "playback.autoplayNext"
         static let voice = "voice.default"
+        static let favoriteVoices = "voice.favorites"
     }
 
     public var textScale: Double {
@@ -90,6 +91,16 @@ public final class ReaderPreferences {
         didSet { defaults.set(defaultVoiceID, forKey: Key.voice) }
     }
 
+    /// Voice IDs the reader has starred in the picker (spec: voice picker, Plan 9 quality). A plain
+    /// set, not a ranking — the picker's "Favorites" filter is a subset, not a reorder.
+    public var favoriteVoiceIDs: Set<String> {
+        didSet { defaults.set(Array(favoriteVoiceIDs), forKey: Key.favoriteVoices) }
+    }
+
+    public func toggleFavoriteVoice(_ id: String) {
+        if favoriteVoiceIDs.contains(id) { favoriteVoiceIDs.remove(id) } else { favoriteVoiceIDs.insert(id) }
+    }
+
     /// `.infinity` = Everything. Stored as a Double; `AppPaths.prepareBudgetKey` is shared with
     /// the coordinator wiring.
     public var prepareBudgetSeconds: TimeInterval {
@@ -106,6 +117,7 @@ public final class ReaderPreferences {
         defaultRate = defaults.object(forKey: Key.rate) as? Double ?? 1.0
         autoplayNext = defaults.object(forKey: Key.autoplay) as? Bool ?? true
         defaultVoiceID = defaults.string(forKey: Key.voice)
+        favoriteVoiceIDs = Set(defaults.stringArray(forKey: Key.favoriteVoices) ?? [])
         prepareBudgetSeconds = defaults.object(forKey: AppPaths.prepareBudgetKey) as? Double ?? 3 * 3600
     }
 
@@ -118,6 +130,7 @@ public final class ReaderPreferences {
         defaultRate = 1.0
         autoplayNext = true
         defaultVoiceID = nil
+        favoriteVoiceIDs = []
         prepareBudgetSeconds = 3 * 3600
     }
 }

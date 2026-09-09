@@ -11,6 +11,9 @@ struct VoiceListPage: View {
     /// Kokoro Heart on the phone build; on the simulator the routing echoes "default" back, which is
     /// the `systemDefault` row's own id. Until it loads, `option.isDefault` marks a row instead (spec §6).
     @State private var resolvedDefault: String?
+    /// The Kokoro list's quick filter — only the Kokoro rows carry the gender and favorite data a
+    /// filter needs, so System and Cloud are unaffected.
+    @State private var filter: VoiceFilter = .all
 
     var body: some View {
         let options = env.voices.voices()
@@ -65,9 +68,11 @@ struct VoiceListPage: View {
     /// default voice is American (Heart).
     private func kokoroRows(_ groupOptions: [VoiceOption], options: [VoiceOption], hasDefaultRow: Bool) -> some View {
         let defaults = groupOptions.filter(\.isDefault)
-        let american = groupOptions.filter { !$0.isDefault && $0.language == "en-US" }
-        let british = groupOptions.filter { !$0.isDefault && $0.language == "en-GB" }
+        let candidates = groupOptions.filter { !$0.isDefault && matchesFilter($0) }
+        let american = candidates.filter { $0.language == "en-US" }
+        let british = candidates.filter { $0.language == "en-GB" }
         return VStack(alignment: .leading, spacing: 0) {
+            filterPills()
             ForEach(defaults) { row($0, options: options, hasDefaultRow: hasDefaultRow) }
             if !american.isEmpty {
                 subsectionHeader("American English", flag: "🇺🇸")
@@ -77,7 +82,56 @@ struct VoiceListPage: View {
                 subsectionHeader("British English", flag: "🇬🇧")
                 ForEach(british) { row($0, options: options, hasDefaultRow: hasDefaultRow) }
             }
+            if american.isEmpty && british.isEmpty {
+                emptyFilterMessage
+            }
         }
+    }
+
+    /// One filter is live at a time — "All" clears it. Only the Kokoro rows carry `gender`, and only
+    /// they can be starred, so this is the Kokoro list's own filter, not a picker-wide one.
+    private enum VoiceFilter: CaseIterable {
+        case all, favorites, female, male
+
+        var title: String {
+            switch self {
+            case .all: return "All"
+            case .favorites: return "Favorites"
+            case .female: return "Female"
+            case .male: return "Male"
+            }
+        }
+    }
+
+    private func matchesFilter(_ option: VoiceOption) -> Bool {
+        switch filter {
+        case .all: return true
+        case .favorites: return env.preferences.favoriteVoiceIDs.contains(option.id)
+        case .female: return option.gender == .female
+        case .male: return option.gender == .male
+        }
+    }
+
+    /// Pill-shaped, scrollable so a narrower phone never wraps them (spec §2.4.3's `Pill`, the same
+    /// chip already used for the appearance and speed pickers).
+    private func filterPills() -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Spacing.grid) {
+                ForEach(VoiceFilter.allCases, id: \.self) { option in
+                    Pill(label: option.title, style: filter == option ? .selected : .soft) { filter = option }
+                }
+            }
+        }
+        .padding(.bottom, Spacing.row)
+    }
+
+    private var emptyFilterMessage: some View {
+        Text(filter == .favorites
+             ? "No favorites yet — tap the heart on a voice to add one."
+             : "No voices match this filter.")
+            .typeRole(.meta)
+            .foregroundStyle(Tokens.ink2)
+            .padding(.top, Spacing.grid)
     }
 
     /// A flag and the accent's name, with room above and below so each accent reads as its own
@@ -127,13 +181,15 @@ struct VoiceListPage: View {
             }
             .buttonStyle(.plain)
 
-            // The "Default" row is a pointer, not a voice: the voice it points at has its own row and
-            // its own preview.
+            // The "Default" row is a pointer, not a voice: the voice it points at has its own row,
+            // its own preview, and its own favorite.
             if !option.isDefault {
+                favoriteButton(for: option)
                 previewButton(for: option)
             }
         }
         .frame(minHeight: 56)
+        .padding(.vertical, Spacing.grid)   // room between rows, on top of the tap-target minimum
     }
 
     /// The "Default" row says which voice it currently means, once the routing has answered.
@@ -159,11 +215,26 @@ struct VoiceListPage: View {
                         .font(.system(size: 32))
                 }
             }
-            .foregroundStyle(Tokens.ink)
+            .foregroundStyle(Tokens.ink2)   // unchanged colour — only the glyph size grew
             .frame(width: 44, height: 44)   // the full tap target; the glyph sits inside it
         }
         .buttonStyle(.plain)
         .accessibilityLabel(previewing ? "Stop preview" : "Preview \(option.name)")
+    }
+
+    /// A heart, independent of the checkmark: the checked row is what plays by default, the starred
+    /// rows are what "Favorites" filters to. A voice can be both, neither, or starred without being
+    /// default. Persisted in `ReaderPreferences.favoriteVoiceIDs`, so it survives a relaunch.
+    private func favoriteButton(for option: VoiceOption) -> some View {
+        let isFavorite = env.preferences.favoriteVoiceIDs.contains(option.id)
+        return Button { env.preferences.toggleFavoriteVoice(option.id) } label: {
+            Image(systemName: isFavorite ? "heart.fill" : "heart")
+                .font(.system(size: 17))
+                .foregroundStyle(isFavorite ? Tokens.accent : Tokens.ink2)
+                .frame(width: 32, height: 32)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isFavorite ? "Remove \(option.name) from favorites" : "Add \(option.name) to favorites")
     }
 
     /// A disc with the voice's initial, tinted by the voice's gender — pink for a female voice, blue

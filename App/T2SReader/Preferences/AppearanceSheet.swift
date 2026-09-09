@@ -39,8 +39,9 @@ struct AppearanceSheet: View {
             }
             Spacer()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, Spacing.margin)
-        .background(Tokens.raised)
+        .presentationBackground(Tokens.raised)
         .presentationDetents([.medium])
         .presentationCornerRadius(Spacing.sheetCorner)
     }

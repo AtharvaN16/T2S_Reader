@@ -130,6 +130,25 @@ struct ProgressBar: View {
     }
 }
 
+/// A ring showing elapsed fraction of a document (Continue Listening row).
+struct CircularProgress: View {
+    var fraction: Double
+    var lineWidth: CGFloat = 3
+    var size: CGFloat = 48
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(Tokens.ink3, lineWidth: lineWidth)
+            Circle()
+                .trim(from: 0, to: min(1, max(0, fraction)))
+                .stroke(Tokens.accent, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+}
+
 /// A pulsing accent dot for the one-time voice warm-up — visually distinct from the routine
 /// buffering spinner (`ProgressView`) so a reader can tell "this is the long one-time wait" from
 /// "this resolves in a second or two." Respects Reduce Motion with a static dot instead of a loop.

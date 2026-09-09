@@ -21,61 +21,75 @@ struct QueueRow: View {
     private var isPlayingHere: Bool { isCurrent && env.player.isPlaying }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Image(systemName: sourceMark).font(.system(size: 16, weight: .medium))
-                Text(sourceName)
-                Text("·").accessibilityHidden(true)
-                Text(DurationFormatter.age(of: summary.document.addedAt))
-                if let progress, summary.document.sourceType != .article, progress.chapterCount > 1, let c = progress.chapterIndex {
-                    Text("·").accessibilityHidden(true)
-                    Text("Chapter \(c + 1) of \(progress.chapterCount)")
+        HStack(alignment: .top, spacing: 14) {
+            VStack(spacing: 6) {
+                ZStack {
+                    CircularProgress(fraction: progress?.fraction ?? 0, lineWidth: 3, size: 48)
+                    Image(systemName: sourceMark).font(.system(size: 17, weight: .medium)).foregroundStyle(Tokens.ink2)
                 }
-                if summary.isFullyRendered { PositiveCheck() }
+                Text(remainingText)
+                    .typeRole(.meta)
+                    .foregroundStyle(Tokens.ink2)
+                    .multilineTextAlignment(.center)
             }
-            .typeRole(.meta)
-            .foregroundStyle(Tokens.ink2)
+            .frame(width: 64)
             .accessibilityElement(children: .combine)
 
-            Button(action: onOpen) {
-                Text(summary.document.title)
-                    .typeRole(.rowTitle)
-                    .foregroundStyle(Tokens.ink)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.plain)
-            .accessibilityHint("Opens the reader")
-
-            HStack(spacing: 8) {
-                Pill(label: isPlayingHere ? "Pause" : (isStarting ? "Starting…" : "Play \(remainingText)"),
-                     glyph: isPlayingHere ? "pause.fill" : (isStarting ? nil : "play.fill"),
-                     style: .soft) {
-                    Task {
-                        if isPlayingHere { await env.player.togglePlay(); return }   // Pause stays in place
-                        if isCurrent {
-                            isStarting = true
-                            await env.player.togglePlay()                            // resume, then read along
-                            isStarting = false
-                        }
-                        onOpen()                                                       // the Reader loads and plays a non-current document itself
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    Text(sourceName)
+                    Text("·").accessibilityHidden(true)
+                    Text(DurationFormatter.age(of: summary.document.addedAt))
+                    if let progress, summary.document.sourceType != .article, progress.chapterCount > 1, let c = progress.chapterIndex {
+                        Text("·").accessibilityHidden(true)
+                        Text("Chapter \(c + 1) of \(progress.chapterCount)")
                     }
+                    if summary.isFullyRendered { PositiveCheck() }
                 }
-                .disabled(isStarting)
-                .accessibilityHint(isPlayingHere ? "Pauses" : "Plays and opens the reader")
-                Pill(label: "Archive", glyph: "archivebox", style: .soft) {
-                    Task { await env.libraryModel.archive(summary.id) }
-                }
-                Menu {
-                    contextItems
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 15, weight: .semibold))
+                .typeRole(.meta)
+                .foregroundStyle(Tokens.ink2)
+                .accessibilityElement(children: .combine)
+
+                Button(action: onOpen) {
+                    Text(summary.document.title)
+                        .typeRole(.playerTitle)
                         .foregroundStyle(Tokens.ink)
-                        .frame(width: 36, height: 36)
-                        .background(Tokens.surface, in: Circle())
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .accessibilityLabel("More")
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens the reader")
+
+                HStack(spacing: 8) {
+                    Pill(label: isPlayingHere ? "Pause" : (isStarting ? "Starting…" : "Play"),
+                         glyph: isPlayingHere ? "pause.fill" : (isStarting ? nil : "play.fill"),
+                         style: .soft) {
+                        Task {
+                            if isPlayingHere { await env.player.togglePlay(); return }   // Pause stays in place
+                            if isCurrent {
+                                isStarting = true
+                                await env.player.togglePlay()                            // resume, then read along
+                                isStarting = false
+                            }
+                            onOpen()                                                       // the Reader loads and plays a non-current document itself
+                        }
+                    }
+                    .disabled(isStarting)
+                    .accessibilityHint(isPlayingHere ? "Pauses" : "Plays and opens the reader")
+                    Pill(label: "Archive", glyph: "archivebox", style: .soft) {
+                        Task { await env.libraryModel.archive(summary.id) }
+                    }
+                    Menu {
+                        contextItems
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Tokens.ink)
+                            .frame(width: 36, height: 36)
+                            .background(Tokens.surface, in: Circle())
+                    }
+                    .accessibilityLabel("More")
+                }
             }
         }
         .contextMenu { contextItems }
@@ -100,9 +114,10 @@ struct QueueRow: View {
         } label: { Label("Render whole document", systemImage: "waveform") }
     }
 
+    /// Time left, shown under the progress ring: "~22h 39m left".
     private var remainingText: String {
-        if let progress { return DurationFormatter.remaining(progress.remainingSeconds, approximate: progress.isApproximate) }
-        return DurationFormatter.remaining(summary.totalSeconds, approximate: !summary.isFullyRendered)
+        if let progress { return DurationFormatter.remaining(progress.remainingSeconds, approximate: progress.isApproximate) + " left" }
+        return DurationFormatter.remaining(summary.totalSeconds, approximate: !summary.isFullyRendered) + " left"
     }
 
     private var sourceMark: String {

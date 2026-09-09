@@ -20,7 +20,6 @@ struct QueuePage: View {
     }
 
     var body: some View {
-        @Bindable var model = env.libraryModel
         List {
             Section {
                 header
@@ -33,14 +32,17 @@ struct QueuePage: View {
                         .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
                 }
                 if rows.isEmpty {
-                    if model.queueView == .queue && !isSearching {
-                        EmptyQueue { showAdd = true }
-                            .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
-                    } else {
-                        Text(isSearching ? "No matches." : "Nothing finished yet.")
+                    if isSearching {
+                        Text("No matches.")
                             .typeRole(.meta).foregroundStyle(Tokens.ink2)
                             .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
+                    } else {
+                        EmptyQueue { showAdd = true }
+                            .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
                     }
+                } else if !isSearching {
+                    SectionHeader(title: "Continue Listening")
+                        .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
                 }
                 ForEach(rows) { summary in
                     QueueRow(summary: summary, onOpen: {
@@ -73,19 +75,8 @@ struct QueuePage: View {
     }
 
     private var header: some View {
-        @Bindable var model = env.libraryModel
-        return HStack(alignment: .top) {
-            PageTitle(text: model.queueView == .queue ? "Queue" : "Finished", subtitle: model.queueView == .queue ? model.queueSubtitle : nil) {
-                Menu {
-                    Button("Queue") { model.queueView = .queue }
-                    Button("Finished") { model.queueView = .finished }
-                } label: {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(Tokens.ink2)
-                        .padding(4)
-                }
-            }
+        HStack(alignment: .top) {
+            PageTitle(text: "Home")
             Spacer(minLength: 12)
             HStack(spacing: 8) {
                 Button { showAdd = true } label: {

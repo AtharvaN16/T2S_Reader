@@ -2,7 +2,63 @@
 
 _Last updated 2026-09-09 (Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-09, latest) — Continue Listening row round 2
+## Resume here (2026-09-09, latest) — Home round 3: excerpt, 3D cover, Import page, bottom fade
+
+The owner's third pass on the Home page, from a phone screenshot plus an Apple Books "Continue" cell
+and an ElevenReader Import screen (Mobbin) as references. Six asks, all done on `dev`:
+
+- **Row meta line** (`Queue/QueueRow.swift`): "EPUB · 3d · Chapter 7 of 27" is now just "Chapter 7"
+  (plus the ready check when fully rendered), and the whole line is omitted when neither applies.
+  `sourceName` and the `DurationFormatter.age` use are gone from the row.
+- **Story excerpt under the title**: two lines of the text at the resume position, `.meta`/`ink2`,
+  tail-truncated. Source is the new `LibraryModel.excerpt(for:) async -> String?`
+  (`Sources/T2SApp/Library/LibraryModel.swift`): decodes only the resume chapter via
+  `store.chapter(_:of:)`, resolves the position inside a one-chapter `Timeline`, joins utterance
+  `source` strings to ≥240 chars, collapses whitespace, and caches per document against
+  (chapter, resume position, staleness, utterance count). The row loads it in `.task(id:)` keyed on
+  the same fields, so a refresh that moves nothing costs nothing. Tested in `LibraryModelTests`.
+- **Ring and time left moved to the bottom row**, trailing Play + "…": `CircularProgress` at 12 pt
+  and `DurationFormatter.coarseRemaining` — "22 hrs left", "1 hr left", "42 min left",
+  "<1 min left", never a "~" (the ring already says how sure we are). Tested in
+  `DurationFormatterTests`. The `~`-aware `remaining(_:approximate:)` is untouched and still used
+  elsewhere.
+- **3D book cover at its own aspect ratio**: new `BookCover` primitive (`Design/Primitives.swift`,
+  next to `Artwork`, which now exposes its image cache as internal `Artwork.image(at:)`). Fixed
+  96 pt height, width from the decoded image (clamped 0.55–0.85 × height), square spine corners,
+  two `raised` page sheets offset behind the fore-edge, a spine-gutter gradient overlay, one
+  compositing-group shadow, and a −6° y-axis tilt anchored at the spine. Articles keep the flat
+  64 pt `Artwork`. **Eyeball on the phone**: the shadow/gutter use `Tokens.ink`, which is near-white
+  in dark mode (a glow, not a shadow) — there is no "always dark" token; and the tilt sign (fore-edge
+  toward the reader) may want flipping.
+- **Import page replaces the Add sheet**: `Import/ImportPage.swift` (new) / `Import/AddSheet.swift`
+  (deleted). Same contract (`imported` binding, `initialFiles`, `Path`, file importer, `.onChange`
+  → dismiss, `.onDisappear` → `model.reset()`), now a `.fullScreenCover` with `PageTitle("Import")`,
+  a close circle, and a two-column grid of three 128 pt tiles — Paste a link / Upload a file / Paste
+  text. A "Back" pill (hidden when opened on files from another app) returns to the grid and clears
+  the model so one path's failure never shows under the next. All three presenters switched:
+  `QueuePage`, `CollectionPage`, and `RootPager`'s `openedFiles`.
+- **Home header is one "Import" pill** (`Pill("Import", "plus")`); the Search pill, field, and
+  "No matches." moved to `Collection/CollectionPage.swift` (title filter; subtitle still counts the
+  whole collection). `RootPage.queue` is titled "Home" with the `house` glyph.
+- **Bottom bar fade** (`Root/RootPager.swift`): a `LinearGradient` layer between the pager and the
+  mini-player/indicator stack — `ground` at 0 opacity → solid from 34 % of a 210 pt band that
+  ignores the bottom safe area, so it is opaque through the bar (≈138 pt) and fades ~70 pt above it.
+  Hit testing off. New `Spacing.bottomClearance = 184` replaces the six `Color.clear.frame(height:
+  120)` trailers (Home, Collection, Preferences, Pronunciation, Storage, Cloud voices) so the last
+  row scrolls fully clear of the fade.
+- **Bug fixed on the way — `typeRole` swallowed every caller's `lineLimit`.** `typeRole` ended in
+  `.lineLimit(role.lineLimit)`, and the environment modifier nearest the text wins, so every
+  `.typeRole(x).lineLimit(n)` in the app was a no-op (Collection titles were unlimited, the
+  mini-player title could wrap to two lines, `FileImportRows`/`ChapterList`/`BookSheet` "one-line"
+  titles were two). `Design/Typography.swift` now sets the role's limit through
+  `transformEnvironment(\.lineLimit)` only when nothing else has, so either modifier order works
+  and all fourteen call sites now do what they say. Expect some rows to look tighter than before.
+
+Verification: `scripts/build-app.sh` → `** BUILD SUCCEEDED **` (only the pre-existing
+`ShareViewController` async warnings); `swift test` → 427 tests in 80 suites passed. Still not seen
+on a phone — same standing gap as every UI round this week.
+
+## Resume here (2026-09-09) — Continue Listening row round 2
 
 The owner's second pass on the same row, on `dev` commit `6987a75`: four small corrections to round 1
 below, all in `QueueRow.swift` / `Design/Typography.swift`.

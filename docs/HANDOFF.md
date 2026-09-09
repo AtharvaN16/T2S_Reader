@@ -10,8 +10,11 @@ Preferences page is titled **"Settings"** (`PageTitle`, and `RootPage.preference
 indicator's label; the type stays `PreferencesPage`); its section headings use a new
 `TypeRole.groupTitle` — **Inter-Bold 22 pt**, relative `.title2`. Inter-Bold was not bundled, and
 the owner's call was to bundle it rather than substitute the Display ExtraBold: `scripts/fetch-fonts.sh`
-now lists six faces, `App/Resources/Fonts/Inter-Bold.ttf` is committed (Inter 4.1, same OFL), both
-`Info.plist`s register it under `UIAppFonts`, and `docs/licenses.md` says six TTFs. The explanatory row
+now lists six faces, `App/Resources/Fonts/Inter-Bold.ttf` is committed (Inter 4.1, same OFL), the
+shared `targetTemplates` entry in `App/project.yml` registers it under `UIAppFonts` (both
+`Info.plist`s are generated from there and git-ignored — editing them directly is undone by the next
+`xcodegen generate`, which is exactly what happened on the first try), and `docs/licenses.md` says
+six TTFs. The explanatory row
 subtitles are gone ("Seconds" ×2, "New documents start here", "Continue with the next queued item",
 "Theme for the whole app", "Your provider, your API key"); subtitles that carry a value stay (the default
 voice's name, the dictionary's word count, the storage size, "Coming later" under the disabled iCloud

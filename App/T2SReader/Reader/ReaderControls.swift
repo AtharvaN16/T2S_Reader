@@ -2,12 +2,12 @@ import SwiftUI
 import T2SApp
 
 /// Sleep timer · back 15 · play · forward 30 · speed — the Reader page's transport row (spec
-/// §2.4.5, after ElevenReader), evenly spaced across the width. Size and weight rank the controls:
-/// play is the biggest (44pt glyph in 72), the skips second (28 in 52), both at regular weight so
-/// size does the ranking rather than heft; the sleep timer and the speed label are the small pair
-/// at the ends — one glyph weight, one type weight, both in `ink2` — and sit flush with the margins
-/// so their centres line up with the tool row's circles below. Skip amounts stay synchronized with
-/// the reading preferences.
+/// §2.4.5, after ElevenReader). Size and weight rank the controls: play is the biggest (44pt glyph
+/// in 72), the skips second (28 in 52), both at regular weight so size does the ranking rather than
+/// heft, and the three huddle 12 pt apart as one transport unit in the middle; the sleep timer and
+/// the speed label are the small pair at the ends — one glyph weight, one type weight, both in
+/// `ink2` — flush with the margins so their centres line up with the tool row's circles below.
+/// Skip amounts stay synchronized with the reading preferences.
 struct ReaderControls: View {
     @Environment(AppEnvironment.self) private var env
     var onSleepTimer: () -> Void
@@ -23,38 +23,38 @@ struct ReaderControls: View {
             )
             .foregroundStyle(Tokens.ink2)
             Spacer()
-            control(
-                "gobackward.\(preferences.skipBackSeconds)", "Back \(preferences.skipBackSeconds) seconds",
-                size: 28, frame: 52
-            ) {
-                Task { await player.skip(by: -Double(preferences.skipBackSeconds)) }
-            }
-            Spacer()
-            Button {
-                Task { await player.togglePlay() }
-            } label: {
-                Group {
-                    if env.isWarmingUp {
-                        WarmingDot()
-                    } else if player.isCatchingUp {
-                        ProgressView().progressViewStyle(.circular).tint(Tokens.ink)
-                    } else {
-                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 44, weight: .regular))
-                    }
+            HStack(spacing: 12) {
+                control(
+                    "gobackward.\(preferences.skipBackSeconds)", "Back \(preferences.skipBackSeconds) seconds",
+                    size: 28, frame: 52
+                ) {
+                    Task { await player.skip(by: -Double(preferences.skipBackSeconds)) }
                 }
-                .frame(width: 72, height: 72)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
-            .accessibilityValue(player.isCatchingUp ? (env.isWarmingUp ? "Preparing the voice" : "Buffering") : "")
-            Spacer()
-            control(
-                "goforward.\(preferences.skipForwardSeconds)", "Forward \(preferences.skipForwardSeconds) seconds",
-                size: 28, frame: 52
-            ) {
-                Task { await player.skip(by: Double(preferences.skipForwardSeconds)) }
+                Button {
+                    Task { await player.togglePlay() }
+                } label: {
+                    Group {
+                        if env.isWarmingUp {
+                            WarmingDot()
+                        } else if player.isCatchingUp {
+                            ProgressView().progressViewStyle(.circular).tint(Tokens.ink)
+                        } else {
+                            Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 44, weight: .regular))
+                        }
+                    }
+                    .frame(width: 72, height: 72)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                .accessibilityValue(player.isCatchingUp ? (env.isWarmingUp ? "Preparing the voice" : "Buffering") : "")
+                control(
+                    "goforward.\(preferences.skipForwardSeconds)", "Forward \(preferences.skipForwardSeconds) seconds",
+                    size: 28, frame: 52
+                ) {
+                    Task { await player.skip(by: Double(preferences.skipForwardSeconds)) }
+                }
             }
             Spacer()
             Button(action: onSpeed) {

@@ -47,7 +47,9 @@ struct ThinScrubber: View {
             }
             .frame(width: width, height: Self.pressedHeight, alignment: .leading)
             .animation(.spring(duration: 0.25), value: activeIndex)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            // Low in the hit area: the finger lands above the bar, and the times sit close below it.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .padding(.bottom, 4)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
@@ -59,7 +61,7 @@ struct ThinScrubber: View {
                     }
             )
         }
-        .frame(height: 44)
+        .frame(height: 40)
         .accessibilityElement()
         .accessibilityLabel("Scrubber")
         .accessibilityValue("\(Int((model.fraction * 100).rounded())) percent")

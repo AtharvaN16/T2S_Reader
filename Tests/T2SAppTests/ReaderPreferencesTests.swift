@@ -57,6 +57,17 @@ import Testing
         #expect(again.highlightTheme == .amber && ReaderPreferences(defaults: defaults).highlightTheme == .amber)
     }
 
+    @Test func collectionLayoutDefaultsPersistsAndResets() {
+        let defaults = fresh()
+        let preferences = ReaderPreferences(defaults: defaults)
+        #expect(preferences.collectionLayout == .grid)
+        preferences.collectionLayout = .list
+        let again = ReaderPreferences(defaults: defaults)
+        #expect(again.collectionLayout == .list)
+        again.reset()
+        #expect(again.collectionLayout == .grid && ReaderPreferences(defaults: defaults).collectionLayout == .grid)
+    }
+
     @Test func voiceOptionDefault() {
         #expect(VoiceOption.systemDefault.id == "default" && VoiceOption.systemDefault.isDefault)
     }

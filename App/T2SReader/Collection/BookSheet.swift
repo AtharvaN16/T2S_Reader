@@ -25,8 +25,10 @@ struct BookSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.section) {
-                HStack { Spacer(); Artwork(relativePath: live.document.coverImagePath, paths: env.paths, size: 180, radius: Spacing.artworkLarge)
-                    .shadow(color: Tokens.ink.opacity(0.18), radius: 24, y: 12); Spacer() }
+                // The same book as the Collection's tile and the Home row, larger: a tap on a book
+                // should open onto that book, not a square of it.
+                HStack { Spacer(); BookCover(relativePath: live.document.coverImagePath, paths: env.paths, height: 240,
+                                             title: live.document.title, isPDF: live.document.sourceType == .pdf); Spacer() }
                     .padding(.top, Spacing.section)
                 VStack(alignment: .leading, spacing: 8) {
                     Text(live.document.title).typeRole(.playerTitle).foregroundStyle(Tokens.ink)

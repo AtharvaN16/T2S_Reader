@@ -2,7 +2,45 @@
 
 _Last updated 2026-09-09 (Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-09, latest) — Reader round: fades in the bars, Apple Music scrubber, sizes, chapter row, title, highlight themes
+## Resume here (2026-09-09, latest) — Collection round: books, a list, menus, a kind filter
+
+The owner's four asks for the Collection page, done on `dev` in `Collection/CollectionPage.swift`:
+
+- **The grid's tiles are books.** Each cell is the Home row's `BookCover` (the Figma softcover with
+  hinge, sheen and shadow) at the foot of a cover-proportioned slot — `BookCover.ratio` is internal
+  now and the cell's `aspectRatio` is it, cells are top-aligned so every book in a row stands on
+  the same shelf line, and `BookCover` gained `maxWidth`: a cover wider than the placeholder's
+  proportion shrinks to the cell width keeping its own, so it is shorter, not clipped. No progress
+  bar under a tile; the title (`meta`, `ink`, two lines) and the author (`meta`, `ink2`, one line)
+  are. PDFs get the red PDF book. The book sheet's hero is the same `BookCover` at 240 pt, so a tap
+  on a book opens onto that book, not a square of it.
+- **Grid or list** (`ReaderPreferences.collectionLayout`, `CollectionLayout` grid / list, key
+  `collection.layout`, default grid, tested). The switch is a 36 pt `surface` circle at the right
+  of the chip row showing the layout a tap switches to (`list.bullet` / `square.grid.2x2`). A list
+  row is an 88 pt book, the title in `rowTitle`, author, and "12 chapters · ~5h 10m" in the book
+  sheet's words, with the Home row's `⋯` circle at the trailing edge.
+- **One menu three ways**: long-press on a tile (with a `preview:` of the book alone at 240 pt, so
+  the shadow is not cut off at the cell's edge), the row's `⋯`, and long-press on a row. Items:
+  Play (resumes a paused current book before opening the Reader, as the Home row does), Add to /
+  Remove from Queue, Mark as finished / unfinished, Details (`DetailsSheet`), Delete. Delete asks
+  first (`confirmationDialog`, "Removes the book, its audio and its progress from this device.")
+  and pauses the player if that book is playing; `DetailsSheet`'s own delete pill still deletes
+  without asking, as before.
+- **Kind chips** — All · Books · PDFs — in the voice picker's filter-chip style, above the grid.
+  Articles are not in the Collection (spec §2.3, they live on Home) so there is no chip for them.
+  Search now matches the author too. The "N books" subtitle under the title is gone (owner's
+  call): the chips and the shelf say what is here.
+- **`T2S_PAGE`** (`RootPage.launchPage`): `SIMCTL_CHILD_T2S_PAGE=collection` (or `preferences`)
+  opens the app on that page — a script-driven simulator cannot tap the indicator, and this is how
+  the screenshots for this round were taken. A preference can be forced for one launch as an
+  argument: `xcrun simctl launch <udid> com.t2s.reader -collection.layout list` (`defaults write`
+  through `simctl spawn` did not reach the app's `UserDefaults.standard` this time).
+
+Seen in the simulator (iPhone 16 Pro, two EPUBs and a PDF) in both layouts; the menus, the
+dialog and the chips' tap paths were reviewed, not tapped. `scripts/build-app.sh` → `** BUILD
+SUCCEEDED **`; `swift test --filter ReaderPreferencesTests` passes.
+
+## Resume here (2026-09-09) — Reader round: fades in the bars, Apple Music scrubber, sizes, chapter row, title, highlight themes
 
 **Footnote numbers are no longer spoken (2026-09-09, normalizer 3 → 4).** The owner noticed
 sentences ending "me'.18" — an EPUB's superscript footnote reference flattened into the text. Two
@@ -62,6 +100,22 @@ Speechify's highlight-theme swatches, a podcast app's "Intro ▾ … →" chapte
 
 Verification: `scripts/build-app.sh` → `** BUILD SUCCEEDED **`; `swift test` → 428 tests in 80 suites passed. Not
 seen on a phone — same standing gap.
+
+**Fourth cut (2026-09-09, four crops incl. Apple Podcasts' chapter list):** (1) The chapter row's
+chevron is a filled up-arrow (`arrowtriangle.up.fill`, 10 pt bold) inside the text run with
+`.baselineOffset(3)`, so it sits up by the cap height — the inline chevron still hung at the foot.
+(2) Skips huddle with play as one unit (`HStack(spacing: 12)` in the middle of `ReaderControls`);
+the sleep timer and speed label keep the ends. (3) Times sit 2 pt under the bar — `ThinScrubber`
+aligns its bar to the *bottom* of a 40 pt hit area (finger lands above it) — in `.meta` Inter with
+tabular digits, not the system mono; the right side is time *left* as "-14:22:21", no "~".
+(4) The top bookmark button stays: it saves a bookmark at the playhead (`player.addBookmark()`),
+listed under the overflow's "Bookmarks" — the owner asked what it does. (5) `ChapterList` rebuilt
+after Podcasts: no dots, no progress bars; name over length ("1h 8m", no "~") with 12 pt inside
+each row and 8 pt between; the current chapter on a `surface` fill (the reference's highlighted
+row — an owner's ask, not a card) with an 18 pt `CircularProgress` of its fraction at the right
+end; chapters already heard get `checkmark.circle.fill` in `ink2`; later ones nothing. Titles go
+through `ChapterLabel`, whose rule changed: an unnumbered name ("Title Page", "Dramatis Personae")
+is left as written — front matter is not "Chp 1". Tests updated.
 
 **Third cut (2026-09-09, two phone crops):** (1) `ThinScrubber` draws each chapter as a flat
 bar (square ends, 3 pt gaps — the Podcasts look); only the pressed chapter rounds and rises, and it

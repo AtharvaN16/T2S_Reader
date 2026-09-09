@@ -24,6 +24,12 @@ public enum HighlightTheme: String, CaseIterable, Sendable, Identifiable {
     }
 }
 
+/// How the Collection page lays its books out (2026-09-09): the spec's cover grid, or one book per
+/// row with a menu button. Remembered across launches like any other preference.
+public enum CollectionLayout: String, CaseIterable, Sendable {
+    case grid, list
+}
+
 /// User preferences behind the Preferences page (spec §2.4.5) and the Reader's appearance, stored in
 /// `UserDefaults`. Reader body size and line height are independent of the system text size
 /// (spec §2.4.1), hence a scale over the 18pt base rather than a Dynamic Type category.
@@ -60,6 +66,7 @@ public final class ReaderPreferences {
         static let lineHeight = "reader.lineHeight"
         static let theme = "reader.theme"
         static let highlightTheme = "reader.highlightTheme"
+        static let collectionLayout = "collection.layout"
         static let skipBack = "playback.skipBack"
         static let skipForward = "playback.skipForward"
         static let rate = "playback.defaultRate"
@@ -91,6 +98,11 @@ public final class ReaderPreferences {
     /// `amber` is the accent — the only look before there was a choice — so existing readers see no change.
     public var highlightTheme: HighlightTheme {
         didSet { defaults.set(highlightTheme.rawValue, forKey: Key.highlightTheme) }
+    }
+
+    /// The grid is the spec's Collection, so it stays the default.
+    public var collectionLayout: CollectionLayout {
+        didSet { defaults.set(collectionLayout.rawValue, forKey: Key.collectionLayout) }
     }
 
     public var skipBackSeconds: Int {
@@ -136,6 +148,7 @@ public final class ReaderPreferences {
         lineHeight = Self.lineHeightRange.clamped(defaults.object(forKey: Key.lineHeight) as? Double ?? 1.5)
         theme = ReaderTheme(rawValue: defaults.string(forKey: Key.theme) ?? "") ?? .system
         highlightTheme = HighlightTheme(rawValue: defaults.string(forKey: Key.highlightTheme) ?? "") ?? .amber
+        collectionLayout = CollectionLayout(rawValue: defaults.string(forKey: Key.collectionLayout) ?? "") ?? .grid
         skipBackSeconds = defaults.object(forKey: Key.skipBack) as? Int ?? 15
         skipForwardSeconds = defaults.object(forKey: Key.skipForward) as? Int ?? 30
         defaultRate = defaults.object(forKey: Key.rate) as? Double ?? 1.0
@@ -150,6 +163,7 @@ public final class ReaderPreferences {
         lineHeight = 1.5
         theme = .system
         highlightTheme = .amber
+        collectionLayout = .grid
         skipBackSeconds = 15
         skipForwardSeconds = 30
         defaultRate = 1.0

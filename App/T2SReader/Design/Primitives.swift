@@ -135,9 +135,13 @@ struct BookCover: View {
     var height: CGFloat
     var title: String
     var isPDF: Bool = false
+    /// The Collection grid's cell: a cover wider than the placeholder shrinks to fit it, keeping its
+    /// proportions, so every book in a column stands on the same width. Nil (a row) lets it run.
+    var maxWidth: CGFloat? = nil
 
     /// The mockup's own proportions (1461 × 2192); a real cover uses its own, within the book range.
-    private static let ratio: CGFloat = 0.667
+    /// Internal, not private: the Collection grid sizes its cells from it.
+    static let ratio: CGFloat = 0.667
     private static let coverRatios: ClosedRange<CGFloat> = 0.55...0.8
 
     private var image: UIImage? {
@@ -148,29 +152,34 @@ struct BookCover: View {
         return image
     }
 
-    private var width: CGFloat {
-        guard let image else { return height * Self.ratio }
-        return height * image.size.width / image.size.height
+    /// The book's frame: `height` tall at its own proportions, unless that runs past `maxWidth`.
+    private var size: CGSize {
+        let ratio = image.map { $0.size.width / $0.size.height } ?? Self.ratio
+        var h = height
+        if let maxWidth, h * ratio > maxWidth { h = maxWidth / ratio }
+        return CGSize(width: h * ratio, height: h)
     }
 
-    private var shape: UnevenRoundedRectangle {
+    private func shape(_ height: CGFloat) -> UnevenRoundedRectangle {
         let r = height * 0.03
         return UnevenRoundedRectangle(topLeadingRadius: 1, bottomLeadingRadius: 1, bottomTrailingRadius: r, topTrailingRadius: r, style: .continuous)
     }
 
     var body: some View {
-        face
-            .frame(width: width, height: height)
+        let size = size
+        let shape = shape(size.height)
+        face(height: size.height)
+            .frame(width: size.width, height: size.height)
             .overlay(hinge)
             .overlay(sheen)
             .clipShape(shape)
             .overlay(shape.strokeBorder(Tokens.shade.opacity(0.12), lineWidth: 0.5))
             .compositingGroup()                                                // one shadow for the book, not one per layer
-            .shadow(color: Tokens.shade.opacity(0.22), radius: height * 0.06, x: height * 0.015, y: height * 0.045)
+            .shadow(color: Tokens.shade.opacity(0.22), radius: size.height * 0.06, x: size.height * 0.015, y: size.height * 0.045)
             .accessibilityHidden(true)
     }
 
-    @ViewBuilder private var face: some View {
+    @ViewBuilder private func face(height: CGFloat) -> some View {
         if let image {
             Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
         } else if isPDF {

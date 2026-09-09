@@ -23,6 +23,18 @@ enum RootPage: Hashable, CaseIterable {
         case .preferences: return "Settings"
         }
     }
+
+    /// The page the app opens on: Queue (spec §2.4.4), unless `T2S_PAGE` in the environment names
+    /// another — `collection` or `preferences`. A simulator driven by script cannot tap the
+    /// indicator, so this is how a screenshot of another page is taken:
+    /// `SIMCTL_CHILD_T2S_PAGE=collection xcrun simctl launch <udid> com.t2s.reader`.
+    static var launchPage: RootPage {
+        switch ProcessInfo.processInfo.environment["T2S_PAGE"] {
+        case "collection": return .collection
+        case "preferences": return .preferences
+        default: return .queue
+        }
+    }
 }
 
 /// Every Reader entry point goes through this closure (spec §2.4.5 lists Queue, book chapters,
@@ -48,7 +60,7 @@ extension EnvironmentValues {
 struct RootPager: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
-    @State private var page: RootPage = .queue
+    @State private var page: RootPage = RootPage.launchPage
     /// A file handed to us by another app (`onOpenURL`), shown through the Import page like any other
     /// import rather than imported invisibly.
     @State private var openedFiles: [URL]?

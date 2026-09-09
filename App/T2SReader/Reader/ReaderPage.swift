@@ -159,22 +159,24 @@ struct ReaderPage: View {
         let player = env.player
         return VStack(spacing: 10) {
             chapterRow
-            VStack(spacing: 6) {
+            VStack(spacing: 2) {
                 ThinScrubber(model: player.scrubber, segments: chapterSegments) { fraction in
                     Task { await player.seek(fraction: fraction) }
                 }
+                // Elapsed on the left, time left on the right (Apple Music's "-1:02:33"), in the
+                // app's own face with tabular digits rather than the system monospace.
                 HStack {
-                    Text(player.elapsedText)
+                    Text(player.elapsedText).monospacedDigit()
                     Spacer()
                     if env.isWarmingUp {
-                        Text("preparing the voice…").typeRole(.meta).foregroundStyle(Tokens.accent)
+                        Text("preparing the voice…").foregroundStyle(Tokens.accent)
                     } else if player.isCatchingUp {
-                        Text("catching up…").typeRole(.meta)
+                        Text("catching up…")
                     }
                     Spacer()
-                    Text(player.totalText)
+                    Text("-" + DurationFormatter.clock(max(0, player.total - player.elapsed))).monospacedDigit()
                 }
-                .typeRole(.mono).foregroundStyle(Tokens.ink2)
+                .typeRole(.meta).foregroundStyle(Tokens.ink2)
                 if let error = player.renderError {
                     Text(error).typeRole(.meta).foregroundStyle(Tokens.destructive).lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -213,11 +215,14 @@ struct ReaderPage: View {
         if chapters.count > 1, let index = player.chapterIndex, chapters.indices.contains(index) {
             HStack {
                 Button { showChapters = true } label: {
-                    // The chevron is part of the text run, so it sits where an inline symbol sits —
-                    // on the type's own centre line — rather than hanging off the frame's bottom.
+                    // The arrow is part of the text run and lifted off the baseline, so it sits up
+                    // beside the title's cap height rather than hanging at the text's foot.
                     (Text(ChapterLabel.text(for: chapters[index].title, ordinal: index + 1))
                         + Text(" ")
-                        + Text(Image(systemName: "chevron.down")).font(.system(size: 12, weight: .semibold)).foregroundStyle(Tokens.ink2))
+                        + Text(Image(systemName: "arrowtriangle.up.fill"))
+                            .font(.system(size: 10, weight: .bold))
+                            .baselineOffset(3)
+                            .foregroundStyle(Tokens.ink2))
                         .typeRole(.rowTitle)
                         .foregroundStyle(Tokens.ink)
                         .lineLimit(1)

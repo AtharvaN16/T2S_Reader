@@ -14,7 +14,7 @@ import Observation
 @Observable
 final class MotionTilt {
     /// Degrees. `x` turns about the vertical axis (from roll), `y` about the horizontal axis (from
-    /// pitch). Clamped to ±10°, `.zero` whenever updates are off or motion is unavailable (the
+    /// pitch). Clamped to ±7°, `.zero` whenever updates are off or motion is unavailable (the
     /// simulator).
     private(set) var tilt: CGPoint = .zero
     /// What the caller last asked for. Stays true on the simulator even though `tilt` never moves,
@@ -75,10 +75,11 @@ private struct TiltFilter {
     private static let baselineSeconds: TimeInterval = 3
     /// Per-sample weight of the smoothing low-pass; 0.2 at 30 Hz settles in about a quarter second.
     private static let smoothing = 0.2
-    /// Degrees of tilt per degree of lean — bolder than the first cut (owner's ask, 2026-09-09: "too
-    /// subtle"): a 10° tip of the phone now moves a cover 9°, close to one-for-one, clamped below.
-    private static let scale = 0.9
-    private static let limitDegrees = 10.0
+    /// Degrees of tilt per degree of lean. Bolder than the first cut (owner: "too subtle"), then
+    /// eased back a step (owner: "slightly less intense") — a 10° tip of the phone now moves a
+    /// cover 6.5°, clamped below.
+    private static let scale = 0.65
+    private static let limitDegrees = 7.0
 
     private let baselineWeight: Double
     private var baseline: (roll: Double, pitch: Double)?

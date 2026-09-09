@@ -46,6 +46,28 @@ import T2SStore
         #expect(model.lastError == nil)
     }
 
+    /// Home keeps the three books played most recently, latest on top.
+    @Test func notePlayingKeepsTheThreeLatestOnTop() async throws {
+        let f = try AppFixtures()
+        let a = try await f.importFake(), b = try await f.importFake(), c = try await f.importFake(), d = try await f.importFake()
+        let model = LibraryModel(library: f.library)
+        await model.refresh()
+        #expect(model.queue.map(\.id) == [a, b, c, d])
+        await model.notePlaying(a)
+        #expect(model.queue.map(\.id) == [a, b, c])                          // d fell past the limit
+        await model.notePlaying(d)
+        #expect(model.queue.map(\.id) == [d, a, b])                          // back in, on top
+        await model.notePlaying(b)
+        #expect(model.queue.map(\.id) == [b, d, a])
+        await model.markFinished(a, true)
+        await model.notePlaying(a)                                           // played again: unfinished, on top
+        #expect(model.queue.map(\.id) == [a, b, d])
+        #expect(model.finished.isEmpty)
+        await model.notePlaying(a)                                           // already on top: nothing moves
+        #expect(model.queue.map(\.id) == [a, b, d])
+        #expect(model.lastError == nil)
+    }
+
     @Test func emptyLibraryIsEmptyQueue() async throws {
         let f = try AppFixtures()
         let model = LibraryModel(library: f.library)

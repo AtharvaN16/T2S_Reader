@@ -76,7 +76,7 @@ struct CollectionPage: View {
                     }
                 }
                 if all.isEmpty {
-                    Text("Books and PDFs you import appear here, whether or not they are queued.")
+                    Text("Books and PDFs you import appear here; Home keeps the ones you played last.")
                         .typeRole(.meta).foregroundStyle(Tokens.ink2)
                 } else if books.isEmpty {
                     Text(emptyText).typeRole(.meta).foregroundStyle(Tokens.ink2)
@@ -208,11 +208,11 @@ struct CollectionPage: View {
     // MARK: Menu
 
     /// One menu for the grid's long press, the row's `⋯` and the row's long press — the Home row's
-    /// items where they apply here, plus Play and Delete. Play resumes a paused current book before
+    /// items where they apply here, plus Play and Delete. Nothing about a queue (owner's rule,
+    /// 2026-09-09): playing a book is what puts it on Home. Play resumes a paused current book before
     /// opening the Reader, as the Home row and the book sheet do; for any other book the Reader
     /// loads and plays it itself.
     @ViewBuilder private func menuItems(for book: DocumentSummary) -> some View {
-        let isQueued = book.queueOrder != nil && !book.isFinished
         let isCurrent = env.player.current?.id == book.id
         Button {
             Task {
@@ -220,11 +220,6 @@ struct CollectionPage: View {
                 readerRoute.open(book)
             }
         } label: { Label("Play", systemImage: "play.fill") }
-        if isQueued {
-            Button { Task { await env.libraryModel.archive(book.id) } } label: { Label("Remove from Queue", systemImage: "archivebox") }
-        } else {
-            Button { Task { await env.libraryModel.enqueue(book.id) } } label: { Label("Add to Queue", systemImage: "plus") }
-        }
         Button { Task { await env.libraryModel.markFinished(book.id, !book.isFinished) } } label: {
             Label(book.isFinished ? "Mark as unfinished" : "Mark as finished", systemImage: "checkmark.circle")
         }

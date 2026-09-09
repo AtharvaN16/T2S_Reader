@@ -154,6 +154,8 @@ struct RootPager: View {
         .onChange(of: env.player.state) { _, state in
             if state == .playing || state == .catchingUp {
                 env.prepareRunner.cancel()
+                // Playing is what puts a book on Home, latest first, three at most (`LibraryModel.notePlaying`).
+                if let id = env.player.current?.id { Task { await env.libraryModel.notePlaying(id) } }
             } else {
                 startForegroundPrepareIfNeeded()
             }

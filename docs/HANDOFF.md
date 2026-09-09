@@ -1,8 +1,50 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-09 evening (chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-09 evening (book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-09, latest) — Chapter sheets, the skip pill, and a bookmark that keeps its sentence
+## Resume here (2026-09-09, latest) — Book sheet rework, no queue, chapter list spacing
+
+The owner's second batch of the evening, on `dev`, straight after the chapter-sheet round below.
+
+- **There is no queue any more, as the reader sees it.** Home ("Continue Listening") is the books
+  played most recently, latest on top, three at most: `LibraryModel.notePlaying(_:)`
+  (`recentLimit = 3`) puts a book on top — back out of finished if it was — and archives whatever
+  falls past the limit; a no-op with no refresh when the book is already on top. `RootPager` calls
+  it whenever `player.state` becomes playing/catching up with a current document. The store's
+  queue calls (`setQueued`, `moveInQueue`, `finish`) are unchanged underneath — an import still
+  appends to Home, and the Reader that opens on it plays, which trims. Gone from the UI: the Book
+  sheet's In Queue / Add to Queue pill, the Collection menu's Add to / Remove from Queue, the Home
+  row's Move to top (recency is the order now). Home's Archive (swipe and menu) stays as the way
+  to drop a book from Home. Wording: "Nothing playing yet." (`EmptyQueue`), "Home keeps the ones
+  you played last" (Collection's empty text). Tested in
+  `LibraryModelTests.notePlayingKeepsTheThreeLatestOnTop`. `LibraryModel.queue`, `move`,
+  `enqueue`, `QueueContinuation` and Now Playing's queue count are still there for the model and
+  the lock screen; the spec's §2.3 queue wording is now behind the app.
+- **Book sheet** (`Collection/BookSheet.swift`): the book at 200 pt (was 240) over a **backlight**
+  — an ellipse of the cover's own colour, blurred 44 pt at 0.7 — from `BookCover.backlight`: the
+  cover's `CIAreaAverage`, lifted in saturation and brightness so a dark or greyish cover still
+  glows, cached per path; `pdfCover` for a PDF, `ink3` for the placeholder. **The gyro tilt is
+  back, on this sheet only**: `System/MotionTilt.swift` restored from 46432a4 unchanged (relative
+  baseline, ±3°, 30 Hz), owned by the sheet as `@State`, on while the sheet shows and the scene is
+  active, off under Reduce Motion, thermal or Low Power, and on `onDisappear`; `BookCover.tilt`
+  (rotation3D + leaning shadow) is back for it — the Home rows do not pass one and must not
+  (owner's earlier ruling). Title and author centred; the "7 chapters · ~59m · Rendered 2%" row is
+  gone; one **Play pill in the Home row's form**, centred — `soft`, "Play  17m" with the resume
+  chapter's time left (duration × (1 − fraction), so no glimpse needed), "Pause" while this book
+  plays, "Starting…" while resuming a paused current one.
+- **`ChapterListView`** (`Player/ChapterList.swift`): the "Chapters" heading and its rows as one
+  component — heading role per caller (`playerTitle` in the sheet, `sectionHeader` in the Book
+  sheet), 24 pt under the heading, rows 10 pt of vertical padding (was 8), 4 pt between title
+  and time (was 2). `ChapterList` and `BookSheet` both use it.
+
+Tests: `swift test` 442/81 green. `scripts/build-app.sh` → `** BUILD SUCCEEDED **`. Seen in the simulator (`T2S_OPEN=book`, `T2S_BOOK=children` and `mughal`;
+`T2S_OPEN=chapters`): the book sheet on a real cover and on the placeholder, the chapter sheet's
+spacing. The first cut of the backlight pushed a near-white cover into pink — an average with almost
+no saturation lifted to 0.35 lands on whatever hue its noise leans — so a near-grey average now
+stays neutral. The tilt cannot show on the simulator (no device motion); `notePlaying` is tested,
+not watched on Home. Still nothing seen on a phone this week.
+
+## Resume here (2026-09-09) — Chapter sheets, the skip pill, and a bookmark that keeps its sentence
 
 The owner's six asks from two phone crops (the Book sheet and the Reader's chapter list), done on
 `dev`, plus a mid-turn ruling: **a bookmark saves the playhead position and the block of text**.

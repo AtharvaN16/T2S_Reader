@@ -193,6 +193,27 @@ public final class LibraryModel {
 
     public func move(_ id: UUID, to index: Int) async { await perform { try await self.library.store.moveInQueue(id, to: index) } }
 
+    /// How many books Home keeps under Continue Listening.
+    public static let recentLimit = 3
+
+    /// Home is the books played most recently, latest first, at most `recentLimit` of them (owner's
+    /// rule, 2026-09-09: there is no queue a reader manages). Called when playback starts: the book
+    /// goes to the top — back out of finished if it was — and whatever falls past the limit leaves.
+    /// A no-op, with no refresh, when the book is already on top and nothing needs trimming.
+    public func notePlaying(_ id: UUID) async {
+        guard let summary = summaries.first(where: { $0.id == id }) else { return }
+        let rows = queue
+        if rows.first?.id == id, rows.count <= Self.recentLimit { return }
+        await perform {
+            if summary.isFinished { try await self.library.store.finish(id, false) }
+            try await self.library.store.setQueued(id, true)
+            try await self.library.store.moveInQueue(id, to: 0)
+            for document in try await self.library.store.queue().dropFirst(Self.recentLimit) {
+                try await self.library.store.setQueued(document.id, false)
+            }
+        }
+    }
+
     /// Finished leaves the Queue; un-finishing puts the document back at the end (spec §2.4.5 context menu).
     public func markFinished(_ id: UUID, _ finished: Bool) async {
         await perform { try await self.library.store.finish(id, finished) }

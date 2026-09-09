@@ -7,7 +7,7 @@ struct EmptyQueue: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Nothing queued yet. Share an article or a book from any app to t2s, or import one here. Everything you add plays right away — no waiting for it to process.")
+            Text("Nothing playing yet. Share an article or a book from any app to t2s, or import one here. Everything you add plays right away — no waiting for it to process.")
                 .typeRole(.meta)
                 .foregroundStyle(Tokens.ink2)
             Pill(label: "Import", glyph: "plus", style: .soft, action: onImport)

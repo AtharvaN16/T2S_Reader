@@ -114,7 +114,6 @@ struct QueueRow: View {
         Button { Task { await env.libraryModel.markFinished(summary.id, !summary.isFinished) } } label: {
             Label(summary.isFinished ? "Mark as unfinished" : "Mark as finished", systemImage: "checkmark.circle")
         }
-        Button { Task { await env.libraryModel.move(summary.id, to: 0) } } label: { Label("Move to top", systemImage: "arrow.up.to.line") }
         Button(action: onDetails) { Label("Details", systemImage: "info.circle") }
         Button { showSleepTimer = true } label: { Label("Sleep timer", systemImage: "moon.zzz") }
         Button { showVoiceChange = true } label: { Label("Change voice", systemImage: "person.wave.2") }

@@ -1,4 +1,6 @@
 // App/T2SReader/Design/Primitives.swift
+import CoreImage
+import CoreImage.CIFilterBuiltins
 import SwiftUI
 import T2SLibrary
 
@@ -152,6 +154,9 @@ struct BookCover: View {
     /// The Collection grid's cell: a cover wider than the placeholder shrinks to fit it, keeping its
     /// proportions, so every book in a column stands on the same width. Nil (a row) lets it run.
     var maxWidth: CGFloat? = nil
+    /// Degrees from `MotionTilt`: the book turns a little with the phone so it reads as an object,
+    /// not a picture. Only the book sheet's hero passes one.
+    var tilt: CGPoint = .zero
 
     /// The mockup's own proportions (1461 × 2192); a real cover uses its own, within the book range.
     /// Internal, not private: the book sheet's hero sizes from it.
@@ -195,8 +200,46 @@ struct BookCover: View {
             .clipShape(shape)
             .overlay(shape.strokeBorder(Tokens.shade.opacity(0.12), lineWidth: 0.5))
             .compositingGroup()                                                // one shadow for the book, not one per layer
-            .shadow(color: Tokens.shade.opacity(0.22), radius: size.height * 0.06, x: size.height * 0.015, y: size.height * 0.045)
+            .shadow(color: Tokens.shade.opacity(0.22), radius: size.height * 0.06,
+                    x: size.height * 0.015 + tilt.x * 0.4, y: size.height * 0.045 + tilt.y * 0.4)   // the shadow leans with the book
+            .rotation3DEffect(.degrees(tilt.x), axis: (x: 0, y: 1, z: 0), perspective: 0.5)
+            .rotation3DEffect(.degrees(-tilt.y), axis: (x: 1, y: 0, z: 0), perspective: 0.5)
             .accessibilityHidden(true)
+    }
+
+    /// The colour the book gives off — the book sheet's backlight: the cover's average colour,
+    /// lifted so a dark or greyish cover still glows; the PDF book's red; the placeholder's paper.
+    var backlight: Color {
+        if let image, let average = Self.averageColor(of: image, key: relativePath ?? "") { return average }
+        return isPDF ? Tokens.pdfCover : Tokens.ink3
+    }
+
+    private static let colorCache = NSCache<NSString, UIColor>()
+    private static let colorContext = CIContext(options: [.workingColorSpace: NSNull()])
+
+    /// One `CIAreaAverage` per cover, cached by path (the decode is the expensive part and
+    /// `Artwork` already caches that; this is a 1 × 1 render on top).
+    private static func averageColor(of image: UIImage, key: String) -> Color? {
+        let cacheKey = key as NSString
+        if let hit = colorCache.object(forKey: cacheKey) { return Color(hit) }
+        guard let input = CIImage(image: image) else { return nil }
+        let filter = CIFilter.areaAverage()
+        filter.inputImage = input
+        filter.extent = input.extent
+        guard let output = filter.outputImage else { return nil }
+        var px = [UInt8](repeating: 0, count: 4)
+        colorContext.render(output, toBitmap: &px, rowBytes: 4, bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+                            format: .RGBA8, colorSpace: nil)
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        UIColor(red: CGFloat(px[0]) / 255, green: CGFloat(px[1]) / 255, blue: CGFloat(px[2]) / 255, alpha: 1)
+            .getHue(&h, saturation: &s, brightness: &b, alpha: &a)
+        // An average is muddy: more saturated and never dim, so the glow reads as the cover's hue.
+        // A near-grey average (a white or a black cover) stays neutral instead of being pushed
+        // into whatever hue its noise happens to lean.
+        let saturation = s < 0.08 ? s : min(1, max(s * 1.5, 0.35))
+        let lifted = UIColor(hue: h, saturation: saturation, brightness: max(b, 0.65), alpha: 1)
+        colorCache.setObject(lifted, forKey: cacheKey)
+        return Color(lifted)
     }
 
     @ViewBuilder private func face(height: CGFloat) -> some View {

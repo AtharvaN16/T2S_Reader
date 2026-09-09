@@ -101,6 +101,11 @@ Speechify's highlight-theme swatches, a podcast app's "Intro ▾ … →" chapte
 Verification: `scripts/build-app.sh` → `** BUILD SUCCEEDED **`; `swift test` → 428 tests in 80 suites passed. Not
 seen on a phone — same standing gap.
 
+**Back-to-current pill (2026-09-09):** it sat inside the bottom block's upward fade and under it —
+the block is a later sibling in the page's `VStack`, so its background (hung 64 pt above itself)
+painted over the pill. Now `.padding(.bottom, 32)` and `.zIndex(1)` on the pill: higher, and drawn
+over the fade.
+
 **Commit `43c9678` carries more than its message says.** It was staged with `git add App Sources
 Tests` in the shared checkout and swept in another session's uncommitted Collection redesign
 alongside the Reader fourth cut: `Collection/CollectionPage.swift` (kind chips All / Books / PDFs,

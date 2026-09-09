@@ -54,10 +54,14 @@ struct ReaderPage: View {
                 topBar.opacity(chromeVisible ? 1 : 0)
                 Spacer()
                 if !reader.isFollowing {
+                    // Above the bottom block's fade in both senses: 32 pt up from it, and drawn
+                    // over the fade the block hangs above itself (a later sibling would otherwise
+                    // paint that fade across the pill).
                     Pill(label: "Back to current", glyph: "text.line.first.and.arrowtriangle.forward", style: .selected) {
                         reader.resumeFollowing()
                     }
-                    .padding(.bottom, 12)
+                    .padding(.bottom, 32)
+                    .zIndex(1)
                 }
                 bottomBar.opacity(chromeVisible ? 1 : 0)
             }

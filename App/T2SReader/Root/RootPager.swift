@@ -48,6 +48,7 @@ extension EnvironmentValues {
 struct RootPager: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var page: RootPage = .queue
     /// A file handed to us by another app (`onOpenURL`), shown through the Import page like any other
     /// import rather than imported invisibly.
@@ -55,6 +56,35 @@ struct RootPager: View {
     /// Set by that page; opened once it has actually gone.
     @State private var pendingOpen: DocumentSummary?
     @State private var readerDocument: DocumentSummary?
+
+    /// The owner's rule for the tilting covers: "disable this if under load, when using the local
+    /// model". Load is the device already struggling (thermal, Low Power Mode) or the on-device
+    /// engine doing work — Kokoro is linked and present, and something is rendering through it:
+    /// playback (`isPlaying` covers catching up), a Prepare pass, the launch warm-up, or a voice
+    /// preview. Playing a system or cloud voice on a Kokoro build counts too; telling them apart
+    /// is not worth the plumbing for a fraction-of-a-degree effect.
+    private var isUnderLoad: Bool {
+        let device = env.deviceMonitor.deviceState
+        if device.thermalSerious || device.lowPowerMode { return true }
+        guard isKokoroPresent else { return false }
+        return env.player.isPlaying || env.prepareRunner.isRunning
+            || env.kokoroStatus.status.isWarming || env.voicePreview.isRendering
+    }
+
+    /// Whether this build links the on-device engine and this device has its files — the states
+    /// in which Kokoro can be the thing under load.
+    private var isKokoroPresent: Bool {
+        switch env.kokoroStatus.status {
+        case .checking, .preparing, .available: true
+        case .notLinked, .unavailable: false
+        }
+    }
+
+    /// Home is the only page that shows the tilting covers and a full-screen Reader hides them, so
+    /// the gyro runs only while they are on screen — and never against Reduce Motion or under load.
+    private var shouldTilt: Bool {
+        scenePhase == .active && !reduceMotion && page == .queue && readerDocument == nil && !isUnderLoad
+    }
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -148,6 +178,9 @@ struct RootPager: View {
                 break
             }
         }
+        // `shouldTilt` reads observable state inside `body`, so SwiftUI re-evaluates it as the
+        // player, Prepare, Kokoro status or device state change — no timer or polling needed.
+        .onChange(of: shouldTilt, initial: true) { _, on in env.motionTilt.setEnabled(on) }
     }
 
     private func openPending() {

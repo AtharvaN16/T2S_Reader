@@ -24,15 +24,19 @@ struct QueueRow: View {
     private var isArticle: Bool { summary.document.sourceType == .article }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
+        // 20 pt between the book and its text: the cover's shadow needs air, and the reference cell
+        // (Apple Books' Continue) breathes there too.
+        HStack(alignment: .top, spacing: 20) {
             if isArticle {
                 // A web article is not a book: flat art, no spine.
                 Artwork(relativePath: summary.document.coverImagePath, paths: env.paths, size: 64, radius: Spacing.artworkSmall)
             } else {
-                BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: 96)
+                BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: 112,
+                          title: summary.document.title, isPDF: summary.document.sourceType == .pdf,
+                          tilt: env.motionTilt.tilt)
             }
 
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 if chapterText != nil || summary.isFullyRendered {           // no empty gap when there is nothing to say
                     HStack(spacing: 6) {
                         if let chapterText { Text(chapterText) }
@@ -63,6 +67,15 @@ struct QueueRow: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
+                // "◔ 5% · 23 hrs left" between the text and the buttons, as in the reference cell.
+                HStack(spacing: 6) {
+                    CircularProgress(fraction: progress?.fraction ?? 0, lineWidth: 2, size: 12)
+                    Text(progressText)
+                }
+                .typeRole(.meta)
+                .foregroundStyle(Tokens.ink2)
+                .accessibilityElement(children: .combine)
+
                 HStack(spacing: 8) {
                     Pill(label: isPlayingHere ? "Pause" : (isStarting ? "Starting…" : "Play"),
                          glyph: isPlayingHere ? "pause.fill" : (isStarting ? nil : "play.fill"),
@@ -89,15 +102,8 @@ struct QueueRow: View {
                             .background(Tokens.surface, in: Circle())
                     }
                     .accessibilityLabel("More")
-                    Spacer(minLength: 8)
-                    HStack(spacing: 6) {
-                        CircularProgress(fraction: progress?.fraction ?? 0, lineWidth: 2, size: 12)
-                        Text(remainingText)
-                    }
-                    .typeRole(.meta)
-                    .foregroundStyle(Tokens.ink2)
-                    .accessibilityElement(children: .combine)
                 }
+                .padding(.top, 6)
             }
         }
         .contextMenu { contextItems }
@@ -129,10 +135,12 @@ struct QueueRow: View {
         return "Chapter \(c + 1)"
     }
 
-    /// Time left beside the ring, coarse on purpose: "22 hrs left", "42 min left". The row is read
-    /// at a glance and the ring already says how far along it is, so no minutes and never a "~".
-    private var remainingText: String {
-        DurationFormatter.coarseRemaining(progress?.remainingSeconds ?? summary.totalSeconds) + " left"
+    /// "5% · 22 hrs left": the ring's number, then time left, coarse on purpose — the row is read at
+    /// a glance, so no minutes and never a "~".
+    private var progressText: String {
+        let percent = Int(((progress?.fraction ?? 0) * 100).rounded())
+        let left = DurationFormatter.coarseRemaining(progress?.remainingSeconds ?? summary.totalSeconds)
+        return "\(percent)% · \(left) left"
     }
 
     /// What `LibraryModel.excerpt(for:)` reads: the task reloads only when the resume point or the

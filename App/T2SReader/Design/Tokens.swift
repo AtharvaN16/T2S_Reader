@@ -23,6 +23,13 @@ enum Tokens {
     /// not accent — they say which of two kinds a row is, never that it is selected or active.
     static let voiceFemale = dynamic(light: 0xE8558A, dark: 0xF06E9E)
     static let voiceMale = dynamic(light: 0x3B82F6, dark: 0x5B9CFF)
+    /// Lighting on artwork (`BookCover`): a shadow is dark and a highlight is light in both themes,
+    /// unlike `ink`, which flips. Neither carries alpha — each use sets its own.
+    static let shade = dynamic(light: 0x000000, dark: 0x000000)
+    static let gloss = dynamic(light: 0xFFFFFF, dark: 0xFFFFFF)
+    /// The PDF placeholder cover: a light red book that says PDF (owner's call, 2026-09-09).
+    static let pdfCover = dynamic(light: 0xF6D2CC, dark: 0x4A2521)
+    static let pdfInk = dynamic(light: 0xB5362B, dark: 0xFF8E82)
 
     private static func dynamic(light: UInt32, dark: UInt32, lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
         Color(UIColor { traits in

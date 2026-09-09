@@ -42,6 +42,8 @@ final class AppEnvironment {
     let sleepTimer: SleepTimer
     let continuation: QueueContinuation
     let audioSession = AudioSessionController()
+    /// The phone's lean, feeding the Home page's `BookCover` tilt; `RootPager` switches it on and off.
+    let motionTilt = MotionTilt()
     let nowPlaying: NowPlayingController
     let deviceMonitor: DeviceMonitor
     /// What Preferences tells the reader about the on-device engine on this device.

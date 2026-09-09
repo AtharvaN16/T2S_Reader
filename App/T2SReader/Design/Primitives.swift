@@ -117,64 +117,104 @@ struct Artwork: View {
     }
 }
 
-/// A book cover at its own proportions with the cues of Apple Books' Continue cell: a page block
-/// behind the fore-edge, a curved-binding highlight along the spine, a soft shadow and a slight
-/// turn toward the reader. Spine corners stay near-square; only the fore-edge corners round.
+/// The book of Figma's "6 Elegant Book Mockups" no. 3 (node 10:6366), at row size: a softcover lying
+/// flat and seen straight on — square spine corners, softly rounded fore-edge corners, a hinge crease
+/// a few points in from the spine, a soft shadow cast down and to the right, and a faint sheen. The
+/// mockup's paper texture and blurred-scene shadow are its own raster layers; at 112 pt they are
+/// invisible, so the shadow is SwiftUI's and the texture is left out. `tilt` (degrees, from
+/// `MotionTilt`) turns the book a little with the phone so it reads as an object, not a picture.
+///
+/// Covers only look like covers at book proportions: an image narrower than 0.55 or wider than 0.8
+/// of its height (a landscape, a banner, a page scan) and a document with no image both get the
+/// placeholder — the title on a plain cover — and every PDF gets a light red one that says PDF.
 struct BookCover: View {
     var relativePath: String?
     var paths: LibraryPaths
     var height: CGFloat
+    var title: String
+    var isPDF: Bool = false
+    var tilt: CGPoint = .zero
+
+    /// The mockup's own proportions (1461 × 2192); a real cover uses its own, within the book range.
+    private static let ratio: CGFloat = 0.667
+    private static let coverRatios: ClosedRange<CGFloat> = 0.55...0.8
 
     private var image: UIImage? {
-        guard let relativePath else { return nil }
-        return Artwork.image(at: paths.url(forRelativePath: relativePath).path)
+        guard !isPDF, let relativePath,
+              let image = Artwork.image(at: paths.url(forRelativePath: relativePath).path),
+              image.size.height > 0, Self.coverRatios.contains(image.size.width / image.size.height)
+        else { return nil }
+        return image
     }
 
-    /// The image's own ratio, clamped so a landscape or extreme cover cannot break the row.
     private var width: CGFloat {
-        guard let image, image.size.height > 0 else { return height * 0.66 }
-        return min(height * 0.85, max(height * 0.55, height * image.size.width / image.size.height))
+        guard let image else { return height * Self.ratio }
+        return height * image.size.width / image.size.height
     }
 
     private var shape: UnevenRoundedRectangle {
-        UnevenRoundedRectangle(topLeadingRadius: 1.5, bottomLeadingRadius: 1.5, bottomTrailingRadius: 5, topTrailingRadius: 5, style: .continuous)
+        let r = height * 0.03
+        return UnevenRoundedRectangle(topLeadingRadius: 1, bottomLeadingRadius: 1, bottomTrailingRadius: r, topTrailingRadius: r, style: .continuous)
     }
 
     var body: some View {
-        ZStack {
-            pages.offset(x: 3, y: 2)                                       // two sheets, so the fore-edge reads as a stack
-            pages.offset(x: 1.5, y: 1)
-            Group {
-                if let image {
-                    Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
-                } else {
-                    Tokens.surface
-                }
-            }
+        face
             .frame(width: width, height: height)
-            .overlay(spine)
+            .overlay(hinge)
+            .overlay(sheen)
             .clipShape(shape)
+            .overlay(shape.strokeBorder(Tokens.shade.opacity(0.12), lineWidth: 0.5))
+            .compositingGroup()                                                // one shadow for the book, not one per layer
+            .shadow(color: Tokens.shade.opacity(0.22), radius: height * 0.06,
+                    x: height * 0.015 + tilt.x * 0.4, y: height * 0.045 + tilt.y * 0.4)   // the shadow leans with the book
+            .rotation3DEffect(.degrees(tilt.x), axis: (x: 0, y: 1, z: 0), perspective: 0.5)
+            .rotation3DEffect(.degrees(-tilt.y), axis: (x: 1, y: 0, z: 0), perspective: 0.5)
+            .accessibilityHidden(true)
+    }
+
+    @ViewBuilder private var face: some View {
+        if let image {
+            Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
+        } else if isPDF {
+            Tokens.pdfCover.overlay {
+                Text("PDF").typeRole(.sectionHeader).foregroundStyle(Tokens.pdfInk).minimumScaleFactor(0.5).padding(8)
+            }
+        } else {
+            // The mockup's title band across the lower third, on a plain cover.
+            Tokens.surface.overlay(alignment: .bottom) {
+                Text(title)
+                    .typeRole(.meta).foregroundStyle(Tokens.ink)
+                    .lineLimit(2).minimumScaleFactor(0.7).multilineTextAlignment(.center)
+                    .padding(.horizontal, 6).padding(.vertical, 6)
+                    .frame(maxWidth: .infinity)
+                    .background(Tokens.ground)
+                    .padding(.bottom, height * 0.12)
+            }
         }
-        .frame(width: width, height: height)
-        .compositingGroup()                                                // one shadow for the book, not one per sheet
-        .shadow(color: Tokens.ink.opacity(0.18), radius: 6, x: 2, y: 4)
-        .rotation3DEffect(.degrees(-6), axis: (x: 0, y: 1, z: 0), anchor: .leading, perspective: 0.6)
-        .accessibilityHidden(true)
     }
 
-    private var pages: some View {
-        shape.fill(Tokens.raised)
-            .overlay(shape.stroke(Tokens.ink3, lineWidth: 1))
-            .frame(width: width, height: height)
-    }
-
-    /// The classic curved binding: dark in the gutter, a thin bright ridge, then the cover.
-    private var spine: some View {
+    /// The softcover's hinge: a bright sliver at the spine edge, a darker crease just inside it.
+    private var hinge: some View {
         LinearGradient(stops: [
-            .init(color: Tokens.ink.opacity(0.28), location: 0),
-            .init(color: Tokens.raised.opacity(0.22), location: 0.09),
-            .init(color: Tokens.raised.opacity(0), location: 0.18),
+            .init(color: Tokens.gloss.opacity(0.18), location: 0),
+            .init(color: Tokens.shade.opacity(0), location: 0.015),
+            .init(color: Tokens.shade.opacity(0.16), location: 0.035),
+            .init(color: Tokens.shade.opacity(0), location: 0.08),
         ], startPoint: .leading, endPoint: .trailing)
+    }
+
+    /// The mockup's two reflection layers: a little light from the top-left, a little more at the foot.
+    private var sheen: some View {
+        ZStack {
+            LinearGradient(stops: [
+                .init(color: Tokens.gloss.opacity(0.10), location: 0),
+                .init(color: Tokens.gloss.opacity(0), location: 0.45),
+            ], startPoint: .topLeading, endPoint: .bottomTrailing)
+            LinearGradient(stops: [
+                .init(color: Tokens.gloss.opacity(0), location: 0.6),
+                .init(color: Tokens.gloss.opacity(0.07), location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+        }
     }
 }
 

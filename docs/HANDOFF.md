@@ -2,7 +2,52 @@
 
 _Last updated 2026-09-09 (Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-09, latest) — Home round 3: excerpt, 3D cover, Import page, bottom fade
+## Resume here (2026-09-09, latest) — Home round 4: Figma mockup cover, gyro tilt, progress line
+
+The owner's fourth pass, from a phone screenshot of round 3 plus a Figma community file ("6 Elegant
+Book Mockups", node `10:6366`, mockup no. 3) read through the Figma MCP (`get_design_context` +
+`get_screenshot` + its layer assets). Done on `dev`:
+
+- **`BookCover` is now mockup no. 3** (`Design/Primitives.swift`): a softcover lying flat, seen
+  straight on — square spine corners, fore-edge corners at `height × 0.03`, a hinge crease a few
+  points in from the spine (bright sliver, then a darker band, gone by 8 % of the width), a soft
+  shadow cast down-right, a faint sheen from the top-left and at the foot, a 0.5 pt edge. The
+  mockup's paper texture and blurred-scene shadow are raster layers that vanish at 112 pt, so the
+  shadow is SwiftUI's and the texture is left out on purpose. Round 3's page-sheet stack and −6°
+  base tilt are gone (the mockup is front-facing). Proportions: the mockup's 0.667 for placeholders,
+  the image's own for real covers.
+- **Placeholders**: a cover whose ratio is outside 0.55…0.8 (landscape, banner, page scan) or a
+  document with no image gets a plain `surface` cover with the title in a `ground` band across the
+  lower third (the mockup's title box). **Every PDF** gets the light red cover that says "PDF"
+  (`Tokens.pdfCover` / `pdfInk`, new) — read as the owner's categorical call ("for pdf we will use a
+  light red book"), so a PDF's rendered first page is never used as its cover on Home. Flip
+  `isPDF` handling in `BookCover.image` if that was meant only for weird/missing PDF covers.
+- **New lighting tokens** `Tokens.shade` (black) and `Tokens.gloss` (white), the same in both
+  themes: round 3's `ink`-based shadow became a glow in dark mode. Alpha is set per use.
+- **Progress line moved** (`Queue/QueueRow.swift`): "◔ 5% · 23 hrs left" (12 pt ring, `.meta`,
+  `ink2`) now sits between the excerpt and the buttons; the button row is Play + "…" only, with 6 pt
+  extra above it. Book-to-text gap 14 → 20 pt, VStack rhythm 10 → 8 pt, cover 96 → 112 pt.
+- **Gyro tilt** (`System/MotionTilt.swift`, new; `AppEnvironment.motionTilt`): `CMMotionManager`
+  device motion at 30 Hz, `.xArbitraryZVertical` (gravity only, no magnetometer). Relative, not
+  absolute: a 3 s exponential baseline makes the resting angle neutral, a 0.2 low-pass smooths the
+  delta, ×0.35, clamped ±3°, published only on a > 0.05° move. `BookCover` adds `tilt.x` about the
+  vertical axis and `−tilt.y` about the horizontal one, and slides its shadow with it. **Gating**
+  (`Root/RootPager.swift`, `shouldTilt` → `motionTilt.setEnabled`): only while the scene is active,
+  Home is the page, no Reader is up, Reduce Motion is off, and the device is not under load —
+  thermal serious / Low Power Mode, or Kokoro present (`.checking`/`.preparing`/`.available`) with
+  playback, a Prepare pass, the warm-up, or a voice preview (`VoicePreviewModel.isRendering`)
+  running. A system/cloud voice playing on a Kokoro build counts as load too (documented; not worth
+  the route plumbing). No `NSMotionUsageDescription` is needed for `CMMotionManager`; CoreMotion is
+  autolinked from the `import`. The simulator reports no device motion, so `tilt` stays `.zero`
+  there by design.
+
+**Owed on a phone**: the tilt's sign (whether covers lean with or against the hand — a one-character
+flip in `BookCover`'s two `rotation3DEffect`s), the shadow strength in dark mode, and the PDF red.
+
+Verification: `scripts/build-app.sh` → `** BUILD SUCCEEDED **`; `swift test` → 427 tests in 80
+suites passed. Not seen on a phone — same standing gap.
+
+## Resume here (2026-09-09) — Home round 3: excerpt, 3D cover, Import page, bottom fade
 
 The owner's third pass on the Home page, from a phone screenshot plus an Apple Books "Continue" cell
 and an ElevenReader Import screen (Mobbin) as references. Six asks, all done on `dev`:

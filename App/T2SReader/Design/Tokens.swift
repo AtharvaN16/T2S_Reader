@@ -19,6 +19,10 @@ enum Tokens {
     static let onAccent = dynamic(light: 0xFFFFFF, dark: 0xFFFFFF)
     static let positive = dynamic(light: 0x22A559, dark: 0x34C070)
     static let destructive = dynamic(light: 0xE5453B, dark: 0xFF5A50)
+    /// The voice picker's avatar discs: pink for a female voice, blue for a male one. Categorical,
+    /// not accent — they say which of two kinds a row is, never that it is selected or active.
+    static let voiceFemale = dynamic(light: 0xE8558A, dark: 0xF06E9E)
+    static let voiceMale = dynamic(light: 0x3B82F6, dark: 0x5B9CFF)
 
     private static func dynamic(light: UInt32, dark: UInt32, lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
         Color(UIColor { traits in

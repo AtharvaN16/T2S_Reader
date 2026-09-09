@@ -2,6 +2,18 @@
 
 _Last updated 2026-09-08 (Plan 16 — steady streaming and the open path — on `plan-16-open-path`, in the worktree `.worktrees/plan-16-open-path`, off `origin/dev` @ 246065b). Written for whoever picks up the coding next._
 
+## Resume here (2026-09-08, late) — the voice picker
+
+A UI-only pass on Preferences → Voice from the owner's phone screenshot, on `dev`: the row's second
+line is now the voice's character ("Warm and intimate", "Sensual, low and slow", "Whispered, close to
+the ear" — `KokoroVoiceCatalog.personalities`, one per voice, written from listening; adjust any that
+read wrong on the phone) instead of "American · Female"; the accent is the sub-section (🇺🇸 / 🇬🇧
+headers at `sectionHeader` weight with `Spacing.row` above) and the gender is the avatar's tint
+(`VoiceOption.gender`, `Tokens.voiceFemale` pink / `Tokens.voiceMale` blue, the initial in `onAccent`);
+the preview glyph is the filled 32 pt circle in a 44 pt target. The Preferences row's subtitle now
+reads "Heart · Warm and intimate". Tests updated and green; the Simulator scheme builds. Not seen on
+a phone yet — the everyday build lists no Kokoro rows, so this needs the Phone scheme to look at.
+
 ## Resume here (2026-09-08) — Plan 16
 
 Plan 16 (`docs/superpowers/plans/2026-09-08-plan-16-open-path.md`) took the audit's remaining items

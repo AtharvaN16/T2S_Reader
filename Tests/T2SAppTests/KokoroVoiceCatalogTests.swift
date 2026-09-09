@@ -24,18 +24,33 @@ import T2SAudio
             #expect(parsed.engineID == identity)
         }
 
+        // The second line is the voice's character; accent and gender ride separately, as the
+        // sub-section (`language`) and the avatar tint (`gender`), so neither is repeated in words.
         let heart = try #require(kokoro.first)
         #expect(heart.name == "Heart")
-        #expect(heart.detail == "American · Female")
+        #expect(heart.detail == "Warm and intimate")
         #expect(heart.language == "en-US")
+        #expect(heart.gender == .female)
 
         let emma = try #require(voices.first { KokoroVoiceID(rawValue: $0.id)?.voice == "bf_emma" })
         #expect(emma.name == "Emma")
-        #expect(emma.detail == "British · Female")
+        #expect(emma.detail == "Warm and measured")
         #expect(emma.language == "en-GB")
+        #expect(emma.gender == .female)
 
         let george = try #require(voices.first { KokoroVoiceID(rawValue: $0.id)?.voice == "bm_george" })
-        #expect(george.detail == "British · Male")
+        #expect(george.detail == "Stately and slow")
+        #expect(george.gender == .male)
+        #expect(voices.first?.gender == nil)   // the "Default" pointer row has no tint
+    }
+
+    @Test func everyVoiceHasItsOwnPersonalityLineAndAGender() {
+        let catalog = KokoroVoiceCatalog(base: BaseCatalog(), engineIdentity: identity)
+        let kokoro = catalog.voices().dropFirst()
+        #expect(Set(KokoroVoiceCatalog.personalities.keys) == Set(KokoroVoiceCatalog.voiceNames))
+        #expect(kokoro.allSatisfy { $0.gender != nil })
+        #expect(kokoro.allSatisfy { !($0.detail ?? "").contains("·") })
+        #expect(Set(kokoro.compactMap(\.detail)).count == kokoro.count)   // no two voices read alike
     }
 
     @Test func withNoEnginesTheBaseRowsIncludingSystemDefaultPassThroughUnchanged() {
@@ -72,11 +87,11 @@ import T2SAudio
         // The label is a runtime qualifier: the everyday route reads as it always has, and only the
         // second runtime has to name itself to be told apart.
         #expect(kokoro.first?.name == "Heart")
-        #expect(kokoro.first?.detail == "American · Female")
+        #expect(kokoro.first?.detail == "Warm and intimate")
         #expect(kokoro.dropFirst(28).first?.name == "Heart")
-        #expect(kokoro.dropFirst(28).first?.detail == "American · Female · MLX")
+        #expect(kokoro.dropFirst(28).first?.detail == "Warm and intimate · MLX")
         let mlxEmma = try #require(kokoro.dropFirst(28).first { KokoroVoiceID(rawValue: $0.id)?.voice == "bf_emma" })
-        #expect(mlxEmma.detail == "British · Female · MLX")
+        #expect(mlxEmma.detail == "Warm and measured · MLX")
         #expect(mlxEmma.language == "en-GB")
         #expect(voices.allSatisfy { $0.group == .kokoro })
     }
@@ -102,7 +117,7 @@ import T2SAudio
         let afterTheProbe = Array(catalog.voices().dropFirst())
         #expect(afterTheProbe.count == 56)
         #expect(afterTheProbe.dropFirst(28).allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == mlx })
-        #expect(afterTheProbe.dropFirst(28).first?.detail == "American · Female · MLX")
+        #expect(afterTheProbe.dropFirst(28).first?.detail == "Warm and intimate · MLX")
     }
 }
 

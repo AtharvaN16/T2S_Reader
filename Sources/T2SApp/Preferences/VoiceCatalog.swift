@@ -14,26 +14,36 @@ public enum VoiceGroup: String, Hashable, Sendable, CaseIterable {
     }
 }
 
+/// The voice's gender, for the picker's tinted avatar (pink for a female voice, blue for a male one).
+/// `nil` for a row that has none to show: the "Default" pointer row, a system voice, a cloud voice.
+public enum VoiceGender: String, Hashable, Sendable {
+    case female, male
+}
+
 /// A selectable voice (spec §2.2 voice picker). Until Plan 5, the app fills this from
 /// `AVSpeechSynthesisVoice`; `systemDefault` maps to the engine's language fallback.
 public struct VoiceOption: Hashable, Sendable, Identifiable {
     public var id: String
     public var name: String
-    /// A second row line — accent/gender for Kokoro, the OS language for a system voice, nil for a
-    /// row with nothing more to say. `name` alone is the display name; this is never folded into it.
+    /// A second row line — the voice's character for Kokoro ("Warm and intimate"), the OS language
+    /// for a system voice, nil for a row with nothing more to say. `name` alone is the display name;
+    /// this is never folded into it. Accent and gender are not repeated here: the accent is the
+    /// sub-section the row sits in, the gender is the avatar's tint.
     public var detail: String?
     public var language: String
     public var isDefault: Bool
     public var group: VoiceGroup
+    public var gender: VoiceGender?
 
     public init(id: String, name: String, detail: String? = nil, language: String, isDefault: Bool = false,
-                group: VoiceGroup = .system) {
+                group: VoiceGroup = .system, gender: VoiceGender? = nil) {
         self.id = id
         self.name = name
         self.detail = detail
         self.language = language
         self.isDefault = isDefault
         self.group = group
+        self.gender = gender
     }
 
     public static let systemDefault = VoiceOption(

@@ -48,7 +48,7 @@ struct VoiceListPage: View {
                         .foregroundStyle(Tokens.destructive)
                         .padding(.top, Spacing.section)
                 }
-                Color.clear.frame(height: 120)
+                Color.clear.frame(height: 160)
             }
             .padding(.horizontal, Spacing.margin)
         }
@@ -70,22 +70,29 @@ struct VoiceListPage: View {
         return VStack(alignment: .leading, spacing: 0) {
             ForEach(defaults) { row($0, options: options, hasDefaultRow: hasDefaultRow) }
             if !american.isEmpty {
-                subsectionHeader("American English")
+                subsectionHeader("American English", flag: "🇺🇸")
                 ForEach(american) { row($0, options: options, hasDefaultRow: hasDefaultRow) }
             }
             if !british.isEmpty {
-                subsectionHeader("British English")
+                subsectionHeader("British English", flag: "🇬🇧")
                 ForEach(british) { row($0, options: options, hasDefaultRow: hasDefaultRow) }
             }
         }
     }
 
-    private func subsectionHeader(_ title: String) -> some View {
-        Text(title)
-            .typeRole(.meta)
-            .foregroundStyle(Tokens.ink2)
-            .padding(.top, Spacing.grid)
-            .padding(.bottom, 4)
+    /// A flag and the accent's name, with room above and below so each accent reads as its own
+    /// block rather than as one more row. The flag is decorative: the title already says which.
+    private func subsectionHeader(_ title: String, flag: String) -> some View {
+        HStack(spacing: Spacing.grid) {
+            Text(flag)
+                .font(.system(size: 22))
+                .accessibilityHidden(true)
+            Text(title)
+                .typeRole(.sectionHeader)
+                .foregroundStyle(Tokens.ink)
+        }
+        .padding(.top, Spacing.row)
+        .padding(.bottom, Spacing.grid)
     }
 
     private func row(_ option: VoiceOption, options: [VoiceOption], hasDefaultRow: Bool) -> some View {
@@ -148,28 +155,33 @@ struct VoiceListPage: View {
                 if rendering {
                     ProgressView()
                 } else {
-                    Image(systemName: previewing ? "stop.circle" : "play.circle")
-                        .font(.system(size: 20))
+                    Image(systemName: previewing ? "stop.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 32))
                 }
             }
-            .foregroundStyle(Tokens.ink2)
-            .frame(width: 24, height: 24)
+            .foregroundStyle(Tokens.ink)
+            .frame(width: 44, height: 44)   // the full tap target; the glyph sits inside it
         }
         .buttonStyle(.plain)
         .accessibilityLabel(previewing ? "Stop preview" : "Preview \(option.name)")
     }
 
-    /// A neutral `surface` disc with the voice's initial: the spec allows one accent element per
-    /// screen and keeps `positive`/`destructive` for states and confirmations, so a coloured orb per
-    /// row is not on the table. The initial is enough to scan the list by.
+    /// A disc with the voice's initial, tinted by the voice's gender — pink for a female voice, blue
+    /// for a male one — so the list scans by colour before it is read. A row with no gender to show
+    /// (the "Default" pointer, a system or cloud voice) keeps the neutral `surface` disc.
     private func avatar(for option: VoiceOption) -> some View {
-        Circle()
-            .fill(Tokens.surface)
-            .frame(width: 36, height: 36)
+        let tint: Color? = switch option.gender {
+        case .female: Tokens.voiceFemale
+        case .male: Tokens.voiceMale
+        case nil: nil
+        }
+        return Circle()
+            .fill(tint ?? Tokens.surface)
+            .frame(width: 40, height: 40)
             .overlay(
                 Text(option.name.prefix(1).uppercased())
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Tokens.ink)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(tint == nil ? Tokens.ink : Tokens.onAccent)
             )
             .accessibilityHidden(true)
     }

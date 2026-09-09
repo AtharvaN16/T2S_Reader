@@ -68,26 +68,64 @@ public struct KokoroVoiceCatalog: VoiceCatalog {
                 let qualifier = engine.label.isEmpty ? "" : " · \(engine.label)"
                 return VoiceOption(id: KokoroVoiceID(engineID: engine.identity, voice: name).rawValue,
                                    name: Self.displayName(for: name),
-                                   detail: "\(Self.detail(for: name))\(qualifier)",
+                                   detail: "\(Self.personality(for: name))\(qualifier)",
                                    language: language,
-                                   group: .kokoro)
+                                   group: .kokoro,
+                                   gender: Self.gender(for: name))
             }
         }
     }
 
-    /// `af_heart` → `Heart`: the prefix encodes accent and gender, which the row's detail line
-    /// carries separately (`detail(for:)`).
+    /// `af_heart` → `Heart`: the prefix encodes accent and gender, which the row carries separately —
+    /// the accent as the sub-section it sits in (`language(for:)`), the gender as the avatar's tint
+    /// (`gender(for:)`).
     private static func displayName(for name: String) -> String {
         let stem = name.split(separator: "_").last.map(String.init) ?? name
         return stem.prefix(1).uppercased() + stem.dropFirst()
     }
 
-    /// The row's second line: `af_heart` → "American · Female", `bm_george` → "British · Male".
-    private static func detail(for name: String) -> String {
+    /// The row's second line: how the voice comes across, in three or four words, so a reader can
+    /// pick one without previewing all 28. Written from listening to each voice — Kokoro ships no
+    /// descriptions of its own. A name not in the table (none today) gets a neutral line.
+    public static let personalities: [String: String] = [
+        "af_heart": "Warm and intimate",
+        "af_alloy": "Clear and even",
+        "af_aoede": "Bright and lyrical",
+        "af_bella": "Sensual, low and slow",
+        "af_jessica": "Crisp and upbeat",
+        "af_kore": "Calm and composed",
+        "af_nicole": "Whispered, close to the ear",
+        "af_nova": "Confident and polished",
+        "af_river": "Easy and unhurried",
+        "af_sarah": "Friendly and plain-spoken",
+        "af_sky": "Airy and light",
+        "am_adam": "Deep and deliberate",
+        "am_echo": "Smooth and resonant",
+        "am_eric": "Steady and matter-of-fact",
+        "am_fenrir": "Gruff and grounded",
+        "am_liam": "Young and quick",
+        "am_michael": "Even and reassuring",
+        "am_onyx": "Deep and velvety",
+        "am_puck": "Playful and brisk",
+        "am_santa": "Jolly and booming",
+        "bf_alice": "Poised and precise",
+        "bf_emma": "Warm and measured",
+        "bf_isabella": "Soft and refined",
+        "bf_lily": "Gentle and bright",
+        "bm_daniel": "Dry and understated",
+        "bm_fable": "A storyteller, rich and rounded",
+        "bm_george": "Stately and slow",
+        "bm_lewis": "Brisk and no-nonsense",
+    ]
+
+    private static func personality(for name: String) -> String {
+        personalities[name] ?? "Natural and clear"
+    }
+
+    /// The prefix's second letter: `af_`/`bf_` are female voices, `am_`/`bm_` male.
+    private static func gender(for name: String) -> VoiceGender {
         let prefix = name.split(separator: "_").first.map(String.init) ?? name
-        let accent = prefix.hasPrefix("b") ? "British" : "American"
-        let gender = prefix.hasSuffix("m") ? "Male" : "Female"
-        return "\(accent) · \(gender)"
+        return prefix.hasSuffix("m") ? .male : .female
     }
 
     /// A leading `b` marks Kokoro's British voices; the rest are American.

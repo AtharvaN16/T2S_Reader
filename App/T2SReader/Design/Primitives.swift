@@ -201,9 +201,9 @@ struct BookCover: View {
             .overlay(shape.strokeBorder(Tokens.shade.opacity(0.12), lineWidth: 0.5))
             .compositingGroup()                                                // one shadow for the book, not one per layer
             .shadow(color: Tokens.shade.opacity(0.22), radius: size.height * 0.06,
-                    x: size.height * 0.015 + tilt.x * 0.4, y: size.height * 0.045 + tilt.y * 0.4)   // the shadow leans with the book
-            .rotation3DEffect(.degrees(tilt.x), axis: (x: 0, y: 1, z: 0), perspective: 0.5)
-            .rotation3DEffect(.degrees(-tilt.y), axis: (x: 1, y: 0, z: 0), perspective: 0.5)
+                    x: size.height * 0.015 + tilt.x * 0.5, y: size.height * 0.045 + tilt.y * 0.5)   // the shadow leans with the book
+            .rotation3DEffect(.degrees(tilt.x), axis: (x: 0, y: 1, z: 0), perspective: 0.7)
+            .rotation3DEffect(.degrees(-tilt.y), axis: (x: 1, y: 0, z: 0), perspective: 0.7)
             .accessibilityHidden(true)
     }
 

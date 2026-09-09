@@ -3,18 +3,18 @@ import CoreMotion
 import Foundation
 import Observation
 
-/// The phone's lean, as a couple of degrees for `BookCover` to add to its rotation so the book on
-/// the Collection's book sheet tilts very subtly with the hand that holds it (owner's ask,
-/// 2026-09-09 — the Home rows had this once and lost it at the owner's request; only the sheet's
-/// book has it). Relative, not absolute: a slowly adapting baseline makes whatever angle the phone
-/// rests at neutral within a few seconds, so only the *change* shows — flat on a table reads the
-/// same as held upright. `BookSheet` switches it on only while it is showing and the device is
-/// not under load.
+/// The phone's lean, as a few degrees for `BookCover` to add to its rotation so the book on the
+/// Collection's book sheet visibly turns with the hand that holds it (owner's ask, 2026-09-09,
+/// made bolder same day after the first cut read as too subtle to notice — the Home rows had this
+/// once and lost it at the owner's request; only the sheet's book has it). Relative, not absolute:
+/// a slowly adapting baseline makes whatever angle the phone rests at neutral within a few
+/// seconds, so only the *change* shows — flat on a table reads the same as held upright.
+/// `BookSheet` switches it on only while it is showing and the device is not under load.
 @MainActor
 @Observable
 final class MotionTilt {
     /// Degrees. `x` turns about the vertical axis (from roll), `y` about the horizontal axis (from
-    /// pitch). Clamped to ±3°, `.zero` whenever updates are off or motion is unavailable (the
+    /// pitch). Clamped to ±10°, `.zero` whenever updates are off or motion is unavailable (the
     /// simulator).
     private(set) var tilt: CGPoint = .zero
     /// What the caller last asked for. Stays true on the simulator even though `tilt` never moves,
@@ -75,9 +75,10 @@ private struct TiltFilter {
     private static let baselineSeconds: TimeInterval = 3
     /// Per-sample weight of the smoothing low-pass; 0.2 at 30 Hz settles in about a quarter second.
     private static let smoothing = 0.2
-    /// Degrees of tilt per degree of lean. "Very subtle": a 10° tip of the phone moves a cover 3.5°.
-    private static let scale = 0.35
-    private static let limitDegrees = 3.0
+    /// Degrees of tilt per degree of lean — bolder than the first cut (owner's ask, 2026-09-09: "too
+    /// subtle"): a 10° tip of the phone now moves a cover 9°, close to one-for-one, clamped below.
+    private static let scale = 0.9
+    private static let limitDegrees = 10.0
 
     private let baselineWeight: Double
     private var baseline: (roll: Double, pitch: Double)?

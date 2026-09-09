@@ -2,7 +2,28 @@
 
 _Last updated 2026-09-09 (Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-09, latest) — Home page: Queue renamed, Continue Listening ring
+## Resume here (2026-09-09, latest) — Continue Listening row round 2
+
+The owner's second pass on the same row, on `dev` commit `6987a75`: four small corrections to round 1
+below, all in `QueueRow.swift` / `Design/Typography.swift`.
+
+- **Archive removed as a standalone pill** — the row's button row is now just Play + "…". Archiving
+  still works: swipe-to-archive (`QueuePage.swift`'s `.swipeActions`) and the "Archive" context-menu
+  item are both untouched, since round 1 already established it's a real, distinct action (unqueue
+  without delete) — the owner's ask this round was about decluttering the row, not the feature.
+- **Cover art is back on the left** — `Artwork(relativePath: summary.document.coverImagePath, paths:
+  env.paths, size: 64, radius: Spacing.artworkSmall)`, the same primitive Collection/BookSheet/
+  MiniPlayer already use, in place of round 1's source-glyph-in-a-ring badge.
+- **The circular progress ring and remaining time shrank into the meta line** — 14pt ring (`lineWidth:
+  2`), trailing the existing "EPUB · 3d · Chapter 7 of 27 [✓]" text at `.meta` size, instead of their
+  own leading block.
+- **Title role**: a new `TypeRole.cardTitle` (`Design/Typography.swift` — Inter-SemiBold 21pt,
+  between `rowTitle`'s 17pt Medium and `playerTitle`'s 26pt ExtraBold) replaces `playerTitle` on the
+  row's title button — smaller and semibold per the owner's ask, not extrabold.
+
+Simulator scheme builds clean. Still not seen on a phone — same standing gap.
+
+## Resume here (2026-09-09) — Home page: Queue renamed, Continue Listening ring
 
 The owner sent two phone screenshots (Queue page, Voice picker) with five UI asks. Done on `dev`,
 commit `8194e11`:

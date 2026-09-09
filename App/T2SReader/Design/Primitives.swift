@@ -154,9 +154,15 @@ struct BookCover: View {
     var maxWidth: CGFloat? = nil
 
     /// The mockup's own proportions (1461 × 2192); a real cover uses its own, within the book range.
-    /// Internal, not private: the Collection grid sizes its cells from it.
+    /// Internal, not private: the book sheet's hero sizes from it.
     static let ratio: CGFloat = 0.667
     private static let coverRatios: ClosedRange<CGFloat> = 0.55...0.8
+    /// The widest a real cover is allowed to be (`coverRatios.upperBound`). Internal: the Collection
+    /// grid sizes its cell to this ratio, not `ratio`, so `size` below never has to clamp a cover's
+    /// height to fit `maxWidth` — every book in the grid then keeps the cell's full height and only
+    /// its width narrows for a narrower cover, instead of some books going both narrower *and*
+    /// shorter than their neighbours for no reason a reader can see.
+    static let widestRatio: CGFloat = coverRatios.upperBound
 
     private var image: UIImage? {
         guard !isPDF, let relativePath,

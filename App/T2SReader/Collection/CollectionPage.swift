@@ -249,11 +249,17 @@ private struct CollectionTile: View {
                               maxWidth: geo.size.width)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 }
-                .aspectRatio(BookCover.ratio, contentMode: .fit)
+                // The slot's own ratio is the widest a real cover is ever let be (`widestRatio`),
+                // not the placeholder's narrower one — so `BookCover.size` never has to clamp a
+                // cover's height to fit the width, and every book in the row stands the same height,
+                // only narrower for a narrower cover. Sizing the slot to the placeholder ratio
+                // instead was the bug: a wide cover clamped short while a narrow one stayed tall,
+                // so books of no particular kind ended up in visibly different sizes.
+                .aspectRatio(BookCover.widestRatio, contentMode: .fit)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(summary.document.title).typeRole(.meta).foregroundStyle(Tokens.ink).lineLimit(2)
+                    Text(summary.document.title).typeRole(.pill).foregroundStyle(Tokens.ink).lineLimit(2)
                     if let author = summary.document.author {
-                        Text(author).typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(1)
+                        Text(author).typeRole(.caption).foregroundStyle(Tokens.ink2).lineLimit(1)
                     }
                 }
                 .multilineTextAlignment(.leading)

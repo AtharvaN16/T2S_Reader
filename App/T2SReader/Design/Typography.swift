@@ -4,7 +4,7 @@ import SwiftUI
 /// Spec §2.4.1 type roles: Inter with tight tracking on display and label text, normal tracking on
 /// meta, monospaced digits for anything that counts. Sizes are Dynamic Type relative.
 enum TypeRole {
-    case pageTitle, playerTitle, groupTitle, sectionHeader, rowTitle, settingsRow, pill, meta, mono
+    case pageTitle, playerTitle, groupTitle, sectionHeader, rowTitle, settingsRow, pill, meta, caption, mono
 
     var font: Font {
         switch self {
@@ -19,6 +19,9 @@ enum TypeRole {
         case .settingsRow: return .custom("Inter-Medium", size: 16, relativeTo: .callout)
         case .pill: return .custom("Inter-Medium", size: 15, relativeTo: .subheadline)
         case .meta: return .custom("Inter-Regular", size: 13, relativeTo: .footnote)
+        /// A step under `meta`: the Collection grid's author line, where `meta` itself is now the
+        /// title's weight and needs something quieter under it.
+        case .caption: return .custom("Inter-Regular", size: 11, relativeTo: .caption2)
         case .mono: return .system(.footnote, design: .monospaced)
         }
     }
@@ -32,7 +35,7 @@ enum TypeRole {
         case .sectionHeader, .rowTitle: return -0.01 * 17
         case .settingsRow: return -0.01 * 16
         case .pill: return -0.01 * 15
-        case .meta, .mono: return 0
+        case .meta, .caption, .mono: return 0
         }
     }
 

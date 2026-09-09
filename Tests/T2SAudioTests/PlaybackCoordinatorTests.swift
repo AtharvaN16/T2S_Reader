@@ -498,6 +498,9 @@ import T2SCore
         await waitForBuffers(player, 2)
         await c.settle()
         #expect(c.state == .playing && player.isPlaying)
+        // The `.rendered` behind the last piece swaps the estimate for the actual; until it lands the
+        // playhead is clamped to the estimate (0.67 s here), which a loaded test run can still be.
+        for _ in 0 ..< 200 where c.timeline?[utterance: 0].duration.isActual != true { try? await Task.sleep(for: .milliseconds(5)) }
         player.advance(seconds: 0.2); c.tick()
         #expect(abs(c.playhead.offset - 0.7) < 1e-9)                 // no jump: the clock stood still while dry
     }

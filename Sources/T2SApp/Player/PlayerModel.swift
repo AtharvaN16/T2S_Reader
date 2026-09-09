@@ -17,15 +17,37 @@ public struct ChapterEntry: Hashable, Sendable, Identifiable {
 
     /// One entry per chapter with its start on the (estimated) time axis and how far `elapsed` is through it.
     public static func entries(timeline: Timeline, timeIndex: TimeIndex, elapsed: TimeInterval) -> [ChapterEntry] {
-        timeline.chapters.indices.map { c in
-            let range = timeline.utteranceRange(ofChapter: c)
-            let start = timeIndex.startTime(ofUtterance: range.lowerBound)
-            let end = timeIndex.startTime(ofUtterance: range.upperBound)
-            let duration = end - start
-            let fraction = duration > 0 ? min(1, max(0, (elapsed - start) / duration)) : 0
-            return ChapterEntry(index: c, title: timeline.chapters[c].title, startSeconds: start, durationSeconds: duration, fraction: fraction)
+        entries(axis: axis(timeline: timeline, timeIndex: timeIndex), elapsed: elapsed)
+    }
+
+    static func entries(axis: [ChapterSpan], elapsed: TimeInterval) -> [ChapterEntry] {
+        axis.enumerated().map { c, span in
+            ChapterEntry(index: c, title: span.title, startSeconds: span.start, durationSeconds: span.duration,
+                         fraction: fraction(of: elapsed, in: span))
         }
     }
+
+    /// Where each chapter sits on the time axis. One pass: a running utterance index, not
+    /// `utteranceRange(ofChapter:)` per chapter, which made this O(chapters²) (Plan 17, audit §7).
+    static func axis(timeline: Timeline, timeIndex: TimeIndex) -> [ChapterSpan] {
+        var next = 0
+        return timeline.chapters.map { chapter in
+            let start = timeIndex.startTime(ofUtterance: next)
+            next += chapter.utterances.count
+            return ChapterSpan(title: chapter.title, start: start, duration: timeIndex.startTime(ofUtterance: next) - start)
+        }
+    }
+
+    static func fraction(of elapsed: TimeInterval, in span: ChapterSpan) -> Double {
+        span.duration > 0 ? min(1, max(0, (elapsed - span.start) / span.duration)) : 0
+    }
+}
+
+/// A chapter's place on the time axis, the part of a `ChapterEntry` that only a timeline change moves.
+struct ChapterSpan: Hashable, Sendable {
+    var title: String
+    var start: TimeInterval
+    var duration: TimeInterval
 }
 
 /// The UI's one view of playback (spec §3): a thin, observable bridge over `PlaybackCoordinator`
@@ -58,6 +80,11 @@ public final class PlayerModel {
     /// `@ObservationIgnored`: filling it from `scrubber`'s getter must not invalidate the body that
     /// is reading it.
     @ObservationIgnored private var tickCache: (revision: Int, ticks: [Bool])?
+    /// The other O(timeline) facts the 10 Hz bodies read — whether every utterance is rendered, and
+    /// each chapter's place on the time axis — cached against `timelineRevision` like the ticks
+    /// (Plan 17, audit §7). `chapterIndexCache` is keyed on the playhead's utterance as well.
+    @ObservationIgnored private var derivedCache: (revision: Int, isFullyRendered: Bool, axis: [ChapterSpan])?
+    @ObservationIgnored private var chapterIndexCache: (revision: Int, utterance: Int, chapter: Int?)?
 
     public init(coordinator: PlaybackCoordinator, library: Library) {
         self.coordinator = coordinator
@@ -71,15 +98,30 @@ public final class PlayerModel {
     public var isCatchingUp: Bool { state == .catchingUp }
     public var elapsed: TimeInterval { coordinator.timeIndex.time(at: coordinator.playhead) }
     public var total: TimeInterval { coordinator.timeIndex.totalDuration }
-    public var isTotalApproximate: Bool { !(coordinator.timeline?.isFullyRendered ?? false) }
+    public var isTotalApproximate: Bool { !derived().isFullyRendered }
     public var elapsedText: String { DurationFormatter.clock(elapsed) }
     public var remainingText: String { DurationFormatter.remaining(total - elapsed, approximate: isTotalApproximate) }
     public var totalText: String { (isTotalApproximate ? "~" : "") + DurationFormatter.clock(total) }
-    public var chapterIndex: Int? { coordinator.timeline?.chapterIndex(forUtterance: coordinator.playhead.utteranceIndex) }
+    public var chapterIndex: Int? {
+        let revision = coordinator.timelineRevision
+        let utterance = coordinator.playhead.utteranceIndex
+        if let chapterIndexCache, chapterIndexCache.revision == revision, chapterIndexCache.utterance == utterance {
+            return chapterIndexCache.chapter
+        }
+        let chapter = coordinator.timeline?.chapterIndex(forUtterance: utterance)
+        chapterIndexCache = (revision, utterance, chapter)
+        return chapter
+    }
 
-    public var chapters: [ChapterEntry] {
-        guard let timeline = coordinator.timeline else { return [] }
-        return ChapterEntry.entries(timeline: timeline, timeIndex: coordinator.timeIndex, elapsed: elapsed)
+    public var chapters: [ChapterEntry] { ChapterEntry.entries(axis: derived().axis, elapsed: elapsed) }
+
+    private func derived() -> (isFullyRendered: Bool, axis: [ChapterSpan]) {
+        let revision = coordinator.timelineRevision
+        if let derivedCache, derivedCache.revision == revision { return (derivedCache.isFullyRendered, derivedCache.axis) }
+        guard let timeline = coordinator.timeline else { return (false, []) }
+        let facts = (timeline.isFullyRendered, ChapterEntry.axis(timeline: timeline, timeIndex: coordinator.timeIndex))
+        derivedCache = (revision, facts.0, facts.1)
+        return facts
     }
 
     public var scrubber: ScrubberModel {

@@ -41,6 +41,23 @@ import T2SStore
         #expect(model.entries[0].createdAt >= model.entries[1].createdAt)
     }
 
+    /// A stale document is re-derived when it is opened, never by the bookmark list (Plan 17, audit
+    /// §5.1): until then the list is empty, and that is not an error.
+    @Test func aStaleDocumentListsNoBookmarksAndNoError() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let summary = try #require(try await f.store.summary(id: id))
+        try await f.store.add(Bookmark(documentID: id, position: Position(resourceHref: "OEBPS/ch1.xhtml", progression: 0, charOffset: 0)))
+        var stale = try #require(try await f.store.timeline(for: id)).timeline
+        stale.segmenterVersion = Versions.segmenter + 1
+        try await f.store.replaceTimeline(stale, for: id)
+        let (player, _) = try await makePlayer(f)
+        let model = BookmarkListModel(library: f.library, player: player)
+        await model.load(summary)
+        #expect(model.entries.isEmpty && model.error == nil)
+        #expect(try await f.store.isStale(id: id) == true)                  // not re-derived from here
+    }
+
     @Test func deleteRemovesTheBookmarkFromTheStoreAndTheList() async throws {
         let f = try AppFixtures()
         let id = try await f.importFake()

@@ -94,7 +94,7 @@ import Testing
     /// A codec change (spec §3.7.4) lands in a new namespace; the previous codec's directory must
     /// not sit on disk forever (`AACCodec` moved from 32 kbps to 64 kbps on 2026-09-05,
     /// `spikes/findings/2026-09-05-coreml-audio-quality.md`).
-    @Test func removesStaleCodecDirectoriesOnInit() async throws {
+    @Test func removesStaleCodecDirectoriesOnFirstUse() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("t2s-store-\(UUID().uuidString)")
         let staleDir = dir.appendingPathComponent("aac-32k-mono-24k", isDirectory: true)
         try FileManager.default.createDirectory(at: staleDir, withIntermediateDirectories: true)
@@ -108,7 +108,10 @@ import Testing
         try Data("keep".utf8).write(to: keptFile)
 
         let s = FileAudioStore(directory: dir, codec: RawPCMCodec(), capacityBytes: 10_000)
+        #expect(FileManager.default.fileExists(atPath: staleDir.path))      // init touches nothing (Plan 17)
 
+        #expect(await s.contains(key(1)) == false)                          // first use starts the sweep, off the probe
+        for _ in 0 ..< 400 where FileManager.default.fileExists(atPath: staleDir.path) { try await Task.sleep(for: .milliseconds(5)) }
         #expect(!FileManager.default.fileExists(atPath: staleDir.path))
         #expect(FileManager.default.fileExists(atPath: keptFile.path))
         try await s.write(pcm(1), for: key(1))

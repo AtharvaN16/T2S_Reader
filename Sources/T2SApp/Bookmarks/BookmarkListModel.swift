@@ -28,9 +28,14 @@ public final class BookmarkListModel {
         do {
             let bookmarks = try await library.store.bookmarks(for: summary.id)
             guard !bookmarks.isEmpty else { entries = []; return }
-            guard let timeline = try await library.timelineForPlayback(summary.id) else {
+            guard let timeline = try await library.currentTimeline(summary.id) else {
+                // A stale document is re-derived when it is opened (`Library.timelineForPlayback`),
+                // never from here (Plan 17, audit §5.1); until then its bookmarks have nothing to
+                // resolve against, which is not an error. A missing document is. The Book sheet
+                // loads its chapters — which re-derives — before it loads this list, so there a
+                // stale book never shows an empty list; a sheet that reorders those two would.
                 entries = []
-                error = "Document is missing"
+                if try await library.store.document(id: summary.id) == nil { error = "Document is missing" }
                 return
             }
             let index = TimeIndex(timeline)

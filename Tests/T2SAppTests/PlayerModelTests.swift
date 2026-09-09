@@ -63,6 +63,34 @@ import T2SStore
         #expect(player.coordinator.rate == 1.5)
     }
 
+    /// The facts the 10 Hz bodies read are cached against the timeline revision (Plan 17): they still
+    /// follow a seek, a render, and a load.
+    @Test func derivedFactsFollowSeeksRendersAndLoads() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let summary = try #require(try await f.store.summary(id: id))
+        let engine = FakeEngine(secondsPerCharacter: 0.05)
+        await engine.hold()
+        let player = try makePlayer(f, engine: engine)
+        await player.load(summary, play: false)
+        #expect(player.isTotalApproximate && player.chapterIndex == 0)
+        #expect(player.chapters.map(\.fraction) == [0, 0])
+        await player.seek(toChapter: 1)
+        #expect(player.chapterIndex == 1)
+        #expect(player.chapters[0].fraction == 1 && player.chapters[1].fraction == 0)
+        let estimated = player.chapters.map(\.durationSeconds)
+        await engine.release()
+        player.renderWholeDocument()                                        // play-ahead alone renders nothing behind the seek
+        await player.coordinator.waitForRenderIdle()
+        #expect(!player.isTotalApproximate)                                 // the render moved the revision
+        let timeline = try #require(player.coordinator.timeline)            // …and the axis with it: the actual durations
+        let actual = ChapterEntry.entries(timeline: timeline, timeIndex: player.coordinator.timeIndex, elapsed: player.elapsed)
+        #expect(player.chapters == actual && actual.map(\.durationSeconds) != estimated)
+        let other = try await f.importFake()
+        await player.load(try #require(try await f.store.summary(id: other)), play: false)
+        #expect(player.isTotalApproximate && player.chapterIndex == 0)      // a load starts over
+    }
+
     @Test func persistsRenderedChapters() async throws {
         let f = try AppFixtures()
         let id = try await f.importFake()

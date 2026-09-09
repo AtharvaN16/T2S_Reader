@@ -560,6 +560,22 @@ import T2SCore
         #expect(saved.position.resourceHref == "b.xhtml")
         #expect(saved.chapterIndex == 1 && abs(saved.secondsIntoChapter - 0.3) < 1e-9)
     }
+
+    /// Ten ticks a second must not invalidate the views that read the highlight while the word has not
+    /// changed (Plan 17, audit §7): the property is written only when the word moves.
+    @Test func theHighlightIsWrittenOnlyWhenTheWordChanges() async throws {
+        let (c, player, _, _, _, doc, timeline) = fixture()
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        await c.play()
+        player.advance(seconds: 0.1); c.tick()                                                   // inside "Alpha" (0…0.5)
+        let changed = ChangeFlag()
+        withObservationTracking { _ = c.highlight } onChange: { changed.fired = true }
+        player.advance(seconds: 0.2); c.tick()                                                   // still "Alpha"
+        #expect(!changed.fired)
+        player.advance(seconds: 0.4); c.tick()                                                   // "one." (0.6…1.0)
+        #expect(changed.fired)
+    }
 }
 
 private struct KeyRejectedEngine: SynthesisEngine {
@@ -568,4 +584,10 @@ private struct KeyRejectedEngine: SynthesisEngine {
     func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
         throw HTTPVoiceError.server(status: 401, message: "key rejected")
     }
+}
+
+/// A one-shot observation flag: `withObservationTracking`'s `onChange` is `@Sendable`, so the test
+/// cannot write a local `var` from it.
+private final class ChangeFlag: @unchecked Sendable {
+    var fired = false
 }

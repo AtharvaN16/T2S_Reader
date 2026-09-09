@@ -221,6 +221,11 @@ public actor LibraryStore {
     /// chapter blob (spec §3.7.3). `nil` when the document does not exist.
     public func isStale(id: UUID) throws -> Bool? { try row(id).map(Self.isStale) }
 
+    /// The persisted stage versions, from the row alone. `nil` when the document does not exist.
+    public func versions(of id: UUID) throws -> (schema: Int, segmenter: Int, normalizer: Int)? {
+        try row(id).map { ($0.schemaVersion, $0.segmenterVersion, $0.normalizerVersion) }
+    }
+
     static func isStale(_ row: StoredDocument) -> Bool {
         row.schemaVersion != Versions.schema
             || row.segmenterVersion != Versions.segmenter
@@ -234,6 +239,13 @@ public actor LibraryStore {
         let timeline = Timeline(chapters: chapters, schemaVersion: row.schemaVersion,
                                 segmenterVersion: row.segmenterVersion, normalizerVersion: row.normalizerVersion)
         return StoredTimeline(timeline: timeline, isStale: Self.isStale(row))
+    }
+
+    /// Every chapter blob as stored, in chapter order, undecoded: what a re-derivation reads before it
+    /// replaces them, to remove their audio behind the load path (`Library.reprocess`).
+    public func chapterBlobs(for id: UUID) throws -> [Data]? {
+        guard let row = try row(id) else { return nil }
+        return row.chapters.sorted { $0.index < $1.index }.map(\.blob)
     }
 
     public func chapter(_ index: Int, of id: UUID) throws -> Chapter? {

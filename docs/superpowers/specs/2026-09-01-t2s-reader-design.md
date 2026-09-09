@@ -1,7 +1,7 @@
 # t2s_reader — Design Spec
 
 **Date:** 2026-09-01
-**Revised:** 2026-09-08 (rev 17 — see §11 changelog)
+**Revised:** 2026-09-09 (rev 18 — see §11 changelog)
 **Status:** Draft for review
 **Working name:** t2s_reader (TBD)
 
@@ -695,6 +695,11 @@ individual rows. A 1,000-page book is ~50K utterances; a 100-document
 library would otherwise be millions of rows. Blobs are loaded on demand
 and decoded per chapter.
 
+Beside the source, the reader's chapters as extracted at import (`chapters.json.lzfse`, rev 18): a
+re-derivation after a version bump (§3.7.3) starts from them and never opens Readium or PDFKit
+again. Only a document's own open re-derives it; Bookmarks, Prepare and a row's progress read the
+timeline as it stands, and the old audio is removed behind the load, not on it.
+
 **Rendered audio is cache, never truth** — evictable and re-derivable. Its
 filename is a `renderKey` hash over:
 
@@ -930,6 +935,15 @@ against a pipeline that is already proven.
 ---
 
 ## 11. Changelog
+
+**rev 18 (2026-09-09)** — Plan 17: the rest of the audit
+- **§5, §3.7.3** the reader's chapters are retained at import and a re-derivation starts from them;
+  only a document's open re-derives it; the old audio is removed in the background.
+- **§3** the highlight is written only when the word changes; the player model caches the
+  O(timeline) facts the 10 Hz bodies read against the timeline revision; the ticker idles at 1 Hz.
+- Launch: the old-codec sweep runs on the audio store's actor at first use; the Core ML stages load
+  concurrently. Core ML engine: the 3 s and 10 s buckets (a streamed first piece renders in the 3 s
+  bucket; a packed sentence of 8–10 s in the 10 s one).
 
 **rev 17 (2026-09-08)** — Plan 16: steady streaming and the open path
 - **§3.5** the underrun rule between a streamed head's pieces: `AudioPlaying.queuedSeconds`; a dry

@@ -23,7 +23,7 @@ spikes/SpikeHarness/Resources/CoreML/
 spikes/SpikeHarness/.deps/
 
 # The app's Core ML Kokoro models — scripts/fetch-kokoro-coreml.sh --app installs them (~350 MB)
-App/Resources/KokoroCoreML/
+App/Resources/KokoroCoreML
 
 # macOS
 .DS_Store

@@ -28,7 +28,7 @@ private struct PlaybackTicking: ViewModifier {
                 } else {
                     handledFinish = false
                 }
-                try? await Task.sleep(for: .milliseconds(playing ? 100 : 250))
+                try? await Task.sleep(for: .milliseconds(playing ? 100 : 1000))
             }
         }
     }

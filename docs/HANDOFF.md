@@ -101,6 +101,19 @@ Speechify's highlight-theme swatches, a podcast app's "Intro ▾ … →" chapte
 Verification: `scripts/build-app.sh` → `** BUILD SUCCEEDED **`; `swift test` → 428 tests in 80 suites passed. Not
 seen on a phone — same standing gap.
 
+**Commit `43c9678` carries more than its message says.** It was staged with `git add App Sources
+Tests` in the shared checkout and swept in another session's uncommitted Collection redesign
+alongside the Reader fourth cut: `Collection/CollectionPage.swift` (kind chips All / Books / PDFs,
+a grid ⇄ list switch, `CollectionTile` / `CollectionRow`, a Delete confirmation, author search),
+`Collection/BookSheet.swift` (the sheet's art is now `BookCover` at 240 pt), `Design/Primitives.swift`
+(`BookCover.maxWidth` so a wide cover fits a grid cell; `ratio` internal), `Root/RootPager.swift`
+(`RootPage.launchPage` from a `T2S_PAGE` environment variable for scripted simulator screenshots),
+`Sources/T2SApp/Preferences/ReaderPreferences.swift` (`CollectionLayout` + `collectionLayout`,
+key `collection.layout`, tested). It built and the full suite passed (433/81), so nothing is
+broken — but that work's author should know it is on `origin/dev` under a Reader message, and
+whether it was finished is theirs to say. Not rewritten: `dev` is shared and pushed. Rule from
+here: stage with explicit paths, never a directory, in this checkout.
+
 **Fourth cut (2026-09-09, four crops incl. Apple Podcasts' chapter list):** (1) The chapter row's
 chevron is a filled up-arrow (`arrowtriangle.up.fill`, 10 pt bold) inside the text run with
 `.baselineOffset(3)`, so it sits up by the cap height — the inline chevron still hung at the foot.

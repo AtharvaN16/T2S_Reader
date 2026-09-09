@@ -116,6 +116,12 @@ import T2SStore
         #expect(excerpt.contains("Gamma follows."))
         #expect(!excerpt.contains("Alpha"))
         #expect(excerpt == "Beta is where we stopped. Gamma follows. Delta ends it.")
+        // The same decode says where in the chapter that is: one 2 s utterance in, four in all.
+        let glimpse = try #require(await model.glimpse(for: s))
+        #expect(glimpse.chapterElapsedSeconds == 2)
+        #expect(glimpse.chapterTotalSeconds == 8)
+        #expect(glimpse.chapterFraction == 0.25)
+        #expect(glimpse.chapterRemainingSeconds == 6)
 
         // A moved position is a new key: the excerpt follows it.
         let third = try #require(one.utterances[2].position.charOffset)
@@ -123,6 +129,7 @@ import T2SStore
         await model.refresh()
         let moved = try #require(model.summaries.first { $0.id == document.id })
         #expect(await model.excerpt(for: moved) == "Gamma follows. Delta ends it.")
+        #expect(await model.glimpse(for: moved)?.chapterElapsedSeconds == 4)
 
         // No resume position reads from the top; enough text stops the join short of the chapter's end.
         let long = String(repeating: "Long sentence here. ", count: 12).trimmingCharacters(in: .whitespaces)   // 239 chars

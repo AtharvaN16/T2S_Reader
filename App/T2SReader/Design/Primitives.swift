@@ -8,6 +8,8 @@ struct Pill: View {
     enum Style { case soft, selected, accent, destructiveSoft }
 
     var label: String
+    /// A quieter second word after the label — the Play pill's "2h 28m" — in the same type, dimmed.
+    var detail: String? = nil
     var glyph: String? = nil
     var style: Style = .soft
     var action: () -> Void
@@ -17,6 +19,7 @@ struct Pill: View {
             HStack(spacing: 6) {
                 if let glyph { Image(systemName: glyph).font(.system(size: 13, weight: .semibold)) }
                 Text(label).typeRole(.pill)
+                if let detail { Text(detail).typeRole(.pill).foregroundStyle(foreground.opacity(0.55)) }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
@@ -121,8 +124,7 @@ struct Artwork: View {
 /// flat and seen straight on — square spine corners, softly rounded fore-edge corners, a hinge crease
 /// a few points in from the spine, a soft shadow cast down and to the right, and a faint sheen. The
 /// mockup's paper texture and blurred-scene shadow are its own raster layers; at 112 pt they are
-/// invisible, so the shadow is SwiftUI's and the texture is left out. `tilt` (degrees, from
-/// `MotionTilt`) turns the book a little with the phone so it reads as an object, not a picture.
+/// invisible, so the shadow is SwiftUI's and the texture is left out.
 ///
 /// Covers only look like covers at book proportions: an image narrower than 0.55 or wider than 0.8
 /// of its height (a landscape, a banner, a page scan) and a document with no image both get the
@@ -133,7 +135,6 @@ struct BookCover: View {
     var height: CGFloat
     var title: String
     var isPDF: Bool = false
-    var tilt: CGPoint = .zero
 
     /// The mockup's own proportions (1461 × 2192); a real cover uses its own, within the book range.
     private static let ratio: CGFloat = 0.667
@@ -165,10 +166,7 @@ struct BookCover: View {
             .clipShape(shape)
             .overlay(shape.strokeBorder(Tokens.shade.opacity(0.12), lineWidth: 0.5))
             .compositingGroup()                                                // one shadow for the book, not one per layer
-            .shadow(color: Tokens.shade.opacity(0.22), radius: height * 0.06,
-                    x: height * 0.015 + tilt.x * 0.4, y: height * 0.045 + tilt.y * 0.4)   // the shadow leans with the book
-            .rotation3DEffect(.degrees(tilt.x), axis: (x: 0, y: 1, z: 0), perspective: 0.5)
-            .rotation3DEffect(.degrees(-tilt.y), axis: (x: 1, y: 0, z: 0), perspective: 0.5)
+            .shadow(color: Tokens.shade.opacity(0.22), radius: height * 0.06, x: height * 0.015, y: height * 0.045)
             .accessibilityHidden(true)
     }
 

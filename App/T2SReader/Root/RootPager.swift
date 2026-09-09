@@ -48,7 +48,6 @@ extension EnvironmentValues {
 struct RootPager: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var page: RootPage = .queue
     /// A file handed to us by another app (`onOpenURL`), shown through the Import page like any other
     /// import rather than imported invisibly.
@@ -57,67 +56,30 @@ struct RootPager: View {
     @State private var pendingOpen: DocumentSummary?
     @State private var readerDocument: DocumentSummary?
 
-    /// The owner's rule for the tilting covers: "disable this if under load, when using the local
-    /// model". Load is the device already struggling (thermal, Low Power Mode) or the on-device
-    /// engine doing work — Kokoro is linked and present, and something is rendering through it:
-    /// playback (`isPlaying` covers catching up), a Prepare pass, the launch warm-up, or a voice
-    /// preview. Playing a system or cloud voice on a Kokoro build counts too; telling them apart
-    /// is not worth the plumbing for a fraction-of-a-degree effect.
-    private var isUnderLoad: Bool {
-        let device = env.deviceMonitor.deviceState
-        if device.thermalSerious || device.lowPowerMode { return true }
-        guard isKokoroPresent else { return false }
-        return env.player.isPlaying || env.prepareRunner.isRunning
-            || env.kokoroStatus.status.isWarming || env.voicePreview.isRendering
-    }
-
-    /// Whether this build links the on-device engine and this device has its files — the states
-    /// in which Kokoro can be the thing under load.
-    private var isKokoroPresent: Bool {
-        switch env.kokoroStatus.status {
-        case .checking, .preparing, .available: true
-        case .notLinked, .unavailable: false
-        }
-    }
-
-    /// Home is the only page that shows the tilting covers and a full-screen Reader hides them, so
-    /// the gyro runs only while they are on screen — and never against Reduce Motion or under load.
-    private var shouldTilt: Bool {
-        scenePhase == .active && !reduceMotion && page == .queue && readerDocument == nil && !isUnderLoad
-    }
-
     var body: some View {
-        ZStack(alignment: .bottom) {
-            TabView(selection: $page) {
-                CollectionPage().tag(RootPage.collection)
-                QueuePage().tag(RootPage.queue)
-                PreferencesPage().tag(RootPage.preferences)
-            }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .ignoresSafeArea(edges: .bottom)
-            .environment(\.readerRoute, ReaderRoute(open: { readerDocument = $0 }))
-
-            /// The bottom bar floats over the pager with nothing behind it, so rows would scroll
-            /// straight through the mini-player and indicator. This merges the bar into the page
-            /// instead: solid `ground` through the bar's own band (mini-player 52, gap 12,
-            /// indicator 32, padding 8, home-indicator inset 34 ≈ 138 pt from the screen bottom,
-            /// which ignoring the safe area makes the frame's origin) and a ~70 pt fade above it,
-            /// like the Reader's bars. Hit testing is off so the pager underneath still gets taps.
-            LinearGradient(stops: [.init(color: Tokens.ground.opacity(0), location: 0),
-                                   .init(color: Tokens.ground, location: 0.34)],
-                           startPoint: .top, endPoint: .bottom)
-                .frame(height: 210)
-                .frame(maxWidth: .infinity)
-                .ignoresSafeArea(edges: .bottom)
-                .allowsHitTesting(false)
-
-            VStack(spacing: 12) {
-                if !env.libraryModel.isQueueEmpty || env.player.current != nil {
-                    MiniPlayer { readerDocument = $0 }
+        // The reader is for the safe-area inset: `bottomFill` has to know how far below the page
+        // row the screen goes, and a fixed frame plus `ignoresSafeArea` alone cannot tell it.
+        GeometryReader { geo in
+            ZStack(alignment: .bottom) {
+                TabView(selection: $page) {
+                    CollectionPage().tag(RootPage.collection)
+                    QueuePage().tag(RootPage.queue)
+                    PreferencesPage().tag(RootPage.preferences)
                 }
-                PageIndicator(page: $page)
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .ignoresSafeArea(edges: .bottom)
+                .environment(\.readerRoute, ReaderRoute(open: { readerDocument = $0 }))
+
+                bottomFill(inset: geo.safeAreaInsets.bottom)
+
+                VStack(spacing: 12) {
+                    if !env.libraryModel.isQueueEmpty || env.player.current != nil {
+                        MiniPlayer { readerDocument = $0 }
+                    }
+                    PageIndicator(page: $page)
+                }
+                .padding(.bottom, Spacing.grid)
             }
-            .padding(.bottom, Spacing.grid)
         }
         .background(Tokens.ground.ignoresSafeArea())
         .appTheme()
@@ -178,15 +140,38 @@ struct RootPager: View {
                 break
             }
         }
-        // `shouldTilt` reads observable state inside `body`, so SwiftUI re-evaluates it as the
-        // player, Prepare, Kokoro status or device state change — no timer or polling needed.
-        .onChange(of: shouldTilt, initial: true) { _, on in env.motionTilt.setEnabled(on) }
     }
 
     private func openPending() {
         guard let doc = pendingOpen else { return }
         pendingOpen = nil
         readerDocument = doc
+    }
+
+    /// Above the fade, the fill is fully clear this far up: the mini-player's band (52 + 12) and a
+    /// little more, so a page's last row can scroll wholly out from under it (`Spacing.bottomClearance`).
+    static let fadeHeight: CGFloat = 120
+
+    /// The bottom bar's ground. Solid from the top of the page row down through the home-indicator
+    /// inset — nothing shows through under the glyphs — and a gentle fade above that, through the
+    /// mini-player's band, so the page stays visible behind it. Anchored to the screen bottom by
+    /// filling the safe-area-ignoring frame and aligning to its foot: a fixed-height view under
+    /// `ignoresSafeArea` alone sits at the top of the expanded region and leaves the inset bare,
+    /// which is what let a row show through under the page row. Hit testing is off so the pager
+    /// underneath still gets its taps.
+    private func bottomFill(inset: CGFloat) -> some View {
+        let solid = PageIndicator.height + Spacing.grid + inset
+        let height = Self.fadeHeight + solid
+        let fadeEnd = Self.fadeHeight / height
+        return LinearGradient(stops: [
+            .init(color: Tokens.ground.opacity(0), location: 0),
+            .init(color: Tokens.ground.opacity(0.3), location: fadeEnd * 0.55),
+            .init(color: Tokens.ground, location: fadeEnd),
+        ], startPoint: .top, endPoint: .bottom)
+        .frame(height: height)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .ignoresSafeArea(edges: .bottom)
+        .allowsHitTesting(false)
     }
 
     /// A foreground pass is only a convenience while the app is awake and idle. The scheduler's

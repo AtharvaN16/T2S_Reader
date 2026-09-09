@@ -15,13 +15,15 @@ struct QueueRow: View {
     /// True only while the Play pill's own tap is resuming a paused, already-current document —
     /// the one branch that awaits playback before opening the reader, otherwise silently.
     @State private var isStarting = false
-    /// The text at the resume position, loaded off the body so the list never decodes a chapter.
-    @State private var excerpt: String?
+    /// The resume chapter's text and progress, loaded off the body so the list never decodes a chapter.
+    @State private var glimpse: RowGlimpse?
 
     private var progress: DocumentProgress? { env.libraryModel.progress(for: summary.id) }
     private var isCurrent: Bool { env.player.current?.id == summary.id }
     private var isPlayingHere: Bool { isCurrent && env.player.isPlaying }
     private var isArticle: Bool { summary.document.sourceType == .article }
+    /// Books with chapters show the chapter's own progress and time; a file with none shows the file's.
+    private var hasChapters: Bool { !isArticle && (progress?.chapterCount ?? summary.chapterCount) > 1 }
 
     var body: some View {
         // 20 pt between the book and its text: the cover's shadow needs air, and the reference cell
@@ -32,20 +34,22 @@ struct QueueRow: View {
                 Artwork(relativePath: summary.document.coverImagePath, paths: env.paths, size: 64, radius: Spacing.artworkSmall)
             } else {
                 BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: 112,
-                          title: summary.document.title, isPDF: summary.document.sourceType == .pdf,
-                          tilt: env.motionTilt.tilt)
+                          title: summary.document.title, isPDF: summary.document.sourceType == .pdf)
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                if chapterText != nil || summary.isFullyRendered {           // no empty gap when there is nothing to say
-                    HStack(spacing: 6) {
-                        if let chapterText { Text(chapterText) }
-                        if summary.isFullyRendered { PositiveCheck() }
+                // "Chapter 7  ◔ 41%  ✓": the chapter, how far through it, and ready-offline.
+                HStack(spacing: 6) {
+                    if let chapterText { Text(chapterText) }
+                    if let fraction {
+                        CircularProgress(fraction: fraction, lineWidth: 2, size: 12)
+                        Text("\(Int((fraction * 100).rounded()))%")
                     }
-                    .typeRole(.meta)
-                    .foregroundStyle(Tokens.ink2)
-                    .accessibilityElement(children: .combine)
+                    if summary.isFullyRendered { PositiveCheck() }
                 }
+                .typeRole(.meta)
+                .foregroundStyle(Tokens.ink2)
+                .accessibilityElement(children: .combine)
 
                 Button(action: onOpen) {
                     Text(summary.document.title)
@@ -57,7 +61,7 @@ struct QueueRow: View {
                 .buttonStyle(.plain)
                 .accessibilityHint("Opens the reader")
 
-                if let excerpt, !excerpt.isEmpty {
+                if let excerpt = glimpse?.excerpt, !excerpt.isEmpty {
                     Text(excerpt)
                         .typeRole(.meta)
                         .lineLimit(2)
@@ -67,17 +71,9 @@ struct QueueRow: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                // "◔ 5% · 23 hrs left" between the text and the buttons, as in the reference cell.
-                HStack(spacing: 6) {
-                    CircularProgress(fraction: progress?.fraction ?? 0, lineWidth: 2, size: 12)
-                    Text(progressText)
-                }
-                .typeRole(.meta)
-                .foregroundStyle(Tokens.ink2)
-                .accessibilityElement(children: .combine)
-
                 HStack(spacing: 8) {
                     Pill(label: isPlayingHere ? "Pause" : (isStarting ? "Starting…" : "Play"),
+                         detail: isStarting ? nil : timeDetail,
                          glyph: isPlayingHere ? "pause.fill" : (isStarting ? nil : "play.fill"),
                          style: .soft) {
                         Task {
@@ -109,7 +105,7 @@ struct QueueRow: View {
         .contextMenu { contextItems }
         .sheet(isPresented: $showSleepTimer) { SleepTimerSheet() }
         .sheet(isPresented: $showVoiceChange) { VoiceChangeSheet(summary: summary) }
-        .task(id: excerptKey) { excerpt = await env.libraryModel.excerpt(for: summary) }
+        .task(id: glimpseKey) { glimpse = await env.libraryModel.glimpse(for: summary) }
     }
 
     @ViewBuilder private var contextItems: some View {
@@ -135,17 +131,24 @@ struct QueueRow: View {
         return "Chapter \(c + 1)"
     }
 
-    /// "5% · 22 hrs left": the ring's number, then time left, coarse on purpose — the row is read at
-    /// a glance, so no minutes and never a "~".
-    private var progressText: String {
-        let percent = Int(((progress?.fraction ?? 0) * 100).rounded())
-        let left = DurationFormatter.coarseRemaining(progress?.remainingSeconds ?? summary.totalSeconds)
-        return "\(percent)% · \(left) left"
+    /// How far through the chapter (books) or the file (everything else). Nil until a chaptered
+    /// book's glimpse has loaded, rather than flashing the whole book's number first.
+    private var fraction: Double? {
+        hasChapters ? glimpse?.chapterFraction : (progress?.fraction ?? 0)
     }
 
-    /// What `LibraryModel.excerpt(for:)` reads: the task reloads only when the resume point or the
+    /// Time left in the chapter (books) or the file, on the Play pill: "2h 28m", never "~" and no
+    /// "left" — the pill is the sentence. Nil until a chaptered book's glimpse has loaded.
+    private var timeDetail: String? {
+        let seconds: TimeInterval?
+        if hasChapters { seconds = glimpse?.chapterRemainingSeconds }
+        else { seconds = progress?.remainingSeconds ?? summary.totalSeconds }
+        return seconds.map { DurationFormatter.remaining($0, approximate: false) }
+    }
+
+    /// What `LibraryModel.glimpse(for:)` reads: the task reloads only when the resume point or the
     /// chapters behind it could have moved, not on every row refresh.
-    private struct ExcerptKey: Hashable {
+    private struct GlimpseKey: Hashable {
         var id: UUID
         var resumePosition: Position?
         var resumeChapterIndex: Int?
@@ -153,8 +156,8 @@ struct QueueRow: View {
         var chapterIndex: Int?
     }
 
-    private var excerptKey: ExcerptKey {
-        ExcerptKey(id: summary.id, resumePosition: summary.document.resumePosition, resumeChapterIndex: summary.resumeChapterIndex,
+    private var glimpseKey: GlimpseKey {
+        GlimpseKey(id: summary.id, resumePosition: summary.document.resumePosition, resumeChapterIndex: summary.resumeChapterIndex,
                    isStale: summary.isStale, chapterIndex: progress?.chapterIndex)
     }
 }

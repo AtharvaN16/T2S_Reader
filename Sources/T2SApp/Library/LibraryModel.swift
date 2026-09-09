@@ -6,6 +6,27 @@ import T2SStore
 
 public enum QueueView: Hashable, Sendable { case queue, finished }
 
+/// What the Home row shows of one document's place in it, read from the resume chapter alone
+/// (`LibraryModel.glimpse(for:)`).
+public struct RowGlimpse: Hashable, Sendable {
+    /// A few lines of text from the resume position on; nil when the chapter has no text.
+    public var excerpt: String?
+    /// Seconds into the resume chapter at 1x, and the chapter's whole length.
+    public var chapterElapsedSeconds: TimeInterval
+    public var chapterTotalSeconds: TimeInterval
+
+    public var chapterFraction: Double {
+        chapterTotalSeconds > 0 ? min(1, max(0, chapterElapsedSeconds / chapterTotalSeconds)) : 0
+    }
+    public var chapterRemainingSeconds: TimeInterval { max(0, chapterTotalSeconds - chapterElapsedSeconds) }
+
+    public init(excerpt: String?, chapterElapsedSeconds: TimeInterval, chapterTotalSeconds: TimeInterval) {
+        self.excerpt = excerpt
+        self.chapterElapsedSeconds = chapterElapsedSeconds
+        self.chapterTotalSeconds = chapterTotalSeconds
+    }
+}
+
 /// The Queue and Collection pages' state (spec §2.3, §2.4.5). Reads summaries from the store and
 /// per-document progress from the summary itself where the coordinator has saved a playhead
 /// (Plan 16), else through `Library.currentTimeline`, which decodes the stored chapters but
@@ -27,13 +48,13 @@ public final class LibraryModel {
     /// so an unchanged document is never decoded twice. `@ObservationIgnored`: it is a cache behind
     /// `progress`, not state a view reads.
     @ObservationIgnored private var progressCache: [UUID: (key: DocumentSummary, value: DocumentProgress)] = [:]
-    /// Excerpts per document (`excerpt(for:)`), keyed on the fields that move one, for the same
+    /// Glimpses per document (`glimpse(for:)`), keyed on the fields that move one, for the same
     /// reason: a chapter decode per Home row per refresh would be the cost this cache exists to avoid.
-    @ObservationIgnored private var excerptCache: [UUID: (key: ExcerptKey, value: String)] = [:]
+    @ObservationIgnored private var glimpseCache: [UUID: (key: GlimpseKey, value: RowGlimpse)] = [:]
 
-    /// What decides which utterances an excerpt shows: the chapter read, where in it the resume
-    /// position lands, and whether the chapters are about to be re-derived under it.
-    private struct ExcerptKey: Hashable {
+    /// What decides what a glimpse shows: the chapter read, where in it the resume position lands,
+    /// and whether the chapters are about to be re-derived under it.
+    private struct GlimpseKey: Hashable {
         var chapterIndex: Int
         var resumePosition: Position?
         var isStale: Bool
@@ -109,38 +130,46 @@ public final class LibraryModel {
             progress = next
             progressCache = cache                                            // rebuilt, so deleted ids drop out
             let ids = Set(all.map(\.id))
-            excerptCache = excerptCache.filter { ids.contains($0.key) }      // a stale key re-decodes on its own
+            glimpseCache = glimpseCache.filter { ids.contains($0.key) }      // a stale key re-decodes on its own
             lastError = nil
         } catch {
             lastError = "\(error)"
         }
     }
 
-    /// A few lines of text from where the reader is in the document — the utterance at the resume
-    /// position and the ones after it, for the Home row's "where we are in the story" line.
-    /// Decodes one chapter from the store; cached per document against the fields that move it.
-    public func excerpt(for summary: DocumentSummary) async -> String? {
+    /// Where the reader is inside the resume chapter — a few lines of its text from the resume
+    /// position on, and how far through the chapter that is — for the Home row. Decodes that one
+    /// chapter from the store; cached per document against the fields that move it. Nil when the
+    /// chapter cannot be read or has no utterances.
+    public func glimpse(for summary: DocumentSummary) async -> RowGlimpse? {
         let chapterIndex = progress[summary.id]?.chapterIndex ?? summary.resumeChapterIndex ?? 0
-        let key = ExcerptKey(chapterIndex: chapterIndex, resumePosition: summary.document.resumePosition,
+        let key = GlimpseKey(chapterIndex: chapterIndex, resumePosition: summary.document.resumePosition,
                              isStale: summary.isStale, utteranceCount: summary.utteranceCount)
-        if let hit = excerptCache[summary.id], hit.key == key { return hit.value }
+        if let hit = glimpseCache[summary.id], hit.key == key { return hit.value }
         guard let chapter = try? await library.store.chapter(chapterIndex, of: summary.id),
               !chapter.utterances.isEmpty else { return nil }
         // Resolved against the one chapter alone: the resolver walks utterances, and this is the
-        // only chapter the position can land in, so the rest of the document stays undecoded.
+        // only chapter the position can land in, so the rest of the document stays undecoded — and
+        // the same one-chapter index makes its times chapter-relative for free.
         let timeline = Timeline(chapters: [chapter])
-        let resolved = summary.document.resumePosition.map { PositionResolver.resolve($0, in: timeline).utteranceIndex } ?? 0
-        let start = min(max(0, resolved), chapter.utterances.count - 1)
+        let index = TimeIndex(timeline)
+        let playhead = index.clamp(summary.document.resumePosition.map { PositionResolver.resolve($0, in: timeline) }
+                                   ?? Playhead(utteranceIndex: 0))
+        let start = min(max(0, playhead.utteranceIndex), chapter.utterances.count - 1)
         var text = ""
         for utterance in chapter.utterances[start...] {
             text += text.isEmpty ? utterance.source : " " + utterance.source
             if text.count >= Self.excerptLength { break }
         }
         let excerpt = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")   // one line, trimmed
-        guard !excerpt.isEmpty else { return nil }
-        excerptCache[summary.id] = (key, excerpt)
-        return excerpt
+        let glimpse = RowGlimpse(excerpt: excerpt.isEmpty ? nil : excerpt,
+                                 chapterElapsedSeconds: index.time(at: playhead), chapterTotalSeconds: index.totalDuration)
+        glimpseCache[summary.id] = (key, glimpse)
+        return glimpse
     }
+
+    /// The glimpse's text alone.
+    public func excerpt(for summary: DocumentSummary) async -> String? { await glimpse(for: summary)?.excerpt }
 
     /// Enough source text for a row's few lines; the joined text stops at the utterance that crosses it.
     private static let excerptLength = 240

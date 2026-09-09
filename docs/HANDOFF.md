@@ -4,6 +4,29 @@ _Last updated 2026-09-09 (Plan 17 — the rest of the audit — on `plan-17-rest
 
 ## Resume here (2026-09-09, latest) — Reader round: fades in the bars, Apple Music scrubber, sizes, chapter row, title, highlight themes
 
+**Footnote numbers are no longer spoken (2026-09-09, normalizer 3 → 4).** The owner noticed
+sentences ending "me'.18" — an EPUB's superscript footnote reference flattened into the text. Two
+problems: the number was read aloud, and `NLTokenizer` sees no sentence boundary in
+"Daryaganj.14 The presence", so the pause vanished too. `StripCitationsRule` (rule 3, the "[14]"
+rule) gained a `footnotes` pattern: one to three digits straight after sentence-final punctuation
+(closing quotes/brackets allowed between), followed by a capital or the end of the utterance. A
+digit *before* the punctuation ("3.14 dollars", "v2.0 The") or a lowercase word after ("p.14 for",
+"Fig.3 shows") is left alone. Known miss: a year before the footnote ("in 1857.18 Then") keeps the
+number, by the same digit-before guard. Tests in `StripCitationsTests` and `TextNormalizerTests`.
+**`Versions.normalizer` is bumped to 4**, unlike Plan 16's dictionary change: every footnoted chapter
+of a book says these numbers, so the fix has to reach the owner's current book, and a bump is the
+only path there. The cost is the designed one — each document re-derives from its retained chapters
+on next open (fast; no Readium pass) and its cached audio is removed in the background
+(`Library.reprocess`, `keysChange`), then re-rendered on play or by Prepare. Resume positions
+survive (they are `Position`s, not utterance indices). **Gotcha when bumping a version:** after
+the bump, `swift test` failed three `LibraryStoreTests` with stored timelines still at normalizer 3
+even after deleting `T2SCore.build` — `Timeline.init`'s default argument `normalizerVersion: Int =
+Versions.normalizer` is a generator SwiftPM's incremental build did not recompile, so
+`Timeline(chapters:)` kept returning the old number while `Versions.normalizer` read 4 in the same
+process. `swift package clean` and a full rebuild fixed it (431 tests, 80 suites). Run the clean
+after any `Versions` change before trusting the suite.
+
+
 The owner's Reader pass, from a phone screenshot plus three references (an Apple Music scrubber,
 Speechify's highlight-theme swatches, a podcast app's "Intro ▾ … →" chapter row). Six asks, done on
 `dev` with two agents (scrubber + transport; highlight themes) and the page itself by hand:

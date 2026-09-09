@@ -5,6 +5,6 @@ import Testing
     @Test func currentVersions() {
         #expect(Versions.schema == 1)
         #expect(Versions.segmenter == 2)
-        #expect(Versions.normalizer == 3)
+        #expect(Versions.normalizer == 4)
     }
 }

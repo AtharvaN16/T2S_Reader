@@ -14,6 +14,13 @@ import Testing
         #expect(TextNormalizer.version == Versions.normalizer)
     }
 
+    /// The footnote number goes before the number rule can spell it out.
+    @Test func neverSpeaksAFootnoteNumber() {
+        let t = TextNormalizer().normalize("of the elite quarter of Daryaganj.14 The presence of sepoys billeted above.")
+        #expect(t.spoken == "of the elite quarter of Daryaganj. The presence of sepoys billeted above.")
+        expectEveryWordMapsToSource(t)
+    }
+
     /// Rule 1 keeps a real hyphen; the pipeline still speaks it as a word break, after URLs are
     /// collapsed (a host keeps its hyphen long enough to be recognised) and before numbers expand.
     @Test func speaksHyphenatedCompoundsAsSeparateWords() {

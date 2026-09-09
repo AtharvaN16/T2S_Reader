@@ -20,7 +20,7 @@ enum RootPage: Hashable, CaseIterable {
         switch self {
         case .collection: return "Collection"
         case .queue: return "Home"
-        case .preferences: return "Preferences"
+        case .preferences: return "Settings"
         }
     }
 }
@@ -148,9 +148,9 @@ struct RootPager: View {
         readerDocument = doc
     }
 
-    /// Above the fade, the fill is fully clear this far up: the mini-player's band (52 + 12) and a
-    /// little more, so a page's last row can scroll wholly out from under it (`Spacing.bottomClearance`).
-    static let fadeHeight: CGFloat = 120
+    /// The fill is fully clear this far above the page row: the mini-player's band (52 + 12) and
+    /// well past it, so a page's last row can scroll wholly out from under it (`Spacing.bottomClearance`).
+    static let fadeHeight: CGFloat = 180
 
     /// The bottom bar's ground. Solid from the top of the page row down through the home-indicator
     /// inset — nothing shows through under the glyphs — and a gentle fade above that, through the

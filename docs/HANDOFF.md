@@ -4,6 +4,24 @@ _Last updated 2026-09-09 (Plan 17 — the rest of the audit — on `plan-17-rest
 
 ## Resume here (2026-09-09, latest) — Home round 5: chapter time on Play, ring by the chapter, no gyro, bottom fill fixed
 
+**Settings pass (2026-09-09, after round 5):** from three phone crops. (1) The bottom fill's fade is
+taller — `RootPager.fadeHeight` 120 → 180, `Spacing.bottomClearance` 168 → 232 to match. (2) The
+Preferences page is titled **"Settings"** (`PageTitle`, and `RootPage.preferences.title` for the
+indicator's label; the type stays `PreferencesPage`); its section headings use a new
+`TypeRole.groupTitle` — **Inter-Bold 22 pt**, relative `.title2`. Inter-Bold was not bundled, and
+the owner's call was to bundle it rather than substitute the Display ExtraBold: `scripts/fetch-fonts.sh`
+now lists six faces, `App/Resources/Fonts/Inter-Bold.ttf` is committed (Inter 4.1, same OFL), both
+`Info.plist`s register it under `UIAppFonts`, and `docs/licenses.md` says six TTFs. The explanatory row
+subtitles are gone ("Seconds" ×2, "New documents start here", "Continue with the next queued item",
+"Theme for the whole app", "Your provider, your API key"); subtitles that carry a value stay (the default
+voice's name, the dictionary's word count, the storage size, "Coming later" under the disabled iCloud
+toggle), and `row(_:subtitle:)`'s subtitle defaults to "". (3) A row title that wraps ("Rendered audio
+and prepare on charge") was centred by SwiftUI's multi-line default; `row()` now sets
+`.multilineTextAlignment(.leading)`. (4) The Appearance sheet did not follow a theme change made from
+inside it: `preferredColorScheme` is applied to the root pager and full-screen covers, but a `.sheet`
+is its own presentation and only takes the scheme when it opens. `AppearanceSheet` now carries
+`.appTheme()` itself; other sheets open after the theme is set and inherit it, so they were left alone.
+
 **Round 5 follow-ups (2026-09-09):** a "·" now separates "Chapter 7" from the ring and percent
 (`QueueRow` meta line); and the bottom fill's opacity ramp is eased — smoothstep squared over twelve
 stops (`RootPager.bottomFill`) — because the linear ramp that stopped dead at solid drew a visible

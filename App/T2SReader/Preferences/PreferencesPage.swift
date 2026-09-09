@@ -1,7 +1,9 @@
 import SwiftUI
 import T2SApp
 
-/// Spec §2.4.5 Preferences: sections as a header plus rows of title, grey subtitle, right-aligned control.
+/// Spec §2.4.5 Preferences, titled "Settings" since 2026-09-09: sections as a heavy header plus rows
+/// of title, an optional grey subtitle that carries a value (never an explanation), and a
+/// right-aligned control.
 struct PreferencesPage: View {
     @Environment(AppEnvironment.self) private var env
     @State private var showAppearance = false
@@ -18,7 +20,7 @@ struct PreferencesPage: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.section) {
-                    PageTitle(text: "Preferences")
+                    PageTitle(text: "Settings")
                     section("Voice") {
                         NavigationLink {
                             VoiceListPage(selection: preferences.defaultVoiceID) { option in
@@ -29,7 +31,7 @@ struct PreferencesPage: View {
                         }
                     }
                     section("Playback") {
-                        row("Skip back", subtitle: "Seconds") {
+                        row("Skip back") {
                             Menu {
                                 ForEach(ReaderPreferences.skipBackOptions, id: \.self) { seconds in
                                     Button("\(seconds) s") { preferences.skipBackSeconds = seconds }
@@ -38,7 +40,7 @@ struct PreferencesPage: View {
                                 valuePill("\(preferences.skipBackSeconds) s")
                             }
                         }
-                        row("Skip forward", subtitle: "Seconds") {
+                        row("Skip forward") {
                             Menu {
                                 ForEach(ReaderPreferences.skipForwardOptions, id: \.self) { seconds in
                                     Button("\(seconds) s") { preferences.skipForwardSeconds = seconds }
@@ -47,7 +49,7 @@ struct PreferencesPage: View {
                                 valuePill("\(preferences.skipForwardSeconds) s")
                             }
                         }
-                        row("Default speed", subtitle: "New documents start here") {
+                        row("Default speed") {
                             Menu {
                                 ForEach(SpeedPickerModel.rates.filter { $0 <= 3.0 }, id: \.self) { rate in
                                     Button(SpeedPickerModel.label(for: rate)) { preferences.defaultRate = rate }
@@ -56,7 +58,7 @@ struct PreferencesPage: View {
                                 valuePill(SpeedPickerModel.label(for: preferences.defaultRate))
                             }
                         }
-                        row("Autoplay next", subtitle: "Continue with the next queued item") {
+                        row("Autoplay next") {
                             Toggle("", isOn: $preferences.autoplayNext)
                                 .labelsHidden()
                                 .tint(Tokens.ink)
@@ -64,7 +66,7 @@ struct PreferencesPage: View {
                     }
                     section("Reading") {
                         Button { showAppearance = true } label: {
-                            row("Appearance", subtitle: "Theme for the whole app")
+                            row("Appearance")
                         }
                         .buttonStyle(.plain)
                     }
@@ -92,7 +94,7 @@ struct PreferencesPage: View {
                         NavigationLink {
                             CloudVoicesPage()
                         } label: {
-                            row("Bring your own key", subtitle: "Your provider, your API key")
+                            row("Bring your own key")
                         }
                     }
                     section("iCloud sync") {
@@ -103,7 +105,7 @@ struct PreferencesPage: View {
                         }
                     }
                     section("About") {
-                        row("Fonts: Inter (SIL OFL) · Reader: Readium (BSD-3) · Extraction: Readability (Apache-2.0)", subtitle: "")
+                        row("Fonts: Inter (SIL OFL) · Reader: Readium (BSD-3) · Extraction: Readability (Apache-2.0)")
                     }
                     Color.clear.frame(height: Spacing.bottomClearance)
                 }
@@ -134,12 +136,12 @@ struct PreferencesPage: View {
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 20) {
-            SectionHeader(title: title)
+            Text(title).typeRole(.groupTitle).foregroundStyle(Tokens.ink)
             content()
         }
     }
 
-    private func row(_ title: String, subtitle: String) -> some View {
+    private func row(_ title: String, subtitle: String = "") -> some View {
         row(title, subtitle: subtitle) {
             Image(systemName: "chevron.right")
                 .font(.system(size: 13, weight: .bold))
@@ -147,10 +149,11 @@ struct PreferencesPage: View {
         }
     }
 
-    private func row<Control: View>(_ title: String, subtitle: String, @ViewBuilder control: () -> Control) -> some View {
+    private func row<Control: View>(_ title: String, subtitle: String = "", @ViewBuilder control: () -> Control) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(title).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
+                // A title that wraps ("Rendered audio and prepare on charge") stays on the left edge.
+                Text(title).typeRole(.rowTitle).foregroundStyle(Tokens.ink).multilineTextAlignment(.leading)
                 if !subtitle.isEmpty {
                     Text(subtitle).typeRole(.meta).foregroundStyle(Tokens.ink2)
                 }

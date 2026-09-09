@@ -12,7 +12,7 @@ resolved tags in `Packages/T2SReadium/.build/checkouts` and `Packages/T2SKokoro/
 
 | Component | Version | Licence | LICENSE file |
 | --- | --- | --- | --- |
-| Inter (5 TTFs) | 4.1 | SIL Open Font License 1.1 | `App/Resources/Fonts/LICENSE.txt` |
+| Inter (6 TTFs) | 4.1 | SIL Open Font License 1.1 | `App/Resources/Fonts/LICENSE.txt` |
 | Readability.js | 0.6.0 | Apache-2.0 | `App/Resources/Readability/LICENSE` |
 | MLXUtilsLibrary | 0.0.6 + our patch | Apache-2.0 | `Packages/MLXUtilsLibrary/LICENSE` |
 | KokoroPipeline | `mattmireles/kokoro-coreml` @ `66d8cf5108cce0991b8868b01b4d8a8b2e98881d` | Apache-2.0 | `Packages/KokoroPipeline/LICENSE` |

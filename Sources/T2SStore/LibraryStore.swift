@@ -25,13 +25,19 @@ public struct DocumentSummary: Hashable, Sendable, Identifiable {
     public var isFinished: Bool
     public var queueOrder: Int?
     public var lastPlayedAt: Date?
+    /// Where the resume position sits in time, from the row alone (Plan 16): the durations of the
+    /// chapters before `resumeChapterIndex` plus the seconds into it, as saved with the position.
+    /// nil until the coordinator has saved a playhead, or after a position saved on its own.
+    public var resumeElapsedSeconds: TimeInterval?
+    public var resumeChapterIndex: Int?
 
     public var id: UUID { document.id }
     /// The Queue row's `positive` check (spec §3.4.1): plays with no synthesis and no network.
     public var isFullyRendered: Bool { utteranceCount > 0 && renderedCount == utteranceCount }
 
     public init(document: Document, chapterCount: Int, utteranceCount: Int, totalSeconds: TimeInterval,
-                renderedCount: Int, isFinished: Bool, queueOrder: Int?, lastPlayedAt: Date?) {
+                renderedCount: Int, isFinished: Bool, queueOrder: Int?, lastPlayedAt: Date?,
+                resumeElapsedSeconds: TimeInterval? = nil, resumeChapterIndex: Int? = nil) {
         self.document = document
         self.chapterCount = chapterCount
         self.utteranceCount = utteranceCount
@@ -40,6 +46,8 @@ public struct DocumentSummary: Hashable, Sendable, Identifiable {
         self.isFinished = isFinished
         self.queueOrder = queueOrder
         self.lastPlayedAt = lastPlayedAt
+        self.resumeElapsedSeconds = resumeElapsedSeconds
+        self.resumeChapterIndex = resumeChapterIndex
     }
 }
 
@@ -53,7 +61,7 @@ public enum LibraryStoreError: Error, Equatable, Sendable {
 /// see value types.
 @ModelActor
 public actor LibraryStore {
-    static let schema = Schema(versionedSchema: LibrarySchemaV1.self)
+    static let schema = Schema(versionedSchema: LibrarySchemaV2.self)
 
     /// SwiftData crashes intermittently when several containers are created at once (Swift Testing
     /// runs suites in parallel and each test opens its own store). Creation is rare and cheap, so
@@ -332,11 +340,20 @@ public actor LibraryStore {
     }
 
     /// Writes the four flattened resume columns, nil-ing them when `position` is nil.
+    /// A position on its own: the time beside it, if any, no longer describes it and is dropped.
     static func setResume(_ row: StoredDocument, _ position: Position?) {
         row.resumeHref = position?.resourceHref
         row.resumeProgression = position?.progression
         row.resumeCharOffset = position?.charOffset
         row.resumeCSSSelector = position?.cssSelector
+        row.resumeChapterIndex = nil
+        row.resumeSecondsIntoChapter = nil
+    }
+
+    static func setResume(_ row: StoredDocument, _ playhead: SavedPlayhead) {
+        setResume(row, playhead.position)
+        row.resumeChapterIndex = playhead.chapterIndex
+        row.resumeSecondsIntoChapter = playhead.secondsIntoChapter
     }
 
     static func domain(_ r: StoredDocument) -> Document {
@@ -354,10 +371,15 @@ public actor LibraryStore {
     }
 
     static func summary(_ r: StoredDocument) -> DocumentSummary {
-        DocumentSummary(document: domain(r), chapterCount: r.chapters.count,
-                        utteranceCount: r.chapters.reduce(0) { $0 + $1.utteranceCount },
-                        totalSeconds: r.chapters.reduce(0) { $0 + $1.durationSeconds },
-                        renderedCount: r.chapters.reduce(0) { $0 + $1.renderedCount },
-                        isFinished: r.isFinished, queueOrder: r.queueOrder, lastPlayedAt: r.lastPlayedAt)
+        let resumeChapter = r.resumeChapterIndex ?? 0
+        let elapsed = r.resumeSecondsIntoChapter.map { into in
+            into + r.chapters.filter { $0.index < resumeChapter }.reduce(0) { $0 + $1.durationSeconds }
+        }
+        return DocumentSummary(document: domain(r), chapterCount: r.chapters.count,
+                               utteranceCount: r.chapters.reduce(0) { $0 + $1.utteranceCount },
+                               totalSeconds: r.chapters.reduce(0) { $0 + $1.durationSeconds },
+                               renderedCount: r.chapters.reduce(0) { $0 + $1.renderedCount },
+                               isFinished: r.isFinished, queueOrder: r.queueOrder, lastPlayedAt: r.lastPlayedAt,
+                               resumeElapsedSeconds: elapsed, resumeChapterIndex: r.resumeChapterIndex)
     }
 }

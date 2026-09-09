@@ -50,8 +50,9 @@ public final class PlayerModel {
 
     private let library: Library
     private static let log = Logger(subsystem: "com.t2s.reader", category: "playback")
-    /// Hash of each chapter as last written, to skip unchanged chapters on the next persist.
-    private var persistedChapterHashes: [Int] = []
+    /// Chapters to write at the next persist: the ones the coordinator reports changed, plus any
+    /// whose last write failed.
+    private var pendingChapters: Set<Int> = []
     /// The tick array is O(timeline) and the player sheet's body runs at 10 Hz while playing, so it
     /// is a cache invalidated by `coordinator.timelineRevision`, not a computed property.
     /// `@ObservationIgnored`: filling it from `scrubber`'s getter must not invalidate the body that
@@ -165,7 +166,7 @@ public final class PlayerModel {
             document.voiceID = Delivery.applied(to: routed)
             coordinator.load(document, timeline: timeline)
             current = summary
-            persistedChapterHashes = timeline.chapters.map(\.hashValue)
+            pendingChapters = []
             localError = nil
             if play { await coordinator.play() }
         } catch {
@@ -220,14 +221,15 @@ public final class PlayerModel {
 
     // MARK: Persistence of phase 2
 
-    /// Writes chapters whose utterances changed since the last write (actual durations, word
-    /// timings, audio refs from `.rendered` events). Cheap when nothing changed.
+    /// Writes the chapters whose utterances changed since the last write (actual durations, word
+    /// timings, audio refs from `.rendered` events) — the coordinator says which (Plan 16; a pass
+    /// hashing every chapter used to find them). Free when nothing changed.
     public func persistRenderedChapters() async {
+        pendingChapters.formUnion(coordinator.takeChangedChapters())
         guard let current, let timeline = coordinator.timeline else { return }
         var failed = false
-        for (c, chapter) in timeline.chapters.enumerated() {
-            let hash = chapter.hashValue
-            if c < persistedChapterHashes.count, persistedChapterHashes[c] == hash { continue }
+        for c in pendingChapters.sorted() where timeline.chapters.indices.contains(c) {
+            let chapter = timeline.chapters[c]
             do {
                 // Merge before writing: a cache-hit `.rendered` carries no word timings
                 // (`RenderScheduler`), so an utterance this coordinator "rendered" straight from the
@@ -236,7 +238,7 @@ public final class PlayerModel {
                 let stored = try await library.store.chapter(c, of: current.id)
                 let merged = stored.map { Self.merging(stored: $0, into: chapter) } ?? chapter
                 try await library.store.saveChapter(merged, at: c, of: current.id)
-                if c < persistedChapterHashes.count { persistedChapterHashes[c] = hash } else { persistedChapterHashes.append(hash) }
+                pendingChapters.remove(c)
             } catch {
                 localError = "\(error)"
                 failed = true

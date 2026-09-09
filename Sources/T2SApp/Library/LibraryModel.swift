@@ -7,7 +7,8 @@ import T2SStore
 public enum QueueView: Hashable, Sendable { case queue, finished }
 
 /// The Queue and Collection pages' state (spec §2.3, §2.4.5). Reads summaries from the store and
-/// per-document progress through `Library.currentTimeline`, which decodes the stored chapters but
+/// per-document progress from the summary itself where the coordinator has saved a playhead
+/// (Plan 16), else through `Library.currentTimeline`, which decodes the stored chapters but
 /// never reprocesses: re-derivation after a version bump is a load-time concern
 /// (`Library.timelineForPlayback`), not something an action's refresh should trigger for every
 /// queued document at once. Progress is cached per document against the parts of its summary that
@@ -83,7 +84,10 @@ public final class LibraryModel {
                     cache[s.id] = hit
                     continue
                 }
-                if let timeline = try await library.currentTimeline(s.id) {
+                if let stored = DocumentProgress.fromSummary(s) {                // the row says where it is
+                    next[s.id] = stored
+                    cache[s.id] = (key, stored)
+                } else if let timeline = try await library.currentTimeline(s.id) {
                     let computed = DocumentProgress.compute(summary: s, timeline: timeline)
                     next[s.id] = computed
                     cache[s.id] = (key, computed)

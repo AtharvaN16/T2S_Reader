@@ -48,4 +48,17 @@ import T2SStore
         let p = DocumentProgress.compute(summary: summary(resume: nil), timeline: Timeline(chapters: []))
         #expect(p.totalSeconds == 0 && p.fraction == 0 && p.chapterIndex == nil && p.chapterCount == 0)
     }
+
+    @Test func aSummaryWithASavedPlayheadNeedsNoTimeline() {
+        var s = DocumentSummary(document: Document(title: "D", sourceType: .epub), chapterCount: 3, utteranceCount: 4,
+                                totalSeconds: 10, renderedCount: 4, isFinished: false, queueOrder: 0, lastPlayedAt: nil)
+        #expect(DocumentProgress.fromSummary(s) == nil)                                         // never played
+        s.resumeElapsedSeconds = 6.5
+        s.resumeChapterIndex = 2
+        let p = try! #require(DocumentProgress.fromSummary(s))
+        #expect(p.elapsedSeconds == 6.5 && p.totalSeconds == 10 && p.chapterIndex == 2 && p.chapterCount == 3)
+        #expect(!p.isApproximate)
+        s.resumeElapsedSeconds = 12                                                             // durations shrank since the save
+        #expect(DocumentProgress.fromSummary(s)?.elapsedSeconds == 10)
+    }
 }

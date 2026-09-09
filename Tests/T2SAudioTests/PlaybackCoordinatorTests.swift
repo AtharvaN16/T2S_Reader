@@ -501,6 +501,29 @@ import T2SCore
         player.advance(seconds: 0.2); c.tick()
         #expect(abs(c.playhead.offset - 0.7) < 1e-9)                 // no jump: the clock stood still while dry
     }
+
+    /// The player model persists the chapters the coordinator changed and nothing else (Plan 16): a
+    /// render marks its chapter, taking the set clears it, a load starts it empty. A save carries
+    /// where the playhead sits in its chapter beside the position.
+    @Test func reportsChangedChaptersAndSavesTheTimeIntoTheChapter() async throws {
+        let (c, _, _, _, saves, doc, _) = fixture()
+        let a = SourceBlock(text: "Alpha one.", position: Position(resourceHref: "a.xhtml", progression: 0, charOffset: 0))
+        let b = SourceBlock(text: "Beta two.", position: Position(resourceHref: "b.xhtml", progression: 0, charOffset: 0))
+        let timeline = TimelineBuilder.build(chapters: [ChapterInput(title: "A", position: a.position, blocks: [a]),
+                                                        ChapterInput(title: "B", position: b.position, blocks: [b])],
+                                             segmenter: Segmenter(normalizer: TextNormalizer()))
+        c.load(doc, timeline: timeline)
+        #expect(c.changedChapters.isEmpty)
+        await c.waitForRenderIdle()                                                              // the window covers both
+        #expect(c.changedChapters == [0, 1])
+        #expect(c.takeChangedChapters() == [0, 1])
+        #expect(c.changedChapters.isEmpty)
+        await c.seek(to: Playhead(utteranceIndex: 1, offset: 0.3))
+        await c.settle()
+        let saved = try #require(await saves.lastSaved)
+        #expect(saved.position.resourceHref == "b.xhtml")
+        #expect(saved.chapterIndex == 1 && abs(saved.secondsIntoChapter - 0.3) < 1e-9)
+    }
 }
 
 private struct KeyRejectedEngine: SynthesisEngine {

@@ -69,6 +69,24 @@ import T2SStore
         #expect(model.progress(for: a)?.chapterIndex == 1)
     }
 
+    /// A row the coordinator has played carries its own elapsed time (Plan 16): progress comes from
+    /// the summary and the chapter blobs stay on disk.
+    @Test func progressComesFromTheSavedPlayheadWithoutADecode() async throws {
+        let f = try AppFixtures()
+        let a = try await f.importFake()
+        let model = LibraryModel(library: f.library)
+        let playhead: any PlayheadStore = f.store
+        await playhead.save(SavedPlayhead(position: Position(resourceHref: "OEBPS/ch2.xhtml", progression: 0, charOffset: 0),
+                                          chapterIndex: 1, secondsIntoChapter: 0.25), for: a)
+        await model.refresh()
+        let p = try #require(model.progress(for: a))
+        let s = try #require(model.summaries.first { $0.id == a })
+        let elapsed = try #require(s.resumeElapsedSeconds)
+        #expect(p.chapterIndex == 1 && p.chapterCount == 2)
+        #expect(abs(p.elapsedSeconds - elapsed) < 1e-9 && elapsed > 0.25)                     // chapter 1's duration, then 0.25 s
+        #expect(p.totalSeconds == s.totalSeconds && p.isApproximate)
+    }
+
     @Test func progressFollowsSavedPositions() async throws {
         let f = try AppFixtures()
         let a = try await f.importFake()

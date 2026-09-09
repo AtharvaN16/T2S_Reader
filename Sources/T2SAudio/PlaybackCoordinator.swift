@@ -44,6 +44,11 @@ public final class PlaybackCoordinator {
     /// estimate for an actual. Anything O(timeline) a view derives can be cached against it
     /// instead of recomputed per body evaluation.
     public private(set) var timelineRevision = 0
+    /// Chapters whose utterances this coordinator changed since `takeChangedChapters()`: a
+    /// `.rendered` event, or an audio ref cleared because the store lost the clip. The player model
+    /// persists exactly these (Plan 16; it used to hash every chapter to find them). A load starts
+    /// the set empty: the refs it clears are persisted with the chapter's next real change, as before.
+    public private(set) var changedChapters: Set<Int> = []
     public private(set) var timeIndex = TimeIndex(Timeline(chapters: []))
     /// Set by the app from battery, thermal, and Low Power Mode notifications.
     public var device = DeviceState.unplugged { didSet { replan() } }
@@ -126,6 +131,7 @@ public final class PlaybackCoordinator {
             if !isCurrent { self.timeline?[utterance: i].audioRef = nil }
         }
         manualRequested = false
+        changedChapters = []
         lastPlayed = document.id
         lastRenderError = nil
         rateLoweredTo = nil
@@ -161,6 +167,7 @@ public final class PlaybackCoordinator {
             for (entry, isPresent) in zip(keyed, present) where !isPresent {
                 self.rendered[entry.index] = false
                 self.timeline?[utterance: entry.index].audioRef = nil
+                self.markChanged(utterance: entry.index)
                 flipped = true
             }
             if flipped { self.replan() }
@@ -316,6 +323,7 @@ public final class PlaybackCoordinator {
                 // the scheduler to render it again rather than deadlocking here forever.
                 rendered[next] = false
                 self.timeline?[utterance: next].audioRef = nil
+                markChanged(utterance: next)
                 awaitingIndex = next
                 replan()
                 return
@@ -462,6 +470,7 @@ public final class PlaybackCoordinator {
             }
             u.audioRef = r.key.rawValue
             timeline![utterance: r.utteranceIndex] = u
+            markChanged(utterance: r.utteranceIndex)
             rendered[r.utteranceIndex] = true
             timeIndex = TimeIndex(timeline!)
             refreshHighlight()
@@ -521,10 +530,24 @@ public final class PlaybackCoordinator {
                   segmenterVersion: timeline.segmenterVersion)
     }
 
+    /// Returns the chapters changed since the last call and forgets them; the caller owns them now.
+    public func takeChangedChapters() -> Set<Int> {
+        defer { changedChapters = [] }
+        return changedChapters
+    }
+
+    private func markChanged(utterance i: Int) {
+        if let c = timeline?.chapterIndex(forUtterance: i) { changedChapters.insert(c) }
+    }
+
     private func save() {
         guard let document, let timeline else { return }
         let position = PositionResolver.position(for: playhead, in: timeline)
+        let chapter = timeline.chapterIndex(forUtterance: playhead.utteranceIndex)
+        let chapterStart = chapter.map { timeIndex.startTime(ofUtterance: timeline.utteranceRange(ofChapter: $0).lowerBound) } ?? 0
+        let saved = SavedPlayhead(position: position, chapterIndex: chapter,
+                                  secondsIntoChapter: max(0, timeIndex.time(at: playhead) - chapterStart))
         let store = playheadStore
-        chain { await store.save(position, for: document.id) }
+        chain { await store.save(saved, for: document.id) }
     }
 }

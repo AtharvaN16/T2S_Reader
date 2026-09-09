@@ -2,17 +2,12 @@ import Foundation
 import SwiftData
 import T2SCore
 
-/// The current schema (Plan 16): V1 plus `StoredDocument.resumeChapterIndex` and
-/// `resumeSecondsIntoChapter`, both optional, so a V1 row reads back with them nil. The model
-/// classes live inside their schema version, as SwiftData needs them to: a migration stage
-/// compares the two versions' models, and two versions naming the same classes are "duplicate
-/// version checksums" at run time. `Models.swift`'s top-level names are aliases of these.
-enum LibrarySchemaV2: VersionedSchema {
-    static var versionIdentifier: Schema.Version { Schema.Version(2, 0, 0) }
+/// The Plan 3 schema, as shipped, kept so a store written under it has a migration stage to the
+/// current version (`LibraryMigrationPlan`). Frozen: never edit these classes; add a version.
+enum LibrarySchemaV1: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(1, 0, 0) }
     static let models: [any PersistentModel.Type] = [StoredDocument.self, StoredChapter.self, StoredBookmark.self, StoredPronunciation.self]
 
-    /// SwiftData rows. Internal on purpose (spec §3.7.1): the store hands out `T2SCore` value types,
-    /// so the persistence schema never shapes the domain model.
     @Model
     final class StoredDocument {
         @Attribute(.unique) var id: UUID
@@ -32,11 +27,6 @@ enum LibrarySchemaV2: VersionedSchema {
         var resumeProgression: Double?
         var resumeCharOffset: Int?
         var resumeCSSSelector: String?
-        /// Where the resume position sits in time (`SavedPlayhead`, schema V2): the chapter, and the
-        /// seconds into it. nil for a position saved without them, so a list screen falls back to the
-        /// decode. The earlier chapters' durations are added when the summary is read.
-        var resumeChapterIndex: Int?
-        var resumeSecondsIntoChapter: Double?
         /// nil = not in the Queue; otherwise the row's rank, ascending and unique among queued rows.
         var queueOrder: Int?
         var isFinished: Bool
@@ -63,8 +53,6 @@ enum LibrarySchemaV2: VersionedSchema {
             self.resumeProgression = nil
             self.resumeCharOffset = nil
             self.resumeCSSSelector = nil
-            self.resumeChapterIndex = nil
-            self.resumeSecondsIntoChapter = nil
             self.queueOrder = nil
             self.isFinished = false
             self.schemaVersion = schemaVersion

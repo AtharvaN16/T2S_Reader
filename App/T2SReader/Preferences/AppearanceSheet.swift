@@ -43,6 +43,5 @@ struct AppearanceSheet: View {
         .background(Tokens.raised)
         .presentationDetents([.medium])
         .presentationCornerRadius(Spacing.sheetCorner)
-        .appTheme()
     }
 }

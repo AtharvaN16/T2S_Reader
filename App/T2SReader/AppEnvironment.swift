@@ -147,6 +147,19 @@ final class AppEnvironment {
     }
 }
 
+extension AppEnvironment {
+    /// Delete removes a document from Queue and Collection both (spec §2.3). The player lets go of
+    /// it first, so nothing keeps sounding from — or tries to save into — a document the library
+    /// no longer has. Every delete in the app goes through here.
+    func deleteDocument(_ id: UUID) async {
+        if player.current?.id == id { player.unload() }
+        await libraryModel.delete(id)
+    }
+
+    /// The confirmation's one line, wherever a delete is offered.
+    static let deleteMessage = "Removes it, its audio and its progress from this device."
+}
+
 /// `AudioPlayer`'s init can throw — a real `AVAudioEngine` failing to start, not something a preview
 /// button tap should crash over. This plays nothing and reports every segment finished the moment
 /// `play()` is called, so the preview button returns to "play" at once rather than sitting on "stop"

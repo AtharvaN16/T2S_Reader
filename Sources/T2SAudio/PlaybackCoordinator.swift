@@ -152,6 +152,37 @@ public final class PlaybackCoordinator {
         reconcileWithStore()
     }
 
+    /// Forgets the loaded document: stops the player and drops its queue, clears the render plan,
+    /// and returns to `.idle` with no document and no timeline — for a document the library is
+    /// deleting. Nothing is saved: the playhead row goes with the document. A late event from the
+    /// old plan is ignored by `apply`'s document check.
+    public func unload() {
+        player.reset()
+        document = nil
+        timeline = nil
+        timeIndex = TimeIndex(Timeline(chapters: []))
+        rendered = []
+        changedChapters = []
+        manualRequested = false
+        lastPlayed = nil
+        playhead = Playhead(utteranceIndex: 0)
+        highlight = nil
+        headIndex = 0
+        headStartConsumed = 0
+        lastEnqueued = nil
+        awaitingIndex = nil
+        streaming = nil
+        state = .idle
+        submitsInFlight += 1                                                 // the same idle accounting as `replan`
+        let scheduler = self.scheduler
+        chain {
+            let owesIdle = await scheduler.setPlan([])
+            self.submitsInFlight -= 1
+            if owesIdle { self.expectedIdles += 1 }
+            self.releaseIdleWaitersIfSettled()
+        }
+    }
+
     /// The store is cache, never truth (spec §3.7.3): a `rendered[i] == true` seeded from a
     /// persisted `audioRef` can be stale if the entry was evicted while the app was closed.
     /// Flips any such index back to unrendered and clears its `audioRef` so `replan()` asks the

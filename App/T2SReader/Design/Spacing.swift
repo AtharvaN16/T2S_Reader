@@ -10,7 +10,6 @@ enum Spacing {
     static let titleTop: CGFloat = 56
     static let sheetCorner: CGFloat = 28
     static let artworkSmall: CGFloat = 8
-    static let artworkLarge: CGFloat = 16
     /// Trailing space on the root pages so their last row scrolls clear of the bottom bar's fill
     /// (`RootPager.bottomFill`: 180 pt of fade over the page row's 40 pt and a 34 pt home-indicator
     /// inset, measured from the screen bottom, less the row's own 28 pt gap).

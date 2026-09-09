@@ -32,6 +32,25 @@ import T2SStore
         #expect(player.renderError == nil)
     }
 
+    /// Delete's path: the player forgets the document without saving anything, so nothing plays
+    /// from — or writes into — a document the library is removing.
+    @Test func unloadForgetsTheDocument() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let summary = try #require(try await f.store.summary(id: id))
+        let player = try makePlayer(f)
+        await player.load(summary, play: true)
+        #expect(player.isPlaying)
+        player.unload()
+        #expect(player.current == nil)
+        #expect(player.state == .idle && !player.isPlaying)
+        #expect(player.chapters.isEmpty && player.total == 0)
+        #expect(player.renderError == nil)
+        await player.coordinator.waitForRenderIdle()                        // the cleared plan settles; nothing hangs
+        await player.persistRenderedChapters()                              // a no-op with nothing loaded
+        #expect(try await f.store.summary(id: id)?.renderedCount == 0)
+    }
+
     @Test func transportAndSeeks() async throws {
         let f = try AppFixtures()
         let id = try await f.importFake()

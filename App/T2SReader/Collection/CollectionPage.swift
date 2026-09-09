@@ -4,29 +4,29 @@ import T2SApp
 import T2SCore
 import T2SStore
 
-/// Which kinds the Collection shows. Every EPUB and PDF is in it (spec §2.3) — articles live on
-/// Home — so the chips are the two kinds and "All".
-enum CollectionFilter: CaseIterable {
-    case all, books, pdfs
-
-    var title: String {
-        switch self {
-        case .all: return "All"
-        case .books: return "Books"
-        case .pdfs: return "PDFs"
-        }
-    }
-
-    func includes(_ type: SourceType) -> Bool {
-        switch self {
-        case .all: return true
-        case .books: return type == .epub
-        case .pdfs: return type == .pdf
-        }
-    }
-}
-
 struct CollectionPage: View {
+    /// Which kinds the page shows. Every EPUB and PDF is in the Collection (spec §2.3) — articles
+    /// live on Home — so the chips are the two kinds and "All".
+    private enum Filter: CaseIterable {
+        case all, books, pdfs
+
+        var title: String {
+            switch self {
+            case .all: return "All"
+            case .books: return "Books"
+            case .pdfs: return "PDFs"
+            }
+        }
+
+        func includes(_ type: SourceType) -> Bool {
+            switch self {
+            case .all: return true
+            case .books: return type == .epub
+            case .pdfs: return type == .pdf
+            }
+        }
+    }
+
     @Environment(AppEnvironment.self) private var env
     @Environment(\.readerRoute) private var readerRoute
     @State private var showAdd = false
@@ -34,11 +34,12 @@ struct CollectionPage: View {
     @State private var pendingOpen: DocumentSummary?
     @State private var selected: DocumentSummary?
     @State private var details: DocumentSummary?
+    @State private var voiceChange: DocumentSummary?
     /// The book a menu's Delete named; the confirmation dialog presents it and clears it.
     @State private var pendingDelete: DocumentSummary?
     @State private var searchText = ""
     @State private var isSearching = false
-    @State private var filter: CollectionFilter = .all
+    @State private var filter: Filter = .all
 
     /// Cells align at the top so every book in a row stands on the same shelf line — the cover
     /// slot is a fixed proportion of the width, and only the text below it varies in height.
@@ -91,15 +92,16 @@ struct CollectionPage: View {
         .fullScreenCover(isPresented: $showAdd, onDismiss: openPending) { ImportPage(imported: $pendingOpen) }
         .sheet(item: $selected) { BookSheet(summary: $0) }
         .sheet(item: $details) { DetailsSheet(summary: $0) }
+        .sheet(item: $voiceChange) { VoiceChangeSheet(summary: $0) }
         .confirmationDialog(
             pendingDelete.map { "Delete “\($0.document.title)”?" } ?? "",
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
             titleVisibility: .visible,
             presenting: pendingDelete
         ) { book in
-            Button("Delete from library", role: .destructive) { Task { await delete(book) } }
+            Button("Delete from library", role: .destructive) { Task { await env.deleteDocument(book.id) } }
         } message: { _ in
-            Text("Removes the book, its audio and its progress from this device.")
+            Text(AppEnvironment.deleteMessage)
         }
     }
 
@@ -115,7 +117,9 @@ struct CollectionPage: View {
             PageTitle(text: "Collection")
             Spacer(minLength: 12)
             HStack(spacing: 8) {
-                circleButton("plus", label: "Add") { showAdd = true }
+                Button { showAdd = true } label: { CircleGlyph(systemName: "plus") }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Import")                          // Home's word for the same door
                 Pill(label: isSearching ? "Done" : "Search", style: isSearching ? .selected : .soft) {
                     withAnimation(.snappy) { isSearching.toggle(); if !isSearching { searchText = "" } }
                 }
@@ -124,34 +128,32 @@ struct CollectionPage: View {
         }
     }
 
-    /// The kind chips on the left (the voice picker's filter row) and the layout switch on the
-    /// right — a circle like the header's `+`, showing the layout a tap switches to.
+    /// The kind chips on the left — the voice picker's filter row, scrolling rather than wrapping
+    /// at the large text sizes — and the layout switch on the right, a circle like the header's
+    /// `+` showing the layout a tap switches to.
     private func controls(layout: CollectionLayout) -> some View {
         HStack(spacing: Spacing.grid) {
-            ForEach(CollectionFilter.allCases, id: \.self) { option in
-                Pill(label: option.title, style: filter == option ? .selected : .soft) {
-                    withAnimation(.snappy) { filter = option }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: Spacing.grid) {
+                    ForEach(Filter.allCases, id: \.self) { option in
+                        Pill(label: option.title, style: filter == option ? .selected : .soft) {
+                            withAnimation(.snappy) { filter = option }
+                        }
+                    }
                 }
             }
-            Spacer(minLength: Spacing.grid)
-            circleButton(layout == .grid ? "list.bullet" : "square.grid.2x2",
-                         label: layout == .grid ? "Show as list" : "Show as grid") {
+            Button {
                 withAnimation(.snappy) { env.preferences.collectionLayout = layout == .grid ? .list : .grid }
+            } label: {
+                CircleGlyph(systemName: layout == .grid ? "list.bullet" : "square.grid.2x2")
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(layout == .grid ? "Show as list" : "Show as grid")
         }
     }
 
-    /// The 36 pt `surface` circle of the page headers and the row menus, with one glyph in it.
-    private func circleButton(_ glyph: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: glyph).font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Tokens.ink).frame(width: 36, height: 36)
-                .background(Tokens.surface, in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
-    }
-
+    /// `.all` with nothing typed cannot be empty here — `all.isEmpty` is handled first — so its
+    /// line is only ever the search's.
     private var emptyText: String {
         if isSearching, !searchText.isEmpty { return "No matches." }
         switch filter {
@@ -174,6 +176,8 @@ struct CollectionPage: View {
                         // shadow cut off at the edge.
                         cover(book, height: 240).padding(Spacing.section).background(Tokens.ground)
                     }
+                    // A long press is the only visible way in; VoiceOver's rotor gets the same items.
+                    .accessibilityActions { menuItems(for: book) }
             }
         }
     }
@@ -194,14 +198,16 @@ struct CollectionPage: View {
 
     // MARK: Menu
 
-    /// One menu for the grid's long press, the row's `⋯` and the row's long press. Play resumes a
-    /// paused current book before opening the Reader, as the Home row and the book sheet do; for
-    /// any other book the Reader loads and plays it itself.
+    /// One menu for the grid's long press, the row's `⋯` and the row's long press — the Home row's
+    /// items where they apply here, plus Play and Delete. Play resumes a paused current book before
+    /// opening the Reader, as the Home row and the book sheet do; for any other book the Reader
+    /// loads and plays it itself.
     @ViewBuilder private func menuItems(for book: DocumentSummary) -> some View {
         let isQueued = book.queueOrder != nil && !book.isFinished
+        let isCurrent = env.player.current?.id == book.id
         Button {
             Task {
-                if env.player.current?.id == book.id, !env.player.isPlaying { await env.player.togglePlay() }
+                if isCurrent, !env.player.isPlaying { await env.player.togglePlay() }
                 readerRoute.open(book)
             }
         } label: { Label("Play", systemImage: "play.fill") }
@@ -214,14 +220,14 @@ struct CollectionPage: View {
             Label(book.isFinished ? "Mark as unfinished" : "Mark as finished", systemImage: "checkmark.circle")
         }
         Button { details = book } label: { Label("Details", systemImage: "info.circle") }
+        Button { voiceChange = book } label: { Label("Change voice", systemImage: "person.wave.2") }
+        Button {
+            Task {
+                if !isCurrent { await env.player.load(book, play: false) }
+                env.player.renderWholeDocument()
+            }
+        } label: { Label("Render whole document", systemImage: "waveform") }
         Button(role: .destructive) { pendingDelete = book } label: { Label("Delete", systemImage: "trash") }
-    }
-
-    /// Delete removes the book from Queue and Collection both (spec §2.3). A book that is playing
-    /// is paused first, so nothing keeps sounding from a document the library no longer has.
-    private func delete(_ book: DocumentSummary) async {
-        if env.player.current?.id == book.id, env.player.isPlaying { await env.player.togglePlay() }
-        await env.libraryModel.delete(book.id)
     }
 }
 
@@ -234,7 +240,8 @@ private struct CollectionTile: View {
 
     var body: some View {
         Button(action: action) {
-            // 12 pt between the book and its text: air under the cover's shadow.
+            // 12 pt between the book and its text: the shadow's visible part clears it, and the
+            // three-up grid has no room for the Home row's 20.
             VStack(alignment: .leading, spacing: 12) {
                 GeometryReader { geo in
                     BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: geo.size.height,
@@ -252,6 +259,7 @@ private struct CollectionTile: View {
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .contentShape(Rectangle())                                         // the whole cell taps, not just the ink
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
@@ -276,7 +284,7 @@ private struct CollectionRow<Items: View>: View {
                     BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: 88,
                               title: summary.document.title, isPDF: summary.document.sourceType == .pdf)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(summary.document.title).typeRole(.rowTitle).foregroundStyle(Tokens.ink).lineLimit(2)
+                        Text(summary.document.title).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
                         if let author = summary.document.author {
                             Text(author).typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(1)
                         }
@@ -285,6 +293,7 @@ private struct CollectionRow<Items: View>: View {
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityElement(children: .ignore)
@@ -293,11 +302,7 @@ private struct CollectionRow<Items: View>: View {
             Menu {
                 menuItems()
             } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Tokens.ink)
-                    .frame(width: 36, height: 36)
-                    .background(Tokens.surface, in: Circle())
+                CircleGlyph(systemName: "ellipsis")
             }
             .accessibilityLabel("More")
         }

@@ -22,10 +22,24 @@ The owner's four asks for the Collection page, done on `dev` in `Collection/Coll
 - **One menu three ways**: long-press on a tile (with a `preview:` of the book alone at 240 pt, so
   the shadow is not cut off at the cell's edge), the row's `⋯`, and long-press on a row. Items:
   Play (resumes a paused current book before opening the Reader, as the Home row does), Add to /
-  Remove from Queue, Mark as finished / unfinished, Details (`DetailsSheet`), Delete. Delete asks
-  first (`confirmationDialog`, "Removes the book, its audio and its progress from this device.")
-  and pauses the player if that book is playing; `DetailsSheet`'s own delete pill still deletes
-  without asking, as before.
+  Remove from Queue, Mark as finished / unfinished, Details (`DetailsSheet`), Change voice, Render
+  whole document, Delete. **Every delete now goes through `AppEnvironment.deleteDocument`** and asks
+  first (`confirmationDialog`, `AppEnvironment.deleteMessage`) — the Details sheet's pill too, which
+  used to delete on the spot. If the document is the loaded one, `PlayerModel.unload()` (new) drops
+  it first: `PlaybackCoordinator.unload()` resets the player, clears the plan with the same idle
+  accounting as `replan`, and returns to `.idle` with no document or timeline, saving nothing — the
+  playhead row goes with the document. Before, a deleted book stayed in the mini-player and a tap
+  played it from memory, then `persistRenderedChapters` threw on the missing row. Tested in
+  `PlayerModelTests.unloadForgetsTheDocument`. Known gap: a delete that lands while that same
+  document's `load` is still awaiting its timeline is not caught (`current` is set only after).
+  Home's context menu still calls the same action "Archive" where the Collection says "Remove from
+  Queue" — one word app-wide is owed.
+- **`CircleGlyph`** (`Design/Primitives.swift`): the 36 pt `surface` circle with a 15 pt semibold
+  glyph, as a label so a `Button` and a `Menu` can both wear it. The Collection uses it for `+`, the
+  layout switch and the rows' `⋯`; `ReaderPage.icon`, `QueueRow`, `MiniPlayer` and `ImportPage`
+  still inline the same circle and could move onto it. `Spacing.artworkLarge` is gone (no users).
+  Tiles have `.contentShape(Rectangle())` and `.accessibilityActions` with the menu's items, so
+  VoiceOver reaches what a long press does.
 - **Kind chips** — All · Books · PDFs — in the voice picker's filter-chip style, above the grid.
   Articles are not in the Collection (spec §2.3, they live on Home) so there is no chip for them.
   Search now matches the author too. The "N books" subtitle under the title is gone (owner's
@@ -117,7 +131,10 @@ a grid ⇄ list switch, `CollectionTile` / `CollectionRow`, a Delete confirmatio
 key `collection.layout`, tested). It built and the full suite passed (433/81), so nothing is
 broken — but that work's author should know it is on `origin/dev` under a Reader message, and
 whether it was finished is theirs to say. Not rewritten: `dev` is shared and pushed. Rule from
-here: stage with explicit paths, never a directory, in this checkout.
+here: stage with explicit paths, never a directory, in this checkout. _Answered by the Collection
+session: that sweep was the finished first pass; the review-fix pass on top of it (delete goes
+through `AppEnvironment.deleteDocument` with `PlayerModel.unload`, `CircleGlyph`, the menu's Change
+voice / Render whole document, tap shapes, VoiceOver actions) is its own commit after this one._
 
 **Fourth cut (2026-09-09, four crops incl. Apple Podcasts' chapter list):** (1) The chapter row's
 chevron is a filled up-arrow (`arrowtriangle.up.fill`, 10 pt bold) inside the text run with

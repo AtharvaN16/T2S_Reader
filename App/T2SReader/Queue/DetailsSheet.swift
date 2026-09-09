@@ -3,12 +3,14 @@ import SwiftUI
 import T2SApp
 import T2SStore
 
-/// Context-menu "Details": what the library knows about a document, and the only place to delete it
-/// (delete removes from Queue and Collection both, spec §2.3).
+/// Context-menu "Details": what the library knows about a document, and a place to delete it
+/// (delete removes from Queue and Collection both, spec §2.3; the Collection's menus offer it too,
+/// and every path asks first and goes through `AppEnvironment.deleteDocument`).
 struct DetailsSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     var summary: DocumentSummary
+    @State private var confirmDelete = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.section) {
@@ -37,13 +39,18 @@ struct DetailsSheet: View {
             Text("Re-reads the file with the current pronunciation dictionary. Rendered audio is discarded.")
                 .typeRole(.meta)
                 .foregroundStyle(Tokens.ink2)
-            Pill(label: "Delete from library", glyph: "trash", style: .destructiveSoft) {
-                Task { await env.libraryModel.delete(summary.id); dismiss() }
-            }
+            Pill(label: "Delete from library", glyph: "trash", style: .destructiveSoft) { confirmDelete = true }
         }
         .padding(Spacing.margin)
         .padding(.top, Spacing.grid)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .confirmationDialog("Delete “\(summary.document.title)”?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete from library", role: .destructive) {
+                Task { await env.deleteDocument(summary.id); dismiss() }
+            }
+        } message: {
+            Text(AppEnvironment.deleteMessage)
+        }
         .presentationBackground(Tokens.raised)
         .presentationDetents([.medium, .large])
         .presentationCornerRadius(Spacing.sheetCorner)

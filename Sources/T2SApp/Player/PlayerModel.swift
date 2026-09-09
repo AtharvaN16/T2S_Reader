@@ -216,6 +216,16 @@ public final class PlayerModel {
         }
     }
 
+    /// Drops the loaded document without persisting it — for a document the library is deleting,
+    /// whose chapters and playhead row are going too. `current` is nil after, so the mini-player
+    /// falls back to the queue's head and Now Playing clears.
+    public func unload() {
+        coordinator.unload()
+        current = nil
+        pendingChapters = []
+        localError = nil
+    }
+
     // MARK: Transport
 
     public func togglePlay() async {

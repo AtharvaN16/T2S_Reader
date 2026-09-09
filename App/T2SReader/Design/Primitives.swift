@@ -48,6 +48,20 @@ struct Pill: View {
     }
 }
 
+/// The 36 pt `surface` circle with one 15 pt semibold glyph in it: the page headers' `+`, the rows'
+/// `⋯`, the Reader bar's circles. A label, not a button, so a `Button` and a `Menu` can both wear it.
+struct CircleGlyph: View {
+    var systemName: String
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(Tokens.ink)
+            .frame(width: 36, height: 36)
+            .background(Tokens.surface, in: Circle())
+    }
+}
+
 /// The section header of spec §2.4.5, shared by the pages that group rows under one — the
 /// spacing below it belongs to each page, so only the type is here.
 struct SectionHeader: View {

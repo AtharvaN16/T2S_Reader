@@ -1,8 +1,21 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-09 evening (book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-09 evening (the book sheet's tilt made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-09, latest) — Book sheet rework, no queue, chapter list spacing
+## Resume here (2026-09-09, latest) — the tilt made bolder
+
+The owner tried the book sheet's gyro tilt (added the round before) and called it "too subtle".
+`System/MotionTilt.swift`: `TiltFilter.scale` 0.35 → 0.9 and `limitDegrees` 3 → 10, so a 10° tip of
+the phone now turns the book close to one-for-one instead of a third of the way; the doc comment's
+±3° became ±10°. `Design/Primitives.swift`'s `BookCover`: the shadow's lean multiplier 0.4 → 0.5
+(it already scales with the bigger `tilt` values, this just keeps the shadow keeping pace with the
+now-larger rotation) and `rotation3DEffect`'s `perspective` 0.5 → 0.7, so the tilt reads more like a
+3-D object turning and less like a flat skew. No test exercises `MotionTilt` (it wraps
+`CMMotionManager`, which reports nothing on the simulator), and the simulator cannot show a tilt at
+all — this is unverified until the owner is back on a phone. `scripts/build-app.sh` → `** BUILD
+SUCCEEDED **`.
+
+## Resume here (2026-09-09) — Book sheet rework, no queue, chapter list spacing
 
 The owner's second batch of the evening, on `dev`, straight after the chapter-sheet round below.
 

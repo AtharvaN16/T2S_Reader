@@ -32,7 +32,9 @@ warm-up, prime after import and at launch); #4 done as `RecentAudioStore` (the t
 decode paths stay); #5 partly (one store hop per load, cheaper keys — the `play()` gate,
 "stop hashing every chapter twice per open" and `LibraryModel.refresh` are all untouched); #8 done;
 #11 done (`rateLoweredTo`, and the rate is raised again as the RTF recovers; the Reader's line is the
-UI plan's). Open (after Plan 16): #6, #7, #9, #10, #14, and the rest of #12.
+UI plan's). Open (after Plan 17): the rest of #12 (the OOV cache needs an upstream MisakiSwift hook;
+the G2P/generator overlap and the AAC encode want the §8 measurement first), #14's BART port,
+per-chapter lazy re-derivation (§5.1 b), and `RootPager`'s second `update()` per tick (#7).
 
 **Progress (Plan 15, 2026-09-08):** #2 done — the head streams; first sound after the first ~3 s piece
 (~1 s on an A13 in the 7 s bucket). The 3 s bucket (#9) would halve that.
@@ -47,6 +49,18 @@ the dictionary, the number rule skipped without a digit. #12 in part: the harmon
 nine sine passes over the voiced prefix only (bit-identical) and runs beside decoder-pre in the vendored
 executor; the OOV phoneme cache, the G2P/generator overlap and the AAC encode off the critical path are
 still open, and want the §8 measurement first.
+
+**Progress (Plan 17, 2026-09-09):** #6 done but for (b): import retains the reader's chapters and a
+re-derivation reads them, the old audio goes in the background from the raw blobs, and only a
+document's own open re-derives it (Bookmarks and Prepare read the timeline as it stands;
+`BookSheet.loadChapters` still re-derives — another session's file). #7 done on the app side: the
+highlight is written only on change, the O(timeline) facts the 10 Hz bodies read are cached against
+the revision, the chapter axis is one pass, the ticker idles at 1 Hz, an idle `clear()` writes once;
+`RootPager`'s second `update()` per tick is open. #10 done but for bucket-lazy readiness: the sweep
+runs on the store's actor at first use, the stages load concurrently. #9 done: the 3 s and 10 s
+buckets are pinned, staged and vended (+~250 MB of bundle; the weights are byte-identical, the
+plans are not). #12: the OOV cache needs an upstream MisakiSwift hook (the fallback is private);
+the overlap and the encode wait for §8. #14: nothing to do at launch; the BART port is its own project.
 
 | # | Recommendation | Listener-visible effect | Effort | Section |
 |---|---|---|---|---|

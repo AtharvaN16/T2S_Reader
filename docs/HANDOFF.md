@@ -1,6 +1,56 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-08 (Plan 16 — steady streaming and the open path — on `plan-16-open-path`, in the worktree `.worktrees/plan-16-open-path`, off `origin/dev` @ 246065b). Written for whoever picks up the coding next._
+_Last updated 2026-09-09 (Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498). Written for whoever picks up the coding next._
+
+## Resume here (2026-09-09) — Plan 17
+
+Plan 17 (`docs/superpowers/plans/2026-09-09-plan-17-rest-of-audit.md`) took what remained of the
+performance audit that this Mac can build:
+
+- **Re-derivation never touches the reader again** (Task 1, audit #6): import keeps the reader's
+  chapters beside the source (`chapters.json.lzfse`, `RetainedChapters`); a re-derivation after a
+  version bump reads them (a document imported before this build reads its source once more, then
+  keeps the result); the old audio is removed in the background from the raw old blobs, after the
+  load has its timeline; Bookmarks and Prepare read `currentTimeline` and never re-derive — only the
+  document's own open does. Not taken: per-chapter lazy re-derivation (the coordinator's indices span
+  the document). `BookSheet.loadChapters` (another session's file) still calls `timelineForPlayback`
+  and so still re-derives a stale book from the sheet; switch it to `currentTimeline` when that file
+  is free.
+- **The timer work coalesces** (Task 2, audit #7): the highlight is written only when the word
+  changes; `PlayerModel` caches the rendered flag, the chapter axis and the chapter index against
+  `timelineRevision`; the chapter axis is one pass; the ticker idles at 1 Hz; an idle `clear()`
+  writes the Now Playing centre once. Not taken: `RootPager`'s second `update()` per tick (another
+  session's file). The two `App/T2SReader/System` edits were checked by reading — no simulator build
+  fit the disk.
+- **Launch** (Task 3, audit #10): the old-codec sweep runs on the store's actor at first use, not on
+  the main thread in `init`; the Core ML stages load concurrently under one shared task
+  (`KokoroCoreMLModels.loadStages`). Not taken: bucket-lazy readiness (7 s first, the rest after) —
+  the engine's readiness gating would change; measure the concurrent load's peak memory on the A13
+  first (audit §4.1).
+- **The 3 s and 10 s buckets** (Task 4, audit #9): `scripts/fetch-kokoro-coreml.sh` pins them (run
+  it: the main checkout's staging has all 14 stages, 591 MB); `KokoroCoreMLResources.buckets` is
+  `[3, 7, 10, 15]`. Every weight file is byte-identical across buckets, but the bundle duplicates
+  them: **about +250 MB on the phone**. To drop the 10 s bucket, remove it from `buckets` and from
+  the script's pins. The first launch after install builds fourteen compute plans, not eight.
+
+**Not taken, and why:** the OOV phoneme cache (audit #12) — MisakiSwift's fallback network is private
+to `EnglishG2P`; it needs an upstream hook or a vendored copy. The G2P/generator overlap and the AAC
+encode off the render path (#12) — the audit asks for the §8 stage-timing measurement first, and
+the encode is a few percent of a render. #14 — nothing runs at launch, the MLX weights are not
+staged, and the BART-to-Accelerate port is its own project.
+
+**Owed:** the model-backed Kokoro tests (still disk-bound: the 14 stages compile to ~600 MB per copy
+and Core ML's own cache runs to gigabytes); a simulator build; the phone. **The phone listen:** tap
+play on an unplayed sentence — the first sound should come a beat sooner than Plan 15's (the 48-id
+first piece renders in the 3 s bucket when it predicts under 3 s); a long packed sentence should
+sound exactly as before (the 10 s bucket is the same weights, a smaller plan). Open the app after
+this update: every book re-derives once on its first open, in one to three seconds instead of the
+old five to twelve, and the Queue's rows keep their progress meanwhile. Launch on a cold phone: the
+warm-up should be noticeably shorter than before, and the first launch after install shorter still.
+
+**Next:** the §8 measurement on a phone (StageTimings and the G2P time, logged once), then whichever
+of #12's remaining items it justifies; bucket-lazy readiness if the concurrent load's memory peak
+is a problem on the A13.
 
 ## Resume here (2026-09-08, later) — voice picker round 2
 

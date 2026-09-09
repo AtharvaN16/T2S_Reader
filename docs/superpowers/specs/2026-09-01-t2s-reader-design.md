@@ -1,7 +1,7 @@
 # t2s_reader — Design Spec
 
 **Date:** 2026-09-01
-**Revised:** 2026-09-08 (rev 16 — see §11 changelog)
+**Revised:** 2026-09-08 (rev 17 — see §11 changelog)
 **Status:** Draft for review
 **Working name:** t2s_reader (TBD)
 
@@ -401,6 +401,9 @@ hazard:
 On load, the persisted `Position` resolves to `(utteranceIndex, offset)`.
 On save, the runtime pair projects back to a `Position`. A
 `segmenterVersion` mismatch simply forces re-resolution, which is cheap.
+The save carries, beside the `Position`, where it sits in time — the chapter and the seconds into it
+(`SavedPlayhead`, rev 17) — so a list screen can show progress from the document's row (§5). That
+time is display-only: the `Position` is the only anchor, and the next save corrects it.
 
 **Why the runtime form is still index-anchored:** absolute seconds are a
 *derived, display-only* value computed by summing preceding durations.
@@ -509,9 +512,10 @@ import.
 
 Buffers are scheduled per utterance for gapless playback. A streamed head is several buffers under
 one tag; the segment's completion fires after the buffer marked final (rev 16).
-§3.6's underrun rule applies between utterances, not between the pieces of a streamed head: if the
-second piece renders slower than the first plays, the player runs dry until it arrives (rev 16; a
-queued-frames accessor on the player is the planned remedy).
+§3.6's underrun rule holds between the pieces of a streamed head as well (rev 17): the player says
+what it still holds (`AudioPlaying.queuedSeconds`), and when a stream is live and it holds nothing
+the coordinator pauses on "catching up" at its next tick and resumes on the next piece — the player
+never renders silence, and the playhead never runs past the audio.
 `AVAudioUnitTimePitch.rate` provides 0.5x–4x **with pitch correction**;
 `AVQueuePlayer` was rejected because per-item boundaries are audible and
 rate handling across items is awkward. Playhead precision comes from
@@ -671,7 +675,10 @@ Rules, applied in order:
    enough to be recognised), before numerals. Spaced dashes, `--`, em and
    en dashes and digit–digit ranges stay.
 5. Expand abbreviations, ordinals, numerals, units, currency
-6. Apply the user's pronunciation dictionary, last, immediately before G2P
+6. Apply the user's pronunciation dictionary, last, immediately before G2P.
+   One pass over the text for every entry (rev 17): an entry replaces the reader's text, never
+   another entry's replacement, and where two terms overlap the one that starts first wins, then the
+   one listed first.
 
 ---
 
@@ -694,6 +701,12 @@ filename is a `renderKey` hash over:
 documentID · utteranceIndex · voiceID · engineID
            · normalizerVersion · segmenterVersion
 ```
+
+A document's row also carries the playhead's chapter and the seconds into it as last saved
+(`resumeChapterIndex`, `resumeSecondsIntoChapter`; schema V2, rev 17). The summary adds the earlier
+chapters' stored durations, so the Queue's progress needs no chapter blob. A position saved without
+its time clears them, and that row falls back to the decode. Each schema version is a frozen copy of
+its model classes with a lightweight stage between versions (`LibraryMigrationPlan`).
 
 This makes staleness structural: **changing voice automatically
 invalidates that document's audio** rather than silently serving the old
@@ -916,6 +929,18 @@ against a pipeline that is already proven.
 ---
 
 ## 11. Changelog
+
+**rev 17 (2026-09-08)** — Plan 16: steady streaming and the open path
+- **§3.5** the underrun rule between a streamed head's pieces: `AudioPlaying.queuedSeconds`; a dry
+  player pauses on "catching up" and the next piece resumes it.
+- **§3.2, §5** a saved playhead carries its chapter and the seconds into it (`SavedPlayhead`); the
+  document row stores them (schema V2, lightweight stage from the frozen V1) and the Queue's progress
+  comes from the row, not a decode. The coordinator reports the chapters its renders changed and the
+  player model writes those, not a hash of every chapter.
+- **§4.1** the pronunciation dictionary is one pass; the abbreviation rule is one pass; the number
+  rule is skipped for text without a digit.
+- Core ML engine (vendored pipeline): the harmonic source's sine passes stop one frame past the last
+  voiced frame, bit-identical; the hn-nsf build runs beside the DecoderPre prediction.
 
 **rev 16 (2026-09-08)** — Plan 15: streaming the first sound
 - **§3.3, §3.5** the head utterance renders in pieces (`SynthesisEngine.synthesizeStreaming`,

@@ -32,10 +32,21 @@ warm-up, prime after import and at launch); #4 done as `RecentAudioStore` (the t
 decode paths stay); #5 partly (one store hop per load, cheaper keys — the `play()` gate,
 "stop hashing every chapter twice per open" and `LibraryModel.refresh` are all untouched); #8 done;
 #11 done (`rateLoweredTo`, and the rate is raised again as the RTF recovers; the Reader's line is the
-UI plan's). Open (after Plan 15): #6, #7, #9, #10, #12, #13, #14.
+UI plan's). Open (after Plan 16): #6, #7, #9, #10, #14, and the rest of #12.
 
 **Progress (Plan 15, 2026-09-08):** #2 done — the head streams; first sound after the first ~3 s piece
 (~1 s on an A13 in the 7 s bucket). The 3 s bucket (#9) would halve that.
+
+**Progress (Plan 16, 2026-09-08):** the gap Plan 15 left closed — a streamed head that runs dry between
+its pieces pauses on "catching up" and resumes on the next piece (`AudioPlaying.queuedSeconds`). #5
+done but for the `play()` gate, which now costs one batched store hop: the coordinator reports the
+chapters its renders changed and the player model writes those (no hash pass over the book); a saved
+playhead carries its chapter and seconds into it (schema V2), so `LibraryModel.refresh` decodes no
+timeline for a row the coordinator has played. #13 done: one alternation for the abbreviations, one for
+the dictionary, the number rule skipped without a digit. #12 in part: the harmonic source computes its
+nine sine passes over the voiced prefix only (bit-identical) and runs beside decoder-pre in the vendored
+executor; the OOV phoneme cache, the G2P/generator overlap and the AAC encode off the critical path are
+still open, and want the §8 measurement first.
 
 | # | Recommendation | Listener-visible effect | Effort | Section |
 |---|---|---|---|---|

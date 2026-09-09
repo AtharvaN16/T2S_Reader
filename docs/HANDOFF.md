@@ -1,6 +1,46 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-08 (Plan 15 — streaming the first sound — on `plan-14-streaming`, in the worktree `.worktrees/plan-14-streaming`, both named before the other session's Plan 14 landed, off `origin/dev` @ 4056ccd). Written for whoever picks up the coding next._
+_Last updated 2026-09-08 (Plan 16 — steady streaming and the open path — on `plan-16-open-path`, in the worktree `.worktrees/plan-16-open-path`, off `origin/dev` @ 246065b). Written for whoever picks up the coding next._
+
+## Resume here (2026-09-08) — Plan 16
+
+Plan 16 (`docs/superpowers/plans/2026-09-08-plan-16-open-path.md`) took the audit's remaining items
+that need no model files and no UI files:
+
+- **A streamed head that runs dry pauses** (Task 1): `AudioPlaying.queuedSeconds`; the coordinator's
+  10 Hz tick pauses on "catching up" while a stream is live and the player holds nothing, and the next
+  piece resumes it. This is the in-utterance hole Plan 15's listen list asked you to listen for; the
+  remedy is in, and the listen still applies (below).
+- **The normalizer folds its passes** (Task 2): one alternation for the abbreviations, one for the
+  dictionary (each entry keeps its case rule; entries no longer chain), the number rule skipped for
+  text without a digit. Output identical for every existing test.
+- **The harmonic source** (Task 3, vendored `KokoroPipeline`): the nine sine passes stop one frame past
+  the last voiced frame, bit-identical to the full computation (`HarmonicSourceTests`); the hn-nsf
+  build runs on another core beside the DecoderPre prediction, and `StageTimings.decoderPreHnsfOverlap`
+  is set at last. `Packages/KokoroPipeline/README.md` lists the patches.
+- **The open path** (Task 4): the coordinator reports the chapters its renders changed
+  (`changedChapters` / `takeChangedChapters()`) and `PlayerModel.persistRenderedChapters` writes
+  those — no SipHash pass over the book per pause. A saved playhead carries its chapter and the
+  seconds into it (`SavedPlayhead`; `PlayheadStore.save` changed), stored on the document row
+  (`LibrarySchemaV2`, a frozen `LibrarySchemaV1` copy of the models, a lightweight stage — verified
+  once against a V1 store file written by the previous build), so `LibraryModel.refresh` decodes no
+  timeline for a row the coordinator has played. Rows saved before this build decode once more, then
+  never again.
+
+**Owed:** model-backed Kokoro tests (`preloadBuildsTheG2P()`,
+`streamsALongPassageInPiecesThatFoldToTheSameTimings()`) and a simulator app build on the merged
+branch — this Mac had no disk for either (the model caches need ~10 GB); the phone is the test. The
+T2SKokoro package's own non-model suites were not rerun on this branch: its sources are untouched, and
+the vendored pipeline's public API is unchanged.
+
+**The phone listen (adds to Plan 15's).** Tap play on an unplayed book on a hot phone and listen to the
+first sentence: a hole inside it should now come with the play glyph's "catching up…" ring and no jump
+in the highlight afterwards. Open the Queue after a few minutes of listening: the row's remaining time
+and chapter should be right without a beat's delay on first show.
+
+**Next:** the 3 s bucket (audit #9) to halve the first sound again; then per-chapter lazy re-derivation
+(#6), the tick churn (#7, the other session's files), lazy warm-up (#10), and the rest of #12 after the
+§8 measurement.
 
 ## Resume here (2026-09-08) — Plan 15
 
@@ -22,11 +62,8 @@ the first sentence after a tap should flow into its second piece without a hole 
 first sentence sounds cut in two, the streamed join's tail budget (`KokoroCoreMLSeam.budgetSamples`)
 is the knob; if the highlight drifts in the first sentence only, the fold's `offsetSeconds` for the
 streamed pieces is.
-Also listen for a hole *inside* the first sentence after a tap on a hot phone: a streamed utterance
-has no "catching up" of its own between its pieces (spec §3.6's underrun rule fires only between
-utterances), and after such a hole the highlight can jump ahead by the hole's length for the rest of
-that sentence. If you hear it, the next plan gives the player a queued-frames accessor so the
-coordinator can pause between pieces as it does between utterances.
+Also listen for a hole *inside* the first sentence after a tap on a hot phone: Plan 15 left a streamed
+utterance without a "catching up" of its own between its pieces; Plan 16 added it (above).
 
 **Next:** the 3 s bucket (audit #9) to halve the first sound again; then the open path (#5) and the
 tick churn (#7).

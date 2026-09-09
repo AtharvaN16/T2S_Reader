@@ -25,11 +25,11 @@ struct ReaderTextView: UIViewRepresentable {
 
     /// Room for the header and the bottom block. The page gives the view `.ignoresSafeArea(edges:
     /// .bottom)`, so the top is measured from the safe-area top and the bottom from the window's:
-    /// 96 (12 × 8) clears the header's 52 pt band (8 + 36 + 8) and most of the 48 pt of fade it
+    /// 112 (14 × 8) clears the header's 68 pt band (16 + 36 + 16) and most of the 48 pt of fade it
     /// hangs below itself; 336 clears the bottom block (chapter row, scrubber, times, transport at
     /// 72, tool row, home-indicator inset ≈ 302) and the near-solid part of the 64 pt of fade it
     /// hangs above itself, so the last line can scroll up to where the ground is faint.
-    static let insets = UIEdgeInsets(top: 96, left: Spacing.margin, bottom: 336, right: Spacing.margin)
+    static let insets = UIEdgeInsets(top: 112, left: Spacing.margin, bottom: 336, right: Spacing.margin)
     static let cornerRadius: CGFloat = 4
 
     func makeUIView(context: Context) -> UITextView {

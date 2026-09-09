@@ -125,8 +125,8 @@ struct ReaderPage: View {
             }
         }
         .padding(.horizontal, Spacing.margin)
-        .padding(.top, Spacing.grid)
-        .padding(.bottom, Spacing.grid)
+        .padding(.top, 2 * Spacing.grid)
+        .padding(.bottom, 2 * Spacing.grid)                                  // a taller band, at the owner's ask
         .background(alignment: .top) {
             Self.groundFade(solidAtTop: true, span: 0.5)
                 .padding(.bottom, -48)                                     // hangs below the bar, over the text
@@ -213,14 +213,15 @@ struct ReaderPage: View {
         if chapters.count > 1, let index = player.chapterIndex, chapters.indices.contains(index) {
             HStack {
                 Button { showChapters = true } label: {
-                    // Baseline-aligned so the chevron sits up beside the title's x-height, not below it.
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(chapters[index].title).typeRole(.rowTitle).foregroundStyle(Tokens.ink).lineLimit(1)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Tokens.ink2)
-                    }
-                    .contentShape(Rectangle())
+                    // The chevron is part of the text run, so it sits where an inline symbol sits —
+                    // on the type's own centre line — rather than hanging off the frame's bottom.
+                    (Text(ChapterLabel.text(for: chapters[index].title, ordinal: index + 1))
+                        + Text(" ")
+                        + Text(Image(systemName: "chevron.down")).font(.system(size: 12, weight: .semibold)).foregroundStyle(Tokens.ink2))
+                        .typeRole(.rowTitle)
+                        .foregroundStyle(Tokens.ink)
+                        .lineLimit(1)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Chapter")

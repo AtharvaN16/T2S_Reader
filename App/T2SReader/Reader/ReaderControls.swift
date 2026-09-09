@@ -2,11 +2,12 @@ import SwiftUI
 import T2SApp
 
 /// Sleep timer · back 15 · play · forward 30 · speed — the Reader page's transport row (spec
-/// §2.4.5, after ElevenReader), evenly spaced across the width. Size ranks the controls: play is
-/// the biggest (44pt glyph in 72, regular weight so it is big without being heavy), the skips
-/// second (32 in 56), the sleep timer stays small (20 in 44), and the speed label is bold body text
-/// so it reads as a control rather than a caption. Skip amounts stay synchronized with the reading
-/// preferences.
+/// §2.4.5, after ElevenReader), evenly spaced across the width. Size and weight rank the controls:
+/// play is the biggest (44pt glyph in 72), the skips second (28 in 52), both at regular weight so
+/// size does the ranking rather than heft; the sleep timer and the speed label are the small pair
+/// at the ends — one glyph weight, one type weight, both in `ink2` — and sit flush with the margins
+/// so their centres line up with the tool row's circles below. Skip amounts stay synchronized with
+/// the reading preferences.
 struct ReaderControls: View {
     @Environment(AppEnvironment.self) private var env
     var onSleepTimer: () -> Void
@@ -18,12 +19,13 @@ struct ReaderControls: View {
         HStack(spacing: 0) {
             control(
                 env.sleepTimer.active == nil ? "moon.zzz" : "moon.zzz.fill", "Sleep timer",
-                action: onSleepTimer
+                size: 20, frame: 36, action: onSleepTimer
             )
+            .foregroundStyle(Tokens.ink2)
             Spacer()
             control(
                 "gobackward.\(preferences.skipBackSeconds)", "Back \(preferences.skipBackSeconds) seconds",
-                size: 32, frame: 56
+                size: 28, frame: 52
             ) {
                 Task { await player.skip(by: -Double(preferences.skipBackSeconds)) }
             }
@@ -50,7 +52,7 @@ struct ReaderControls: View {
             Spacer()
             control(
                 "goforward.\(preferences.skipForwardSeconds)", "Forward \(preferences.skipForwardSeconds) seconds",
-                size: 32, frame: 56
+                size: 28, frame: 52
             ) {
                 Task { await player.skip(by: Double(preferences.skipForwardSeconds)) }
             }
@@ -59,26 +61,26 @@ struct ReaderControls: View {
                 /// Tabular digits so "1x" → "1.5x" changes width only by the added glyphs.
                 Text(SpeedPickerModel.label(for: player.coordinator.rate))
                     .monospacedDigit()
-                    .typeRole(.speed)
-                    .frame(width: 52, height: 44)
+                    .typeRole(.rowTitle)
+                    .foregroundStyle(Tokens.ink2)
+                    .frame(minWidth: 36)
+                    .frame(height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Playback speed")
         }
         .foregroundStyle(Tokens.ink)
-        .padding(.horizontal, Spacing.grid)
-        .frame(height: 72)
+        .frame(height: 72)                                                 // no side padding: ends align with the circles below
     }
 
-    /// `size` is the glyph's point size and `frame` its square tap target; the defaults are the
-    /// sleep timer's, the smallest rank.
+    /// `size` is the glyph's point size and `frame` its square tap target.
     private func control(
-        _ glyph: String, _ label: String, size: CGFloat = 20, frame: CGFloat = 44, action: @escaping () -> Void
+        _ glyph: String, _ label: String, size: CGFloat, frame: CGFloat, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: glyph)
-                .font(.system(size: size, weight: .medium))
+                .font(.system(size: size, weight: .regular))
                 .frame(width: frame, height: frame)
                 .contentShape(Rectangle())
         }

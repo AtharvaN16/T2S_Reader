@@ -63,6 +63,24 @@ Speechify's highlight-theme swatches, a podcast app's "Intro ▾ … →" chapte
 Verification: `scripts/build-app.sh` → `** BUILD SUCCEEDED **`; `swift test` → 428 tests in 80 suites passed. Not
 seen on a phone — same standing gap.
 
+**Third cut (2026-09-09, two phone crops):** (1) `ThinScrubber` draws each chapter as a flat
+bar (square ends, 3 pt gaps — the Podcasts look); only the pressed chapter rounds and rises, and it
+now also *widens* to at least 45 % of the bar (`activeShare`) while the others shrink in proportion
+and dull, so the finger's travel across that widened bar maps onto that chapter alone (`scrub(to:
+width:)`: pick the chapter under the finger from the current layout, switch, then map the local
+position into the chapter's span). Precise in-chapter scrubbing for a 27-chapter book; still one
+bar for PDFs and texts. (2) Chapter row: the chevron is now part of the text run (`Text(Image(…))`
+concatenated), so it sits on the type's centre line; the label is `ChapterLabel.text(for:ordinal:)`
+(`Sources/T2SApp/Player/ChapterLabel.swift`, tested) — "7 A Precarious Position" → "Chp 7: A
+Precarious Position", a bare number or empty title → "Chapter 7", a name with no number → "Chp N:
+name" from the ordinal, and a title that names itself ("Chapter 7", "Part Two", "Prologue") is left
+as written. The regexes are built per call: `Regex` is not `Sendable`, so a static fails strict
+concurrency. (3) Transport: play 44 in 72 and skips 28 in 52, both `.regular` so size ranks them,
+not heft; the sleep timer (20 in 36) and the speed label (`rowTitle`, tabular digits, `minWidth`
+36) are the small pair at the ends, both `ink2`, and the row has no side padding so their centres
+line up with the tool row's circles below. `TypeRole.speed` is gone. (4) The header band is taller
+(16 pt above and below the circles); `ReaderTextView.insets.top` 96 → 112.
+
 **Second cut (2026-09-09, from a phone screenshot):** (1) the header's fade was invisible — it ran
 from solid at the status bar to clear at the bar's own foot, so behind the title it was already ~13 %
 ground. `groundFade` now takes `span` on both sides: the header is solid through the circles and

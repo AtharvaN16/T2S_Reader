@@ -2,6 +2,35 @@
 
 _Last updated 2026-09-09 (Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
+## Resume here (2026-09-09, latest) — Home page: Queue renamed, Continue Listening ring
+
+The owner sent two phone screenshots (Queue page, Voice picker) with five UI asks. Done on `dev`,
+commit `8194e11`:
+
+- **Queue → Home**: `PageTitle` is now a fixed "Home" (`App/T2SReader/Queue/QueuePage.swift`), no
+  item-count subtitle (`LibraryModel.queueSubtitle` stays — the model property is still tested —
+  the view just stopped rendering it), and the chevron `Menu` that switched to the Finished list is
+  gone. Asked the owner directly since it was the *only* entry point to Finished anywhere in the
+  app: their call was "drop it entirely," not move it elsewhere.
+- **Title bigger/bolder**: `QueueRow`'s title `Button` now reads `.typeRole(.playerTitle)` (26pt
+  ExtraBold) instead of `.rowTitle` (17pt Medium) — the same role `BookSheet`/`DetailsSheet`/
+  `VoiceChangeSheet` already use for a single prominent title, not a new one invented for this.
+- **Play pill** dropped its "~22h 39m" suffix — just "Play" / "Pause" / "Starting…" now.
+- **Archive, investigated and kept**: `LibraryModel.archive(_:)` calls `store.setQueued(id, false)`
+  — it unqueues a document without deleting it (stays in Collection, can be re-enqueued). Real,
+  distinct purpose from delete, so it stayed.
+- **New**: a `SectionHeader("Continue Listening")` above the row list when not searching and not
+  empty (`QueuePage.swift`); each `QueueRow` gained a leading `CircularProgress` ring (new
+  primitive, `Design/Primitives.swift` — a stroked/trimmed `Circle`, `Tokens.accent` over
+  `Tokens.ink3`) at 48pt with the row's source-type glyph centred in it. The "~22h 39m" that used to
+  live on the Play pill now sits under the ring as "~22h 39m left" (`remainingText`, `QueueRow.swift`).
+
+Simulator scheme builds clean (`xcodebuild -scheme Simulator`); `swift test --filter
+LibraryModelTests` green (6/6) — the only suite touching the `LibraryModel` surface this pass reads.
+Not seen on a phone yet — same standing gap as every UI round this week; owed once the owner
+re-authenticates the Apple ID in Xcode (see the 2026-09-08 "Not available on this device" section
+below) and can Cmd+R.
+
 ## Resume here (2026-09-09) — Plan 17
 
 Plan 17 (`docs/superpowers/plans/2026-09-09-plan-17-rest-of-audit.md`) took what remained of the

@@ -10,7 +10,7 @@ enum TypeRole {
         switch self {
         case .pageTitle: return .custom("InterDisplay-Black", size: 34, relativeTo: .largeTitle)
         case .playerTitle: return .custom("InterDisplay-ExtraBold", size: 26, relativeTo: .title)
-        case .cardTitle: return .custom("Inter-SemiBold", size: 21, relativeTo: .title3)
+        case .cardTitle: return .custom("Inter-SemiBold", size: 19, relativeTo: .title3)
         case .sectionHeader: return .custom("Inter-SemiBold", size: 17, relativeTo: .headline)
         case .rowTitle: return .custom("Inter-Medium", size: 17, relativeTo: .body)
         case .pill: return .custom("Inter-Medium", size: 15, relativeTo: .subheadline)
@@ -24,7 +24,7 @@ enum TypeRole {
         switch self {
         case .pageTitle: return -0.03 * 34
         case .playerTitle: return -0.025 * 26
-        case .cardTitle: return -0.02 * 21
+        case .cardTitle: return -0.02 * 19
         case .sectionHeader, .rowTitle: return -0.01 * 17
         case .pill: return -0.01 * 15
         case .meta, .mono: return 0

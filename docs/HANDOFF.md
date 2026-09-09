@@ -8,7 +8,8 @@ _Last updated 2026-09-09 (Plan 17 — the rest of the audit — on `plan-17-rest
 (`QueueRow` meta line); and the bottom fill's opacity ramp is eased — smoothstep squared over twelve
 stops (`RootPager.bottomFill`) — because the linear ramp that stopped dead at solid drew a visible
 line across the screen (a Mach band), which the owner read as a "sharp cutoff". The title role the
-owner asked about is `cardTitle`: Inter-SemiBold 21 pt, relative to `.title3`.
+owner asked about is `cardTitle`, then made "a bit smaller" on request: Inter-SemiBold 21 → 19 pt
+(tracking stays −0.02 em), relative to `.title3`; only the Home row uses it.
 
 **Signing note (2026-09-09, after round 5):** `DEVELOPMENT_TEAM: 5HZ38K43M9` is no longer pinned in
 `App/project.yml` (either target) — the owner saw Xcode's Signing & Capabilities show it in red as

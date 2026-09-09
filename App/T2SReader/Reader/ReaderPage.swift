@@ -89,9 +89,9 @@ struct ReaderPage: View {
     }
 
     /// Back on the left, bookmark and the overflow on the right, the document's title between them
-    /// (owner's ask, 2026-09-09). The circles float on a `ground` fade that lives inside the
-    /// header's own band — solid at the status bar, clear by the circles' foot — rather than a solid
-    /// block with a fade hanging below it over the text.
+    /// (owner's ask, 2026-09-09). The circles sit on solid `ground` that eases to clear from their
+    /// band down through 48 pt below the bar, so the header itself visibly fades into the text
+    /// (the first cut faded within the bar alone and read as no fade at all).
     private var topBar: some View {
         ZStack {
             Text(summary.document.title)
@@ -127,34 +127,40 @@ struct ReaderPage: View {
         .padding(.horizontal, Spacing.margin)
         .padding(.top, Spacing.grid)
         .padding(.bottom, Spacing.grid)
-        .background {
-            Self.groundFade(solidAtTop: true).ignoresSafeArea(edges: .top)
+        .background(alignment: .top) {
+            Self.groundFade(solidAtTop: true, span: 0.5)
+                .padding(.bottom, -48)                                     // hangs below the bar, over the text
+                .ignoresSafeArea(edges: .top)
         }
     }
 
     /// `ground` easing between solid and clear with zero slope at both ends, so neither edge of a
-    /// fade reads as a line across the text (the Home bar's lesson). `solidAtTop` runs solid → clear
-    /// down the whole height; otherwise clear → solid over the top `span` of it, then solid.
+    /// fade reads as a line across the text (the Home bar's lesson). `solidAtTop`: solid from the
+    /// top, easing to clear over the bottom `span` of the height. Otherwise clear at the top, easing
+    /// to solid over the top `span`, then solid to the bottom.
     private static func groundFade(solidAtTop: Bool, span: Double = 1) -> LinearGradient {
         let steps = 12
-        var stops = (0...steps).map { i -> Gradient.Stop in
+        var stops: [Gradient.Stop] = []
+        if solidAtTop, span < 1 { stops.append(.init(color: Tokens.ground, location: 0)) }
+        stops += (0...steps).map { i -> Gradient.Stop in
             let t = Double(i) / Double(steps)
             let s = t * t * (3 - 2 * t)
-            return .init(color: Tokens.ground.opacity(solidAtTop ? 1 - s : s), location: t * span)
+            return .init(color: Tokens.ground.opacity(solidAtTop ? 1 - s : s),
+                         location: solidAtTop ? (1 - span) + t * span : t * span)
         }
-        if span < 1 { stops.append(.init(color: Tokens.ground.opacity(solidAtTop ? 0 : 1), location: 1)) }
+        if !solidAtTop, span < 1 { stops.append(.init(color: Tokens.ground, location: 1)) }
         return LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
     }
 
     /// Chapter row, progress bar + times, transport row, tool row (spec §2.4.5, after ElevenReader).
-    /// The `ground` fade lives inside the block — clear at the chapter row, solid by the transport —
-    /// so the text is seen through the top of the controls rather than under a fade above them.
+    /// The `ground` fade starts 64 pt above the block and is solid by the chapter row's foot, so the
+    /// chapter picker sits on ground too (the owner's second cut) and the text fades out above it.
     private var bottomBar: some View {
         let player = env.player
         return VStack(spacing: 10) {
             chapterRow
             VStack(spacing: 6) {
-                ThinScrubber(model: player.scrubber) { fraction in
+                ThinScrubber(model: player.scrubber, segments: chapterSegments) { fraction in
                     Task { await player.seek(fraction: fraction) }
                 }
                 HStack {
@@ -180,21 +186,35 @@ struct ReaderPage: View {
         .padding(.horizontal, Spacing.margin)
         .padding(.top, 12)
         .padding(.bottom, Spacing.grid)
-        .background {
-            Self.groundFade(solidAtTop: false, span: 0.5).ignoresSafeArea(edges: .bottom)
+        .background(alignment: .bottom) {
+            Self.groundFade(solidAtTop: false, span: 0.25)
+                .padding(.top, -64)                                        // hangs above the block, over the text
+                .ignoresSafeArea(edges: .bottom)
         }
     }
 
-    /// "Chapter title ▾" on the left opens the chapter list; "→" on the right jumps to the next
-    /// chapter (after the reference the owner sent, 2026-09-09). Hidden for a document with one
-    /// chapter or none — an article has nothing to pick.
+    /// The chapters as spans of the whole, for the scrubber's segments; empty for a document whose
+    /// duration is not known yet, which draws one bar.
+    private var chapterSegments: [Range<Double>] {
+        let player = env.player
+        let total = player.total
+        guard total > 0 else { return [] }
+        return player.chapters.map { chapter in
+            let start = min(1, max(0, chapter.startSeconds / total))
+            return start..<min(1, max(start, (chapter.startSeconds + chapter.durationSeconds) / total))
+        }
+    }
+
+    /// "Chapter title ▾" on the left opens the chapter list (after the reference the owner sent,
+    /// 2026-09-09). Hidden for a document with one chapter or none — an article has nothing to pick.
     @ViewBuilder private var chapterRow: some View {
         let player = env.player
         let chapters = player.chapters
         if chapters.count > 1, let index = player.chapterIndex, chapters.indices.contains(index) {
             HStack {
                 Button { showChapters = true } label: {
-                    HStack(spacing: 6) {
+                    // Baseline-aligned so the chevron sits up beside the title's x-height, not below it.
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(chapters[index].title).typeRole(.rowTitle).foregroundStyle(Tokens.ink).lineLimit(1)
                         Image(systemName: "chevron.down")
                             .font(.system(size: 12, weight: .semibold))
@@ -207,19 +227,6 @@ struct ReaderPage: View {
                 .accessibilityValue(chapters[index].title)
                 .accessibilityHint("Opens the chapter list")
                 Spacer(minLength: 12)
-                if index + 1 < chapters.count {
-                    Button {
-                        Task { await player.seek(toChapter: index + 1) }
-                    } label: {
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(Tokens.ink)
-                            .frame(width: 36, height: 36)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Next chapter")
-                }
             }
             .frame(height: 36)
         }

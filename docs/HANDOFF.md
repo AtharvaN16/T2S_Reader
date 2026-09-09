@@ -40,6 +40,22 @@ Speechify's highlight-theme swatches, a podcast app's "Intro ▾ … →" chapte
 Verification: `scripts/build-app.sh` → `** BUILD SUCCEEDED **`; `swift test` → 428 tests in 80 suites passed. Not
 seen on a phone — same standing gap.
 
+**Second cut (2026-09-09, from a phone screenshot):** (1) the header's fade was invisible — it ran
+from solid at the status bar to clear at the bar's own foot, so behind the title it was already ~13 %
+ground. `groundFade` now takes `span` on both sides: the header is solid through the circles and
+eases to clear over a fade that hangs 48 pt *below* the bar (`.padding(.bottom, -48)` in a
+top-aligned background), and the bottom block's fade hangs 64 pt *above* it and is solid by the
+chapter row's foot (`span: 0.25`), so the chapter picker sits on ground as asked.
+`ReaderTextView.insets.bottom` 304 → 336. (2) The chapter row lost its "→" and its chevron sits on
+the title's baseline (`HStack(alignment: .firstTextBaseline)`) instead of below the text's centre.
+(3) `ThinScrubber` is chapter-segmented: `segments: [Range<Double>]` (from `ReaderPage.
+chapterSegments`, chapter start/duration over `player.total`), one capsule per chapter with a 3 pt
+gap, one unbroken bar for a document with fewer than two (PDF, text). Pressing thickens the chapter
+under the finger to 12 pt and dulls the rest to half opacity through the mask's alpha; the drag
+still maps 1:1 across the whole, the seek fires on release. (4) Transport: play 44 pt *regular*
+weight in 72 (bigger, lighter), skips 32 in 56, row 72.
+
+
 ## Resume here (2026-09-09) — Home round 5: chapter time on Play, ring by the chapter, no gyro, bottom fill fixed
 
 **Type pass (2026-09-09, after the Settings pass):** the Home row's title now uses `rowTitle`

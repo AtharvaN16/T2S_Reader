@@ -3,9 +3,10 @@ import T2SApp
 
 /// Sleep timer · back 15 · play · forward 30 · speed — the Reader page's transport row (spec
 /// §2.4.5, after ElevenReader), evenly spaced across the width. Size ranks the controls: play is
-/// the biggest (34pt glyph in 64), the skips second (26 in 52), the sleep timer stays small (20 in
-/// 44), and the speed label is bold body text so it reads as a control rather than a caption. Skip
-/// amounts stay synchronized with the reading preferences.
+/// the biggest (44pt glyph in 72, regular weight so it is big without being heavy), the skips
+/// second (32 in 56), the sleep timer stays small (20 in 44), and the speed label is bold body text
+/// so it reads as a control rather than a caption. Skip amounts stay synchronized with the reading
+/// preferences.
 struct ReaderControls: View {
     @Environment(AppEnvironment.self) private var env
     var onSleepTimer: () -> Void
@@ -22,7 +23,7 @@ struct ReaderControls: View {
             Spacer()
             control(
                 "gobackward.\(preferences.skipBackSeconds)", "Back \(preferences.skipBackSeconds) seconds",
-                size: 26, frame: 52
+                size: 32, frame: 56
             ) {
                 Task { await player.skip(by: -Double(preferences.skipBackSeconds)) }
             }
@@ -37,10 +38,10 @@ struct ReaderControls: View {
                         ProgressView().progressViewStyle(.circular).tint(Tokens.ink)
                     } else {
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 34, weight: .semibold))
+                            .font(.system(size: 44, weight: .regular))
                     }
                 }
-                .frame(width: 64, height: 64)
+                .frame(width: 72, height: 72)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -49,7 +50,7 @@ struct ReaderControls: View {
             Spacer()
             control(
                 "goforward.\(preferences.skipForwardSeconds)", "Forward \(preferences.skipForwardSeconds) seconds",
-                size: 26, frame: 52
+                size: 32, frame: 56
             ) {
                 Task { await player.skip(by: Double(preferences.skipForwardSeconds)) }
             }
@@ -67,7 +68,7 @@ struct ReaderControls: View {
         }
         .foregroundStyle(Tokens.ink)
         .padding(.horizontal, Spacing.grid)
-        .frame(height: 64)
+        .frame(height: 72)
     }
 
     /// `size` is the glyph's point size and `frame` its square tap target; the defaults are the

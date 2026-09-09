@@ -101,6 +101,11 @@ targetTemplates:
         SWIFT_STRICT_CONCURRENCY: complete
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
+        # Pinned rather than left to a one-off Xcode GUI click: Automatic signing still needs to
+        # know which team to ask for a profile, and a team picked only in Signing & Capabilities
+        # lives in project.pbxproj, which `xcodegen generate` overwrites from this file on every
+        # run — so an un-pinned team is silently lost the next time anyone regenerates the project.
+        DEVELOPMENT_TEAM: 5HZ38K43M9
         INFOPLIST_KEY_UIUserInterfaceStyle: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 targets:
@@ -183,6 +188,7 @@ targets:
         SWIFT_STRICT_CONCURRENCY: complete
         TARGETED_DEVICE_FAMILY: "1"
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 5HZ38K43M9
 # Two schemes with plain names, so the Xcode picker needs no explanation: Phone builds the app you
 # install on an iPhone (the T2SReaderKokoro target); Simulator builds the Mac-only test build
 # (T2SReader). The build scripts and CI use the same two names.

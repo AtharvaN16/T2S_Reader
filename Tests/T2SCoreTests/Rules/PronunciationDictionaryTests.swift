@@ -28,6 +28,26 @@ import Testing
         #expect(t.spoken == "I write see plus plus daily, not C+ or C++11.")
         expectEveryWordMapsToSource(t)
     }
+
+    /// The entries fold into one pass (Plan 16): each keeps its own case rule, and each replaces
+    /// the reader's text, never another entry's replacement.
+    @Test func manyEntriesApplyInOnePassEachWithItsOwnCaseRule() {
+        let rule = PronunciationDictionaryRule(entries: [
+            PronunciationEntry(term: "SQL", replacement: "sequel"),
+            PronunciationEntry(term: "US", replacement: "U S", caseSensitive: true),
+            PronunciationEntry(term: "", replacement: "nothing"),
+            PronunciationEntry(term: "sequel", replacement: "SEQUEL"),
+            PronunciationEntry(term: "Nguyen", replacement: "Nwin"),
+        ])
+        let t = rule.apply(NormalizedText(source: "sql in the US, not us; the sequel by Nguyen."))
+        #expect(t.spoken == "sequel in the U S, not us; the SEQUEL by Nwin.")
+        expectEveryWordMapsToSource(t)
+    }
+
+    @Test func noEntriesLeaveTheTextAlone() {
+        let input = NormalizedText(source: "Dr Nguyen")
+        #expect(PronunciationDictionaryRule(entries: []).apply(input) == input)
+    }
 }
 
 /// The hyphen rule runs before the dictionary, so a term the reader typed with a hyphen has to match

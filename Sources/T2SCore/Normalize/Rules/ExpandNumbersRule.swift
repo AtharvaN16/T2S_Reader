@@ -28,6 +28,9 @@ public struct ExpandNumbersRule: NormalizerRule {
     public init() {}
 
     public func apply(_ input: NormalizedText) -> NormalizedText {
+        // Eight passes, each a regex over the whole text: skipped for the many utterances
+        // without a digit (Plan 16). `\\d` is Nd, as is `decimalDigits`.
+        guard input.spoken.rangeOfCharacter(from: .decimalDigits) != nil else { return input }
         var t = input
         t.replaceMatches(of: Self.units) { m, s in
             guard let num = m.group(1, in: s), let unit = m.group(2, in: s), let names = Self.unitNames[unit] else { return nil }

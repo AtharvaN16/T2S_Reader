@@ -35,4 +35,9 @@ import Testing
         let t = rule.apply(NormalizedText(source: "costs $2.50 now"))
         #expect(t.sourceRange(forSpoken: 6..<33) == 6..<11)   // "two dollars and fifty cents" ← "$2.50"
     }
+
+    @Test func textWithoutADigitIsUntouched() {
+        let input = NormalizedText(source: "no numbers here, not even a percent sign %")
+        #expect(ExpandNumbersRule().apply(input) == input)
+    }
 }

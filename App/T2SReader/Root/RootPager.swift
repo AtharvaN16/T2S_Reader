@@ -163,11 +163,17 @@ struct RootPager: View {
         let solid = PageIndicator.height + Spacing.grid + inset
         let height = Self.fadeHeight + solid
         let fadeEnd = Self.fadeHeight / height
-        return LinearGradient(stops: [
-            .init(color: Tokens.ground.opacity(0), location: 0),
-            .init(color: Tokens.ground.opacity(0.3), location: fadeEnd * 0.55),
-            .init(color: Tokens.ground, location: fadeEnd),
-        ], startPoint: .top, endPoint: .bottom)
+        // An eased ramp, not a straight one: a linear fade that stops dead at solid has a kink
+        // the eye reads as a line across the screen (a Mach band). Smoothstep squared starts and
+        // ends with zero slope, and keeps the lower half of the fade light so the page shows.
+        let steps = 12
+        var stops = (0...steps).map { i -> Gradient.Stop in
+            let t = Double(i) / Double(steps)
+            let eased = pow(t * t * (3 - 2 * t), 2)
+            return .init(color: Tokens.ground.opacity(eased), location: fadeEnd * t)
+        }
+        stops.append(.init(color: Tokens.ground, location: 1))
+        return LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
         .frame(height: height)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .ignoresSafeArea(edges: .bottom)

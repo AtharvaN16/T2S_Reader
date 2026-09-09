@@ -4,6 +4,12 @@ _Last updated 2026-09-09 (Plan 17 — the rest of the audit — on `plan-17-rest
 
 ## Resume here (2026-09-09, latest) — Home round 5: chapter time on Play, ring by the chapter, no gyro, bottom fill fixed
 
+**Round 5 follow-ups (2026-09-09):** a "·" now separates "Chapter 7" from the ring and percent
+(`QueueRow` meta line); and the bottom fill's opacity ramp is eased — smoothstep squared over twelve
+stops (`RootPager.bottomFill`) — because the linear ramp that stopped dead at solid drew a visible
+line across the screen (a Mach band), which the owner read as a "sharp cutoff". The title role the
+owner asked about is `cardTitle`: Inter-SemiBold 21 pt, relative to `.title3`.
+
 **Signing note (2026-09-09, after round 5):** `DEVELOPMENT_TEAM: 5HZ38K43M9` is no longer pinned in
 `App/project.yml` (either target) — the owner saw Xcode's Signing & Capabilities show it in red as
 "Unknown Name (5HZ38K43M9)" and asked for it to go. The ID is the owner's own personal team (the one

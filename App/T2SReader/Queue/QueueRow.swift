@@ -38,10 +38,11 @@ struct QueueRow: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                // "Chapter 7  ◔ 41%  ✓": the chapter, how far through it, and ready-offline.
+                // "Chapter 7 · ◔ 41%  ✓": the chapter, how far through it, and ready-offline.
                 HStack(spacing: 6) {
                     if let chapterText { Text(chapterText) }
                     if let fraction {
+                        if chapterText != nil { Text("·").accessibilityHidden(true) }
                         CircularProgress(fraction: fraction, lineWidth: 2, size: 12)
                         Text("\(Int((fraction * 100).rounded()))%")
                     }

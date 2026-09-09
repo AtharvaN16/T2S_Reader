@@ -483,8 +483,8 @@ import T2SCore
     /// Loading suspends while the eight `.mlpackage` stages compile, and the actor is released
     /// across that suspension — so the wiring the app is headed for, `preload()` off the playback
     /// path and a render on play, arrives at a half-loaded engine twice. Both have to wait on the
-    /// one compile: loading twice would build eight more compute plans (206 s on an A13's first
-    /// launch after install) and hold two copies of the 119 MB until the first was dropped.
+    /// one compile and the one load: loading twice would build every compute plan again (206 s on an
+    /// A13's first launch after install) and hold two copies of the 119 MB until the first was dropped.
     ///
     /// `loadCount` is the only way to see the difference from outside — both spellings return the
     /// same audio, one of them several minutes later.

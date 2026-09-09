@@ -17,7 +17,11 @@ public struct ChapterEntry: Hashable, Sendable, Identifiable {
 
     /// One entry per chapter with its start on the (estimated) time axis and how far `elapsed` is through it.
     public static func entries(timeline: Timeline, timeIndex: TimeIndex, elapsed: TimeInterval) -> [ChapterEntry] {
-        axis(timeline: timeline, timeIndex: timeIndex).enumerated().map { c, span in
+        entries(axis: axis(timeline: timeline, timeIndex: timeIndex), elapsed: elapsed)
+    }
+
+    static func entries(axis: [ChapterSpan], elapsed: TimeInterval) -> [ChapterEntry] {
+        axis.enumerated().map { c, span in
             ChapterEntry(index: c, title: span.title, startSeconds: span.start, durationSeconds: span.duration,
                          fraction: fraction(of: elapsed, in: span))
         }
@@ -109,13 +113,7 @@ public final class PlayerModel {
         return chapter
     }
 
-    public var chapters: [ChapterEntry] {
-        let elapsed = elapsed
-        return derived().axis.enumerated().map { c, span in
-            ChapterEntry(index: c, title: span.title, startSeconds: span.start, durationSeconds: span.duration,
-                         fraction: ChapterEntry.fraction(of: elapsed, in: span))
-        }
-    }
+    public var chapters: [ChapterEntry] { ChapterEntry.entries(axis: derived().axis, elapsed: elapsed) }
 
     private func derived() -> (isFullyRendered: Bool, axis: [ChapterSpan]) {
         let revision = coordinator.timelineRevision

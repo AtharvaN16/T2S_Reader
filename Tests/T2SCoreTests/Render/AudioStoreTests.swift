@@ -110,7 +110,8 @@ import Testing
         let s = FileAudioStore(directory: dir, codec: RawPCMCodec(), capacityBytes: 10_000)
         #expect(FileManager.default.fileExists(atPath: staleDir.path))      // init touches nothing (Plan 17)
 
-        #expect(await s.contains(key(1)) == false)                          // first use: the sweep runs on the actor
+        #expect(await s.contains(key(1)) == false)                          // first use starts the sweep, off the probe
+        for _ in 0 ..< 400 where FileManager.default.fileExists(atPath: staleDir.path) { try await Task.sleep(for: .milliseconds(5)) }
         #expect(!FileManager.default.fileExists(atPath: staleDir.path))
         #expect(FileManager.default.fileExists(atPath: keptFile.path))
         try await s.write(pcm(1), for: key(1))

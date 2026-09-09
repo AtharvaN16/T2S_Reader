@@ -221,6 +221,11 @@ public actor LibraryStore {
     /// chapter blob (spec §3.7.3). `nil` when the document does not exist.
     public func isStale(id: UUID) throws -> Bool? { try row(id).map(Self.isStale) }
 
+    /// The persisted stage versions, from the row alone. `nil` when the document does not exist.
+    public func versions(of id: UUID) throws -> (schema: Int, segmenter: Int, normalizer: Int)? {
+        try row(id).map { ($0.schemaVersion, $0.segmenterVersion, $0.normalizerVersion) }
+    }
+
     static func isStale(_ row: StoredDocument) -> Bool {
         row.schemaVersion != Versions.schema
             || row.segmenterVersion != Versions.segmenter

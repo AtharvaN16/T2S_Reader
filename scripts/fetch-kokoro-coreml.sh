@@ -17,10 +17,10 @@
 #      sentence of 8-10 s in the 10 s one instead of padding out the 15 s one).
 #      Layout is preserved (coreml/*.mlpackage, voices/, runtime/) so xcodegen picks the
 #      .mlpackage directories up as single resources and Xcode compiles them to .mlmodelc.
-#      Two buckets, not one: `selectBucket` picks the smallest bucket >= ceil(audio seconds), and
-#      the corpus is 4.4-7.6 s, so a 15s-only staging runs every sentence through 15 s of decoder
-#      and generator geometry. That inflates RTF as well as footprint, and 80% of a warm call is
-#      those two stages. Same reason for two duration models (t128 and t256): upstream pads to the
+#      Several buckets, not one: `selectBucket` picks the smallest bucket >= ceil(audio seconds),
+#      and a 15s-only staging would run every sentence through 15 s of decoder and generator
+#      geometry. That inflates RTF as well as footprint, and 80% of a warm call is those two
+#      stages. Same reason for two duration models (t128 and t256): upstream pads to the
 #      smallest enumerated token size >= the token count, and these sentences are 71-127 tokens.
 #   2. Source (default mode only) — the low-level `KokoroPipeline` Swift package. The repo root
 #      has NO Package.swift; the package lives in the `swift/` subdirectory, and SwiftPM cannot
@@ -157,6 +157,7 @@ SHARED_WEIGHTS=(
   "coreml/kokoro_decoder_har_post_3s.mlpackage/Data/com.apple.CoreML/weights/weight.bin coreml/kokoro_decoder_har_post_15s.mlpackage/Data/com.apple.CoreML/weights/weight.bin"
   "coreml/kokoro_decoder_pre_10s.mlpackage/Data/com.apple.CoreML/weights/weight.bin coreml/kokoro_decoder_pre_15s.mlpackage/Data/com.apple.CoreML/weights/weight.bin"
   "coreml/kokoro_decoder_har_post_10s.mlpackage/Data/com.apple.CoreML/weights/weight.bin coreml/kokoro_decoder_har_post_15s.mlpackage/Data/com.apple.CoreML/weights/weight.bin"
+  "coreml/kokoro_f0ntrain_t280.mlpackage/Data/com.apple.CoreML/weights/weight.bin coreml/kokoro_f0ntrain_t600.mlpackage/Data/com.apple.CoreML/weights/weight.bin"
   "coreml/kokoro_f0ntrain_t120.mlpackage/Data/com.apple.CoreML/weights/weight.bin coreml/kokoro_f0ntrain_t600.mlpackage/Data/com.apple.CoreML/weights/weight.bin"
   "coreml/kokoro_f0ntrain_t400.mlpackage/Data/com.apple.CoreML/weights/weight.bin coreml/kokoro_f0ntrain_t600.mlpackage/Data/com.apple.CoreML/weights/weight.bin"
 )
@@ -239,13 +240,13 @@ while read -r sha path rel; do
   fetch_verified "$path" "$sha" "$DEST/$rel"
 done <<< "$plan"
 
-# Cross-check the two shared weight.bin pins against the manifest before using them.
+# Cross-check every pinned weight.bin against the manifest's copy before using the pins.
 for pair in "${SHARED_WEIGHTS[@]}"; do
-  read -r seven fifteen <<< "$pair"
-  pinned=$(printf '%s\n' "${EXTRA_SHA256[@]}" | awk -v p="$seven" '$2 == p { print $1 }')
-  covered=$(awk -v p="$fifteen" '$2 == p { print $1 }' <<< "$plan")
+  read -r pinned_path covered_path <<< "$pair"
+  pinned=$(printf '%s\n' "${EXTRA_SHA256[@]}" | awk -v p="$pinned_path" '$2 == p { print $1 }')
+  covered=$(awk -v p="$covered_path" '$2 == p { print $1 }' <<< "$plan")
   if [[ -z "$pinned" || -z "$covered" || "$pinned" != "$covered" ]]; then
-    echo "pin for $seven ($pinned) disagrees with the manifest's $fifteen ($covered)" >&2
+    echo "pin for $pinned_path ($pinned) disagrees with the manifest's $covered_path ($covered)" >&2
     exit 1
   fi
 done

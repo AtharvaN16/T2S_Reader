@@ -51,13 +51,15 @@ executor; the OOV phoneme cache, the G2P/generator overlap and the AAC encode of
 still open, and want the §8 measurement first.
 
 **Progress (Plan 17, 2026-09-09):** #6 done but for (b): import retains the reader's chapters and a
-re-derivation reads them, the old audio goes in the background from the raw blobs, and only a
-document's own open re-derives it (Bookmarks and Prepare read the timeline as it stands;
+re-derivation reads them, the old audio goes in the background from the raw blobs when the versions
+moved (and first, when they did not — the keys are then the same bytes), and only a document's own
+open or its launch prime re-derives it (Bookmarks and a Prepare pass read the timeline as it stands;
 `BookSheet.loadChapters` still re-derives — another session's file). #7 done on the app side: the
 highlight is written only on change, the O(timeline) facts the 10 Hz bodies read are cached against
 the revision, the chapter axis is one pass, the ticker idles at 1 Hz, an idle `clear()` writes once;
 `RootPager`'s second `update()` per tick is open. #10 done but for bucket-lazy readiness: the sweep
-runs on the store's actor at first use, the stages load concurrently. #9 done: the 3 s and 10 s
+starts from the store's first use on its own task, the stages load four at a time (the peak memory of
+wider windows is unmeasured). #9 done: the 3 s and 10 s
 buckets are pinned, staged and vended (+~250 MB of bundle; the weights are byte-identical, the
 plans are not). #12: the OOV cache needs an upstream MisakiSwift hook (the fallback is private);
 the overlap and the encode wait for §8. #14: nothing to do at launch; the BART port is its own project.

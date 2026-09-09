@@ -37,11 +37,10 @@ final class KokoroCoreMLModels: KokoroModelProvider {
     /// Compiles every staged `.mlpackage` and hands back the compiled URLs, or passes an already
     /// compiled staging straight through.
     ///
-    /// Deliberately separate from ``init(compiledStages:)``: this is the whole load's only
-    /// asynchronous step, and URLs are the only part of a load that can safely cross an actor
-    /// suspension. ``KokoroCoreMLEngine`` shares one call of this between concurrent renders and
-    /// then builds the models synchronously, so the stages are compiled and loaded once
-    /// however many renders ask at the same time.
+    /// The first of a load's two asynchronous steps (``loadStages(_:)`` is the second), kept apart
+    /// from the model objects so ``KokoroCoreMLEngine`` can share each step between concurrent
+    /// renders through one `Task` and re-check for a finished load after each suspension: the
+    /// stages are compiled and loaded once however many renders ask at the same time.
     ///
     /// `async` because the only non-deprecated `MLModel.compileModel` is the asynchronous one. The
     /// app bundle needs no compile at all — Xcode runs `coremlc` at build time, which is what
@@ -58,18 +57,23 @@ final class KokoroCoreMLModels: KokoroModelProvider {
         return compiled
     }
 
-    /// Every stage's model, loaded concurrently from the compiled URLs ``compileStages(_:)`` returned.
+    /// Every stage's model, loaded a few at a time from the compiled URLs ``compileStages(_:)`` returned.
     ///
     /// `MLModel.load` builds the compute plan, and that is where a slow first load goes: 206 s on an
     /// A13's first launch after install, 3-5 s on every later one (§7.3) — one stage after another,
     /// until Plan 17 (audit §4.1). The builds are independent, so the warm-up now pays for the
-    /// longest, not the sum. `MLModel` is not `Sendable`: ``LoadedStages`` carries them out of the
-    /// group unchecked, under the rule the engine already keeps — nothing touches a model until
-    /// every load has returned and the set is on the engine's actor.
+    /// longest few, not the sum. ``loadWindow`` builds at once: the ceiling on speed is the core
+    /// count, and the window is what bounds the peak footprint while every plan is under
+    /// construction — the audit asked for that peak to be measured on an A13, and it has not been.
+    /// `MLModel` is not `Sendable`: ``LoadedStages`` carries them out of the group unchecked, under
+    /// the rule the engine already keeps — nothing touches a model until every load has returned
+    /// and the set is on the engine's actor.
     static func loadStages(_ compiled: [String: URL]) async throws -> LoadedStages {
         var models: [String: MLModel] = [:]
+        var pending = KokoroCoreMLResources.stageNames()[...]
         try await withThrowingTaskGroup(of: StageLoad.self) { group in
-            for name in KokoroCoreMLResources.stageNames() {
+            func addNext() throws {
+                guard let name = pending.popFirst() else { return }
                 guard let url = compiled[name] else { throw KokoroCoreMLResources.Failure.missing(name) }
                 group.addTask {
                     let configuration = MLModelConfiguration()
@@ -77,10 +81,17 @@ final class KokoroCoreMLModels: KokoroModelProvider {
                     return StageLoad(name: name, model: try await MLModel.load(contentsOf: url, configuration: configuration))
                 }
             }
-            for try await load in group { models[load.name] = load.model }
+            for _ in 0 ..< loadWindow { try addNext() }
+            for try await load in group {
+                models[load.name] = load.model
+                try addNext()
+            }
         }
         return LoadedStages(models: models, urls: compiled)
     }
+
+    /// How many compute plans build at once.
+    static let loadWindow = max(1, min(4, ProcessInfo.processInfo.activeProcessorCount))
 
     /// The stages as ``loadStages(_:)`` returns them; see there for why this is `@unchecked`.
     struct LoadedStages: @unchecked Sendable {

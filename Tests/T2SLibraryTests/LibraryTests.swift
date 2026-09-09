@@ -213,9 +213,30 @@ import T2SCore
         #expect(timeline[utterance: 1].spoken == "2nd sentence.")
         #expect(timeline[utterance: 1].source == "Second sentence.")
         try await h.store.upsert(PronunciationEntry(term: "Third", replacement: "3rd"))
+        // The versions do not move, so the new render keys are the old ones: the old audio must be
+        // gone before the replacement, or the next render would play the old pronunciation.
+        let oldKey = RenderKey(rawValue: "old")
+        try await h.audio.write(PCMAudio(samples: [0]), for: oldKey)
+        var rendered = timeline
+        rendered[utterance: 2].audioRef = oldKey.rawValue
+        try await h.store.replaceTimeline(rendered, for: doc.id)
         let reprocessed = try await h.library.reprocess(doc.id)
         #expect(reprocessed[utterance: 2].spoken == "3rd sentence.")
         #expect(try await h.store.timeline(for: doc.id)?.timeline == reprocessed)
+        #expect(await h.audio.contains(oldKey) == false)                    // removed on the way, not behind it
+    }
+
+    /// A retained file that cannot be read — a bad frame, a shape change — falls back to the reader
+    /// and is written again.
+    @Test func aCorruptRetainedFileFallsBackToTheReaderAndIsRewritten() async throws {
+        let reader = FakeDocumentReader()
+        let h = try makeHarness(readers: [reader])
+        let doc = try await importFake(h).document
+        try Data("not lzfse".utf8).write(to: h.paths.retainedChaptersURL(doc.id))
+        let reprocessed = try await h.library.reprocess(doc.id)
+        #expect(reprocessed.utteranceCount == 3)
+        #expect(await reader.log.urls.count == 2)
+        #expect(try RetainedChapters.read(from: h.paths.retainedChaptersURL(doc.id))?.count == 2)
     }
 
     /// Import keeps the reader's chapters beside the source, and a re-derivation starts from them

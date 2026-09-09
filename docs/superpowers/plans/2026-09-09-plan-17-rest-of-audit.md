@@ -29,6 +29,22 @@ concurrent stage loads (#10), and the 3 s and 10 s buckets (#9). Record what is 
 - Both new buckets are staged. Every `weight.bin` is byte-identical across buckets, so the download is
   small, but the bundle duplicates them: about +250 MB on the phone. The owner can drop the 10 s bucket
   by removing it from `KokoroCoreMLResources.buckets` and the script.
+- The render key is not bumped for the new buckets (the review's finding 6). Every bucket shares one set
+  of weights and pads with zeros, so the spoken region computes the same; the one cross-bucket difference
+  is where each overtone's noise slice starts in the pipeline's fixed-seed (42) stream, laid out
+  harmonic-major over the padded length — the same kind of difference as another seed, never a word or a
+  timing. And the Kokoro identity cannot change without orphaning every stored `kokoro:<identity>:<voice>`
+  choice (`VoiceRouting` would route them to the system voice), while a `RoutedEngine.engineID` bump
+  would re-render every book for a difference no one can hear. Cost: a cache holding both geometries.
+- The old audio is removed *before* the replacement when a re-derivation leaves the versions alone (a
+  dictionary change, a schema-only bump): the render keys are then the old bytes, and a deferred removal
+  would let the next render's cache probe adopt the old pronunciation (the review's blocker). Only a
+  version-moving re-derivation defers it.
+- A prime may re-derive (one document, in the background, at launch or after an import); a Prepare pass
+  may not. Cost: the launch prime of a stale continue-document takes the segmenter's one to three seconds.
+- The concurrent stage loads are windowed to four (or the core count): the audit asked for the peak memory
+  of the concurrent plan builds to be measured on an A13 first, and it has not been. Cost: a launch that
+  could be a little faster with a wider window.
 - Not taken, with the reason in the audit's progress note: the OOV phoneme cache (MisakiSwift's fallback
   is private to `EnglishG2P`; it needs an upstream hook), the G2P/generator overlap and the AAC encode off
   the render path (the audit asks for the §8 measurement first), the MLX items (#14: nothing runs at

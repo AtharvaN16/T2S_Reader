@@ -26,6 +26,22 @@ import T2SCore
         #expect(defaults.object(forKey: StorageModel.lastPrepareRunKey) as? Date != nil)
     }
 
+    /// A prime is the one Prepare path that may re-derive (Plan 17): a stale continue-document is
+    /// re-derived at launch, in the background, so its first tap does not pay for that and the spin-up.
+    @Test func aPrimeReDerivesAStaleDocument() async throws {
+        let fixtures = try AppFixtures()
+        let id = try await fixtures.importFake()
+        var stale = try #require(try await fixtures.store.timeline(for: id)).timeline
+        stale.segmenterVersion = Versions.segmenter + 1
+        try await fixtures.store.replaceTimeline(stale, for: id)
+        let runner = PrepareRunner(library: fixtures.library, store: fixtures.store, audioStore: fixtures.audio,
+                                   engine: FakeEngine(secondsPerCharacter: 0.05),
+                                   defaults: UserDefaults(suiteName: "prepare-\(UUID())")!, arbiter: RenderArbiter())
+        let result = await runner.prime(id)
+        #expect(result.renderedUtterances > 0)
+        #expect(try await fixtures.store.isStale(id: id) == false)
+    }
+
     @Test func unsafeDeviceDoesNoWorkAndDoesNotClaimARun() async throws {
         let fixtures = try AppFixtures()
         let id = try await fixtures.importFake()

@@ -209,6 +209,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                                 linearWeights: weights.linear_weights,
                                 linearBias: weights.linear_bias)
             self.loaded = loaded
+            // The models live in `loaded` now; the task must not keep a second reference to them.
+            loadingStages = nil
             // The G2P's lexicons (two 3 MB JSON files, merged) and its fallback network are the other
             // thing the first sentence would otherwise wait for; build the American one here so the
             // launch warm-up pays it. The British G2P stays lazy: a `b*` voice is a choice, not the
@@ -228,9 +230,11 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     }
 
     /// The stages loaded concurrently (`KokoroCoreMLModels.loadStages`), once however many renders
-    /// ask at the same time — the same sharing as ``compiledStages()``, for the same reason.
+    /// ask at the same time — the same sharing as ``compiledStages()``, for the same reason. This is
+    /// where a load begins in earnest, so `loadCount` counts here.
     private func loadedStages(_ compiled: [String: URL]) async throws -> KokoroCoreMLModels.LoadedStages {
         if let loadingStages { return try await loadingStages.value }
+        loadCount += 1
         let task = Task { try await KokoroCoreMLModels.loadStages(compiled) }
         loadingStages = task
         do {
@@ -244,18 +248,18 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// The compiled stage URLs, compiling the `.mlpackage` staging exactly once however many renders
     /// ask at the same time.
     ///
-    /// `MLModel.compileModel` is asynchronous, so the actor is released while it runs and `load()`
-    /// is reentrant across it. The recommended app wiring — `preload()` off the playback path, a
-    /// render on play — is exactly the pattern that arrives twice: without sharing the one task both
-    /// would compile and load a full set of stages, doubling the compute-plan build (206 s on
-    /// an A13's first launch) and, briefly, the footprint. Sharing a `Task` is what makes the two
-    /// callers wait on the same work; URLs are the only part of a load that may cross the suspension,
-    /// which is why the compile is split out of ``KokoroCoreMLModels`` at all.
+    /// `load()` suspends twice — here, while `MLModel.compileModel` runs, and in ``loadedStages(_:)``
+    /// while the plans build — and the actor is released across both, so `load()` is reentrant. The
+    /// recommended app wiring — `preload()` off the playback path, a render on play — is exactly the
+    /// pattern that arrives twice: without sharing, both would compile and load a full set of stages,
+    /// doubling the compute-plan build (206 s on an A13's first launch) and, briefly, the footprint.
+    /// Each step is shared through one `Task`, and `load()` re-checks for a finished load after each
+    /// suspension. The models cross the second suspension under one rule: nothing touches them until
+    /// the whole set is back on this actor.
     private func compiledStages() async throws -> [String: URL] {
         if let compiling { return try await compiling.value }
-        loadCount += 1
         // Nothing to compile: Xcode ran `coremlc` at build time, so on the app's own staging this
-        // function never suspends and `load()` cannot be reentered at all.
+        // function never suspends (`load()` still does, in `loadedStages`).
         guard !resources.isPrecompiled else { return resources.stages }
 
         let task = Task { [resources] in try await KokoroCoreMLModels.compileStages(resources) }

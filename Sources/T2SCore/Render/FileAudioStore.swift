@@ -37,13 +37,16 @@ public actor FileAudioStore: AudioStore {
 
     /// Scans `directory` and builds the LRU index on first use, rather than in `init`, so
     /// constructing a store costs nothing and never touches the disk until it's actually needed.
-    /// The old-codec sweep runs here too, on this actor: in `init` it ran on whichever thread built
-    /// the store — the main thread, at launch, before the first frame, deleting up to a whole old
-    /// cache (Plan 17, audit §4.3).
+    /// The old-codec sweep starts here too, on a task of its own: in `init` it ran on whichever thread
+    /// built the store — the main thread, at launch, before the first frame — and inline here it would
+    /// sit on the first cache probe, between the tap and the head render, deleting up to a whole old
+    /// cache (Plan 17, audit §4.3). It touches only sibling directories, never this codec's, so
+    /// nothing here waits for it.
     private func ensureIndexed() {
         guard !indexed else { return }
         indexed = true
-        Self.removeStaleCodecDirectories(parent: directory.deletingLastPathComponent(), keeping: codec.identifier)
+        let parent = directory.deletingLastPathComponent(), current = codec.identifier
+        Task.detached(priority: .utility) { Self.removeStaleCodecDirectories(parent: parent, keeping: current) }
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let keys = [.fileSizeKey, .contentModificationDateKey] as [URLResourceKey]
         let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys)) ?? []

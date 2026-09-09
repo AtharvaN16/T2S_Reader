@@ -83,7 +83,9 @@ import T2SStore
         player.renderWholeDocument()                                        // play-ahead alone renders nothing behind the seek
         await player.coordinator.waitForRenderIdle()
         #expect(!player.isTotalApproximate)                                 // the render moved the revision
-        #expect(player.chapters.map(\.durationSeconds) != estimated)        // …and the axis with it
+        let timeline = try #require(player.coordinator.timeline)            // …and the axis with it: the actual durations
+        let actual = ChapterEntry.entries(timeline: timeline, timeIndex: player.coordinator.timeIndex, elapsed: player.elapsed)
+        #expect(player.chapters == actual && actual.map(\.durationSeconds) != estimated)
         let other = try await f.importFake()
         await player.load(try #require(try await f.store.summary(id: other)), play: false)
         #expect(player.isTotalApproximate && player.chapterIndex == 0)      // a load starts over

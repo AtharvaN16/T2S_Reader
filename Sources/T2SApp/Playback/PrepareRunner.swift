@@ -144,7 +144,10 @@ public final class PrepareRunner {
         beginRun()
         defer { endRun() }
 
-        let documents = await loadDocuments(lastPlayed: documentID, queue: [])
+        // The one place Prepare may re-derive: one document, in the background, at launch or after an
+        // import — with the reader out of the path it is the segmenter alone, and the alternative is
+        // the first tap after an update paying the re-derivation and the spin-up together.
+        let documents = await loadDocuments(lastPlayed: documentID, queue: [], allowingReDerivation: true)
         guard let document = documents.first else {
             return finish(PrepareRunResult(reason: .prime, stopReason: .completed))
         }
@@ -237,16 +240,19 @@ public final class PrepareRunner {
         return finish(result)
     }
 
-    private func loadDocuments(lastPlayed: UUID?, queue: [UUID]) async -> [PreparedDocument] {
+    private func loadDocuments(lastPlayed: UUID?, queue: [UUID], allowingReDerivation: Bool = false) async -> [PreparedDocument] {
         var ids: [UUID] = []
         for id in [lastPlayed].compactMap({ $0 }) + queue where !ids.contains(id) { ids.append(id) }
 
         var documents: [PreparedDocument] = []
         for id in ids {
-            // Never re-derives: a stale document waits for its own open (Plan 17, audit §5.1 — the first
-            // charge after an update used to re-derive every queued book, serially, on the way here).
+            // A Prepare pass never re-derives: a stale document waits for its own open (Plan 17, audit
+            // §5.1 — the first charge after an update used to re-derive every queued book, serially,
+            // on the way here). A prime may (`prime(_:)`).
             guard let document = try? await store.document(id: id),
-                  let timeline = try? await library.currentTimeline(id)
+                  let timeline = allowingReDerivation
+                    ? try? await library.timelineForPlayback(id)
+                    : try? await library.currentTimeline(id)
             else { continue }
             var snapshot = Library.renderSnapshot(for: document, timeline: timeline)
 

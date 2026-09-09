@@ -70,7 +70,12 @@ public enum KokoroCoreMLResources: Sendable {
         durationTokenLengths: [Int] = durationTokenLengths
     ) -> [String] {
         var names = durationTokenLengths.map { "kokoro_duration_t\($0)" }
-        names += buckets.compactMap { PipelineConstants.tFramesForBucket[$0] }.map { "kokoro_f0ntrain_t\($0)" }
+        // Two buckets can share one F0Ntrain geometry: each name once, in bucket order.
+        var tFrames: [Int] = []
+        for bucket in buckets {
+            if let t = PipelineConstants.tFramesForBucket[bucket], !tFrames.contains(t) { tFrames.append(t) }
+        }
+        names += tFrames.map { "kokoro_f0ntrain_t\($0)" }
         names += buckets.map { "kokoro_decoder_pre_\($0)s" }
         names += buckets.map { "kokoro_decoder_har_post_\($0)s" }
         return names

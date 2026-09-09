@@ -1,6 +1,6 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-09 (Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498). Written for whoever picks up the coding next._
+_Last updated 2026-09-09 (Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
 ## Resume here (2026-09-09) — Plan 17
 
@@ -11,27 +11,32 @@ performance audit that this Mac can build:
   chapters beside the source (`chapters.json.lzfse`, `RetainedChapters`); a re-derivation after a
   version bump reads them (a document imported before this build reads its source once more, then
   keeps the result); the old audio is removed in the background from the raw old blobs, after the
-  load has its timeline; Bookmarks and Prepare read `currentTimeline` and never re-derive — only the
-  document's own open does. Not taken: per-chapter lazy re-derivation (the coordinator's indices span
-  the document). `BookSheet.loadChapters` (another session's file) still calls `timelineForPlayback`
-  and so still re-derives a stale book from the sheet; switch it to `currentTimeline` when that file
-  is free.
+  load has its timeline — except when the re-derivation leaves the versions alone (a dictionary
+  change from Details, a schema-only bump): the keys are then the old bytes, so the removal runs
+  first. Bookmarks and a Prepare pass read `currentTimeline` and never re-derive; a prime may (one
+  document, at launch or after an import). Not taken: per-chapter lazy re-derivation (the
+  coordinator's indices span the document). `BookSheet.loadChapters` (another session's file) still
+  calls `timelineForPlayback` and so still re-derives a stale book from the sheet — and the Bookmarks
+  list relies on that running first; switch both to `currentTimeline` when that file is free.
 - **The timer work coalesces** (Task 2, audit #7): the highlight is written only when the word
   changes; `PlayerModel` caches the rendered flag, the chapter axis and the chapter index against
   `timelineRevision`; the chapter axis is one pass; the ticker idles at 1 Hz; an idle `clear()`
   writes the Now Playing centre once. Not taken: `RootPager`'s second `update()` per tick (another
   session's file). The two `App/T2SReader/System` edits were checked by reading — no simulator build
   fit the disk.
-- **Launch** (Task 3, audit #10): the old-codec sweep runs on the store's actor at first use, not on
-  the main thread in `init`; the Core ML stages load concurrently under one shared task
-  (`KokoroCoreMLModels.loadStages`). Not taken: bucket-lazy readiness (7 s first, the rest after) —
-  the engine's readiness gating would change; measure the concurrent load's peak memory on the A13
-  first (audit §4.1).
+- **Launch** (Task 3, audit #10): the old-codec sweep starts from the store's first use on a task of
+  its own, not on the main thread in `init` and not on the first cache probe; the Core ML stages load
+  four at a time under one shared task (`KokoroCoreMLModels.loadStages`, `loadWindow`). Not taken:
+  bucket-lazy readiness (7 s first, the rest after) — the engine's readiness gating would change;
+  measure the windowed load's peak memory on the A13 first (audit §4.1) before widening the window.
 - **The 3 s and 10 s buckets** (Task 4, audit #9): `scripts/fetch-kokoro-coreml.sh` pins them (run
   it: the main checkout's staging has all 14 stages, 591 MB); `KokoroCoreMLResources.buckets` is
   `[3, 7, 10, 15]`. Every weight file is byte-identical across buckets, but the bundle duplicates
   them: **about +250 MB on the phone**. To drop the 10 s bucket, remove it from `buckets` and from
-  the script's pins. The first launch after install builds fourteen compute plans, not eight.
+  the script's pins. The first launch after install builds fourteen compute plans, not eight. The
+  render key is unchanged (the plan records why): clips cached at the old geometry play beside new
+  ones, and the only cross-bucket difference is the overtones' noise realization — the same kind as
+  another seed. If a seam ever sounds different after this update, that is the first suspect.
 
 **Not taken, and why:** the OOV phoneme cache (audit #12) — MisakiSwift's fallback network is private
 to `EnglishG2P`; it needs an upstream hook or a vendored copy. The G2P/generator overlap and the AAC
@@ -48,8 +53,12 @@ this update: every book re-derives once on its first open, in one to three secon
 old five to twelve, and the Queue's rows keep their progress meanwhile. Launch on a cold phone: the
 warm-up should be noticeably shorter than before, and the first launch after install shorter still.
 
+While paused, the ticker now samples once a second: if the sleep timer's countdown skips a displayed
+second while paused, that is the 1 Hz idle tick (`PlaybackTicker`), and a 250 ms idle tick is the
+one-line revert.
+
 **Next:** the §8 measurement on a phone (StageTimings and the G2P time, logged once), then whichever
-of #12's remaining items it justifies; bucket-lazy readiness if the concurrent load's memory peak
+of #12's remaining items it justifies; bucket-lazy readiness if the windowed load's memory peak
 is a problem on the A13.
 
 ## Resume here (2026-09-08, later) — voice picker round 2

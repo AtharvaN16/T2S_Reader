@@ -105,11 +105,15 @@ public actor Library {
     /// Re-segments the retained chapters with the current segmenter, normalizer, and dictionary and
     /// replaces the stored ones. The resume position survives (spec §3.2). The reader is opened only
     /// for a document imported before its chapters were retained, and then retained for next time
-    /// (Plan 17, audit §5.1). The old utterances' audio keys embed the old versions and would never
-    /// be looked up again, so they are removed from the cache — behind this call, from the old blobs
-    /// read raw before the replacement: the load path pays for neither the decode nor the removals.
-    /// An undecodable old blob just leaks its keys rather than blocking re-derivation, the very thing
-    /// meant to recover from it.
+    /// (Plan 17, audit §5.1). The old utterances' audio is removed from the cache — from the old blobs
+    /// read raw before the replacement. When the re-derivation moves the segmenter or normalizer
+    /// version, the new render keys differ from the old (`RenderKey` carries both) and the removal
+    /// runs behind this call: the load path pays for neither the decode nor the removals. When it
+    /// does not — a dictionary change from the Details sheet, a schema-only bump — the keys are the
+    /// same bytes, and the removal must finish before the replacement, or the next render's cache
+    /// probe would adopt the old pronunciation (the Plan 17 review's blocker). An undecodable old
+    /// blob just leaks its keys rather than blocking re-derivation, the very thing meant to recover
+    /// from it.
     @discardableResult
     public func reprocess(_ id: UUID) async throws -> Timeline {
         guard let document = try await store.document(id: id) else { throw LibraryStoreError.documentNotFound(id) }
@@ -126,8 +130,15 @@ public actor Library {
         }
         let timeline = try await build(chapters)
         let oldBlobs = (try? await store.chapterBlobs(for: id)) ?? []
-        try await store.replaceTimeline(timeline, for: id)
-        removeAudioInBackground(ofBlobs: oldBlobs)
+        let old = try await store.versions(of: id)
+        let keysChange = old?.segmenter != timeline.segmenterVersion || old?.normalizer != timeline.normalizerVersion
+        if keysChange {
+            try await store.replaceTimeline(timeline, for: id)
+            removeAudioInBackground(ofBlobs: oldBlobs)
+        } else {
+            await Self.removeAudio(ofBlobs: oldBlobs, from: audioStore)
+            try await store.replaceTimeline(timeline, for: id)
+        }
         return timeline
     }
 
@@ -175,7 +186,8 @@ public actor Library {
     private func ingest(id: UUID, sourceType: SourceType, sourceURL: URL?, reader: any DocumentReader) async throws -> ImportResult {
         let read = try await reader.read(fileURL: paths.sourceURL(id, type: sourceType), sourceType: sourceType)
         let timeline = try await build(read.chapters)
-        try RetainedChapters.write(read.chapters, to: paths.retainedChaptersURL(id))
+        // Best effort: without the retained file a re-derivation reads the source once more.
+        try? RetainedChapters.write(read.chapters, to: paths.retainedChaptersURL(id))
         var coverPath: String?
         if let cover = read.coverImage {
             let url = paths.coverURL(id)
@@ -213,11 +225,15 @@ public actor Library {
         let previous = audioGC
         audioGC = Task.detached(priority: .utility) {
             await previous?.value
-            for blob in blobs {
-                guard let chapter = try? TimelineCodec.decode(blob).chapter else { continue }
-                for utterance in chapter.utterances {
-                    if let ref = utterance.audioRef { try? await audioStore.remove(RenderKey(rawValue: ref)) }
-                }
+            await Self.removeAudio(ofBlobs: blobs, from: audioStore)
+        }
+    }
+
+    private static func removeAudio(ofBlobs blobs: [Data], from audioStore: any AudioStore) async {
+        for blob in blobs {
+            guard let chapter = try? TimelineCodec.decode(blob).chapter else { continue }
+            for utterance in chapter.utterances {
+                if let ref = utterance.audioRef { try? await audioStore.remove(RenderKey(rawValue: ref)) }
             }
         }
     }

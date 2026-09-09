@@ -48,5 +48,9 @@ import T2SCore
         // A position saved on its own says nothing about time.
         try await store.savePosition(p, for: doc.id)
         #expect(try await store.summary(id: doc.id)?.resumeElapsedSeconds == nil)
+        // Re-derived chapters are not the ones the time was measured against: it goes with them.
+        try await store.savePosition(SavedPlayhead(position: p, chapterIndex: 1, secondsIntoChapter: 1.5), for: doc.id)
+        try await store.replaceTimeline(makeTimeline([[makeUtterance("All in one.", seconds: 9)]]), for: doc.id)
+        #expect(try await store.summary(id: doc.id)?.resumeElapsedSeconds == nil)
     }
 }

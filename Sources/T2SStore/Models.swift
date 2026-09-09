@@ -6,7 +6,7 @@ import T2SCore
 /// `resumeSecondsIntoChapter`, both optional, so a V1 row reads back with them nil. The model
 /// classes live inside their schema version, as SwiftData needs them to: a migration stage
 /// compares the two versions' models, and two versions naming the same classes are "duplicate
-/// version checksums" at run time. `Models.swift`'s top-level names are aliases of these.
+/// version checksums" at run time. `LibrarySchema.swift` aliases the top-level names to these.
 enum LibrarySchemaV2: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(2, 0, 0) }
     static let models: [any PersistentModel.Type] = [StoredDocument.self, StoredChapter.self, StoredBookmark.self, StoredPronunciation.self]

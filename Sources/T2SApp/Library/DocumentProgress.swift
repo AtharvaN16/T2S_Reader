@@ -16,9 +16,10 @@ public struct DocumentProgress: Hashable, Sendable {
     public var fraction: Double { totalSeconds > 0 ? min(1, max(0, elapsedSeconds / totalSeconds)) : 0 }
 
     /// From a row that carries its playhead's elapsed time (Plan 16): no decode. Nil for a document
-    /// never played through the coordinator, or whose position was last saved without its time.
+    /// never played through the coordinator, whose position was last saved without its time, or
+    /// whose chapters are stale (the time was measured against a timeline about to be replaced).
     public static func fromSummary(_ s: DocumentSummary) -> DocumentProgress? {
-        guard let elapsed = s.resumeElapsedSeconds else { return nil }
+        guard let elapsed = s.resumeElapsedSeconds, !s.isStale else { return nil }
         return DocumentProgress(elapsedSeconds: min(max(0, elapsed), s.totalSeconds), totalSeconds: s.totalSeconds,
                                 chapterIndex: s.resumeChapterIndex, chapterCount: s.chapterCount,
                                 isApproximate: !s.isFullyRendered)

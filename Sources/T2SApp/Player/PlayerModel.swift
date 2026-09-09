@@ -228,7 +228,8 @@ public final class PlayerModel {
         pendingChapters.formUnion(coordinator.takeChangedChapters())
         guard let current, let timeline = coordinator.timeline else { return }
         var failed = false
-        for c in pendingChapters.sorted() where timeline.chapters.indices.contains(c) {
+        pendingChapters = pendingChapters.filter { timeline.chapters.indices.contains($0) }   // a chapter of a timeline since replaced
+        for c in pendingChapters.sorted() {
             let chapter = timeline.chapters[c]
             do {
                 // Merge before writing: a cache-hit `.rendered` carries no word timings

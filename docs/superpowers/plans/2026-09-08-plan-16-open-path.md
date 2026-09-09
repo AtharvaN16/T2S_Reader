@@ -30,3 +30,7 @@ work the mask throws away (#12, the part that needs no model).
   more per book, then never again.
 - The harmonic source's noise stays full-length so the output stays bit-identical to the reference; only the
   sine passes shrink. Cost: the noise's share of the stage is untouched.
+- `Versions.normalizer` is not bumped for the one-pass dictionary (the review's finding 7): the output
+  differs only for a dictionary built to chain or overlap its own entries, and a bump re-derives and
+  re-renders every book. Cost: such a dictionary's books normalize differently from their stored blobs
+  until they re-derive for another reason.

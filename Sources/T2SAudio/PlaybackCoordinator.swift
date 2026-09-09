@@ -45,9 +45,9 @@ public final class PlaybackCoordinator {
     /// instead of recomputed per body evaluation.
     public private(set) var timelineRevision = 0
     /// Chapters whose utterances this coordinator changed since `takeChangedChapters()`: a
-    /// `.rendered` event, or an audio ref cleared because the store lost the clip. The player model
-    /// persists exactly these (Plan 16; it used to hash every chapter to find them). A load starts
-    /// the set empty: the refs it clears are persisted with the chapter's next real change, as before.
+    /// `.rendered` event, an audio ref cleared because the store lost the clip, or a stale ref a load
+    /// cleared. `PlayerModel` — its one owner — persists exactly these (Plan 16; it used to hash every
+    /// chapter to find them).
     public private(set) var changedChapters: Set<Int> = []
     public private(set) var timeIndex = TimeIndex(Timeline(chapters: []))
     /// Set by the app from battery, thermal, and Low Power Mode notifications.
@@ -119,6 +119,7 @@ public final class PlaybackCoordinator {
         timeIndex = TimeIndex(timeline)
         rendered = []
         rendered.reserveCapacity(timeline.utteranceCount)
+        changedChapters = []
         let voice = document.voiceID ?? "default"
         for i in 0..<timeline.utteranceCount {
             let expected = RenderKey(documentID: document.id, utteranceIndex: i, voiceID: voice,
@@ -127,11 +128,14 @@ public final class PlaybackCoordinator {
             let isCurrent = timeline[utterance: i].audioRef == expected.rawValue
             rendered.append(isCurrent)
             // `audioRef` is cache metadata, not proof that this build/voice still owns the clip.
-            // Clear old identities so the next persistence cannot revive an invalid cache hit.
-            if !isCurrent { self.timeline?[utterance: i].audioRef = nil }
+            // Clear old identities so the next persistence cannot revive an invalid cache hit — and
+            // persist the clearing, or the store keeps counting the clip as rendered.
+            if !isCurrent, timeline[utterance: i].audioRef != nil {
+                self.timeline?[utterance: i].audioRef = nil
+                changedChapters.insert(timeline.chapterIndex(forUtterance: i) ?? 0)
+            }
         }
         manualRequested = false
-        changedChapters = []
         lastPlayed = document.id
         lastRenderError = nil
         rateLoweredTo = nil
@@ -451,10 +455,7 @@ public final class PlaybackCoordinator {
             }
             lastEnqueued = index
             awaitingIndex = nil
-            if state == .catchingUp, !clip.samples.isEmpty {
-                player.play()
-                state = .playing
-            }
+            resumeIfQueued()
             if isLast {
                 chain { await self.fill() }                          // the rest of the window may follow now
             }
@@ -517,6 +518,16 @@ public final class PlaybackCoordinator {
     private func closeStream(_ index: Int) {
         streaming = nil
         player.enqueue(PCMAudio(sampleRate: PCMAudio.defaultSampleRate, samples: []), tag: index, isFinal: true)
+        resumeIfQueued()
+    }
+
+    /// The way out of "catching up" once the player holds something again: the next piece, or the
+    /// final buffer that closes a stream (`.failed`, `.storeFull`) — a paused player delivers no
+    /// completion, so without this a stream closed after the tick's dry pause would never move on.
+    private func resumeIfQueued() {
+        guard state == .catchingUp, queuedCount > 0 else { return }
+        player.play()
+        state = .playing
     }
 
     private func refreshHighlight() {
@@ -530,7 +541,8 @@ public final class PlaybackCoordinator {
                   segmenterVersion: timeline.segmenterVersion)
     }
 
-    /// Returns the chapters changed since the last call and forgets them; the caller owns them now.
+    /// Returns the chapters changed since the last call and forgets them. Exactly one caller may own
+    /// them — `PlayerModel.persistRenderedChapters` — a second would steal what the first never writes.
     public func takeChangedChapters() -> Set<Int> {
         defer { changedChapters = [] }
         return changedChapters

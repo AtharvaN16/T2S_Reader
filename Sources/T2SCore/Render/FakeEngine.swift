@@ -30,7 +30,8 @@ public actor FakeEngine: SynthesisEngine {
 
     public func fail(on spoken: String) { failures.insert(spoken) }
 
-    /// The streamed render throws after yielding piece `ordinal` (a mid-stream engine failure).
+    /// The streamed render throws after yielding piece `ordinal` (a mid-stream engine failure) — once
+    /// it is released from any hold between pieces, so a test can fail an engine that is parked.
     public func fail(afterPiece ordinal: Int) { failAfterPiece = ordinal }
     private var failAfterPiece: Int?
 
@@ -113,16 +114,17 @@ public actor FakeEngine: SynthesisEngine {
                     let count = max(1, min(self.pieceCount, max(1, samples.count)))
                     let size = samples.count / count
                     for ordinal in 0 ..< count {
-                        if ordinal > 0 { await self.waitBetweenPieces() }
+                        if ordinal > 0 {
+                            await self.waitBetweenPieces()
+                            try await self.failIfAsked(afterPiece: ordinal - 1)
+                        }
                         try Task.checkCancellation()
                         let start = ordinal * size
                         let end = ordinal == count - 1 ? samples.count : start + size
                         continuation.yield(.piece(PCMAudio(sampleRate: whole.audio.sampleRate, samples: Array(samples[start ..< end])),
                                                   ordinal: ordinal, isLast: ordinal == count - 1))
-                        if let failAfterPiece = await self.failAfterPiece, ordinal == failAfterPiece {
-                            throw SynthesisError.failed("failed after piece \(ordinal)")
-                        }
                     }
+                    try await self.failIfAsked(afterPiece: count - 1)
                     continuation.yield(.finished(wordTimings: whole.wordTimings))
                     continuation.finish()
                 } catch {
@@ -146,6 +148,10 @@ public actor FakeEngine: SynthesisEngine {
     // the park so a *mid-park* cancellation also resumes it (from `resumeParkedPieces()`, hopping back
     // onto the actor since `onCancel` itself runs outside actor isolation) — the resumed call then
     // returns here, and the caller's `try Task.checkCancellation()` throws and ends the stream.
+    private func failIfAsked(afterPiece ordinal: Int) throws {
+        if let failAfterPiece, ordinal == failAfterPiece { throw SynthesisError.failed("failed after piece \(ordinal)") }
+    }
+
     private func waitBetweenPieces() async {
         if Task.isCancelled { return }
         guard holdingBetweenPieces else { return }

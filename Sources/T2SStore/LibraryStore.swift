@@ -30,6 +30,9 @@ public struct DocumentSummary: Hashable, Sendable, Identifiable {
     /// nil until the coordinator has saved a playhead, or after a position saved on its own.
     public var resumeElapsedSeconds: TimeInterval?
     public var resumeChapterIndex: Int?
+    /// The persisted versions differ from `Versions` (spec §3.7.3): the chapters — and the resume
+    /// time measured against them — are about to be re-derived.
+    public var isStale: Bool
 
     public var id: UUID { document.id }
     /// The Queue row's `positive` check (spec §3.4.1): plays with no synthesis and no network.
@@ -37,7 +40,7 @@ public struct DocumentSummary: Hashable, Sendable, Identifiable {
 
     public init(document: Document, chapterCount: Int, utteranceCount: Int, totalSeconds: TimeInterval,
                 renderedCount: Int, isFinished: Bool, queueOrder: Int?, lastPlayedAt: Date?,
-                resumeElapsedSeconds: TimeInterval? = nil, resumeChapterIndex: Int? = nil) {
+                resumeElapsedSeconds: TimeInterval? = nil, resumeChapterIndex: Int? = nil, isStale: Bool = false) {
         self.document = document
         self.chapterCount = chapterCount
         self.utteranceCount = utteranceCount
@@ -48,6 +51,7 @@ public struct DocumentSummary: Hashable, Sendable, Identifiable {
         self.lastPlayedAt = lastPlayedAt
         self.resumeElapsedSeconds = resumeElapsedSeconds
         self.resumeChapterIndex = resumeChapterIndex
+        self.isStale = isStale
     }
 }
 
@@ -215,9 +219,10 @@ public actor LibraryStore {
 
     /// Whether the document's persisted versions differ from `Versions`, without decoding a single
     /// chapter blob (spec §3.7.3). `nil` when the document does not exist.
-    public func isStale(id: UUID) throws -> Bool? {
-        guard let row = try row(id) else { return nil }
-        return row.schemaVersion != Versions.schema
+    public func isStale(id: UUID) throws -> Bool? { try row(id).map(Self.isStale) }
+
+    static func isStale(_ row: StoredDocument) -> Bool {
+        row.schemaVersion != Versions.schema
             || row.segmenterVersion != Versions.segmenter
             || row.normalizerVersion != Versions.normalizer
     }
@@ -228,10 +233,7 @@ public actor LibraryStore {
         let chapters = try row.chapters.sorted { $0.index < $1.index }.map { try TimelineCodec.decode($0.blob).chapter }
         let timeline = Timeline(chapters: chapters, schemaVersion: row.schemaVersion,
                                 segmenterVersion: row.segmenterVersion, normalizerVersion: row.normalizerVersion)
-        let stale = row.schemaVersion != Versions.schema
-            || row.segmenterVersion != Versions.segmenter
-            || row.normalizerVersion != Versions.normalizer
-        return StoredTimeline(timeline: timeline, isStale: stale)
+        return StoredTimeline(timeline: timeline, isStale: Self.isStale(row))
     }
 
     public func chapter(_ index: Int, of id: UUID) throws -> Chapter? {
@@ -316,6 +318,9 @@ public actor LibraryStore {
     private func replaceChapters(of row: StoredDocument, with timeline: Timeline) throws {
         for c in row.chapters { modelContext.delete(c) }
         row.chapters = []
+        // The resume time described the chapters just discarded; the row decodes once more instead.
+        row.resumeChapterIndex = nil
+        row.resumeSecondsIntoChapter = nil
         row.schemaVersion = timeline.schemaVersion
         row.segmenterVersion = timeline.segmenterVersion
         row.normalizerVersion = timeline.normalizerVersion
@@ -380,6 +385,7 @@ public actor LibraryStore {
                                totalSeconds: r.chapters.reduce(0) { $0 + $1.durationSeconds },
                                renderedCount: r.chapters.reduce(0) { $0 + $1.renderedCount },
                                isFinished: r.isFinished, queueOrder: r.queueOrder, lastPlayedAt: r.lastPlayedAt,
-                               resumeElapsedSeconds: elapsed, resumeChapterIndex: r.resumeChapterIndex)
+                               resumeElapsedSeconds: elapsed, resumeChapterIndex: r.resumeChapterIndex,
+                               isStale: isStale(r))
     }
 }

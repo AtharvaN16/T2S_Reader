@@ -501,8 +501,31 @@ import T2SCore
         // The `.rendered` behind the last piece swaps the estimate for the actual; until it lands the
         // playhead is clamped to the estimate (0.67 s here), which a loaded test run can still be.
         for _ in 0 ..< 200 where c.timeline?[utterance: 0].duration.isActual != true { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(c.timeline?[utterance: 0].duration.isActual == true)
         player.advance(seconds: 0.2); c.tick()
-        #expect(abs(c.playhead.offset - 0.7) < 1e-9)                 // no jump: the clock stood still while dry
+        #expect(abs(c.playhead.offset - 0.7) < 1e-9)                 // the clock picks up where it paused
+    }
+
+    /// A stream closed while the dry pause holds — the engine failing after a piece, here — ends with
+    /// the final buffer in a *paused* player, which delivers no completion: the coordinator must resume
+    /// on that buffer itself, or the book is stuck on "catching up" (the Plan 16 review's blocker).
+    @Test func aStreamThatFailsWhileDryStillMovesOn() async throws {
+        let (c, player, engine, _, doc, timeline) = await streamingFixture(pieces: 2)
+        await engine.hold()
+        c.load(doc, timeline: timeline)
+        await c.play()
+        await engine.release()                                       // piece 0 arrives; piece 1 parks
+        await waitForBuffers(player, 1)
+        await c.settle()
+        player.advance(seconds: 0.5); c.tick()
+        #expect(c.state == .catchingUp && !player.isPlaying)
+        await engine.fail(afterPiece: 0)                             // the engine dies once released
+        await engine.releasePiece()
+        for _ in 0 ..< 200 where c.state == .catchingUp { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(c.state == .playing && player.isPlaying)
+        #expect(c.lastRenderError != nil)
+        player.advance(seconds: 0.1); await c.settle()               // the empty final buffer completes: the head moves on
+        #expect(c.playhead.utteranceIndex == 1)
     }
 
     /// The player model persists the chapters the coordinator changed and nothing else (Plan 16): a
@@ -521,6 +544,16 @@ import T2SCore
         #expect(c.changedChapters == [0, 1])
         #expect(c.takeChangedChapters() == [0, 1])
         #expect(c.changedChapters.isEmpty)
+        // A load that clears stale refs (another voice) marks their chapters: the store must stop
+        // counting those clips as rendered.
+        var other = doc
+        other.voiceID = "another"
+        c.load(other, timeline: try #require(c.timeline))
+        #expect(c.changedChapters == [0, 1])
+        c.load(doc, timeline: timeline)                                                         // nothing to clear: nothing marked
+        #expect(c.changedChapters.isEmpty)
+        await c.waitForRenderIdle()
+        _ = c.takeChangedChapters()
         await c.seek(to: Playhead(utteranceIndex: 1, offset: 0.3))
         await c.settle()
         let saved = try #require(await saves.lastSaved)

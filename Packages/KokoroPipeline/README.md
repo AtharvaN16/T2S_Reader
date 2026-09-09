@@ -18,7 +18,7 @@
   predicted F0 curve's voiced frames scaled about their log-mean before the decoder; 1 is upstream.
 - `HarmonicSource.swift` (Plan 16): `sineGenFromF0Frames` computes its nine sine passes over the
   voiced prefix of the padded F0 curve plus one frame (`sineFrameCount`); the mask zeroes the rest
-  anyway, and the output is bit-identical to upstream's (`HarmonicSourceTests`).
+  anyway, and the output is bit-identical to the untrimmed computation (`HarmonicSourceTests`).
 - `KokoroSynthesisExecutor.swift` (Plan 16): the hn-nsf build (Stage 7) runs on another core
   while the DecoderPre prediction (Stage 6) holds the thread; `StageTimings.decoderPreHnsfOverlap`,
   which upstream declares and never sets, records the overlap.

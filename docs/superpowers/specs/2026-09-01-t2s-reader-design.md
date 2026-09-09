@@ -514,8 +514,9 @@ Buffers are scheduled per utterance for gapless playback. A streamed head is sev
 one tag; the segment's completion fires after the buffer marked final (rev 16).
 §3.6's underrun rule holds between the pieces of a streamed head as well (rev 17): the player says
 what it still holds (`AudioPlaying.queuedSeconds`), and when a stream is live and it holds nothing
-the coordinator pauses on "catching up" at its next tick and resumes on the next piece — the player
-never renders silence, and the playhead never runs past the audio.
+the coordinator pauses on "catching up" at its next tick and resumes on the next piece, or on the
+final buffer that closes a failed stream — at most a tick's worth of silence is rendered, and the
+playhead never runs past the audio.
 `AVAudioUnitTimePitch.rate` provides 0.5x–4x **with pitch correction**;
 `AVQueuePlayer` was rejected because per-item boundaries are audible and
 rate handling across items is awkward. Playhead precision comes from

@@ -60,5 +60,7 @@ import T2SStore
         #expect(!p.isApproximate)
         s.resumeElapsedSeconds = 12                                                             // durations shrank since the save
         #expect(DocumentProgress.fromSummary(s)?.elapsedSeconds == 10)
+        s.isStale = true                                                                        // measured against chapters about to go
+        #expect(DocumentProgress.fromSummary(s) == nil)
     }
 }

@@ -71,7 +71,7 @@ import T2SStore
 
     /// A row the coordinator has played carries its own elapsed time (Plan 16): progress comes from
     /// the summary and the chapter blobs stay on disk.
-    @Test func progressComesFromTheSavedPlayheadWithoutADecode() async throws {
+    @Test func progressComesFromTheSavedPlayhead() async throws {
         let f = try AppFixtures()
         let a = try await f.importFake()
         let model = LibraryModel(library: f.library)

@@ -287,8 +287,8 @@ public func executeKokoroSynthesis(
     let harGroup = DispatchGroup()
     let wantsHarComponents = tensorDump != nil
     let harSeed = request.seed
-    let t12 = CFAbsoluteTimeGetCurrent()
     DispatchQueue.global(qos: .userInitiated).async(group: harGroup) {
+        har.started = CFAbsoluteTimeGetCurrent()
         if wantsHarComponents {
             let components = buildHarComponents(
                 f0Padded: f0Padded,
@@ -311,6 +311,7 @@ public func executeKokoroSynthesis(
         }
         har.finished = CFAbsoluteTimeGetCurrent()
     }
+    defer { harGroup.wait() }   // on every exit, a throw included: the build must not outlive the call
 
     // Stage 6: DecoderPre Core ML.
     let t10 = CFAbsoluteTimeGetCurrent()
@@ -328,20 +329,19 @@ public func executeKokoroSynthesis(
         "n_input": MLFeatureValue(multiArray: nArray3D),
         "ref_s": MLFeatureValue(multiArray: decRefS),
     ])
-    let decPreResult = Result { try decPreModel.prediction(from: decPreInput) }
+    let decPreOutput = try decPreModel.prediction(from: decPreInput)
     let t11 = CFAbsoluteTimeGetCurrent()
     timings.decoderPre = t11 - t10
-    harGroup.wait()   // before any throw: the build must not outlive the call that started it
-    let decPreOutput = try decPreResult.get()
     let xPre = decPreOutput.featureValue(for: "x_pre")!.multiArrayValue!
 
     try tensorDump?.writeMLMultiArray(name: "x_pre", array: xPre)
 
+    harGroup.wait()
     let harFlat = har.flat
     let harFrames = har.frames
     let harDebug = har.debug
-    timings.hnsfSwift = har.finished - t12
-    timings.decoderPreHnsfOverlap = max(0, min(t11, har.finished) - max(t10, t12))
+    timings.hnsfSwift = har.finished - har.started                       // the build itself, not the queue's latency
+    timings.decoderPreHnsfOverlap = max(0, min(t11, har.finished) - max(t10, har.started))
 
     if let harDebug {
         try tensorDump?.writeFloatArray(
@@ -630,6 +630,7 @@ private final class HarBuild {
     var flat: [Float] = []
     var frames = 0
     var debug: HarDebugComponents?
+    var started: CFAbsoluteTime = 0
     var finished: CFAbsoluteTime = 0
 }
 

@@ -133,24 +133,35 @@ public final class AudioPlayer: AudioPlaying {
     }
 
     public var consumedSeconds: TimeInterval {
-        let rawFrames: Double
+        guard let rawFrames = rawConsumedFrames else { return 0 }
+        let frames = min(rawFrames, Double(scheduledFrames))
+        return max(0, frames) / format.sampleRate
+    }
+
+    /// Source frames consumed since the last reset, uncapped by what was scheduled; nil before the
+    /// live player has a render time.
+    private var rawConsumedFrames: Double? {
         if manual {
             // `engine.manualRenderingSampleTime` is exact rendered-output time, but it's in the
             // engine's fixed processing-rate domain, not source-domain — it doesn't reflect the
             // time-pitch rate multiplier, so scale by `rate` to get source seconds at 1x. Progress
             // from earlier rate intervals is already folded into `manualAccumulatedSourceFrames`
             // (see `foldManualProgress()`), so only the current interval needs scaling here.
-            rawFrames = manualAccumulatedSourceFrames + Double(max(0, engine.manualRenderingSampleTime - manualBaseline)) * rate
-        } else {
-            guard let nodeTime = player.lastRenderTime, let t = player.playerTime(forNodeTime: nodeTime) else { return 0 }
-            rawFrames = Double(t.sampleTime)
+            return manualAccumulatedSourceFrames + Double(max(0, engine.manualRenderingSampleTime - manualBaseline)) * rate
         }
-        let frames = min(rawFrames, Double(scheduledFrames))
-        return max(0, frames) / format.sampleRate
+        guard let nodeTime = player.lastRenderTime, let t = player.playerTime(forNodeTime: nodeTime) else { return nil }
+        return Double(t.sampleTime)
     }
 
+    /// Audio scheduled and not yet presented, in seconds at 1x. On the live graph the player's own
+    /// position is its pull position, ahead of what the listener has heard by the time-pitch unit's
+    /// look-ahead (`outputLatencySeconds`, see above); that is added back, so this reaches zero only
+    /// when the last frame has been presented and a stream keeping up with a few tens of
+    /// milliseconds of headroom is not read as dry (Plan 16).
     public var queuedSeconds: TimeInterval {
-        max(0, Double(scheduledFrames) / format.sampleRate - consumedSeconds)
+        guard let rawFrames = rawConsumedFrames else { return Double(scheduledFrames) / format.sampleRate }
+        let lookAhead = manual ? 0 : outputLatencySeconds * format.sampleRate
+        return max(0, (Double(scheduledFrames) - rawFrames + lookAhead) / format.sampleRate)
     }
 
     public func enqueue(_ audio: PCMAudio, tag: Int, isFinal: Bool) {

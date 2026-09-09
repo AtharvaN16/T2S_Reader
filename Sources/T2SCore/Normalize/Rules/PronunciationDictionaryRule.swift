@@ -10,8 +10,10 @@ public struct PronunciationDictionaryRule: NormalizerRule {
     private let replacements: [String]
 
     public init(entries: [PronunciationEntry]) {
-        // An empty term would match the empty string at every boundary; it is not a term.
-        let entries = entries.filter { !$0.term.isEmpty }
+        // A term with nothing to say once spoken ("" or "-") would match every boundary; it is not a term.
+        let entries = entries.filter {
+            !SplitHyphenatedCompoundsRule.spokenForm(of: $0.term).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
         replacements = entries.map(\.replacement)
         guard !entries.isEmpty else { pattern = nil; return }
         let alternatives = entries.map { e -> String in

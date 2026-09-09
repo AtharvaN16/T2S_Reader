@@ -36,6 +36,7 @@ import Testing
             PronunciationEntry(term: "SQL", replacement: "sequel"),
             PronunciationEntry(term: "US", replacement: "U S", caseSensitive: true),
             PronunciationEntry(term: "", replacement: "nothing"),
+            PronunciationEntry(term: "-", replacement: "dash"),
             PronunciationEntry(term: "sequel", replacement: "SEQUEL"),
             PronunciationEntry(term: "Nguyen", replacement: "Nwin"),
         ])

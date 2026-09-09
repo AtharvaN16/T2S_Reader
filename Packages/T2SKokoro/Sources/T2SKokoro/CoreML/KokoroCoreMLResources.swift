@@ -1,7 +1,7 @@
 import Foundation
 import KokoroPipeline
 
-/// The Core ML Kokoro model files: eight staged inference stages, the voice table, the tokenizer
+/// The Core ML Kokoro model files: fourteen staged inference stages, the voice table, the tokenizer
 /// vocabulary and the harmonic-plus-noise synthesis filter weights, as staged by
 /// `scripts/fetch-kokoro-coreml.sh` and consumed by Task 3's engine.
 ///
@@ -12,8 +12,11 @@ public enum KokoroCoreMLResources: Sendable {
     public static let modelRevision = "2e878c6a33c56b40de094ef8237bf15a83d233c5"
     /// The first eight characters of ``modelRevision``.
     public static let revisionPrefix = "2e878c6a"
-    /// Bucket lengths, in seconds, staged for the decoder and F0Ntrain models.
-    public static let buckets = [7, 15]
+    /// Bucket lengths, in seconds, staged for the decoder and F0Ntrain models. 3 and 10 since Plan 17
+    /// (audit #9): a streamed first piece (48 ids, about 3 s) renders in the 3 s bucket, and a packed
+    /// sentence of 8-10 s in the 10 s one rather than padding out the 15 s one. Every weight file is
+    /// byte-identical across buckets; only the compute plan differs.
+    public static let buckets = [3, 7, 10, 15]
     /// Padded input-token lengths staged for the duration model.
     public static let durationTokenLengths = [128, 256]
 

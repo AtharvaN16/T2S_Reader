@@ -3,12 +3,13 @@ import Testing
 @testable import T2SKokoro
 
 @Suite struct KokoroCoreMLResourcesTests {
-    @Test func stageNamesCoverBothBucketsAndBothDurationModels() {
+    @Test func stageNamesCoverEveryBucketAndBothDurationModels() {
+        #expect(KokoroCoreMLResources.buckets == [3, 7, 10, 15])
         #expect(Set(KokoroCoreMLResources.stageNames()) == [
             "kokoro_duration_t128", "kokoro_duration_t256",
-            "kokoro_f0ntrain_t280", "kokoro_f0ntrain_t600",
-            "kokoro_decoder_pre_7s", "kokoro_decoder_pre_15s",
-            "kokoro_decoder_har_post_7s", "kokoro_decoder_har_post_15s",
+            "kokoro_f0ntrain_t120", "kokoro_f0ntrain_t280", "kokoro_f0ntrain_t400", "kokoro_f0ntrain_t600",
+            "kokoro_decoder_pre_3s", "kokoro_decoder_pre_7s", "kokoro_decoder_pre_10s", "kokoro_decoder_pre_15s",
+            "kokoro_decoder_har_post_3s", "kokoro_decoder_har_post_7s", "kokoro_decoder_har_post_10s", "kokoro_decoder_har_post_15s",
         ])
     }
 

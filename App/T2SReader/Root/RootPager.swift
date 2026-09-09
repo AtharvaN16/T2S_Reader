@@ -35,6 +35,20 @@ enum RootPage: Hashable, CaseIterable {
         default: return .queue
         }
     }
+
+    /// `T2S_OPEN`, the same idea one step further: `reader` opens the Reader, `chapters` the Reader
+    /// with its chapter list up, `book` the Collection's book sheet — on the first document whose
+    /// title contains `T2S_BOOK`, else the first document. Screenshots only.
+    static var launchOpen: String? { ProcessInfo.processInfo.environment["T2S_OPEN"] }
+
+    static func launchDocument(in summaries: [DocumentSummary]) -> DocumentSummary? {
+        guard launchOpen != nil else { return nil }
+        if let title = ProcessInfo.processInfo.environment["T2S_BOOK"],
+           let hit = summaries.first(where: { $0.document.title.localizedCaseInsensitiveContains(title) }) {
+            return hit
+        }
+        return summaries.first
+    }
 }
 
 /// Every Reader entry point goes through this closure (spec §2.4.5 lists Queue, book chapters,
@@ -108,7 +122,13 @@ struct RootPager: View {
         }
         .fullScreenCover(item: $readerDocument) { ReaderPage(summary: $0) }
         .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation, nowPlaying: env.nowPlaying)
-        .task { await env.libraryModel.refresh() }
+        .task {
+            await env.libraryModel.refresh()
+            if ["reader", "chapters"].contains(RootPage.launchOpen ?? ""),
+               let document = RootPage.launchDocument(in: env.libraryModel.summaries) {
+                readerDocument = document
+            }
+        }
         .onChange(of: env.deviceMonitor.deviceState, initial: true) { _, state in
             updatePrepareDeviceState(state)
         }

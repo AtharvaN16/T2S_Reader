@@ -33,6 +33,7 @@ struct CollectionPage: View {
     /// Set by the Import page; opened from its `onDismiss`, once it has actually gone.
     @State private var pendingOpen: DocumentSummary?
     @State private var selected: DocumentSummary?
+    @State private var launchOpened = false
     @State private var details: DocumentSummary?
     @State private var voiceChange: DocumentSummary?
     /// The book a menu's Delete named; the confirmation dialog presents it and clears it.
@@ -91,6 +92,14 @@ struct CollectionPage: View {
         .background(Tokens.ground)
         .fullScreenCover(isPresented: $showAdd, onDismiss: openPending) { ImportPage(imported: $pendingOpen) }
         .sheet(item: $selected) { BookSheet(summary: $0) }
+        .onChange(of: env.libraryModel.summaries.map(\.id), initial: true) { _, _ in
+            // `T2S_OPEN=book` (screenshots, see `RootPage.launchOpen`): the book sheet, once.
+            if RootPage.launchOpen == "book", !launchOpened,
+               let document = RootPage.launchDocument(in: env.libraryModel.summaries) {
+                launchOpened = true
+                selected = document
+            }
+        }
         .sheet(item: $details) { DetailsSheet(summary: $0) }
         .sheet(item: $voiceChange) { VoiceChangeSheet(summary: $0) }
         .confirmationDialog(

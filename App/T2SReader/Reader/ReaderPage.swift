@@ -13,15 +13,17 @@ struct ReaderPage: View {
     @State private var text: ReaderText?
     @State private var error: String?
     @State private var chromeVisible = true
-    @State private var showChapters = false
+    @State private var showChapters = RootPage.launchOpen == "chapters"      // screenshots, see `RootPage.launchOpen`
     @State private var showAppearance = false
     @State private var showSpeed = false
     @State private var showBookmarks = false
     @State private var showSleepTimer = false
     @State private var showVoiceChange = false
     @State private var showDetails = false
-    @State private var bookmarkSaved = false
     @State private var voiceName = "Voice"
+    /// Where the book proper starts, for the "Skip to Chapter 1" pill; nil when there is no front
+    /// matter to skip. Read once per document in `open`.
+    @State private var bodyStart: (index: Int, number: Int)?
 
     var body: some View {
         let reader = env.readerModel
@@ -62,6 +64,16 @@ struct ReaderPage: View {
                     }
                     .padding(.bottom, 32)
                     .zIndex(1)
+                } else if let skip = skipTarget, chromeVisible {
+                    // The same pill while the playhead is still in the front matter (owner's ask,
+                    // 2026-09-09): one tap past the title page, dedication and reviews to the
+                    // first numbered chapter. Goes with the chrome, so a tap on the text dismisses it.
+                    Pill(label: "Skip to Chapter \(skip.number)", glyph: "forward.end.fill", style: .selected) {
+                        Task { await env.player.seek(toChapter: skip.index) }
+                    }
+                    .padding(.bottom, 32)
+                    .zIndex(1)
+                    .accessibilityHint("Skips the front matter")
                 }
                 bottomBar.opacity(chromeVisible ? 1 : 0)
             }
@@ -89,13 +101,19 @@ struct ReaderPage: View {
         .sheet(isPresented: $showDetails) {
             if let current = env.player.current { DetailsSheet(summary: current) }
         }
-        .onChange(of: env.player.coordinator.playhead) { _, _ in bookmarkSaved = false }
     }
 
-    /// Back on the left, bookmark and the overflow on the right, the document's title between them
-    /// (owner's ask, 2026-09-09). The circles sit on solid `ground` that eases to clear from their
-    /// band down through 48 pt below the bar, so the header itself visibly fades into the text
-    /// (the first cut faded within the bar alone and read as no fade at all).
+    /// The first numbered chapter, while the playhead is before it.
+    private var skipTarget: (index: Int, number: Int)? {
+        guard let bodyStart, let index = env.player.chapterIndex, index < bodyStart.index else { return nil }
+        return bodyStart
+    }
+
+    /// Back on the left, the overflow on the right, the document's title between them (owner's
+    /// ask, 2026-09-09; the bookmark moved down to the tool row). The circles sit on solid `ground`
+    /// that eases to clear from their band down through 48 pt below the bar, so the header itself
+    /// visibly fades into the text (the first cut faded within the bar alone and read as no fade
+    /// at all).
     private var topBar: some View {
         ZStack {
             Text(summary.document.title)
@@ -103,14 +121,11 @@ struct ReaderPage: View {
                 .foregroundStyle(Tokens.ink)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
-                .padding(.horizontal, 92)                                  // clear of one circle left, two right
+                .padding(.horizontal, 60)                                  // clear of one circle each side
                 .accessibilityAddTraits(.isHeader)
             HStack {
                 icon("chevron.left", "Back") { dismiss() }
                 Spacer()
-                icon(bookmarkSaved ? "bookmark.fill" : "bookmark", bookmarkSaved ? "Bookmarked" : "Bookmark") {
-                    Task { bookmarkSaved = await env.player.addBookmark() }
-                }
                 Menu {
                     Button { showChapters = true } label: { Label("Chapters", systemImage: "list.bullet") }
                     Button { showBookmarks = true } label: { Label("Bookmarks", systemImage: "bookmark.circle") }
@@ -219,18 +234,17 @@ struct ReaderPage: View {
         if chapters.count > 1, let index = player.chapterIndex, chapters.indices.contains(index) {
             HStack {
                 Button { showChapters = true } label: {
-                    // The arrow is part of the text run and lifted off the baseline, so it sits up
-                    // beside the title's cap height rather than hanging at the text's foot.
-                    (Text(ChapterLabel.text(for: chapters[index].title, ordinal: index + 1))
-                        + Text(" ")
-                        + Text(Image(systemName: "arrowtriangle.up.fill"))
+                    // The arrow stands 8 pt off the title, centred on its height, in `ink` like
+                    // the title (owner's third cut, 2026-09-09).
+                    HStack(alignment: .center, spacing: 8) {
+                        Text(ChapterLabel.text(for: chapters[index].title, ordinal: index + 1))
+                            .typeRole(.rowTitle)
+                            .lineLimit(1)
+                        Image(systemName: "arrowtriangle.up.fill")
                             .font(.system(size: 10, weight: .bold))
-                            .baselineOffset(3)
-                            .foregroundStyle(Tokens.ink2))
-                        .typeRole(.rowTitle)
-                        .foregroundStyle(Tokens.ink)
-                        .lineLimit(1)
-                        .contentShape(Rectangle())
+                    }
+                    .foregroundStyle(Tokens.ink)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Chapter")
@@ -242,14 +256,21 @@ struct ReaderPage: View {
         }
     }
 
-    /// Appearance (left) · voice chip (centred) · contents (right) — spec §2.4.5. The chip shows
-    /// the voice actually routed for this document, resolved once per document in `resolveVoiceName`.
+    /// Appearance (left) · voice chip (centred) · bookmark (right). The chip shows the voice
+    /// actually routed for this document, resolved once per document in `resolveVoiceName`. The
+    /// bookmark took the contents circle's place (owner's ask, 2026-09-09; the chapter row above
+    /// already opens the list): filled while the sentence under the playhead is bookmarked, and a
+    /// tap then removes that bookmark rather than adding a second.
     private var toolRow: some View {
-        ZStack {
+        let bookmarked = env.player.isBookmarkedAtPlayhead
+        return ZStack {
             HStack {
                 icon("textformat.size", "Appearance") { showAppearance = true }
                 Spacer()
-                icon("list.bullet", "Contents") { showChapters = true }
+                icon(bookmarked ? "bookmark.fill" : "bookmark", bookmarked ? "Bookmarked" : "Bookmark") {
+                    Task { await env.player.toggleBookmark() }
+                }
+                .accessibilityHint(bookmarked ? "Removes the bookmark" : "Saves this place and its sentence")
             }
             Button { showVoiceChange = true } label: {
                 HStack(spacing: 8) {
@@ -310,6 +331,7 @@ struct ReaderPage: View {
             error = env.player.renderError ?? "This document has no readable text."
             return
         }
+        bodyStart = ChapterLabel.bodyStart(titles: timeline.chapters.map(\.title))
         let document = summary.document
         let model = await Task.detached(priority: .userInitiated) {
             ReaderText(documentID: document.id, timeline: timeline, title: document.title, author: document.author)

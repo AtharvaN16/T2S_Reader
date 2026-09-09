@@ -85,6 +85,11 @@ public final class PlayerModel {
     /// (Plan 17, audit §7). `chapterIndexCache` is keyed on the playhead's utterance as well.
     @ObservationIgnored private var derivedCache: (revision: Int, isFullyRendered: Bool, axis: [ChapterSpan])?
     @ObservationIgnored private var chapterIndexCache: (revision: Int, utterance: Int, chapter: Int?)?
+    /// The utterances of the loaded document that carry a bookmark, resolved against the
+    /// coordinator's timeline, so the Reader's bookmark button can show filled while the playhead
+    /// is inside one and clear it on a tap. Read from the store at load and after every change here
+    /// or in `BookmarkListModel`.
+    public private(set) var bookmarkedUtterances: Set<Int> = []
 
     public init(coordinator: PlaybackCoordinator, library: Library) {
         self.coordinator = coordinator
@@ -210,6 +215,7 @@ public final class PlayerModel {
             current = summary
             pendingChapters = []
             localError = nil
+            await refreshBookmarks()
             if play { await coordinator.play() }
         } catch {
             localError = "\(error)"
@@ -223,6 +229,7 @@ public final class PlayerModel {
         coordinator.unload()
         current = nil
         pendingChapters = []
+        bookmarkedUtterances = []
         localError = nil
     }
 
@@ -253,17 +260,51 @@ public final class PlayerModel {
 
     public func renderWholeDocument() { coordinator.renderWholeDocument() }
 
-    /// A bookmark at the playhead, persisted as a `Position` (spec §3.2). False when nothing is loaded.
+    /// Whether the utterance under the playhead carries a bookmark (`bookmarkedUtterances`).
+    public var isBookmarkedAtPlayhead: Bool { bookmarkedUtterances.contains(coordinator.playhead.utteranceIndex) }
+
+    /// A bookmark at the playhead, persisted as a `Position` (spec §3.2) together with the block of
+    /// text it lands on — the utterance's source, so the bookmark keeps its words even after the
+    /// document is re-derived (owner's ask, 2026-09-09). False when nothing is loaded.
     public func addBookmark() async -> Bool {
         guard let current, let timeline = coordinator.timeline, timeline.utteranceCount > 0 else { return false }
-        let position = PositionResolver.position(for: coordinator.playhead, in: timeline)
+        let playhead = coordinator.playhead
+        let position = PositionResolver.position(for: playhead, in: timeline)
+        let block = timeline[utterance: playhead.utteranceIndex].source
         do {
-            try await library.store.add(Bookmark(documentID: current.id, position: position))
+            try await library.store.add(Bookmark(documentID: current.id, position: position, note: block))
+            bookmarkedUtterances.insert(playhead.utteranceIndex)
             return true
         } catch {
             localError = "\(error)"
             return false
         }
+    }
+
+    /// The Reader's bookmark button: removes the bookmark on the utterance under the playhead when
+    /// there is one, adds one otherwise. Returns whether the utterance is bookmarked afterwards.
+    public func toggleBookmark() async -> Bool {
+        guard let current, let timeline = coordinator.timeline, timeline.utteranceCount > 0 else { return false }
+        let utterance = coordinator.playhead.utteranceIndex
+        do {
+            let here = try await library.store.bookmarks(for: current.id)
+                .filter { PositionResolver.resolve($0.position, in: timeline).utteranceIndex == utterance }
+            guard !here.isEmpty else { return await addBookmark() }
+            for bookmark in here { try await library.store.deleteBookmark(id: bookmark.id) }
+            bookmarkedUtterances.remove(utterance)
+            return false
+        } catch {
+            localError = "\(error)"
+            return isBookmarkedAtPlayhead
+        }
+    }
+
+    /// Re-reads the loaded document's bookmarks into `bookmarkedUtterances`. Cheap: a document
+    /// has a handful, and each resolves in O(log utterances).
+    public func refreshBookmarks() async {
+        guard let current, let timeline = coordinator.timeline else { bookmarkedUtterances = []; return }
+        let bookmarks = (try? await library.store.bookmarks(for: current.id)) ?? []
+        bookmarkedUtterances = Set(bookmarks.map { PositionResolver.resolve($0.position, in: timeline).utteranceIndex })
     }
 
     /// Drive from a 10 Hz timer while playing (spec §3: the coordinator polls the player clock).

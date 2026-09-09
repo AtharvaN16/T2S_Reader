@@ -62,33 +62,27 @@ struct BookSheet: View {
                         Pill(label: "Add to Queue", glyph: "plus", style: .soft) { Task { await env.libraryModel.enqueue(live.id) } }
                     }
                 }
-                VStack(alignment: .leading, spacing: 20) {
+                // The Reader's chapter list, row for row (owner's ask, 2026-09-09): the chapter
+                // the book would resume in wears the ring, the ones before it the check.
+                VStack(alignment: .leading, spacing: 0) {
                     Text("Chapters").typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 12)
+                    let resumeIndex = chapters.first { $0.fraction < 1 }?.index ?? chapters.last?.index
                     ForEach(chapters) { chapter in
-                        HStack(spacing: 12) {
-                            Button {
-                                Task {
-                                    if !isCurrent { await env.player.load(live, play: false) }
-                                    await env.player.seek(toChapter: chapter.index)
-                                    if !env.player.isPlaying { await env.player.togglePlay() }
-                                    dismiss()
-                                    readerRoute.open(live)
-                                }
-                            } label: {
-                                Image(systemName: "play.fill").font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(Tokens.ink).frame(width: 32, height: 32)
-                                    .background(Tokens.surface, in: Circle())
+                        ChapterRow(chapter: chapter, isCurrent: chapter.index == resumeIndex,
+                                   isHeard: resumeIndex.map { chapter.index < $0 } ?? false) {
+                            Task {
+                                if !isCurrent { await env.player.load(live, play: false) }
+                                await env.player.seek(toChapter: chapter.index)
+                                if !env.player.isPlaying { await env.player.togglePlay() }
+                                dismiss()
+                                readerRoute.open(live)
                             }
-                            .buttonStyle(.plain)
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(chapter.title).typeRole(.rowTitle).foregroundStyle(Tokens.ink).lineLimit(1)
-                                ProgressBar(fraction: chapter.fraction)
-                            }
-                            Text(DurationFormatter.long(chapter.durationSeconds, approximate: !live.isFullyRendered))
-                                .typeRole(.mono).foregroundStyle(Tokens.ink2)
                         }
                     }
                 }
+                .padding(.horizontal, -12)                                 // the rows' fill runs into the margin, as in the Reader
                 if let bookmarks, !bookmarks.entries.isEmpty {
                     VStack(alignment: .leading, spacing: 20) {
                         Text("Bookmarks").typeRole(.sectionHeader).foregroundStyle(Tokens.ink)

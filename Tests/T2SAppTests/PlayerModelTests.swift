@@ -215,6 +215,40 @@ import T2SStore
         let bookmarks = try await f.store.bookmarks(for: id)
         #expect(bookmarks.count == 1)
         #expect(bookmarks[0].position.resourceHref == "OEBPS/ch2.xhtml")
+        #expect(bookmarks[0].note == "Sentence number 2 here.")             // the block of text it lands on
+        #expect(player.isBookmarkedAtPlayhead)
+    }
+
+    @Test func toggleBookmarkAddsThenRemovesTheOneUnderThePlayhead() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let player = try makePlayer(f)
+        #expect(await player.toggleBookmark() == false)                    // nothing loaded
+        await player.load(try #require(try await f.store.summary(id: id)), play: false)
+        #expect(!player.isBookmarkedAtPlayhead)
+        #expect(await player.toggleBookmark())
+        #expect(player.isBookmarkedAtPlayhead)
+        #expect(try await f.store.bookmarks(for: id).count == 1)
+        await player.seek(toChapter: 1)
+        #expect(!player.isBookmarkedAtPlayhead)                             // another utterance
+        await player.seek(toChapter: 0)
+        #expect(player.isBookmarkedAtPlayhead)                              // back on the bookmarked one
+        #expect(await player.toggleBookmark() == false)
+        #expect(!player.isBookmarkedAtPlayhead)
+        #expect(try await f.store.bookmarks(for: id).isEmpty)
+    }
+
+    @Test func loadReadsTheDocumentsBookmarksAndUnloadForgetsThem() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        try await f.store.add(Bookmark(documentID: id, position: Position(resourceHref: "OEBPS/ch2.xhtml", progression: 0, charOffset: 0)))
+        let player = try makePlayer(f)
+        await player.load(try #require(try await f.store.summary(id: id)), play: false)
+        #expect(!player.isBookmarkedAtPlayhead)
+        await player.seek(toChapter: 1)
+        #expect(player.isBookmarkedAtPlayhead)
+        player.unload()
+        #expect(player.bookmarkedUtterances.isEmpty)
     }
 
     @Test func defaultVoiceAppliesOnlyWithoutAnOverride() async throws {

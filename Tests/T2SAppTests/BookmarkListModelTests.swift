@@ -41,6 +41,44 @@ import T2SStore
         #expect(model.entries[0].createdAt >= model.entries[1].createdAt)
     }
 
+    /// A bookmark saved with its block of text shows that block whole, from its start, even when
+    /// its position points into the middle of the sentence; one saved without it (older builds)
+    /// shows the timeline's text from the bookmark's word.
+    @Test func snippetPrefersTheSavedBlockOfText() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let summary = try #require(try await f.store.summary(id: id))
+        let (player, _) = try await makePlayer(f)
+        await player.load(summary, play: false)
+        let timeline = try #require(player.coordinator.timeline)
+        let first = timeline[utterance: 0]
+        let midWord = Position(resourceHref: first.position.resourceHref, progression: first.position.progression,
+                               charOffset: (first.position.charOffset ?? 0) + 6)
+        try await f.store.add(Bookmark(documentID: id, position: midWord, note: first.source, createdAt: Date(timeIntervalSince1970: 2)))
+        try await f.store.add(Bookmark(documentID: id, position: midWord, note: nil, createdAt: Date(timeIntervalSince1970: 1)))
+
+        let model = BookmarkListModel(library: f.library, player: player)
+        await model.load(summary)
+        #expect(model.entries.count == 2)
+        #expect(model.entries[0].snippet == "First sentence.")               // the saved block
+        #expect(model.entries[1].snippet == "sentence.")                     // from the word, as before
+    }
+
+    /// Deleting from the list keeps the player's bookmark button honest for the loaded book.
+    @Test func deleteRefreshesThePlayersBookmarkedUtterances() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let summary = try #require(try await f.store.summary(id: id))
+        let (player, _) = try await makePlayer(f)
+        await player.load(summary, play: false)
+        #expect(await player.addBookmark())
+        #expect(player.isBookmarkedAtPlayhead)
+        let model = BookmarkListModel(library: f.library, player: player)
+        await model.load(summary)
+        await model.delete(try #require(model.entries.first))
+        #expect(!player.isBookmarkedAtPlayhead)
+    }
+
     /// A stale document is re-derived when it is opened, never by the bookmark list (Plan 17, audit
     /// §5.1): until then the list is empty, and that is not an error.
     @Test func aStaleDocumentListsNoBookmarksAndNoError() async throws {

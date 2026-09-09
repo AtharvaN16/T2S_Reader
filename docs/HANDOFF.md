@@ -1,6 +1,57 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-09 (Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-09 evening (chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+
+## Resume here (2026-09-09, latest) — Chapter sheets, the skip pill, and a bookmark that keeps its sentence
+
+The owner's six asks from two phone crops (the Book sheet and the Reader's chapter list), done on
+`dev`, plus a mid-turn ruling: **a bookmark saves the playhead position and the block of text**.
+
+- **One chapter row everywhere** — `ChapterRow` (`Player/ChapterList.swift`): the title in
+  `settingsRow` (16) over the length in `pill` (15, `ink2`) — the title a step down and the time a
+  step up from before, 2 pt apart, rows 8 pt tall in padding with no gap between them; the current
+  chapter on a `surface` fill with the 18 pt ring, chapters before it a **`positive` green check**.
+  The Reader's `ChapterList` heading is `playerTitle` now (26 ExtraBold, the Bookmarks sheet's).
+  `BookSheet` draws the same rows instead of its play-circle + progress-bar rows: the chapter the
+  book would resume in (`first { fraction < 1 }`) wears the ring, the ones before it the check, and
+  a tap still loads, seeks, plays and opens the Reader. Its "Chapters" header stays `sectionHeader`
+  — it is a section of a page, not a sheet's title.
+- **Chapter picker row** (`ReaderPage.chapterRow`): the up-arrow is an `HStack` sibling 8 pt off
+  the title, centred on its height, in `ink` — no longer a text-run glyph on a baseline offset.
+- **"Skip to Chapter 1"** — `ChapterLabel.bodyStart(titles:)` finds the first chapter whose title
+  starts with a number or reads "Chapter 1 / One / I" (any case; "Chapters of My Life" does not
+  count); nil when none, or when it is the first chapter. `ReaderPage` reads it once per document in
+  `open()` and, while `player.chapterIndex` is before it, shows a `selected` pill in the
+  Back-to-current slot ("Back to current" wins when both apply). It goes with the chrome, so a tap
+  on the text dismisses it; a tap seeks to that chapter and it disappears on its own. Tested in
+  `ChapterLabelTests`.
+- **The bookmark button moved to the tool row's right**, where the contents circle was (the
+  chapter row already opens the list; the overflow menu still has "Chapters"). The header is back
+  · title · overflow, the title clear of one circle each side. It is a **toggle**:
+  `PlayerModel.toggleBookmark()` removes the bookmark on the utterance under the playhead when
+  there is one, adds one otherwise; `isBookmarkedAtPlayhead` (from `bookmarkedUtterances`, read
+  from the store at `load`, kept by add/toggle, cleared by `unload`, refreshed after a delete in
+  `BookmarkListModel`) fills the glyph while the playhead is inside a bookmarked sentence, so it
+  shows filled again when you scrub back to one. Before, the glyph filled on save and cleared on
+  the next playhead tick, and every tap added another bookmark.
+- **What a bookmark is now.** `addBookmark` stores the utterance's `source` — the sentence the
+  playhead is in — in the bookmark's `note` column (present since schema V1, never used, so no
+  migration). `BookmarkListModel` shows that block from its start; an older bookmark without it
+  still shows the timeline's text from the bookmark's own word. Answered the owner's question on
+  the way: the Reader has no text selection (`ReaderTextView` sets `isSelectable = false`), so a
+  bookmark could never have saved "selected text"; it was the playhead position alone.
+- **`T2S_OPEN`** (`RootPage.launchOpen`, screenshots only, beside `T2S_PAGE`): `reader`, `chapters`
+  (the Reader with its list up) or `book` (the Collection's book sheet) on the first document whose
+  title contains `T2S_BOOK`, else the first. The fixture used for this round is generated, not
+  committed: a seven-section EPUB (title page, dedication, reviews, introduction, "1 A Chessboard
+  King" …) so the skip pill has front matter to skip — a real book with the same shape is the
+  owner's *The Last Mughal*.
+
+Tests: `swift test` 441/81 green (three new `PlayerModelTests`, two new `BookmarkListModelTests`,
+three new `ChapterLabelTests`). `scripts/build-app.sh` → `** BUILD SUCCEEDED **`. Seen in the simulator (iPhone 16 Pro, the generated fixture imported with the
+`openurl` recipe, `T2S_SILENT=1`): the Reader with the skip pill, the chapter row and the bookmark
+at the bottom right; the chapter sheet; the book sheet. The bookmark toggle's fill and removal are
+covered by `PlayerModelTests`, not tapped — still nothing seen on a phone this week.
 
 ## Resume here (2026-09-09, latest) — Collection round: books, a list, menus, a kind filter
 

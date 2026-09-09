@@ -22,18 +22,7 @@ struct QueueRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
-            VStack(spacing: 6) {
-                ZStack {
-                    CircularProgress(fraction: progress?.fraction ?? 0, lineWidth: 3, size: 48)
-                    Image(systemName: sourceMark).font(.system(size: 17, weight: .medium)).foregroundStyle(Tokens.ink2)
-                }
-                Text(remainingText)
-                    .typeRole(.meta)
-                    .foregroundStyle(Tokens.ink2)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(width: 64)
-            .accessibilityElement(children: .combine)
+            Artwork(relativePath: summary.document.coverImagePath, paths: env.paths, size: 64, radius: Spacing.artworkSmall)
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
@@ -45,6 +34,9 @@ struct QueueRow: View {
                         Text("Chapter \(c + 1) of \(progress.chapterCount)")
                     }
                     if summary.isFullyRendered { PositiveCheck() }
+                    Spacer(minLength: 8)
+                    CircularProgress(fraction: progress?.fraction ?? 0, lineWidth: 2, size: 14)
+                    Text(remainingText)
                 }
                 .typeRole(.meta)
                 .foregroundStyle(Tokens.ink2)
@@ -52,7 +44,7 @@ struct QueueRow: View {
 
                 Button(action: onOpen) {
                     Text(summary.document.title)
-                        .typeRole(.playerTitle)
+                        .typeRole(.cardTitle)
                         .foregroundStyle(Tokens.ink)
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -76,9 +68,6 @@ struct QueueRow: View {
                     }
                     .disabled(isStarting)
                     .accessibilityHint(isPlayingHere ? "Pauses" : "Plays and opens the reader")
-                    Pill(label: "Archive", glyph: "archivebox", style: .soft) {
-                        Task { await env.libraryModel.archive(summary.id) }
-                    }
                     Menu {
                         contextItems
                     } label: {
@@ -118,14 +107,6 @@ struct QueueRow: View {
     private var remainingText: String {
         if let progress { return DurationFormatter.remaining(progress.remainingSeconds, approximate: progress.isApproximate) + " left" }
         return DurationFormatter.remaining(summary.totalSeconds, approximate: !summary.isFullyRendered) + " left"
-    }
-
-    private var sourceMark: String {
-        switch summary.document.sourceType {
-        case .epub: return "book.closed"
-        case .pdf: return "doc.text"
-        case .article: return "globe"
-        }
     }
 
     private var sourceName: String {

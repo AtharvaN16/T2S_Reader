@@ -4,6 +4,15 @@ _Last updated 2026-09-09 (Plan 17 — the rest of the audit — on `plan-17-rest
 
 ## Resume here (2026-09-09, latest) — Home round 5: chapter time on Play, ring by the chapter, no gyro, bottom fill fixed
 
+**Signing note (2026-09-09, after round 5):** `DEVELOPMENT_TEAM: 5HZ38K43M9` is no longer pinned in
+`App/project.yml` (either target) — the owner saw Xcode's Signing & Capabilities show it in red as
+"Unknown Name (5HZ38K43M9)" and asked for it to go. The ID is the owner's own personal team (the one
+`Apple Development: shubham123nayak@gmail.com (5HZ38K43M9)` identity on this Mac); the red name only
+means Xcode is not signed in to that Apple ID. Consequence: a device build now needs the team picked
+in Xcode's Signing & Capabilities, and because `xcodegen generate` rewrites `project.pbxproj` from
+`project.yml` on every `scripts/build-app.sh` / `build-device.sh` run, that pick has to be made again
+after each regenerate. The simulator script signs ad hoc and is unaffected (verified after the change).
+
 The owner's fifth pass, from two phone crops (a "▶ Play  2h 28m" pill reference, and Preferences
 showing a row's text visible *under* the page indicator). Done on `dev`:
 

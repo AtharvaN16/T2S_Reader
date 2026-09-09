@@ -7,6 +7,23 @@ public enum ReaderTheme: String, CaseIterable, Sendable {
     case dark
 }
 
+/// The read-along tint pair (spec 2026-09-09): which colours mark the sentence and the word.
+public enum HighlightTheme: String, CaseIterable, Sendable, Identifiable {
+    case amber, sky, fall, marker, mint
+
+    public var id: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .amber: return "Amber"
+        case .sky: return "Sky"
+        case .fall: return "Fall"
+        case .marker: return "Marker"
+        case .mint: return "Mint"
+        }
+    }
+}
+
 /// User preferences behind the Preferences page (spec §2.4.5) and the Reader's appearance, stored in
 /// `UserDefaults`. Reader body size and line height are independent of the system text size
 /// (spec §2.4.1), hence a scale over the 18pt base rather than a Dynamic Type category.
@@ -42,6 +59,7 @@ public final class ReaderPreferences {
         static let textScale = "reader.textScale"
         static let lineHeight = "reader.lineHeight"
         static let theme = "reader.theme"
+        static let highlightTheme = "reader.highlightTheme"
         static let skipBack = "playback.skipBack"
         static let skipForward = "playback.skipForward"
         static let rate = "playback.defaultRate"
@@ -68,6 +86,11 @@ public final class ReaderPreferences {
 
     public var theme: ReaderTheme {
         didSet { defaults.set(theme.rawValue, forKey: Key.theme) }
+    }
+
+    /// `amber` is the accent — the only look before there was a choice — so existing readers see no change.
+    public var highlightTheme: HighlightTheme {
+        didSet { defaults.set(highlightTheme.rawValue, forKey: Key.highlightTheme) }
     }
 
     public var skipBackSeconds: Int {
@@ -112,6 +135,7 @@ public final class ReaderPreferences {
         textScale = Self.textScaleRange.clamped(defaults.object(forKey: Key.textScale) as? Double ?? 1.0)
         lineHeight = Self.lineHeightRange.clamped(defaults.object(forKey: Key.lineHeight) as? Double ?? 1.5)
         theme = ReaderTheme(rawValue: defaults.string(forKey: Key.theme) ?? "") ?? .system
+        highlightTheme = HighlightTheme(rawValue: defaults.string(forKey: Key.highlightTheme) ?? "") ?? .amber
         skipBackSeconds = defaults.object(forKey: Key.skipBack) as? Int ?? 15
         skipForwardSeconds = defaults.object(forKey: Key.skipForward) as? Int ?? 30
         defaultRate = defaults.object(forKey: Key.rate) as? Double ?? 1.0
@@ -125,6 +149,7 @@ public final class ReaderPreferences {
         textScale = 1.0
         lineHeight = 1.5
         theme = .system
+        highlightTheme = .amber
         skipBackSeconds = 15
         skipForwardSeconds = 30
         defaultRate = 1.0

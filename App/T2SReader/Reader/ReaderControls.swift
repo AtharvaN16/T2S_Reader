@@ -2,8 +2,10 @@ import SwiftUI
 import T2SApp
 
 /// Sleep timer · back 15 · play · forward 30 · speed — the Reader page's transport row (spec
-/// §2.4.5, after ElevenReader), evenly spaced across the width. Skip amounts stay synchronized
-/// with the reading preferences.
+/// §2.4.5, after ElevenReader), evenly spaced across the width. Size ranks the controls: play is
+/// the biggest (34pt glyph in 64), the skips second (26 in 52), the sleep timer stays small (20 in
+/// 44), and the speed label is bold body text so it reads as a control rather than a caption. Skip
+/// amounts stay synchronized with the reading preferences.
 struct ReaderControls: View {
     @Environment(AppEnvironment.self) private var env
     var onSleepTimer: () -> Void
@@ -18,7 +20,10 @@ struct ReaderControls: View {
                 action: onSleepTimer
             )
             Spacer()
-            control("gobackward.\(preferences.skipBackSeconds)", "Back \(preferences.skipBackSeconds) seconds") {
+            control(
+                "gobackward.\(preferences.skipBackSeconds)", "Back \(preferences.skipBackSeconds) seconds",
+                size: 26, frame: 52
+            ) {
                 Task { await player.skip(by: -Double(preferences.skipBackSeconds)) }
             }
             Spacer()
@@ -32,24 +37,29 @@ struct ReaderControls: View {
                         ProgressView().progressViewStyle(.circular).tint(Tokens.ink)
                     } else {
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 26, weight: .semibold))
+                            .font(.system(size: 34, weight: .semibold))
                     }
                 }
-                .frame(width: 56, height: 56)
+                .frame(width: 64, height: 64)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
             .accessibilityValue(player.isCatchingUp ? (env.isWarmingUp ? "Preparing the voice" : "Buffering") : "")
             Spacer()
-            control("goforward.\(preferences.skipForwardSeconds)", "Forward \(preferences.skipForwardSeconds) seconds") {
+            control(
+                "goforward.\(preferences.skipForwardSeconds)", "Forward \(preferences.skipForwardSeconds) seconds",
+                size: 26, frame: 52
+            ) {
                 Task { await player.skip(by: Double(preferences.skipForwardSeconds)) }
             }
             Spacer()
             Button(action: onSpeed) {
+                /// Tabular digits so "1x" → "1.5x" changes width only by the added glyphs.
                 Text(SpeedPickerModel.label(for: player.coordinator.rate))
-                    .typeRole(.mono)
-                    .frame(width: 44, height: 44)
+                    .monospacedDigit()
+                    .typeRole(.speed)
+                    .frame(width: 52, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -57,14 +67,18 @@ struct ReaderControls: View {
         }
         .foregroundStyle(Tokens.ink)
         .padding(.horizontal, Spacing.grid)
-        .frame(height: 56)
+        .frame(height: 64)
     }
 
-    private func control(_ glyph: String, _ label: String, action: @escaping () -> Void) -> some View {
+    /// `size` is the glyph's point size and `frame` its square tap target; the defaults are the
+    /// sleep timer's, the smallest rank.
+    private func control(
+        _ glyph: String, _ label: String, size: CGFloat = 20, frame: CGFloat = 44, action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             Image(systemName: glyph)
-                .font(.system(size: 20, weight: .medium))
-                .frame(width: 44, height: 44)
+                .font(.system(size: size, weight: .medium))
+                .frame(width: frame, height: frame)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -2,7 +2,45 @@
 
 _Last updated 2026-09-09 (Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-09, latest) — Home round 5: chapter time on Play, ring by the chapter, no gyro, bottom fill fixed
+## Resume here (2026-09-09, latest) — Reader round: fades in the bars, Apple Music scrubber, sizes, chapter row, title, highlight themes
+
+The owner's Reader pass, from a phone screenshot plus three references (an Apple Music scrubber,
+Speechify's highlight-theme swatches, a podcast app's "Intro ▾ … →" chapter row). Six asks, done on
+`dev` with two agents (scrubber + transport; highlight themes) and the page itself by hand:
+
+- **The fades moved into the bars** (`Reader/ReaderPage.swift`). Before, the header was a solid
+  150 pt block with a fade hanging below it over the text, and the bottom block had 40 pt of fade
+  above the controls; the owner read that as "the fade is in the text". Now each bar's `ground`
+  fade lives inside its own band: the header is solid at the status bar and clear by the circles'
+  foot; the bottom block is clear at the chapter row and solid by the transport (`groundFade(
+  solidAtTop:span:)` — smoothstep over twelve stops, the Home bar's lesson, so neither edge draws a
+  line). `ReaderTextView.insets.bottom` 240 → 304 for the taller block.
+- **Scrubber** (`Reader/ThinScrubber.swift`): no knob; one 6 pt capsule that springs to 12 pt while
+  pressed (`dragFraction != nil`). Played part `ink`; ahead of it the render-frontier ticks survive
+  as `ink2` (rendered) / `ink3` (not yet). Only the height animates — the seek is async, so on
+  release the fill would otherwise spring back to the stale fraction and jump.
+- **Transport sizes** (`Reader/ReaderControls.swift`): play 34 pt glyph in 64 (was 26 in 56), skips
+  26 in 52 (was 20 in 44), sleep timer unchanged at 20 in 44, speed label on a new `TypeRole.speed`
+  (Inter-Bold 17, tabular digits) instead of footnote mono. Row height 56 → 64.
+- **Chapter row** above the scrubber: "Chapter title ▾" (opens the existing `ChapterList` sheet) on
+  the left, "→" (next chapter, `player.seek(toChapter:)`) on the right, hidden when the document
+  has one chapter or none — the reference's row.
+- **Document title** centred in the header (`.pill` role, one line, 92 pt clear of the circles on
+  each side); the spec's "no title in the header" note is superseded.
+- **Highlight themes** (`ReaderPreferences.highlightTheme`, `HighlightTheme` amber / sky / fall /
+  marker / mint, key `reader.highlightTheme`, default `.amber` = the accent pair so nothing changes
+  for existing readers; tested in `ReaderPreferencesTests`). Colours are `Tokens.highlightTint(_:)`
+  / `highlightWord(_:)` — `Tokens.swift` now imports `T2SApp` for the enum. `ReaderTextView` takes
+  `highlightTheme` after `highlight` and redraws the tint/word layers when it changes. The
+  Appearance sheet gained a "Highlight" row of `HighlightSwatch` previews (three capsule "lines",
+  the middle one under a tint band with a word box), 2 pt `ink` ring on the selected one, in a
+  horizontal scroll that bleeds under the margin; the sheet scrolls and allows `.large`. The row
+  shows in the Settings presentation too — it is an app-wide preference like Theme.
+
+Verification: `scripts/build-app.sh` → `** BUILD SUCCEEDED **`; `swift test` → 428 tests in 80 suites passed. Not
+seen on a phone — same standing gap.
+
+## Resume here (2026-09-09) — Home round 5: chapter time on Play, ring by the chapter, no gyro, bottom fill fixed
 
 **Type pass (2026-09-09, after the Settings pass):** the Home row's title now uses `rowTitle`
 (Inter-Medium 17 pt) — the owner wanted the Settings rows' face on the Continue Listening titles — so

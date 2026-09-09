@@ -18,16 +18,17 @@ struct ReaderTextView: UIViewRepresentable {
     let textScale: Double
     let lineHeight: Double
     let highlight: HighlightRange?
+    let highlightTheme: HighlightTheme
     let isFollowing: Bool
     let onTap: (Tap) -> Void
     let onUserScroll: () -> Void
 
-    /// Room for the floating top circles and the three-row bottom block. The page gives the view
-    /// `.ignoresSafeArea(edges: .bottom)`, so the top is measured from the safe-area top and the
-    /// bottom from the window's: 96 (12 × 8) clears the top band's 150 pt on an iPhone 16 Pro
-    /// (59 + 96) and leaves only the last few points of its fade over the first line on an
-    /// iPhone 11 Pro (44 + 96); 240 clears the scrubber, times, transport and tool rows.
-    static let insets = UIEdgeInsets(top: 96, left: Spacing.margin, bottom: 240, right: Spacing.margin)
+    /// Room for the header and the bottom block. The page gives the view `.ignoresSafeArea(edges:
+    /// .bottom)`, so the top is measured from the safe-area top and the bottom from the window's:
+    /// 96 (12 × 8) clears the header's 52 pt band (8 + 36 + 8) with air under its fade; 304 clears
+    /// the chapter row, scrubber, times, transport (64) and tool rows plus the home-indicator inset,
+    /// so the last line can scroll up out of the block's fade.
+    static let insets = UIEdgeInsets(top: 96, left: Spacing.margin, bottom: 304, right: Spacing.margin)
     static let cornerRadius: CGFloat = 4
 
     func makeUIView(context: Context) -> UITextView {
@@ -57,6 +58,7 @@ struct ReaderTextView: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.onTap = onTap
         coordinator.onUserScroll = onUserScroll
+        coordinator.setHighlightTheme(highlightTheme)
         coordinator.setText(text, scale: textScale, lineHeight: lineHeight, following: isFollowing)
         coordinator.setHighlight(highlight, following: isFollowing)
     }
@@ -86,6 +88,7 @@ struct ReaderTextView: UIViewRepresentable {
         private var styleKey: StyleKey?
         private var buildTask: Task<Void, Never>?
         private var highlight: HighlightRange?
+        private var highlightTheme: HighlightTheme = .amber
         private var wasFollowing = true
         private var wordRange: Range<Int>?
         private var tintRange: Range<Int>?
@@ -176,6 +179,13 @@ struct ReaderTextView: UIViewRepresentable {
             wasFollowing = following
         }
 
+        /// The tint pair is a fill, not a layout: a change repaints in place without touching the ranges.
+        func setHighlightTheme(_ theme: HighlightTheme) {
+            guard theme != highlightTheme else { return }
+            highlightTheme = theme
+            redrawHighlight()
+        }
+
         private func recomputeRanges() {
             guard let text, let highlight else {
                 wordRange = nil
@@ -191,8 +201,8 @@ struct ReaderTextView: UIViewRepresentable {
             let traits = view.traitCollection
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            tintLayer.fillColor = UIColor(Tokens.accentFaint).resolvedColor(with: traits).cgColor
-            wordLayer.fillColor = UIColor(Tokens.accentSoft).resolvedColor(with: traits).cgColor
+            tintLayer.fillColor = UIColor(Tokens.highlightTint(highlightTheme)).resolvedColor(with: traits).cgColor
+            wordLayer.fillColor = UIColor(Tokens.highlightWord(highlightTheme)).resolvedColor(with: traits).cgColor
             tintLayer.path = tintRange.flatMap { path(for: rects(for: $0), padding: 0) }
             wordLayer.path = wordRange.flatMap { path(for: rects(for: $0), padding: 1) }
             syncOverlay()

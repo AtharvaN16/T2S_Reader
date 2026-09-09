@@ -4,7 +4,7 @@ import SwiftUI
 /// Spec §2.4.1 type roles: Inter with tight tracking on display and label text, normal tracking on
 /// meta, monospaced digits for anything that counts. Sizes are Dynamic Type relative.
 enum TypeRole {
-    case pageTitle, playerTitle, groupTitle, sectionHeader, rowTitle, settingsRow, pill, meta, mono
+    case pageTitle, playerTitle, groupTitle, sectionHeader, rowTitle, settingsRow, pill, meta, mono, speed
 
     var font: Font {
         switch self {
@@ -20,6 +20,9 @@ enum TypeRole {
         case .pill: return .custom("Inter-Medium", size: 15, relativeTo: .subheadline)
         case .meta: return .custom("Inter-Regular", size: 13, relativeTo: .footnote)
         case .mono: return .system(.footnote, design: .monospaced)
+        /// The transport row's speed label: bold at body size so it ranks with the skip glyphs
+        /// as a control instead of reading as a caption.
+        case .speed: return .custom("Inter-Bold", size: 17, relativeTo: .body)
         }
     }
 
@@ -29,7 +32,7 @@ enum TypeRole {
         case .pageTitle: return -0.03 * 34
         case .playerTitle: return -0.025 * 26
         case .groupTitle: return -0.02 * 20
-        case .sectionHeader, .rowTitle: return -0.01 * 17
+        case .sectionHeader, .rowTitle, .speed: return -0.01 * 17
         case .settingsRow: return -0.01 * 16
         case .pill: return -0.01 * 15
         case .meta, .mono: return 0

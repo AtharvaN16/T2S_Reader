@@ -46,6 +46,17 @@ import Testing
         #expect(again.textScale == 1.0 && again.theme == .system && again.defaultVoiceID == nil && again.prepareBudgetSeconds == 3 * 3600)
     }
 
+    @Test func highlightThemeDefaultsPersistsAndResets() {
+        let defaults = fresh()
+        let preferences = ReaderPreferences(defaults: defaults)
+        #expect(preferences.highlightTheme == .amber)
+        preferences.highlightTheme = .sky
+        let again = ReaderPreferences(defaults: defaults)
+        #expect(again.highlightTheme == .sky)
+        again.reset()
+        #expect(again.highlightTheme == .amber && ReaderPreferences(defaults: defaults).highlightTheme == .amber)
+    }
+
     @Test func voiceOptionDefault() {
         #expect(VoiceOption.systemDefault.id == "default" && VoiceOption.systemDefault.isDefault)
     }

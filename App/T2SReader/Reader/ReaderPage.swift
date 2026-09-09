@@ -33,6 +33,7 @@ struct ReaderPage: View {
                     textScale: env.preferences.textScale,
                     lineHeight: env.preferences.lineHeight,
                     highlight: reader.activeHighlight,
+                    highlightTheme: env.preferences.highlightTheme,
                     isFollowing: reader.isFollowing,
                     onTap: handleTap,
                     onUserScroll: { reader.suspendFollowing() }
@@ -87,49 +88,71 @@ struct ReaderPage: View {
         .onChange(of: env.player.coordinator.playhead) { _, _ in bookmarkSaved = false }
     }
 
-    /// Two floating circles over a short `ground` fade (spec §2.4.5, after ElevenReader): no bar,
-    /// no chapter title — the title moved to the tool row's Contents button below.
+    /// Back on the left, bookmark and the overflow on the right, the document's title between them
+    /// (owner's ask, 2026-09-09). The circles float on a `ground` fade that lives inside the
+    /// header's own band — solid at the status bar, clear by the circles' foot — rather than a solid
+    /// block with a fade hanging below it over the text.
     private var topBar: some View {
-        HStack {
-            icon("chevron.left", "Back") { dismiss() }
-            Spacer()
-            icon(bookmarkSaved ? "bookmark.fill" : "bookmark", bookmarkSaved ? "Bookmarked" : "Bookmark") {
-                Task { bookmarkSaved = await env.player.addBookmark() }
-            }
-            Menu {
-                Button { showChapters = true } label: { Label("Chapters", systemImage: "list.bullet") }
-                Button { showBookmarks = true } label: { Label("Bookmarks", systemImage: "bookmark.circle") }
-                Button { showAppearance = true } label: { Label("Appearance", systemImage: "textformat.size") }
-                Button { showVoiceChange = true } label: { Label("Change voice", systemImage: "person.wave.2") }
-                Button { showSleepTimer = true } label: { Label("Sleep timer", systemImage: "moon.zzz") }
-                Button { showDetails = true } label: { Label("Details", systemImage: "info.circle") }
-                Button { env.player.renderWholeDocument() } label: { Label("Render whole document", systemImage: "waveform") }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Tokens.ink)
-                    .frame(width: 36, height: 36)
-                    .background(Tokens.surface, in: Circle())
+        ZStack {
+            Text(summary.document.title)
+                .typeRole(.pill)
+                .foregroundStyle(Tokens.ink)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 92)                                  // clear of one circle left, two right
+                .accessibilityAddTraits(.isHeader)
+            HStack {
+                icon("chevron.left", "Back") { dismiss() }
+                Spacer()
+                icon(bookmarkSaved ? "bookmark.fill" : "bookmark", bookmarkSaved ? "Bookmarked" : "Bookmark") {
+                    Task { bookmarkSaved = await env.player.addBookmark() }
+                }
+                Menu {
+                    Button { showChapters = true } label: { Label("Chapters", systemImage: "list.bullet") }
+                    Button { showBookmarks = true } label: { Label("Bookmarks", systemImage: "bookmark.circle") }
+                    Button { showAppearance = true } label: { Label("Appearance", systemImage: "textformat.size") }
+                    Button { showVoiceChange = true } label: { Label("Change voice", systemImage: "person.wave.2") }
+                    Button { showSleepTimer = true } label: { Label("Sleep timer", systemImage: "moon.zzz") }
+                    Button { showDetails = true } label: { Label("Details", systemImage: "info.circle") }
+                    Button { env.player.renderWholeDocument() } label: { Label("Render whole document", systemImage: "waveform") }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Tokens.ink)
+                        .frame(width: 36, height: 36)
+                        .background(Tokens.surface, in: Circle())
+                }
             }
         }
         .padding(.horizontal, Spacing.margin)
         .padding(.top, Spacing.grid)
-        .background(alignment: .top) {
-            // Opaque through the circles' own band, then a fade the text scrolls under.
-            LinearGradient(stops: [.init(color: Tokens.ground, location: 0),
-                                   .init(color: Tokens.ground, location: 0.62),
-                                   .init(color: Tokens.ground.opacity(0), location: 1)],
-                           startPoint: .top, endPoint: .bottom)
-                .frame(height: 150)
-                .ignoresSafeArea(edges: .top)
+        .padding(.bottom, Spacing.grid)
+        .background {
+            Self.groundFade(solidAtTop: true).ignoresSafeArea(edges: .top)
         }
     }
 
-    /// Progress bar + times, transport row, tool row — pinned over the existing `ground` fade
-    /// (spec §2.4.5, after ElevenReader).
+    /// `ground` easing between solid and clear with zero slope at both ends, so neither edge of a
+    /// fade reads as a line across the text (the Home bar's lesson). `solidAtTop` runs solid → clear
+    /// down the whole height; otherwise clear → solid over the top `span` of it, then solid.
+    private static func groundFade(solidAtTop: Bool, span: Double = 1) -> LinearGradient {
+        let steps = 12
+        var stops = (0...steps).map { i -> Gradient.Stop in
+            let t = Double(i) / Double(steps)
+            let s = t * t * (3 - 2 * t)
+            return .init(color: Tokens.ground.opacity(solidAtTop ? 1 - s : s), location: t * span)
+        }
+        if span < 1 { stops.append(.init(color: Tokens.ground.opacity(solidAtTop ? 0 : 1), location: 1)) }
+        return LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
+    }
+
+    /// Chapter row, progress bar + times, transport row, tool row (spec §2.4.5, after ElevenReader).
+    /// The `ground` fade lives inside the block — clear at the chapter row, solid by the transport —
+    /// so the text is seen through the top of the controls rather than under a fade above them.
     private var bottomBar: some View {
         let player = env.player
         return VStack(spacing: 10) {
+            chapterRow
             VStack(spacing: 6) {
                 ThinScrubber(model: player.scrubber) { fraction in
                     Task { await player.seek(fraction: fraction) }
@@ -155,19 +178,51 @@ struct ReaderPage: View {
             toolRow
         }
         .padding(.horizontal, Spacing.margin)
-        .padding(.top, 40)
+        .padding(.top, 12)
         .padding(.bottom, Spacing.grid)
-        .background(
-            // Opaque behind every control; the fade lives in the 40 pt of top padding above them.
-            LinearGradient(
-                stops: [.init(color: Tokens.ground.opacity(0), location: 0),
-                        .init(color: Tokens.ground, location: 0.16),
-                        .init(color: Tokens.ground, location: 1)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea(edges: .bottom)
-        )
+        .background {
+            Self.groundFade(solidAtTop: false, span: 0.5).ignoresSafeArea(edges: .bottom)
+        }
+    }
+
+    /// "Chapter title ▾" on the left opens the chapter list; "→" on the right jumps to the next
+    /// chapter (after the reference the owner sent, 2026-09-09). Hidden for a document with one
+    /// chapter or none — an article has nothing to pick.
+    @ViewBuilder private var chapterRow: some View {
+        let player = env.player
+        let chapters = player.chapters
+        if chapters.count > 1, let index = player.chapterIndex, chapters.indices.contains(index) {
+            HStack {
+                Button { showChapters = true } label: {
+                    HStack(spacing: 6) {
+                        Text(chapters[index].title).typeRole(.rowTitle).foregroundStyle(Tokens.ink).lineLimit(1)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Tokens.ink2)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Chapter")
+                .accessibilityValue(chapters[index].title)
+                .accessibilityHint("Opens the chapter list")
+                Spacer(minLength: 12)
+                if index + 1 < chapters.count {
+                    Button {
+                        Task { await player.seek(toChapter: index + 1) }
+                    } label: {
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(Tokens.ink)
+                            .frame(width: 36, height: 36)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Next chapter")
+                }
+            }
+            .frame(height: 36)
+        }
     }
 
     /// Appearance (left) · voice chip (centred) · contents (right) — spec §2.4.5. The chip shows

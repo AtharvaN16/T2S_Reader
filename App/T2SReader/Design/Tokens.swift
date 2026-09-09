@@ -1,5 +1,6 @@
 // App/T2SReader/Design/Tokens.swift
 import SwiftUI
+import T2SApp
 import UIKit
 
 /// Spec §2.4.2: semantic tokens only; views never name a literal color. Light / dark resolve
@@ -30,6 +31,31 @@ enum Tokens {
     /// The PDF placeholder cover: a light red book that says PDF (owner's call, 2026-09-09).
     static let pdfCover = dynamic(light: 0xF6D2CC, dark: 0x4A2521)
     static let pdfInk = dynamic(light: 0xB5362B, dark: 0xFF8E82)
+
+    /// The read-along pair is per `HighlightTheme`: a faint sentence tint and a stronger word mark in
+    /// one hue. `amber` is the accent — `accentFaint` / `accentSoft` exactly — so it stays the default
+    /// and a reader who never opens the picker sees nothing change.
+    static func highlightTint(_ theme: HighlightTheme) -> Color {
+        switch theme {
+        case .amber: return accentFaint
+        case .sky: return dynamic(light: 0x3B82F6, dark: 0x5B9CFF, lightAlpha: 0.10, darkAlpha: 0.14)
+        case .fall: return dynamic(light: 0xB5562B, dark: 0xE0754A, lightAlpha: 0.10, darkAlpha: 0.14)
+        case .marker: return dynamic(light: 0xEAB308, dark: 0xFACC15, lightAlpha: 0.16, darkAlpha: 0.14)
+        case .mint: return dynamic(light: 0x10B981, dark: 0x34D399, lightAlpha: 0.10, darkAlpha: 0.14)
+        }
+    }
+
+    /// The read-along word mark for a `HighlightTheme`: the same hue, stronger. `marker` is strongest —
+    /// a yellow word mark is what reads as "highlighter".
+    static func highlightWord(_ theme: HighlightTheme) -> Color {
+        switch theme {
+        case .amber: return accentSoft
+        case .sky: return dynamic(light: 0x3B82F6, dark: 0x5B9CFF, lightAlpha: 0.28, darkAlpha: 0.34)
+        case .fall: return dynamic(light: 0xB5562B, dark: 0xE0754A, lightAlpha: 0.30, darkAlpha: 0.36)
+        case .marker: return dynamic(light: 0xEAB308, dark: 0xFACC15, lightAlpha: 0.48, darkAlpha: 0.42)
+        case .mint: return dynamic(light: 0x10B981, dark: 0x34D399, lightAlpha: 0.28, darkAlpha: 0.34)
+        }
+    }
 
     private static func dynamic(light: UInt32, dark: UInt32, lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
         Color(UIColor { traits in

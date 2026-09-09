@@ -41,7 +41,11 @@ enum TypeRole {
 }
 
 extension View {
+    /// The role's line limit is a default, not an override: environment modifiers nearest the text
+    /// win, so a plain `.lineLimit(role.lineLimit)` here would silently beat any `.lineLimit(n)` a
+    /// caller adds after `typeRole`. Setting it only when nothing else has lets either order work.
     func typeRole(_ role: TypeRole) -> some View {
-        font(role.font).tracking(role.tracking).lineLimit(role.lineLimit)
+        font(role.font).tracking(role.tracking)
+            .transformEnvironment(\.lineLimit) { limit in if limit == nil { limit = role.lineLimit } }
     }
 }

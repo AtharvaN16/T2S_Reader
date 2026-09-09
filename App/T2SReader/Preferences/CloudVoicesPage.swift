@@ -69,7 +69,7 @@ struct CloudVoicesPage: View {
                             .foregroundStyle(resultIsError ? Tokens.destructive : Tokens.positive)
                     }
                 }
-                Color.clear.frame(height: 120)
+                Color.clear.frame(height: Spacing.bottomClearance)
             }
             .padding(.horizontal, Spacing.margin)
         }

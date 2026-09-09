@@ -93,7 +93,9 @@ struct Artwork: View {
     var size: CGFloat
     var radius: CGFloat
 
-    private static func image(at path: String) -> UIImage? {
+    /// Internal, not private: `BookCover` reads the same cache, and needs the decoded size for
+    /// its proportions.
+    static func image(at path: String) -> UIImage? {
         let key = path as NSString
         if let hit = cache.object(forKey: key) { return hit }
         guard let image = UIImage(contentsOfFile: path) else { return nil }
@@ -112,6 +114,67 @@ struct Artwork: View {
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         .accessibilityHidden(true)
+    }
+}
+
+/// A book cover at its own proportions with the cues of Apple Books' Continue cell: a page block
+/// behind the fore-edge, a curved-binding highlight along the spine, a soft shadow and a slight
+/// turn toward the reader. Spine corners stay near-square; only the fore-edge corners round.
+struct BookCover: View {
+    var relativePath: String?
+    var paths: LibraryPaths
+    var height: CGFloat
+
+    private var image: UIImage? {
+        guard let relativePath else { return nil }
+        return Artwork.image(at: paths.url(forRelativePath: relativePath).path)
+    }
+
+    /// The image's own ratio, clamped so a landscape or extreme cover cannot break the row.
+    private var width: CGFloat {
+        guard let image, image.size.height > 0 else { return height * 0.66 }
+        return min(height * 0.85, max(height * 0.55, height * image.size.width / image.size.height))
+    }
+
+    private var shape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(topLeadingRadius: 1.5, bottomLeadingRadius: 1.5, bottomTrailingRadius: 5, topTrailingRadius: 5, style: .continuous)
+    }
+
+    var body: some View {
+        ZStack {
+            pages.offset(x: 3, y: 2)                                       // two sheets, so the fore-edge reads as a stack
+            pages.offset(x: 1.5, y: 1)
+            Group {
+                if let image {
+                    Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
+                } else {
+                    Tokens.surface
+                }
+            }
+            .frame(width: width, height: height)
+            .overlay(spine)
+            .clipShape(shape)
+        }
+        .frame(width: width, height: height)
+        .compositingGroup()                                                // one shadow for the book, not one per sheet
+        .shadow(color: Tokens.ink.opacity(0.18), radius: 6, x: 2, y: 4)
+        .rotation3DEffect(.degrees(-6), axis: (x: 0, y: 1, z: 0), anchor: .leading, perspective: 0.6)
+        .accessibilityHidden(true)
+    }
+
+    private var pages: some View {
+        shape.fill(Tokens.raised)
+            .overlay(shape.stroke(Tokens.ink3, lineWidth: 1))
+            .frame(width: width, height: height)
+    }
+
+    /// The classic curved binding: dark in the gutter, a thin bright ridge, then the cover.
+    private var spine: some View {
+        LinearGradient(stops: [
+            .init(color: Tokens.ink.opacity(0.28), location: 0),
+            .init(color: Tokens.raised.opacity(0.22), location: 0.09),
+            .init(color: Tokens.raised.opacity(0), location: 0.18),
+        ], startPoint: .leading, endPoint: .trailing)
     }
 }
 

@@ -7,31 +7,40 @@ struct CollectionPage: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.readerRoute) private var readerRoute
     @State private var showAdd = false
-    /// Set by the Add sheet; opened from its `onDismiss`, once it has actually gone.
+    /// Set by the Import page; opened from its `onDismiss`, once it has actually gone.
     @State private var pendingOpen: DocumentSummary?
     @State private var selected: DocumentSummary?
+    @State private var searchText = ""
+    @State private var isSearching = false
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: 3)
 
+    /// The grid's books: the whole collection, narrowed by title while a search is typed.
+    private var books: [DocumentSummary] {
+        let all = env.libraryModel.collection
+        guard isSearching, !searchText.isEmpty else { return all }
+        return all.filter { $0.document.title.localizedCaseInsensitiveContains(searchText) }
+    }
+
     var body: some View {
-        let books = env.libraryModel.collection
+        let all = env.libraryModel.collection
+        let books = books
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.section) {
-                HStack(alignment: .top) {
-                    PageTitle(text: "Collection", subtitle: books.count == 1 ? "1 book" : "\(books.count) books")
-                    Spacer(minLength: 12)
-                    Button { showAdd = true } label: {
-                        Image(systemName: "plus").font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(Tokens.ink).frame(width: 36, height: 36)
-                            .background(Tokens.surface, in: Circle())
+                VStack(alignment: .leading, spacing: Spacing.row) {
+                    header(count: all.count)
+                    if isSearching {
+                        TextField("Search", text: $searchText)
+                            .typeRole(.rowTitle)
+                            .padding(.horizontal, 14).padding(.vertical, 10)
+                            .background(Tokens.surface, in: Capsule())
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Add")
-                    .padding(.top, Spacing.titleTop + 4)
                 }
-                if books.isEmpty {
+                if all.isEmpty {
                     Text("Books and PDFs you import appear here, whether or not they are queued.")
                         .typeRole(.meta).foregroundStyle(Tokens.ink2)
+                } else if books.isEmpty {
+                    Text("No matches.").typeRole(.meta).foregroundStyle(Tokens.ink2)
                 }
                 LazyVGrid(columns: columns, spacing: Spacing.row) {
                     ForEach(books) { book in
@@ -52,12 +61,12 @@ struct CollectionPage: View {
                         .accessibilityHint("Opens the book")
                     }
                 }
-                Color.clear.frame(height: 120)
+                Color.clear.frame(height: Spacing.bottomClearance)
             }
             .padding(.horizontal, Spacing.margin)
         }
         .background(Tokens.ground)
-        .sheet(isPresented: $showAdd, onDismiss: openPending) { AddSheet(imported: $pendingOpen) }
+        .fullScreenCover(isPresented: $showAdd, onDismiss: openPending) { ImportPage(imported: $pendingOpen) }
         .sheet(item: $selected) { BookSheet(summary: $0) }
     }
 
@@ -65,5 +74,26 @@ struct CollectionPage: View {
         guard let doc = pendingOpen else { return }
         pendingOpen = nil
         readerRoute.open(doc)
+    }
+
+    /// The subtitle counts the whole collection, not the search's matches.
+    private func header(count: Int) -> some View {
+        HStack(alignment: .top) {
+            PageTitle(text: "Collection", subtitle: count == 1 ? "1 book" : "\(count) books")
+            Spacer(minLength: 12)
+            HStack(spacing: 8) {
+                Button { showAdd = true } label: {
+                    Image(systemName: "plus").font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Tokens.ink).frame(width: 36, height: 36)
+                        .background(Tokens.surface, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add")
+                Pill(label: isSearching ? "Done" : "Search", style: isSearching ? .selected : .soft) {
+                    withAnimation(.snappy) { isSearching.toggle(); if !isSearching { searchText = "" } }
+                }
+            }
+            .padding(.top, Spacing.titleTop + 4)
+        }
     }
 }

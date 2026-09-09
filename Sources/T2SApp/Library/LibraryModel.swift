@@ -27,6 +27,18 @@ public final class LibraryModel {
     /// so an unchanged document is never decoded twice. `@ObservationIgnored`: it is a cache behind
     /// `progress`, not state a view reads.
     @ObservationIgnored private var progressCache: [UUID: (key: DocumentSummary, value: DocumentProgress)] = [:]
+    /// Excerpts per document (`excerpt(for:)`), keyed on the fields that move one, for the same
+    /// reason: a chapter decode per Home row per refresh would be the cost this cache exists to avoid.
+    @ObservationIgnored private var excerptCache: [UUID: (key: ExcerptKey, value: String)] = [:]
+
+    /// What decides which utterances an excerpt shows: the chapter read, where in it the resume
+    /// position lands, and whether the chapters are about to be re-derived under it.
+    private struct ExcerptKey: Hashable {
+        var chapterIndex: Int
+        var resumePosition: Position?
+        var isStale: Bool
+        var utteranceCount: Int
+    }
 
     public init(library: Library) { self.library = library }
 
@@ -96,11 +108,42 @@ public final class LibraryModel {
             summaries = all
             progress = next
             progressCache = cache                                            // rebuilt, so deleted ids drop out
+            let ids = Set(all.map(\.id))
+            excerptCache = excerptCache.filter { ids.contains($0.key) }      // a stale key re-decodes on its own
             lastError = nil
         } catch {
             lastError = "\(error)"
         }
     }
+
+    /// A few lines of text from where the reader is in the document — the utterance at the resume
+    /// position and the ones after it, for the Home row's "where we are in the story" line.
+    /// Decodes one chapter from the store; cached per document against the fields that move it.
+    public func excerpt(for summary: DocumentSummary) async -> String? {
+        let chapterIndex = progress[summary.id]?.chapterIndex ?? summary.resumeChapterIndex ?? 0
+        let key = ExcerptKey(chapterIndex: chapterIndex, resumePosition: summary.document.resumePosition,
+                             isStale: summary.isStale, utteranceCount: summary.utteranceCount)
+        if let hit = excerptCache[summary.id], hit.key == key { return hit.value }
+        guard let chapter = try? await library.store.chapter(chapterIndex, of: summary.id),
+              !chapter.utterances.isEmpty else { return nil }
+        // Resolved against the one chapter alone: the resolver walks utterances, and this is the
+        // only chapter the position can land in, so the rest of the document stays undecoded.
+        let timeline = Timeline(chapters: [chapter])
+        let resolved = summary.document.resumePosition.map { PositionResolver.resolve($0, in: timeline).utteranceIndex } ?? 0
+        let start = min(max(0, resolved), chapter.utterances.count - 1)
+        var text = ""
+        for utterance in chapter.utterances[start...] {
+            text += text.isEmpty ? utterance.source : " " + utterance.source
+            if text.count >= Self.excerptLength { break }
+        }
+        let excerpt = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")   // one line, trimmed
+        guard !excerpt.isEmpty else { return nil }
+        excerptCache[summary.id] = (key, excerpt)
+        return excerpt
+    }
+
+    /// Enough source text for a row's few lines; the joined text stops at the utterance that crosses it.
+    private static let excerptLength = 240
 
     /// The summary reduced to what `DocumentProgress.compute` actually reads: queue position, last
     /// played, and finished state move rows around but never change a row's progress, so an archive

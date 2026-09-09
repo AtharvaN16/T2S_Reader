@@ -19,6 +19,21 @@ import Testing
         #expect(DurationFormatter.remaining(20, approximate: true) == "<1m")
     }
 
+    @Test func coarseRemainingForm() {
+        #expect(DurationFormatter.coarseRemaining(0) == "<1 min")
+        #expect(DurationFormatter.coarseRemaining(59) == "<1 min")
+        #expect(DurationFormatter.coarseRemaining(-5) == "<1 min")                        // behaves as 0
+        #expect(DurationFormatter.coarseRemaining(60) == "1 min")
+        #expect(DurationFormatter.coarseRemaining(42 * 60 + 20) == "42 min")
+        #expect(DurationFormatter.coarseRemaining(42 * 60 + 40) == "43 min")              // nearest minute
+        #expect(DurationFormatter.coarseRemaining(59 * 60 + 45) == "1 hr")                // 60 min is the hour
+        #expect(DurationFormatter.coarseRemaining(3600) == "1 hr")
+        #expect(DurationFormatter.coarseRemaining(3600 + 20 * 60) == "1 hr")
+        #expect(DurationFormatter.coarseRemaining(3600 + 40 * 60) == "2 hrs")             // nearest hour
+        #expect(DurationFormatter.coarseRemaining(22 * 3600 + 20 * 60) == "22 hrs")
+        #expect(DurationFormatter.coarseRemaining(22 * 3600 + 39 * 60) == "23 hrs")
+    }
+
     @Test func clockForm() {
         #expect(DurationFormatter.clock(0) == "0:00")
         #expect(DurationFormatter.clock(42) == "0:42")

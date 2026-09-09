@@ -11,4 +11,7 @@ enum Spacing {
     static let sheetCorner: CGFloat = 28
     static let artworkSmall: CGFloat = 8
     static let artworkLarge: CGFloat = 16
+    /// Trailing space on the root pages so their last row scrolls clear of the bottom bar's fade
+    /// (`RootPager`: 138 pt solid plus ~70 pt of fade, measured from the screen bottom).
+    static let bottomClearance: CGFloat = 184
 }

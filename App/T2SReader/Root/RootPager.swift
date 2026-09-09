@@ -11,7 +11,7 @@ enum RootPage: Hashable, CaseIterable {
     var glyph: String {
         switch self {
         case .collection: return "books.vertical"
-        case .queue: return "list.bullet"
+        case .queue: return "house"
         case .preferences: return "gearshape"
         }
     }
@@ -19,7 +19,7 @@ enum RootPage: Hashable, CaseIterable {
     var title: String {
         switch self {
         case .collection: return "Collection"
-        case .queue: return "Queue"
+        case .queue: return "Home"
         case .preferences: return "Preferences"
         }
     }
@@ -49,10 +49,10 @@ struct RootPager: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
     @State private var page: RootPage = .queue
-    /// A file handed to us by another app (`onOpenURL`), shown through the Add sheet like any other
+    /// A file handed to us by another app (`onOpenURL`), shown through the Import page like any other
     /// import rather than imported invisibly.
     @State private var openedFiles: [URL]?
-    /// Set by that sheet; opened once it has actually gone.
+    /// Set by that page; opened once it has actually gone.
     @State private var pendingOpen: DocumentSummary?
     @State private var readerDocument: DocumentSummary?
 
@@ -66,6 +66,20 @@ struct RootPager: View {
             .tabViewStyle(.page(indexDisplayMode: .never))
             .ignoresSafeArea(edges: .bottom)
             .environment(\.readerRoute, ReaderRoute(open: { readerDocument = $0 }))
+
+            /// The bottom bar floats over the pager with nothing behind it, so rows would scroll
+            /// straight through the mini-player and indicator. This merges the bar into the page
+            /// instead: solid `ground` through the bar's own band (mini-player 52, gap 12,
+            /// indicator 32, padding 8, home-indicator inset 34 ≈ 138 pt from the screen bottom,
+            /// which ignoring the safe area makes the frame's origin) and a ~70 pt fade above it,
+            /// like the Reader's bars. Hit testing is off so the pager underneath still gets taps.
+            LinearGradient(stops: [.init(color: Tokens.ground.opacity(0), location: 0),
+                                   .init(color: Tokens.ground, location: 0.34)],
+                           startPoint: .top, endPoint: .bottom)
+                .frame(height: 210)
+                .frame(maxWidth: .infinity)
+                .ignoresSafeArea(edges: .bottom)
+                .allowsHitTesting(false)
 
             VStack(spacing: 12) {
                 if !env.libraryModel.isQueueEmpty || env.player.current != nil {
@@ -84,9 +98,9 @@ struct RootPager: View {
                 openedFiles = [url]
             }
         }
-        .sheet(isPresented: Binding(get: { openedFiles != nil }, set: { if !$0 { openedFiles = nil } }),
-               onDismiss: openPending) {
-            AddSheet(imported: $pendingOpen, initialFiles: openedFiles ?? [])
+        .fullScreenCover(isPresented: Binding(get: { openedFiles != nil }, set: { if !$0 { openedFiles = nil } }),
+                         onDismiss: openPending) {
+            ImportPage(imported: $pendingOpen, initialFiles: openedFiles ?? [])
         }
         .fullScreenCover(item: $readerDocument) { ReaderPage(summary: $0) }
         .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation, nowPlaying: env.nowPlaying)

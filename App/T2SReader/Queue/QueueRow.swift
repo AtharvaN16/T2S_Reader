@@ -15,32 +15,33 @@ struct QueueRow: View {
     /// True only while the Play pill's own tap is resuming a paused, already-current document —
     /// the one branch that awaits playback before opening the reader, otherwise silently.
     @State private var isStarting = false
+    /// The text at the resume position, loaded off the body so the list never decodes a chapter.
+    @State private var excerpt: String?
 
     private var progress: DocumentProgress? { env.libraryModel.progress(for: summary.id) }
     private var isCurrent: Bool { env.player.current?.id == summary.id }
     private var isPlayingHere: Bool { isCurrent && env.player.isPlaying }
+    private var isArticle: Bool { summary.document.sourceType == .article }
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
-            Artwork(relativePath: summary.document.coverImagePath, paths: env.paths, size: 64, radius: Spacing.artworkSmall)
+            if isArticle {
+                // A web article is not a book: flat art, no spine.
+                Artwork(relativePath: summary.document.coverImagePath, paths: env.paths, size: 64, radius: Spacing.artworkSmall)
+            } else {
+                BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: 96)
+            }
 
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Text(sourceName)
-                    Text("·").accessibilityHidden(true)
-                    Text(DurationFormatter.age(of: summary.document.addedAt))
-                    if let progress, summary.document.sourceType != .article, progress.chapterCount > 1, let c = progress.chapterIndex {
-                        Text("·").accessibilityHidden(true)
-                        Text("Chapter \(c + 1) of \(progress.chapterCount)")
+                if chapterText != nil || summary.isFullyRendered {           // no empty gap when there is nothing to say
+                    HStack(spacing: 6) {
+                        if let chapterText { Text(chapterText) }
+                        if summary.isFullyRendered { PositiveCheck() }
                     }
-                    if summary.isFullyRendered { PositiveCheck() }
-                    Spacer(minLength: 8)
-                    CircularProgress(fraction: progress?.fraction ?? 0, lineWidth: 2, size: 14)
-                    Text(remainingText)
+                    .typeRole(.meta)
+                    .foregroundStyle(Tokens.ink2)
+                    .accessibilityElement(children: .combine)
                 }
-                .typeRole(.meta)
-                .foregroundStyle(Tokens.ink2)
-                .accessibilityElement(children: .combine)
 
                 Button(action: onOpen) {
                     Text(summary.document.title)
@@ -51,6 +52,16 @@ struct QueueRow: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityHint("Opens the reader")
+
+                if let excerpt, !excerpt.isEmpty {
+                    Text(excerpt)
+                        .typeRole(.meta)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .foregroundStyle(Tokens.ink2)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
                 HStack(spacing: 8) {
                     Pill(label: isPlayingHere ? "Pause" : (isStarting ? "Starting…" : "Play"),
@@ -78,12 +89,21 @@ struct QueueRow: View {
                             .background(Tokens.surface, in: Circle())
                     }
                     .accessibilityLabel("More")
+                    Spacer(minLength: 8)
+                    HStack(spacing: 6) {
+                        CircularProgress(fraction: progress?.fraction ?? 0, lineWidth: 2, size: 12)
+                        Text(remainingText)
+                    }
+                    .typeRole(.meta)
+                    .foregroundStyle(Tokens.ink2)
+                    .accessibilityElement(children: .combine)
                 }
             }
         }
         .contextMenu { contextItems }
         .sheet(isPresented: $showSleepTimer) { SleepTimerSheet() }
         .sheet(isPresented: $showVoiceChange) { VoiceChangeSheet(summary: summary) }
+        .task(id: excerptKey) { excerpt = await env.libraryModel.excerpt(for: summary) }
     }
 
     @ViewBuilder private var contextItems: some View {
@@ -103,17 +123,30 @@ struct QueueRow: View {
         } label: { Label("Render whole document", systemImage: "waveform") }
     }
 
-    /// Time left, shown under the progress ring: "~22h 39m left".
-    private var remainingText: String {
-        if let progress { return DurationFormatter.remaining(progress.remainingSeconds, approximate: progress.isApproximate) + " left" }
-        return DurationFormatter.remaining(summary.totalSeconds, approximate: !summary.isFullyRendered) + " left"
+    /// "Chapter 7": books only, once the playhead's chapter is known and there is more than one.
+    private var chapterText: String? {
+        guard let progress, !isArticle, progress.chapterCount > 1, let c = progress.chapterIndex else { return nil }
+        return "Chapter \(c + 1)"
     }
 
-    private var sourceName: String {
-        switch summary.document.sourceType {
-        case .epub: return "EPUB"
-        case .pdf: return "PDF"
-        case .article: return summary.document.sourceURL?.host() ?? "Article"
-        }
+    /// Time left beside the ring, coarse on purpose: "22 hrs left", "42 min left". The row is read
+    /// at a glance and the ring already says how far along it is, so no minutes and never a "~".
+    private var remainingText: String {
+        DurationFormatter.coarseRemaining(progress?.remainingSeconds ?? summary.totalSeconds) + " left"
+    }
+
+    /// What `LibraryModel.excerpt(for:)` reads: the task reloads only when the resume point or the
+    /// chapters behind it could have moved, not on every row refresh.
+    private struct ExcerptKey: Hashable {
+        var id: UUID
+        var resumePosition: Position?
+        var resumeChapterIndex: Int?
+        var isStale: Bool
+        var chapterIndex: Int?
+    }
+
+    private var excerptKey: ExcerptKey {
+        ExcerptKey(id: summary.id, resumePosition: summary.document.resumePosition, resumeChapterIndex: summary.resumeChapterIndex,
+                   isStale: summary.isStale, chapterIndex: progress?.chapterIndex)
     }
 }

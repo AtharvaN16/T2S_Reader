@@ -105,7 +105,7 @@ struct PreferencesPage: View {
                     section("About") {
                         row("Fonts: Inter (SIL OFL) · Reader: Readium (BSD-3) · Extraction: Readability (Apache-2.0)", subtitle: "")
                     }
-                    Color.clear.frame(height: 120)
+                    Color.clear.frame(height: Spacing.bottomClearance)
                 }
                 .padding(.horizontal, Spacing.margin)
             }

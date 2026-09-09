@@ -40,7 +40,7 @@ struct PronunciationPage: View {
                         .tint(Tokens.destructive)
                     }
                 }
-                Color.clear.frame(height: 120).listRowInsets(EdgeInsets())
+                Color.clear.frame(height: Spacing.bottomClearance).listRowInsets(EdgeInsets())
             }
             .listRowSeparator(.hidden)
             .listRowBackground(Tokens.ground)

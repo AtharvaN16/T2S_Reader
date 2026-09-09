@@ -87,6 +87,59 @@ import T2SStore
         #expect(p.totalSeconds == s.totalSeconds && p.isApproximate)
     }
 
+    /// A chapter of known sentences with a resume position on the second: the Home row's excerpt
+    /// starts there, runs on, and is one line however the source was broken.
+    @Test func excerptStartsAtTheResumePosition() async throws {
+        let f = try AppFixtures()
+        func chapter(_ sentences: [String]) -> Chapter {
+            var offset = 0
+            var utterances: [Utterance] = []
+            for text in sentences {
+                let n = text.utf16.count
+                utterances.append(Utterance(position: Position(resourceHref: "a", progression: 0, charOffset: offset),
+                                            source: text, spoken: text, spans: [SpanMap(sourceRange: 0..<n, spokenRange: 0..<n)],
+                                            duration: .estimated(2)))
+                offset += n + 1
+            }
+            return Chapter(title: "One", position: Position(resourceHref: "a", progression: 0, charOffset: 0), utterances: utterances)
+        }
+        let one = chapter(["Alpha starts the chapter.", "Beta is where\nwe   stopped.", "Gamma follows.", "Delta ends it."])
+        let second = try #require(one.utterances[1].position.charOffset)
+        let document = Document(title: "Excerpt", sourceType: .epub,
+                                resumePosition: Position(resourceHref: "a", progression: 0, charOffset: second))
+        try await f.store.insert(document, timeline: Timeline(chapters: [one]), queued: true)
+        let model = LibraryModel(library: f.library)
+        await model.refresh()
+        let s = try #require(model.summaries.first { $0.id == document.id })
+        let excerpt = try #require(await model.excerpt(for: s))
+        #expect(excerpt.hasPrefix("Beta is where we stopped."))                      // whitespace runs collapse
+        #expect(excerpt.contains("Gamma follows."))
+        #expect(!excerpt.contains("Alpha"))
+        #expect(excerpt == "Beta is where we stopped. Gamma follows. Delta ends it.")
+
+        // A moved position is a new key: the excerpt follows it.
+        let third = try #require(one.utterances[2].position.charOffset)
+        try await f.store.savePosition(Position(resourceHref: "a", progression: 0, charOffset: third), for: document.id)
+        await model.refresh()
+        let moved = try #require(model.summaries.first { $0.id == document.id })
+        #expect(await model.excerpt(for: moved) == "Gamma follows. Delta ends it.")
+
+        // No resume position reads from the top; enough text stops the join short of the chapter's end.
+        let long = String(repeating: "Long sentence here. ", count: 12).trimmingCharacters(in: .whitespaces)   // 239 chars
+        let fresh = Document(title: "Fresh", sourceType: .epub)
+        try await f.store.insert(fresh, timeline: Timeline(chapters: [chapter(["Top.", long, "Omega is past the cut."])]), queued: true)
+        await model.refresh()
+        let top = try #require(model.summaries.first { $0.id == fresh.id })
+        let fromTop = try #require(await model.excerpt(for: top))
+        #expect(fromTop.hasPrefix("Top. Long sentence here."))
+        #expect(!fromTop.contains("Omega"))
+
+        // A document the store no longer has is nil, not an error.
+        var gone = s
+        gone.document.id = UUID()
+        #expect(await model.excerpt(for: gone) == nil)
+    }
+
     @Test func progressFollowsSavedPositions() async throws {
         let f = try AppFixtures()
         let a = try await f.importFake()

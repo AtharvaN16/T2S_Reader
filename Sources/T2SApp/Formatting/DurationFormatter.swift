@@ -17,6 +17,20 @@ public enum DurationFormatter {
         return long(seconds, approximate: approximate)
     }
 
+    /// Home row remaining time, coarse and never approximate: "22 hrs", "1 hr", "42 min", "<1 min".
+    /// Coarse on purpose: the row is read at a glance, so a 22-hour book rounds to the hour and an
+    /// estimate wears no `~` (the ring beside it already says how sure we are).
+    public static func coarseRemaining(_ seconds: TimeInterval) -> String {
+        let s = max(0, seconds)
+        if s < 60 { return "<1 min" }
+        if s < 3600 {
+            let minutes = Int((s / 60).rounded(.toNearestOrAwayFromZero))
+            return minutes < 60 ? "\(minutes) min" : "1 hr"                  // 59m 45s is the hour, not "60 min"
+        }
+        let hours = Int((s / 3600).rounded(.toNearestOrAwayFromZero))
+        return hours == 1 ? "1 hr" : "\(hours) hrs"
+    }
+
     /// Player clock: "0:42", "12:05", "1:02:33".
     public static func clock(_ seconds: TimeInterval) -> String {
         let total = Int(max(0, seconds).rounded(.down))

@@ -73,7 +73,7 @@ struct StoragePage: View {
                 if let error = storage.lastError {
                     Text(error).typeRole(.meta).foregroundStyle(Tokens.destructive)
                 }
-                Color.clear.frame(height: 120)
+                Color.clear.frame(height: Spacing.bottomClearance)
             }
             .padding(.horizontal, Spacing.margin)
         }

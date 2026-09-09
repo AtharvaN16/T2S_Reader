@@ -531,8 +531,10 @@ public final class PlaybackCoordinator {
     }
 
     private func refreshHighlight() {
-        guard let timeline else { highlight = nil; return }
-        highlight = Highlighter.highlight(at: playhead, in: timeline)
+        let next = timeline.flatMap { Highlighter.highlight(at: playhead, in: $0) }
+        // Ten ticks a second, one word a second or so: an unchanged word must not invalidate every
+        // view that reads the highlight (Plan 17, audit §7).
+        if highlight != next { highlight = next }
     }
 
     private func renderKey(for document: Document, timeline: Timeline, utteranceIndex: Int) -> RenderKey {

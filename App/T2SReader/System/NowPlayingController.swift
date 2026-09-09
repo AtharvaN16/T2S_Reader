@@ -31,6 +31,9 @@ final class NowPlayingController {
     /// Screen until a different document is loaded instead of letting the ticker republish stale
     /// metadata.
     private var clearedDocumentID: UUID?
+    /// Whether the centre holds nothing of ours: `clear()` is called on every idle tick with no
+    /// document loaded, and must not cost an XPC write each time (Plan 17, audit §7).
+    private var isCleared = false
     private var started = false
 
     init(player: PlayerModel, libraryModel: LibraryModel, preferences: ReaderPreferences, paths: LibraryPaths) {
@@ -220,13 +223,16 @@ final class NowPlayingController {
         if let artwork { info[MPMediaItemPropertyArtwork] = artwork }
         center.nowPlayingInfo = info
         center.playbackState = snapshot.isPlaying ? .playing : .paused
+        isCleared = false
     }
 
     func clear() {
+        clearedDocumentID = player.current?.id
+        guard !isCleared else { return }
         center.nowPlayingInfo = nil
         lastPublishedPlayingSecond = nil
         lastPublishedSnapshot = nil
-        clearedDocumentID = player.current?.id
+        isCleared = true
     }
 
     deinit {

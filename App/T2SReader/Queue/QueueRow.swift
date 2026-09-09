@@ -54,7 +54,7 @@ struct QueueRow: View {
 
                 Button(action: onOpen) {
                     Text(summary.document.title)
-                        .typeRole(.cardTitle)
+                        .typeRole(.rowTitle)                                   // the Settings rows' face, by the owner's eye
                         .foregroundStyle(Tokens.ink)
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)

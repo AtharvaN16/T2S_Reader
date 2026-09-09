@@ -4,17 +4,19 @@ import SwiftUI
 /// Spec §2.4.1 type roles: Inter with tight tracking on display and label text, normal tracking on
 /// meta, monospaced digits for anything that counts. Sizes are Dynamic Type relative.
 enum TypeRole {
-    case pageTitle, playerTitle, cardTitle, groupTitle, sectionHeader, rowTitle, pill, meta, mono
+    case pageTitle, playerTitle, groupTitle, sectionHeader, rowTitle, settingsRow, pill, meta, mono
 
     var font: Font {
         switch self {
         case .pageTitle: return .custom("InterDisplay-Black", size: 34, relativeTo: .largeTitle)
         case .playerTitle: return .custom("InterDisplay-ExtraBold", size: 26, relativeTo: .title)
-        case .cardTitle: return .custom("Inter-SemiBold", size: 19, relativeTo: .title3)
         /// Settings' section headings: bigger and heavier than `sectionHeader`.
-        case .groupTitle: return .custom("Inter-Bold", size: 22, relativeTo: .title2)
+        case .groupTitle: return .custom("Inter-Bold", size: 20, relativeTo: .title3)
         case .sectionHeader: return .custom("Inter-SemiBold", size: 17, relativeTo: .headline)
         case .rowTitle: return .custom("Inter-Medium", size: 17, relativeTo: .body)
+        /// Settings' row titles: `rowTitle` a step smaller, so the page reads a notch quieter than
+        /// the lists elsewhere without shrinking those too.
+        case .settingsRow: return .custom("Inter-Medium", size: 16, relativeTo: .callout)
         case .pill: return .custom("Inter-Medium", size: 15, relativeTo: .subheadline)
         case .meta: return .custom("Inter-Regular", size: 13, relativeTo: .footnote)
         case .mono: return .system(.footnote, design: .monospaced)
@@ -26,9 +28,9 @@ enum TypeRole {
         switch self {
         case .pageTitle: return -0.03 * 34
         case .playerTitle: return -0.025 * 26
-        case .cardTitle: return -0.02 * 19
-        case .groupTitle: return -0.02 * 22
+        case .groupTitle: return -0.02 * 20
         case .sectionHeader, .rowTitle: return -0.01 * 17
+        case .settingsRow: return -0.01 * 16
         case .pill: return -0.01 * 15
         case .meta, .mono: return 0
         }
@@ -37,7 +39,7 @@ enum TypeRole {
     var lineLimit: Int? {
         switch self {
         case .playerTitle: return 4
-        case .cardTitle, .rowTitle: return 2
+        case .rowTitle, .settingsRow: return 2
         default: return nil
         }
     }

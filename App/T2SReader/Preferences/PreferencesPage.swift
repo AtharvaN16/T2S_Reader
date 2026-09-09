@@ -153,7 +153,7 @@ struct PreferencesPage: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 // A title that wraps ("Rendered audio and prepare on charge") stays on the left edge.
-                Text(title).typeRole(.rowTitle).foregroundStyle(Tokens.ink).multilineTextAlignment(.leading)
+                Text(title).typeRole(.settingsRow).foregroundStyle(Tokens.ink).multilineTextAlignment(.leading)
                 if !subtitle.isEmpty {
                     Text(subtitle).typeRole(.meta).foregroundStyle(Tokens.ink2)
                 }

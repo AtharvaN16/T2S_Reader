@@ -2,7 +2,42 @@
 
 _Last updated 2026-09-09 (Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-09, latest) — Home round 4: Figma mockup cover, gyro tilt, progress line
+## Resume here (2026-09-09, latest) — Home round 5: chapter time on Play, ring by the chapter, no gyro, bottom fill fixed
+
+The owner's fifth pass, from two phone crops (a "▶ Play  2h 28m" pill reference, and Preferences
+showing a row's text visible *under* the page indicator). Done on `dev`:
+
+- **Time on the Play pill** (`Design/Primitives.swift` `Pill.detail`, `Queue/QueueRow.swift`):
+  "Play  2h 28m" — the label, then the time in the same type at 55 % of the pill's foreground (so it
+  dims correctly on every style). Just the time: `DurationFormatter.remaining(_, approximate: false)`,
+  no "left", no "~". Books with more than one chapter show **the chapter's** time left; an article
+  or a single-chapter file shows the file's. Hidden while "Starting…".
+- **Progress ring and percent moved beside the chapter**: the meta line is now
+  "Chapter 7  ◔ 41%  ✓" and the separate "◔ 5% · 23 hrs left" line under the excerpt is gone. Same
+  chapter-vs-file rule as the pill. For a chaptered book both stay hidden until its glimpse loads,
+  rather than flashing the whole book's number first.
+- **`LibraryModel.glimpse(for:)`** replaces `excerpt(for:)` as the row's one chapter decode and
+  returns `RowGlimpse` (`excerpt`, `chapterElapsedSeconds`, `chapterTotalSeconds`, plus
+  `chapterFraction` / `chapterRemainingSeconds`): the resume position resolved in a one-chapter
+  `Timeline` gives chapter-relative times through `TimeIndex` for free. `excerpt(for:)` survives
+  as a wrapper. Same cache, renamed. `LibraryModelTests` asserts the chapter numbers.
+- **Gyro tilt removed** at the owner's request (round 4 had added it): `System/MotionTilt.swift`
+  deleted, `AppEnvironment.motionTilt` and `RootPager`'s `shouldTilt`/`isUnderLoad` gone,
+  `BookCover` lost its `tilt` parameter and both `rotation3DEffect`s; the shadow is fixed again.
+- **Bottom fill fixed and softened** (`Root/RootPager.swift` `bottomFill(inset:)`). The round-3
+  gradient — a fixed 210 pt frame under `ignoresSafeArea(.bottom)` — sat at the *top* of the
+  safe-area-expanded region, so the home-indicator strip under the page row was left bare and a
+  page's text showed through there. Now: a `GeometryReader` supplies the inset, the gradient's
+  height is `120 + page row 32 + padding 8 + inset`, and it fills a `maxHeight: .infinity`
+  frame aligned `.bottom` under `ignoresSafeArea`, which pins it to the screen bottom. Solid from the
+  top of the page row down; above that a gentler fade (0 → 0.3 at 55 % of the fade → 1 at the page
+  row) so the page stays visible behind the mini-player. `PageIndicator.height` is now a static.
+  `Spacing.bottomClearance` 184 → 168 to match.
+
+Verification: `scripts/build-app.sh` → `** BUILD SUCCEEDED **` (pre-existing `ShareViewController`
+warnings only); `swift test` → 427 tests in 80 suites passed. Not seen on a phone — same standing gap.
+
+## Resume here (2026-09-09) — Home round 4: Figma mockup cover, gyro tilt, progress line
 
 The owner's fourth pass, from a phone screenshot of round 3 plus a Figma community file ("6 Elegant
 Book Mockups", node `10:6366`, mockup no. 3) read through the Figma MCP (`get_design_context` +

@@ -1,4 +1,4 @@
-public struct SourceBlock: Hashable, Sendable {
+public struct SourceBlock: Hashable, Sendable, Codable {
     public var text: String
     /// `charOffset` is the UTF-16 offset of this block within its resource's extracted text.
     public var position: Position
@@ -9,7 +9,7 @@ public struct SourceBlock: Hashable, Sendable {
     }
 }
 
-public struct ChapterInput: Hashable, Sendable {
+public struct ChapterInput: Hashable, Sendable, Codable {
     public var title: String
     public var position: Position
     public var blocks: [SourceBlock]

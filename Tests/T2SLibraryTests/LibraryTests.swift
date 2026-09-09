@@ -166,7 +166,8 @@ import T2SCore
         #expect(fresh.segmenterVersion == Versions.segmenter && fresh.utteranceCount == 3)
         #expect(fresh.chapters.allSatisfy { $0.utterances.allSatisfy { $0.audioRef == nil } })
         #expect(try await h.store.timeline(for: doc.id)?.isStale == false)
-        #expect(await h.audio.contains(oldKey) == false)                    // orphan removed
+        await h.library.awaitAudioGC()
+        #expect(await h.audio.contains(oldKey) == false)                    // orphan removed, behind the load
         #expect(try await h.store.document(id: doc.id)?.resumePosition == resume)
         #expect(PositionResolver.resolve(resume, in: fresh).utteranceIndex == 2)
     }
@@ -215,6 +216,52 @@ import T2SCore
         let reprocessed = try await h.library.reprocess(doc.id)
         #expect(reprocessed[utterance: 2].spoken == "3rd sentence.")
         #expect(try await h.store.timeline(for: doc.id)?.timeline == reprocessed)
+    }
+
+    /// Import keeps the reader's chapters beside the source, and a re-derivation starts from them
+    /// (Plan 17, audit §5.1): the source is not opened again — here it is not even there.
+    @Test func reprocessReadsTheRetainedChaptersNotTheSource() async throws {
+        let reader = FakeDocumentReader()
+        let h = try makeHarness(readers: [reader])
+        let doc = try await importFake(h).document
+        #expect(FileManager.default.fileExists(atPath: h.paths.retainedChaptersURL(doc.id).path))
+        try FileManager.default.removeItem(at: h.paths.sourceURL(doc.id, type: .epub))
+        var stale = try #require(try await h.store.timeline(for: doc.id)).timeline
+        stale.segmenterVersion = Versions.segmenter + 1
+        try await h.store.replaceTimeline(stale, for: doc.id)
+
+        let fresh = try #require(try await h.library.timelineForPlayback(doc.id))
+        #expect(fresh.utteranceCount == 3 && fresh.segmenterVersion == Versions.segmenter)
+        #expect(await reader.log.urls.count == 1)                          // the import's read, and no other
+    }
+
+    /// A document imported before chapters were retained reads its source once more, and keeps the
+    /// result for the next time.
+    @Test func aDocumentWithoutRetainedChaptersReadsTheSourceOnceAndRetainsIt() async throws {
+        let reader = FakeDocumentReader()
+        let h = try makeHarness(readers: [reader])
+        let doc = try await importFake(h).document
+        try FileManager.default.removeItem(at: h.paths.retainedChaptersURL(doc.id))
+        _ = try await h.library.reprocess(doc.id)
+        #expect(await reader.log.urls.count == 2)
+        #expect(FileManager.default.fileExists(atPath: h.paths.retainedChaptersURL(doc.id).path))
+        _ = try await h.library.reprocess(doc.id)
+        #expect(await reader.log.urls.count == 2)                          // retained now
+    }
+
+    /// The render snapshot is for Prepare, which must never re-derive a book on its own (audit §5.1):
+    /// a stale document has no snapshot until it is opened.
+    @Test func renderSnapshotNeverReDerives() async throws {
+        let reader = FakeDocumentReader()
+        let h = try makeHarness(readers: [reader])
+        let doc = try await importFake(h).document
+        var stale = try #require(try await h.store.timeline(for: doc.id)).timeline
+        stale.normalizerVersion = Versions.normalizer + 1
+        try await h.store.replaceTimeline(stale, for: doc.id)
+        #expect(try await h.library.renderSnapshot(for: doc.id) == nil)
+        #expect(try await h.store.isStale(id: doc.id) == true)
+        _ = try await h.library.timelineForPlayback(doc.id)
+        #expect(try await h.library.renderSnapshot(for: doc.id)?.rendered.count == 3)
     }
 
     /// An undecodable chapter blob must never make a document unplayable *and* undeletable: the

@@ -243,10 +243,12 @@ public final class PrepareRunner {
 
         var documents: [PreparedDocument] = []
         for id in ids {
+            // Never re-derives: a stale document waits for its own open (Plan 17, audit §5.1 — the first
+            // charge after an update used to re-derive every queued book, serially, on the way here).
             guard let document = try? await store.document(id: id),
-                  let timeline = try? await library.timelineForPlayback(id),
-                  var snapshot = try? await library.renderSnapshot(for: id)
+                  let timeline = try? await library.currentTimeline(id)
             else { continue }
+            var snapshot = Library.renderSnapshot(for: document, timeline: timeline)
 
             // The same voice route playback will render with, delivery included, so the prepared audio
             // is the audio it plays (`Delivery`).

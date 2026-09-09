@@ -236,6 +236,13 @@ public actor LibraryStore {
         return StoredTimeline(timeline: timeline, isStale: Self.isStale(row))
     }
 
+    /// Every chapter blob as stored, in chapter order, undecoded: what a re-derivation reads before it
+    /// replaces them, to remove their audio behind the load path (`Library.reprocess`).
+    public func chapterBlobs(for id: UUID) throws -> [Data]? {
+        guard let row = try row(id) else { return nil }
+        return row.chapters.sorted { $0.index < $1.index }.map(\.blob)
+    }
+
     public func chapter(_ index: Int, of id: UUID) throws -> Chapter? {
         guard let row = try row(id), let c = row.chapters.first(where: { $0.index == index }) else { return nil }
         return try TimelineCodec.decode(c.blob).chapter

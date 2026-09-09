@@ -32,6 +32,10 @@ public struct LibraryPaths: Hashable, Sendable {
 
     public func coverURL(_ id: UUID) -> URL { documentDirectory(id).appendingPathComponent("cover.jpg") }
 
+    /// The reader's chapters as extracted at import (`RetainedChapters`), so a re-derivation never
+    /// opens the source again (Plan 17, audit §5.1).
+    public func retainedChaptersURL(_ id: UUID) -> URL { documentDirectory(id).appendingPathComponent("chapters.json.lzfse") }
+
     /// The `Document.coverImagePath` form of a URL under `root`; nil for anything else.
     public func relativePath(of url: URL) -> String? {
         let base = root.path + "/"

@@ -27,6 +27,8 @@ public actor Library {
     /// How many UTF-16 units of consecutive sentences one utterance may pack (`Segmenter.packLength`);
     /// the app passes the default, tests that count sentences pass 0.
     private let segmenterPackLength: Int
+    /// The removal of a re-derived document's old audio, running behind the load path (`reprocess`).
+    private var audioGC: Task<Void, Never>?
 
     public init(paths: LibraryPaths, store: LibraryStore, audioStore: any AudioStore, readers: [any DocumentReader],
                 segmenterPackLength: Int = Segmenter.appPackLength) {
@@ -100,22 +102,37 @@ public actor Library {
         return try await store.timeline(for: id)?.timeline
     }
 
-    /// Re-reads the retained source with the current segmenter, normalizer, and dictionary and
-    /// replaces the chapters. The resume position survives (spec §3.2). The old utterances' audio
-    /// keys are removed from the cache: they embed the old versions and would never be looked up
-    /// again. The old-audio GC is tolerant of an undecodable blob (it just leaks those keys) rather
-    /// than blocking re-derivation, the very thing meant to recover from it.
+    /// Re-segments the retained chapters with the current segmenter, normalizer, and dictionary and
+    /// replaces the stored ones. The resume position survives (spec §3.2). The reader is opened only
+    /// for a document imported before its chapters were retained, and then retained for next time
+    /// (Plan 17, audit §5.1). The old utterances' audio keys embed the old versions and would never
+    /// be looked up again, so they are removed from the cache — behind this call, from the old blobs
+    /// read raw before the replacement: the load path pays for neither the decode nor the removals.
+    /// An undecodable old blob just leaks its keys rather than blocking re-derivation, the very thing
+    /// meant to recover from it.
     @discardableResult
     public func reprocess(_ id: UUID) async throws -> Timeline {
         guard let document = try await store.document(id: id) else { throw LibraryStoreError.documentNotFound(id) }
-        let reader = try reader(for: document.sourceType)
-        let read = try await reader.read(fileURL: paths.sourceURL(id, type: document.sourceType),
-                                         sourceType: document.sourceType)
-        let timeline = try await build(read)
-        if let old = try? await store.timeline(for: id) { await removeAudio(of: old.timeline) }
+        let retainedURL = paths.retainedChaptersURL(id)
+        let chapters: [ChapterInput]
+        if let retained = try? RetainedChapters.read(from: retainedURL) {
+            chapters = retained
+        } else {
+            let reader = try reader(for: document.sourceType)
+            let read = try await reader.read(fileURL: paths.sourceURL(id, type: document.sourceType),
+                                             sourceType: document.sourceType)
+            chapters = read.chapters
+            try? RetainedChapters.write(chapters, to: retainedURL)
+        }
+        let timeline = try await build(chapters)
+        let oldBlobs = (try? await store.chapterBlobs(for: id)) ?? []
         try await store.replaceTimeline(timeline, for: id)
+        removeAudioInBackground(ofBlobs: oldBlobs)
         return timeline
     }
+
+    /// Waits for the old audio a `reprocess` left to remove in the background; tests only.
+    func awaitAudioGC() async { await audioGC?.value }
 
     /// Drops the document's rendered audio from the cache and clears every `audioRef`. Actual
     /// durations and word timings stay: they remain the best estimate until the next render.
@@ -130,15 +147,20 @@ public actor Library {
     }
 
     /// What `RenderPolicy` needs for one document (spec §3.4.1). `rendered` follows `audioRef`;
-    /// the coordinator reconciles against the store when it loads (Plan 2).
+    /// the coordinator reconciles against the store when it loads (Plan 2). Never re-derives: a stale
+    /// document is nil here and is re-derived when it is opened (`timelineForPlayback`).
     public func renderSnapshot(for id: UUID) async throws -> RenderSnapshot? {
         guard let document = try await store.document(id: id),
-              let timeline = try await timelineForPlayback(id) else { return nil }
+              let timeline = try await currentTimeline(id) else { return nil }
+        return Self.renderSnapshot(for: document, timeline: timeline)
+    }
+
+    public static func renderSnapshot(for document: Document, timeline: Timeline) -> RenderSnapshot {
         var rendered: [Bool] = []
         rendered.reserveCapacity(timeline.utteranceCount)
         for chapter in timeline.chapters { for u in chapter.utterances { rendered.append(u.audioRef != nil) } }
         let resume = document.resumePosition.map { PositionResolver.resolve($0, in: timeline).utteranceIndex } ?? 0
-        return RenderSnapshot(documentID: id, timeline: timeline, rendered: rendered, resumeIndex: resume)
+        return RenderSnapshot(documentID: document.id, timeline: timeline, rendered: rendered, resumeIndex: resume)
     }
 
     // MARK: Internals
@@ -152,7 +174,8 @@ public actor Library {
 
     private func ingest(id: UUID, sourceType: SourceType, sourceURL: URL?, reader: any DocumentReader) async throws -> ImportResult {
         let read = try await reader.read(fileURL: paths.sourceURL(id, type: sourceType), sourceType: sourceType)
-        let timeline = try await build(read)
+        let timeline = try await build(read.chapters)
+        try RetainedChapters.write(read.chapters, to: paths.retainedChaptersURL(id))
         var coverPath: String?
         if let cover = read.coverImage {
             let url = paths.coverURL(id)
@@ -166,10 +189,10 @@ public actor Library {
     }
 
     /// Phase 1 (spec §3.3) with the dictionary as it stands now (Global Constraints).
-    private func build(_ read: ReadDocument) async throws -> Timeline {
+    private func build(_ chapters: [ChapterInput]) async throws -> Timeline {
         let dictionary = try await store.pronunciations()
         let segmenter = Segmenter(normalizer: TextNormalizer(dictionary: dictionary), packLength: segmenterPackLength)
-        let timeline = TimelineBuilder.build(chapters: read.chapters, segmenter: segmenter)
+        let timeline = TimelineBuilder.build(chapters: chapters, segmenter: segmenter)
         guard timeline.utteranceCount > 0 else { throw ImportError.noText }
         return timeline
     }
@@ -178,6 +201,23 @@ public actor Library {
         for chapter in timeline.chapters {
             for utterance in chapter.utterances {
                 if let ref = utterance.audioRef { try? await audioStore.remove(RenderKey(rawValue: ref)) }
+            }
+        }
+    }
+
+    /// Decodes the replaced chapters and drops their audio, off this actor and after the caller has
+    /// its timeline. One task at a time: a second re-derivation waits for the first's removals.
+    private func removeAudioInBackground(ofBlobs blobs: [Data]) {
+        guard !blobs.isEmpty else { return }
+        let audioStore = self.audioStore
+        let previous = audioGC
+        audioGC = Task.detached(priority: .utility) {
+            await previous?.value
+            for blob in blobs {
+                guard let chapter = try? TimelineCodec.decode(blob).chapter else { continue }
+                for utterance in chapter.utterances {
+                    if let ref = utterance.audioRef { try? await audioStore.remove(RenderKey(rawValue: ref)) }
+                }
             }
         }
     }

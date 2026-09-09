@@ -61,6 +61,28 @@ one-line revert.
 of #12's remaining items it justifies; bucket-lazy readiness if the windowed load's memory peak
 is a problem on the A13.
 
+## Resume here (2026-09-08, latest) — voice picker round 4: one tap target, a "Change" mode
+
+Picked back up the interaction model the owner asked for two rounds ago (after the Kokoro on-device
+bug detour): the row is one tap target now, not the avatar/text split from round 3.
+
+- **Unarmed (the normal state)**: tapping anywhere on a row previews that voice. The avatar is purely
+  visual now (`avatarGlyph`, no longer its own `Button`) — it still swaps to a pause glyph or spinner
+  while that row's voice is the one playing, but the whole row triggers it.
+- **"Change" / "Done"**: a `Pill` living on the Default row (in place of where a heart would sit,
+  since the Default row was never favoritable either). Tapping it arms `isChanging`; while armed,
+  tapping any row — Default included — calls `onSelect` and disarms itself, so picking is one tap, not
+  tap-then-remember-to-back-out. A visible hint line ("Tap a voice below to make it your default")
+  appears above the rows while armed, spelled out rather than left to the pill's label alone — this
+  exact "does tapping a row do anything" ambiguity is what got flagged three rounds running.
+- The heart (favorite) is untouched by any of this: still its own button, still independent of
+  `isChanging` and of the checkmark.
+
+Simulator build verified clean. No Sources/ changes this round, so nothing to re-run there. Still not
+seen on an actual phone — that's the same standing gap as every prior round, and the fixed on-device
+Kokoro build (previous section) is what finally makes an actual look possible once the owner
+re-authenticates in Xcode.
+
 ## Resume here (2026-09-08, latest) — "Not available on this device" was a real, fixed bug
 
 The owner installed the Phone build on their iPhone 11 Pro (Cmd+R from Xcode) and hit "Not available

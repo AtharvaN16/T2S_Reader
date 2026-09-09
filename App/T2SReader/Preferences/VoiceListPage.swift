@@ -14,6 +14,10 @@ struct VoiceListPage: View {
     /// The Kokoro list's quick filter — only the Kokoro rows carry the gender and favorite data a
     /// filter needs, so System and Cloud are unaffected.
     @State private var filter: VoiceFilter = .all
+    /// Armed by the "Change" control on the Default row. Off: a tap anywhere on a row previews it.
+    /// On: a tap anywhere on a row — the Default row included — makes it the voice, and this clears
+    /// itself right after, so picking is a single tap rather than tap-then-remember-to-exit.
+    @State private var isChanging = false
 
     var body: some View {
         let options = env.voices.voices()
@@ -73,6 +77,15 @@ struct VoiceListPage: View {
         let british = candidates.filter { $0.language == "en-GB" }
         return VStack(alignment: .leading, spacing: 0) {
             filterPills()
+            // Spelled out rather than left to the "Change" pill's label alone: this exact ambiguity
+            // — what does tapping a row do right now — is what the owner has flagged three times
+            // over this picker's last few rounds.
+            if isChanging {
+                Text("Tap a voice below to make it your default.")
+                    .typeRole(.meta)
+                    .foregroundStyle(Tokens.ink2)
+                    .padding(.bottom, Spacing.grid)
+            }
             ForEach(defaults) { row($0, options: options, hasDefaultRow: hasDefaultRow) }
             if !american.isEmpty {
                 subsectionHeader("American English", flag: "🇺🇸")
@@ -154,20 +167,23 @@ struct VoiceListPage: View {
         // has none (the simulator's system list), the resolved default's own row is.
         let isSelected = option.id == selection
             || (selection == nil && (hasDefaultRow ? option.isDefault : (resolvedDefault.map { $0 == option.id } ?? false)))
+        let previewing = env.voicePreview.previewing == option.id
+        let rendering = previewing && env.voicePreview.isRendering
         return HStack(spacing: 12) {
-            // The avatar is its own button: tap it to preview, tap again to stop, and it shows a
-            // pause glyph in place of the initial while it plays. The "Default" row is a pointer, not
-            // a voice — it has nothing of its own to preview, so its avatar stays a plain disc.
-            if option.isDefault {
-                avatar(for: option)
-            } else {
-                avatarButton(for: option)
-            }
-
-            // The name and its line are the row's own selection target now that the avatar has a
-            // job of its own: tap either to make this the voice (spec §2.4.5).
-            Button { onSelect(option) } label: {
+            // One tap target for the whole row now, not a button per zone: unarmed, a tap previews
+            // (the "Default" row has no voice of its own, so it does nothing here); armed by
+            // "Change", a tap makes this the voice and disarms — the Default row included, which is
+            // how "no override, follow the app default" gets picked again once you've moved off it.
+            Button {
+                if isChanging {
+                    onSelect(option)
+                    isChanging = false
+                } else if !option.isDefault {
+                    env.voicePreview.toggle(option.id)
+                }
+            } label: {
                 HStack(spacing: 12) {
+                    avatarGlyph(for: option, previewing: previewing, rendering: rendering)
                     VStack(alignment: .leading, spacing: 6) {
                         Text(option.name)
                             .typeRole(.rowTitle)
@@ -192,13 +208,25 @@ struct VoiceListPage: View {
             }
             .buttonStyle(.plain)
 
-            // The "Default" row points at another row's voice, so it isn't itself favoritable.
-            if !option.isDefault {
+            // The "Default" row carries the mode switch instead of a heart — it points at another
+            // row's voice, so it isn't itself favoritable, and it's the natural home for the one
+            // control that changes what every other row's tap means.
+            if option.isDefault {
+                changeButton()
+            } else {
                 favoriteButton(for: option)
             }
         }
         .frame(minHeight: 56)
         .padding(.vertical, Spacing.grid)   // room between rows, on top of the tap-target minimum
+    }
+
+    /// Arms and disarms `isChanging`. "Change" (soft) → tap a row to pick it, which disarms itself;
+    /// or tap "Done" (now shown, selected style) to back out without picking anything.
+    private func changeButton() -> some View {
+        Pill(label: isChanging ? "Done" : "Change", style: isChanging ? .selected : .soft) {
+            isChanging.toggle()
+        }
     }
 
     /// The "Default" row says which voice it currently means, once the routing has answered.
@@ -210,44 +238,39 @@ struct VoiceListPage: View {
         return option.detail
     }
 
-    /// The avatar as its own preview button (spec: Plan 9 voice quality, second UI pass) — Kokoro,
-    /// system and cloud alike, through the one model `RoutedEngine` already knows how to route any of
-    /// their IDs to. Tap plays, tap again stops; the disc swaps its initial for a pause glyph while
-    /// it plays, so there's no separate play control left in the row.
-    private func avatarButton(for option: VoiceOption) -> some View {
-        let previewing = env.voicePreview.previewing == option.id
-        let rendering = previewing && env.voicePreview.isRendering
+    /// The avatar, purely visual now that the whole row is one tap target: the voice's initial,
+    /// tinted by gender — pink for female, blue for male, neutral `surface` where there is none (the
+    /// "Default" pointer row, a system or cloud voice) — swapped for a pause glyph while this row's
+    /// voice is the one previewing, or a spinner while its preview is still rendering.
+    private func avatarGlyph(for option: VoiceOption, previewing: Bool, rendering: Bool) -> some View {
         let tint: Color? = switch option.gender {
         case .female: Tokens.voiceFemale
         case .male: Tokens.voiceMale
         case nil: nil
         }
         let foreground = tint == nil ? Tokens.ink : Tokens.onAccent
-        return Button { env.voicePreview.toggle(option.id) } label: {
-            ZStack {
-                Circle().fill(tint ?? Tokens.surface)
-                if rendering {
-                    ProgressView().tint(foreground)
-                } else if previewing {
-                    Image(systemName: "pause.fill")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(foreground)
-                } else {
-                    Text(option.name.prefix(1).uppercased())
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(foreground)
-                }
+        return ZStack {
+            Circle().fill(tint ?? Tokens.surface)
+            if rendering {
+                ProgressView().tint(foreground)
+            } else if previewing {
+                Image(systemName: "pause.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(foreground)
+            } else {
+                Text(option.name.prefix(1).uppercased())
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(foreground)
             }
-            .frame(width: 40, height: 40)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(previewing ? "Stop preview" : "Preview \(option.name)")
+        .frame(width: 40, height: 40)
+        .accessibilityHidden(true)
     }
 
-    /// A heart, independent of the checkmark: the checked row is what plays by default, the starred
-    /// rows are what "Favorites" filters to. A voice can be both, neither, or starred without being
-    /// default. Persisted in `ReaderPreferences.favoriteVoiceIDs`, so it survives a relaunch. Sized to
-    /// match the avatar now that it's the row's only trailing control.
+    /// A heart, independent of both the checkmark and `isChanging`: the checked row is what plays by
+    /// default, the starred rows are what "Favorites" filters to, and favoriting works the same
+    /// whether or not "Change" is armed. A voice can be both, neither, or starred without being
+    /// default. Persisted in `ReaderPreferences.favoriteVoiceIDs`, so it survives a relaunch.
     private func favoriteButton(for option: VoiceOption) -> some View {
         let isFavorite = env.preferences.favoriteVoiceIDs.contains(option.id)
         return Button { env.preferences.toggleFavoriteVoice(option.id) } label: {
@@ -258,27 +281,6 @@ struct VoiceListPage: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(isFavorite ? "Remove \(option.name) from favorites" : "Add \(option.name) to favorites")
-    }
-
-    /// The plain disc for the "Default" row, which has no voice of its own to preview: the voice's
-    /// initial, tinted by gender — pink for female, blue for male — for every other row's avatar
-    /// before `avatarButton` takes over. The "Default" row's own gender is always nil, so this stays
-    /// the neutral `surface` disc there.
-    private func avatar(for option: VoiceOption) -> some View {
-        let tint: Color? = switch option.gender {
-        case .female: Tokens.voiceFemale
-        case .male: Tokens.voiceMale
-        case nil: nil
-        }
-        return Circle()
-            .fill(tint ?? Tokens.surface)
-            .frame(width: 40, height: 40)
-            .overlay(
-                Text(option.name.prefix(1).uppercased())
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(tint == nil ? Tokens.ink : Tokens.onAccent)
-            )
-            .accessibilityHidden(true)
     }
 
     /// The Kokoro section is only rendered by a build that links the engine, so this is only ever

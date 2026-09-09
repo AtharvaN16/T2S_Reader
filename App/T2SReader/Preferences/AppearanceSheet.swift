@@ -39,7 +39,7 @@ struct AppearanceSheet: View {
             }
             Spacer()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(.horizontal, Spacing.margin)
         .presentationBackground(Tokens.raised)
         .presentationDetents([.medium])

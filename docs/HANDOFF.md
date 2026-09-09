@@ -2,6 +2,42 @@
 
 _Last updated 2026-09-08 (Plan 16 — steady streaming and the open path — on `plan-16-open-path`, in the worktree `.worktrees/plan-16-open-path`, off `origin/dev` @ 246065b). Written for whoever picks up the coding next._
 
+## Resume here (2026-09-08, latest) — voice picker round 3
+
+A third pass, still on `dev`, still unseen on a phone. Two of the five asks were UI polish; the fifth
+was a real design question worth recording here.
+
+- **Avatar is the preview control now.** Tap the disc to hear the voice, tap again to stop; it swaps
+  its initial for a pause glyph while playing (`avatarButton`, replacing the separate `previewButton`
+  circle the owner asked removed). The "Default" pointer row has no voice of its own, so its avatar
+  stays the plain, non-interactive disc it always was.
+- **The name/detail block is the selection target** — tapping the text (not the avatar, not the
+  heart) is what calls `onSelect` and sets this voice as the default (or the per-document override in
+  `VoiceChangeSheet`). This is the fix for "tapping a voice does not make it default": before this
+  round the whole row shared one purpose and the tap area sprawled past what was visible (the row's
+  own `Spacer` filled blank space up to the heart/play icons), which is a plausible source of the miss
+  the owner hit even though `preferences.defaultVoiceID` itself is straightforward `UserDefaults`
+  state with nothing else touching it. Splitting the row into three explicit buttons — avatar
+  (preview), text (select), heart (favorite) — removes the ambiguity outright rather than patching a
+  bug that couldn't be reproduced by reading the code alone; worth confirming on the phone that the
+  checkmark now visibly follows a tap.
+- **What "default" is for, recorded for whoever is asked this again**: `ReaderPreferences.defaultVoiceID`
+  is the fallback voice for any document with no per-document override — `ReaderPage.swift`,
+  `PrepareRunner`, and `PlayerModel` all read it that way. Removing the concept would mean every new
+  book starts on the hard-coded system fallback until changed one book at a time. Recommended keeping
+  it (and did) rather than removing it unasked — a persisted, load-bearing setting is not something to
+  delete on a UI-fix pass without the owner confirming that's really what they want.
+- **Personality lines shortened to three-word tags** ("Warm, Breathy and Intimate" — the ElevenReader
+  row the owner pointed at reads "Expressive, Deep and Emotive"), condensed from the same grounded
+  write-ups as round 2, not reworded from scratch. `.lineLimit(1)` was already there for the ellipsis
+  truncation the owner asked to match.
+- **More space between name and detail** (`VStack` spacing 2 → 6) and **a bigger heart** (17pt → 22pt
+  glyph, 32pt → 40pt frame, now the row's only trailing control).
+
+Simulator scheme still builds clean; still no Kokoro rows outside the Phone build, so none of round 2
+or round 3 has been seen on any screen. This is the one most worth an actual phone install before
+another round of screenshots — three rounds of blind UI iteration is enough.
+
 ## Resume here (2026-09-08, later) — voice picker round 2
 
 The owner sent a second phone screenshot with five more asks, done on `dev` @ (this commit) and

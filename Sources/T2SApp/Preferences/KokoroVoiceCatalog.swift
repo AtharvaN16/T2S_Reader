@@ -84,42 +84,43 @@ public struct KokoroVoiceCatalog: VoiceCatalog {
         return stem.prefix(1).uppercased() + stem.dropFirst()
     }
 
-    /// The row's second line: how the voice comes across, so a reader can pick one without
-    /// previewing all 28. Kokoro ships no descriptions of its own, so this is grounded in
+    /// The row's second line: three short traits, not a sentence — the ElevenReader row the owner
+    /// pointed at reads "Expressive, Deep and Emotive", and `.lineLimit(1)` on the row truncates
+    /// whatever doesn't fit. Kokoro ships no descriptions of its own, so this is condensed from
     /// independent listener write-ups per voice (voicerankings.com's Kokoro-82M profiles, checked
     /// against Hugging Face's `hexgrad/Kokoro-82M` voice list) rather than a guess from the name —
     /// the first draft here was guessed and the owner correctly called it out as not matching. Still
     /// worth re-checking against the phone once it can be heard. A name not in the table (none
     /// today) gets a neutral line.
     public static let personalities: [String: String] = [
-        "af_heart": "Warm and breathy, a smile in it",
-        "af_alloy": "Bright, clean and cheerful",
-        "af_aoede": "Deep, velvety and unhurried",
-        "af_bella": "Warm and husky, easygoing",
-        "af_jessica": "Bright and quick, a little breathy",
-        "af_kore": "Warm and steady, a patient guide",
-        "af_nicole": "Hushed and whisper-soft, built for sleep",
-        "af_nova": "Polished, clear and efficiently warm",
-        "af_river": "Husky and unhurried, Gen Z casual",
-        "af_sarah": "Polite and plain-spoken, easy to trust",
-        "af_sky": "Smooth and composed, an assistant's calm",
-        "am_adam": "Trustworthy and clear, neighborly warmth",
-        "am_echo": "Soft, breathy and deeply empathetic",
-        "am_eric": "Relaxed and modern, a little grit",
-        "am_fenrir": "Confident and energetic, a rich texture",
-        "am_liam": "Cheerful and quick, upbeat energy",
-        "am_michael": "Deep and grounded, quietly trustworthy",
-        "am_onyx": "Very deep and resonant, real gravitas",
-        "am_puck": "Bouncy and eager, youthful energy",
-        "am_santa": "Deep and jolly, unmistakably Santa",
-        "bf_alice": "Polished and precise, bright and clear",
-        "bf_emma": "Polished and warm, efficiently friendly",
-        "bf_isabella": "Warm and breathy, gently sophisticated",
-        "bf_lily": "Polished and brisk, efficiently clear",
-        "bm_daniel": "Crisp and articulate, polished warmth",
-        "bm_fable": "A velvety storyteller, refined and warm",
-        "bm_george": "Distinguished and reassuring, polished delivery",
-        "bm_lewis": "Sophisticated and composed, corporate calm",
+        "af_heart": "Warm, Breathy and Intimate",
+        "af_alloy": "Bright, Clean and Cheerful",
+        "af_aoede": "Warm, Deep and Relaxed",
+        "af_bella": "Husky, Warm and Conversational",
+        "af_jessica": "Bright, Energetic and Breathy",
+        "af_kore": "Warm, Steady and Guiding",
+        "af_nicole": "Hushed, Whisper-Soft and Intimate",
+        "af_nova": "Polished, Clear and Warm",
+        "af_river": "Husky, Casual and Intimate",
+        "af_sarah": "Polite, Friendly and Approachable",
+        "af_sky": "Smooth, Composed and Helpful",
+        "am_adam": "Trustworthy, Clear and Warm",
+        "am_echo": "Soft, Breathy and Gentle",
+        "am_eric": "Relaxed, Modern and Casual",
+        "am_fenrir": "Confident, Energetic and Rich",
+        "am_liam": "Cheerful, Upbeat and Energetic",
+        "am_michael": "Warm, Resonant and Trustworthy",
+        "am_onyx": "Deep, Resonant and Reassuring",
+        "am_puck": "Youthful, Bouncy and Eager",
+        "am_santa": "Deep, Warm and Jolly",
+        "bf_alice": "Polished, Articulate and Professional",
+        "bf_emma": "Polished, Warm and Inviting",
+        "bf_isabella": "Warm, Breathy and Sophisticated",
+        "bf_lily": "Polished, Clear and Sophisticated",
+        "bm_daniel": "Crisp, Articulate and Polished",
+        "bm_fable": "Refined, Warm and Velvety",
+        "bm_george": "Distinguished, Articulate and Reassuring",
+        "bm_lewis": "Sophisticated, Smooth and Composed",
     ]
 
     private static func personality(for name: String) -> String {

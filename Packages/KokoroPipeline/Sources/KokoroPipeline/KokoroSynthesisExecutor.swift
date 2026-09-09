@@ -279,6 +279,39 @@ public func executeKokoroSynthesis(
     try tensorDump?.writeFloatArray(name: "n_padded", values: nPadded, shape: [1, fullF0Len])
     try tensorDump?.writeMLMultiArray(name: "asr_padded", array: asrPadded)
 
+    // Stage 7 first: hn-nsf Swift DSP, built beside the DecoderPre prediction. It reads only
+    // f0Padded and the source module's weights, so it can run on another core while Core ML
+    // holds this thread; `decoderPreHnsfOverlap` records how much of it hid behind Stage 6.
+    // Vendored change (t2s_reader, Plan 16); upstream ran the two one after the other.
+    let har = HarBuild()
+    let harGroup = DispatchGroup()
+    let wantsHarComponents = tensorDump != nil
+    let harSeed = request.seed
+    let t12 = CFAbsoluteTimeGetCurrent()
+    DispatchQueue.global(qos: .userInitiated).async(group: harGroup) {
+        if wantsHarComponents {
+            let components = buildHarComponents(
+                f0Padded: f0Padded,
+                linearWeights: linearWeights,
+                linearBias: linearBias,
+                seed: harSeed
+            )
+            har.flat = components.har
+            har.frames = components.nFrames
+            har.debug = components
+        } else {
+            let built = buildHar(
+                f0Padded: f0Padded,
+                linearWeights: linearWeights,
+                linearBias: linearBias,
+                seed: harSeed
+            )
+            har.flat = built.har
+            har.frames = built.nFrames
+        }
+        har.finished = CFAbsoluteTimeGetCurrent()
+    }
+
     // Stage 6: DecoderPre Core ML.
     let t10 = CFAbsoluteTimeGetCurrent()
     let decPreModel = try modelProvider.decoderPreModel(bucketSec: bucketSec)
@@ -295,41 +328,20 @@ public func executeKokoroSynthesis(
         "n_input": MLFeatureValue(multiArray: nArray3D),
         "ref_s": MLFeatureValue(multiArray: decRefS),
     ])
-    let decPreOutput = try decPreModel.prediction(from: decPreInput)
-    let xPre = decPreOutput.featureValue(for: "x_pre")!.multiArrayValue!
+    let decPreResult = Result { try decPreModel.prediction(from: decPreInput) }
     let t11 = CFAbsoluteTimeGetCurrent()
     timings.decoderPre = t11 - t10
+    harGroup.wait()   // before any throw: the build must not outlive the call that started it
+    let decPreOutput = try decPreResult.get()
+    let xPre = decPreOutput.featureValue(for: "x_pre")!.multiArrayValue!
 
     try tensorDump?.writeMLMultiArray(name: "x_pre", array: xPre)
 
-    // Stage 7: hn-nsf Swift DSP.
-    let t12 = CFAbsoluteTimeGetCurrent()
-    let harFlat: [Float]
-    let harFrames: Int
-    let harDebug: HarDebugComponents?
-    if tensorDump != nil {
-        let components = buildHarComponents(
-            f0Padded: f0Padded,
-            linearWeights: linearWeights,
-            linearBias: linearBias,
-            seed: request.seed
-        )
-        harFlat = components.har
-        harFrames = components.nFrames
-        harDebug = components
-    } else {
-        let built = buildHar(
-            f0Padded: f0Padded,
-            linearWeights: linearWeights,
-            linearBias: linearBias,
-            seed: request.seed
-        )
-        harFlat = built.har
-        harFrames = built.nFrames
-        harDebug = nil
-    }
-    let t13 = CFAbsoluteTimeGetCurrent()
-    timings.hnsfSwift = t13 - t12
+    let harFlat = har.flat
+    let harFrames = har.frames
+    let harDebug = har.debug
+    timings.hnsfSwift = har.finished - t12
+    timings.decoderPreHnsfOverlap = max(0, min(t11, har.finished) - max(t10, t12))
 
     if let harDebug {
         try tensorDump?.writeFloatArray(
@@ -610,6 +622,15 @@ private func warmModels(
         }
     }
     _ = try genModel.prediction(from: try MLDictionaryFeatureProvider(dictionary: warmGenInputs))
+}
+
+/// The hn-nsf build's result, filled on the queue that built it and read after the group's
+/// wait (which orders the two). Vendored change (t2s_reader, Plan 16).
+private final class HarBuild {
+    var flat: [Float] = []
+    var frames = 0
+    var debug: HarDebugComponents?
+    var finished: CFAbsoluteTime = 0
 }
 
 private func decoderPreFrameCount(fullF0Len: Int) -> Int {

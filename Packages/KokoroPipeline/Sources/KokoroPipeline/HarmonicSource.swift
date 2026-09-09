@@ -320,9 +320,42 @@ public func sineGenFromF0Frames(
     linearBias: Float,
     seed: UInt64? = nil
 ) -> [Float] {
+    sineGenFromF0Frames(
+        f0Frames: f0Frames,
+        linearWeights: linearWeights,
+        linearBias: linearBias,
+        seed: seed,
+        sineFrames: sineFrameCount(f0Frames: f0Frames)
+    )
+}
+
+/// The frames whose sine passes are worth computing: every frame after the last voiced one is
+/// unvoiced, and the voiced/unvoiced mask zeroes its sine samples anyway. One frame past the
+/// last voiced frame is kept because the phase upsample (align_corners=false) of a frame's
+/// second half reads the frame after it. Vendored change (t2s_reader, Plan 16): the padded
+/// bucket can be several times the utterance, and the sine passes over the padding were the
+/// largest share of this stage.
+func sineFrameCount(f0Frames: [Float]) -> Int {
+    guard let lastVoiced = f0Frames.lastIndex(where: { $0 > HarmonicConstants.voicedThreshold }) else { return 0 }
+    return min(f0Frames.count, lastVoiced + 2)
+}
+
+/// `sineFrames` is the prefix of frames whose sine passes are computed (the rest stay zero and
+/// are masked). With `sineFrames == f0Frames.count` this is the reference computation; the
+/// trimmed one is bit-identical to it because the upsample ratio is 1/300 either way and the
+/// prefix carries the one neighbouring frame the interpolation reads.
+func sineGenFromF0Frames(
+    f0Frames: [Float],
+    linearWeights: [Float],
+    linearBias: Float,
+    seed: UInt64?,
+    sineFrames: Int
+) -> [Float] {
     let frameCount = f0Frames.count
     let scale = HarmonicConstants.upsampleScale
     let L = frameCount * scale
+    precondition(sineFrames >= 0 && sineFrames <= frameCount, "sineFrames must be a prefix of the frames")
+    let sineL = sineFrames * scale
     let dim = HarmonicConstants.harmonicDim
     let sr = HarmonicConstants.sampleRate
     let sineAmp = HarmonicConstants.sineAmp
@@ -334,9 +367,9 @@ public func sineGenFromF0Frames(
     var radDS = [Double](repeating: 0, count: frameCount)
     var cumPhase = [Double](repeating: 0, count: frameCount)
     var phaseScaled = [Double](repeating: 0, count: frameCount)
-    var phaseUp = [Double](repeating: 0, count: L)
-    var sinResult = [Double](repeating: 0, count: L)
-    var floatSines = [Float](repeating: 0, count: L)
+    var phaseUp = [Double](repeating: 0, count: sineL)
+    var sinResult = [Double](repeating: 0, count: sineL)
+    var floatSines = [Float](repeating: 0, count: sineL)
     var sineWaves = [Float](repeating: 0, count: dim * L)
     var rng: RandomNumberGenerator = seed.map { SeededRNG(seed: $0) as RandomNumberGenerator } ?? SystemRandomNumberGenerator()
     let twoPiTimesScale = 2.0 * Double.pi * Double(scale)
@@ -359,15 +392,16 @@ public func sineGenFromF0Frames(
             cumPhase[t] = cumPhase[t - 1] + radDS[t]
         }
 
+        guard sineFrames > 0 else { continue }
         vDSP_vsmulD(cumPhase, 1, [twoPiTimesScale], &phaseScaled, 1, vDSP_Length(frameCount))
-        linearInterpolateInto(from: phaseScaled, count: frameCount, into: &phaseUp, targetLen: L)
+        linearInterpolateInto(from: phaseScaled, count: sineFrames, into: &phaseUp, targetLen: sineL)
 
-        var n = Int32(L)
+        var n = Int32(sineL)
         vvsin(&sinResult, phaseUp, &n)
 
-        vDSP_vdpsp(sinResult, 1, &floatSines, 1, vDSP_Length(L))
+        vDSP_vdpsp(sinResult, 1, &floatSines, 1, vDSP_Length(sineL))
         var ampScalar = sineAmp
-        vDSP_vsmul(floatSines, 1, &ampScalar, &sineWaves[h * L], 1, vDSP_Length(L))
+        vDSP_vsmul(floatSines, 1, &ampScalar, &sineWaves[h * L], 1, vDSP_Length(sineL))
     }
 
     let unvoicedNoiseAmp = sineAmp / 3.0

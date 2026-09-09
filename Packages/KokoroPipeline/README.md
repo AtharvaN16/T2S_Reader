@@ -2,8 +2,8 @@
 
 `github.com/mattmireles/kokoro-coreml` at `66d8cf5108cce0991b8868b01b4d8a8b2e98881d` (main,
 2026-08-28), Apache-2.0 — see `LICENSE`. `Sources/KokoroPipeline/` is upstream's
-`swift/Sources/KokoroPipeline/` with two local additions, each marked "Vendored addition
-(t2s_reader)" in the code:
+`swift/Sources/KokoroPipeline/` with these local changes, each marked "Vendored addition
+(t2s_reader)" or "Vendored change (t2s_reader)" in the code:
 
 - `KokoroSynthesisRequest.punctuationSuppression` (`PunctuationSuppression` in
   `KokoroSynthesisExecutor.swift`, `KokoroVocabulary.sentenceFinalPunctuationTokenIds`, and a
@@ -14,8 +14,17 @@
   reads this to prefer a clause boundary over a bare word when it has to cut a long utterance, or
   split one that overflowed its bucket, and no sentence-final boundary is available.
 
-Both defaults match upstream's own behaviour, so every other file is byte-identical and the
-additions are a strict superset.
+- `KokoroSynthesisRequest.f0Spread` (`spreadF0` in `KokoroSynthesisExecutor.swift`): the
+  predicted F0 curve's voiced frames scaled about their log-mean before the decoder; 1 is upstream.
+- `HarmonicSource.swift` (Plan 16): `sineGenFromF0Frames` computes its nine sine passes over the
+  voiced prefix of the padded F0 curve plus one frame (`sineFrameCount`); the mask zeroes the rest
+  anyway, and the output is bit-identical to upstream's (`HarmonicSourceTests`).
+- `KokoroSynthesisExecutor.swift` (Plan 16): the hn-nsf build (Stage 7) runs on another core
+  while the DecoderPre prediction (Stage 6) holds the thread; `StageTimings.decoderPreHnsfOverlap`,
+  which upstream declares and never sets, records the overlap.
+
+Every default matches upstream's own behaviour and every output is unchanged, so the changes are
+a strict superset; the remaining files are byte-identical.
 
 It exists for one reason: the upstream repository root has no `Package.swift` — the package lives
 in the `swift/` subdirectory, and SwiftPM cannot consume a subdirectory of a repository by URL.

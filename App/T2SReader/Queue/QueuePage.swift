@@ -19,8 +19,7 @@ struct QueuePage: View {
                 header
                     .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
                 if rows.isEmpty {
-                    EmptyQueue { showAdd = true }
-                        .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
+                    // Header's Import pill is the only control; nothing else to show here.
                 } else {
                     SectionHeader(title: "Continue Listening")
                         .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))

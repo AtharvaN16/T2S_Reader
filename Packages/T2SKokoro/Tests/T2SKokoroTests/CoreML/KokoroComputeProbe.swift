@@ -31,7 +31,13 @@ import T2SCore
         let voice = KokoroVoiceID(engineID: KokoroCoreMLEngine.identity, voice: "af_heart").rawValue
         var report = ["# Compute-unit probe — \(Date().ISO8601Format())", "",
                       "| policy | load (all buckets) | first render | second render | audio | RTF (second) |", "|---|---|---|---|---|---|"]
-        for policy in KokoroComputeUnits.allCases {
+        let reportURL = Self.outputDirectory.appending(path: "report.md")
+        // GPU before the Neural Engine: the two policies that touch the Neural Engine spend five to
+        // nine minutes per generator stage failing to compile it (`ANECCompile() FAILED`, this Mac,
+        // 2026-09-10 — the audit's §3.7 finding), so the rows worth having come first, and the
+        // report is written after every row so a probe stopped early still leaves them.
+        let policies: [KokoroComputeUnits] = [.cpu, .cpuAndGPU, .all, .cpuAndNeuralEngine]
+        for policy in policies {
             var options = KokoroCoreMLEngine.Options.default
             options.computeUnits = policy
             let engine = KokoroCoreMLEngine(resources: resources, options: options)
@@ -52,8 +58,7 @@ import T2SCore
             print("kokoro compute probe " + line)
             report.append(line)
             _ = first
+            try (report.joined(separator: "\n") + "\n").write(to: reportURL, atomically: true, encoding: .utf8)
         }
-        try (report.joined(separator: "\n") + "\n").write(
-            to: Self.outputDirectory.appending(path: "report.md"), atomically: true, encoding: .utf8)
     }
 }

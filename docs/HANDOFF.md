@@ -60,6 +60,23 @@ crashing after three lines on the 17 Pro, the warm-up, "decouple the model from 
   `com.antarlabs.t2sreader` / `group.com.antarlabs.t2sreader` / `6U8JR7LCRZ` there — what his
   installed app already used — instead of edits to tracked files.
 
+**Compute units, decided 2026-09-10 (Harsh: "as fast as possible", the recommended path):** the app
+ships CPU-only until the phone says otherwise. This Mac's probe (`scripts/compute-probe.sh`,
+`spikes/findings/compute-probe/report.md`) on the 90-word Dickens passage:
+
+| policy | load, all buckets | first render | second render | RTF (second) |
+|---|---|---|---|---|
+| coreml-cpu | 96 s (cold plans) | 3.6 s | 3.5 s | 0.131 |
+| coreml-cpu+gpu | 126 s | 26.2 s | 3.8 s | 0.142 |
+
+The Neural Engine policies (`cpuAndNeuralEngine`, `all`) were stopped: every generator stage
+spends five to nine minutes failing `ANECCompile() FAILED` before Core ML falls back — the audit's
+§3.7 finding, reproduced. So `all` would lengthen the first launch by half an hour and win nothing.
+**The one measurement left:** the 17 Pro with `-kokoro.computeUnits cpuAndGPU` against the
+default; if the GPU wins there by more than noise, wire `.cpuAndGPU` for Apple GPU family 7 and
+up in `KokoroComposition.make` (the family check is `KokoroAvailability.Probe`'s) and keep the A13
+on CPU, where the GPU policy measured twice as slow.
+
 **Why the 11 Pro and the 17 Pro differ:** not the silicon. The 17 Pro's launches were being killed
 mid-warm-up and restarted from a cold plan cache, then it played at whatever the last kill left; a
 CPU-only Core ML pipeline scales with one or two performance cores, not with the A19 Pro's Neural

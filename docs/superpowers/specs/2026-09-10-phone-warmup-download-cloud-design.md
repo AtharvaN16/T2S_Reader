@@ -55,7 +55,10 @@ Two reports under `T2SReaderKokoro` in the 17 Pro's system crash logs:
    timings (`com.t2s.reader`, category `kokoro.timing`); a user default `kokoro.computeUnits`
    (`cpu`, `cpuAndNeuralEngine`, `cpuAndGPU`, `all`) picks the compute units at launch for the
    experiment the audit §3.7 asks for; a macOS probe renders one passage under each and prints the
-   stage split.
+   stage split. The shipped default stays CPU (Harsh, 2026-09-10): on this Mac CPU+GPU is 8% slower
+   at steady state, 30 s slower to load and 26 s slower on its first render, and the Neural Engine
+   policies spend minutes per generator stage failing to compile (`ANECCompile() FAILED`). A GPU
+   default for Apple GPU family 7 and up is a ten-line change once the phone shows it winning.
 9. **The cloud route speaks OpenAI's real contract.** Request `{model, input, voice, response_format:
    "pcm"}`; the response is raw 16-bit little-endian mono PCM at 24 kHz (`audio/pcm`) or — from a
    proxy — the JSON `{audio, sample_rate, word_timings}` contract the code already had.

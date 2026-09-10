@@ -1,8 +1,45 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 small hours (the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 small hours (the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — the share bug, the veil behind the page, the skip pill on any book
+## Resume here (2026-09-10, latest) — the Collection title is the filter
+
+One ask from the phone, with a reference (a podcast app's "Queue ⌄" dropping a Queue / Favorites
+card): rename the Collection's title to **All**, give it an up-and-down chevron, and let a tap on
+it choose the kind — replacing the row of filter tabs under the header.
+
+- **`Design/TitleMenu.swift`** (new, and `Design/FilterTabs.swift` is gone with nothing left
+  referencing it): **`TitleChevron`**, `chevron.up.chevron.down` at 16 pt bold pulled off the
+  baseline onto the word's x-height (`alignmentGuide(.firstTextBaseline) { center + 12 }`) so it
+  reads as part of the title; **`TitleMenuCard`**, a `raised` card at radius 20 with a row per
+  option, the chosen one on `Tokens.ink.opacity(0.07)` with the voice list's `RadioMark`. The film
+  is `ink` at low opacity rather than `surface` because in the dark theme `surface` and `raised`
+  are four values apart — the row would not read as chosen. **`TitleAnchorKey`** carries the
+  title's bounds up as an `Anchor<CGRect>`.
+- **Why an anchor and not a frame.** First cut measured the title with a `GeometryReader` into a
+  coordinate space named on the `ScrollView`; the value arrived as 0 every time (the card landed
+  under the status bar). `anchorPreference(value: .bounds)` + `overlayPreferenceValue` +
+  `proxy[anchor]` resolves through the scroll view. Worth remembering — the named-space trick is
+  the one that looks right and silently is not.
+- **The menu only exists while it is down.** The `GeometryReader` lives inside the `if`, not
+  around it: an open-ended reader over a closed menu is a page-wide view with no content, and a
+  page-wide nothing over the shelf is exactly what must not eat a tap on a book. `T2S_OPEN=kinds`
+  opens the menu at launch — a scripted simulator cannot tap a title.
+- **The freed row.** With the tabs gone the layout switch joins `+` and Search on the header line,
+  and it still only appears when the collection has something in it.
+- **A `Pill` no longer wraps** (`Primitives.swift`): `lineLimit(1)` + `fixedSize` horizontally. At
+  accessibility-extra-large "Search" was breaking to three lines inside its capsule — this was
+  already true before this pass, with the longer title "Collection". What gives now is the title,
+  which takes `lineLimit(1).minimumScaleFactor(0.6)` and scales down; checked with the widest kind
+  ("Books") selected at that size, everything holds one row.
+
+Seen in the simulator: light and dark, grid and list, menu open and closed, at medium and
+accessibility-extra-large. `swift test` → 444 passed; `scripts/build-app.sh` → `** BUILD
+SUCCEEDED **`. **Not seen: any of it under a real finger** — the Mac's screen capture is blocked
+here, so no tap could be driven; the open/pick/dismiss path is reasoned, not exercised. First
+thing to check on the phone: that a tap on the shelf still opens a book with the menu closed.
+
+## Resume here (2026-09-10) — the share bug, the veil behind the page, the skip pill on any book
 
 Five things from the phone.
 
@@ -160,7 +197,7 @@ so nothing has to be a mode. Done on `dev`:
   name through to the end of the row is the *choose* button, ending in a **`RadioMark`** (new in
   `Primitives.swift`: an `ink3` ring, or an ink disc with a check) — Beside's mark in this palette.
   The heart stays between them, Kokoro or not. The "Change" / "Done" pill, `isChanging` and the
-  hint line are gone. The Kokoro filter chips are `FilterTabs` now (the Collection's reasoning).
+  hint line are gone. The Kokoro filter chips were `FilterTabs` (since deleted with the Collection's tabs; nothing references it now).
   New parameter `confirm: Confirm?` — nil applies on the radio's tap (Settings); set, the radio
   moves and a `BarButton` at the foot applies, with an optional note line above it.
 - **`VoiceChangeSheet`** is one screen: the picker with `confirm` — "Change voice", grey until the
@@ -198,9 +235,9 @@ flow "Importing an article (website link)") as the reference for the last one.
 - **Collection: everything imported, five tabs, no pills.** `LibraryModel.collection` is every
   summary now (spec §2.3 kept articles on Home; with Home down to three there is nowhere else for
   an article to live). `CollectionPage.Filter` gained `text` (an article with no `sourceURL`,
-  i.e. pasted text) and `links` (one with a URL). The chips are `Design/FilterTabs.swift`: words,
-  the chosen one in ink with a 2 pt bar under it that slides (`matchedGeometryEffect`), the rest
-  `ink2` — the owner found the pills "too similar to search". `ShelfArt` (private, in
+  i.e. pasted text) and `links` (one with a URL). The chips were `Design/FilterTabs.swift` — words with a
+  sliding 2 pt bar, after the owner found pills "too similar to search"; superseded on 2026-09-10
+  by the title's own kind menu, and the file is gone. `ShelfArt` (private, in
   `CollectionPage.swift`) puts an article on the shelf slot as a flat square — its image, else
   `link` / `text.alignleft` on `surface` — the way the Home row draws one; books unchanged.
   **Not seen with an article in it**: the simulator library has none and a script cannot type

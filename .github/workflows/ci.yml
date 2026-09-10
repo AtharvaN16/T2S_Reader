@@ -183,12 +183,15 @@ jobs:
             ${{ runner.os }}-xcode-26.6-source-packages-
       - run: brew install xcodegen
       # Neither model directory is in the repository, so this checkout has neither and xcodegen
-      # refuses a missing source path. The build scripts create them too; this step runs xcodegen
-      # itself, ahead of -resolvePackageDependencies, so it needs the same two lines.
+      # refuses a missing source path — and it refuses a missing config file the same way, and the
+      # per-Mac `Local.xcconfig` is git-ignored (every line of the example is a comment, so it is
+      # the defaults). The build scripts create all three too; this step runs xcodegen itself,
+      # ahead of -resolvePackageDependencies, so it needs the same lines.
       - name: Generate app project
         working-directory: App
         run: |
           mkdir -p Resources/Kokoro Resources/KokoroCoreML
+          [[ -f Local.xcconfig ]] || cp Local.xcconfig.example Local.xcconfig
           xcodegen generate --quiet
       - name: Resolve app package dependencies
         working-directory: App

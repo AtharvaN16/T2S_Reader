@@ -35,7 +35,7 @@ set +e
 xcodebuild test -scheme T2SKokoro -destination 'platform=macOS' \
   -parallel-testing-enabled NO \
   -derivedDataPath .build/DerivedData "$@" 2>&1 \
-  | grep -E "error:|warning:|Suite |Test run|Executed|TEST (SUCCEEDED|FAILED)|Testing failed" \
+  | grep -E "error:|warning:|Suite |Test run|Executed|TEST (SUCCEEDED|FAILED)|Testing failed|✘|recorded an issue|Expectation failed" \
   | grep -Ev "/checkouts/.*: warning:"
 status="${PIPESTATUS[0]}"
 rm -rf "${TMPDIR:-/tmp}"/kokoro_*.mlmodelc "$e5_bundle_cache"

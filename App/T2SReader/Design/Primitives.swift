@@ -23,6 +23,12 @@ struct Pill: View {
                 Text(label).typeRole(.pill)
                 if let detail { Text(detail).typeRole(.pill).foregroundStyle(foreground.opacity(0.55)) }
             }
+            // A pill's label is one or two words, so it holds its own width and never breaks: at
+            // the accessibility text sizes "Search" was wrapping to three lines inside its capsule.
+            // What gives instead is whatever shares the row — on the Collection that is the title,
+            // which scales down.
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
             .foregroundStyle(foreground)

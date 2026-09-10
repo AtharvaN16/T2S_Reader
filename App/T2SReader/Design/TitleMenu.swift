@@ -39,7 +39,8 @@ struct TitleMenuCard<Option: Hashable>: View {
                         if isOn { RadioMark(isOn: true) }
                     }
                     .padding(.horizontal, 14)
-                    .frame(height: 48)
+                    .padding(.vertical, 12)
+                    .frame(minHeight: 48)                              // grows with Dynamic Type rather than clipping
                     .background(isOn ? Tokens.ink.opacity(0.07) : .clear,
                                 in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .contentShape(Rectangle())

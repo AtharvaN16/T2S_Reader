@@ -98,9 +98,12 @@ struct CollectionPage: View {
         }
         // The kind menu hangs from the title over the shelf, so it lives on the scroll view rather
         // than in the column: inside the column the grid, drawn after it, would cover it.
+        // The `if` is outside the `GeometryReader`, not in it: a reader left standing over a closed
+        // menu is a page-wide view with nothing in it, and nothing is exactly what a tap on the
+        // shelf must not hit.
         .overlayPreferenceValue(TitleAnchorKey.self) { anchor in
-            GeometryReader { page in
-                if isPickingKind, let anchor { kindMenu(under: page[anchor]) }
+            if isPickingKind, let anchor {
+                GeometryReader { page in kindMenu(under: page[anchor]) }
             }
         }
         // No ground of its own: `RootPager` paints one for all three pages, and a transparent page
@@ -146,7 +149,10 @@ struct CollectionPage: View {
         HStack(alignment: .top) {
             Button { withAnimation(.snappy) { isPickingKind.toggle() } } label: {
                 PageTitle(text: filter.title) { TitleChevron() }
-                    .fixedSize(horizontal: true, vertical: false)              // only the word is the target, not the gap after it
+                    // The title is what gives when the row runs short (accessibility text sizes
+                    // with a longer kind than "All"): one line, scaled down, never wrapped.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                     .contentShape(Rectangle())
                     .anchorPreference(key: TitleAnchorKey.self, value: .bounds) { $0 }
             }

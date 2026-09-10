@@ -12,9 +12,12 @@ sort of bezel glow in the top part?"
   iPhone 14–16's; `UIScreen` does not say, and the rim is blurred enough to hide the few points
   the 12/13 (47) and the 16 Pro (62) differ by) the width of the host and three ramps tall, so its
   bottom edge is clipped away, stroked on the edge itself (half the line off-screen) twice: a
-  72 pt halo blurred 26 at alpha 0.50, and a 10 pt rim blurred 4 at alpha 0.80 — over a faint
-  wash from the top (0.26 → 0 by 0.36 of the height). A vertical mask lets the sides fade from a
-  third of the height and be gone by 0.85 of it. The stroke is the same the whole way round, so
+  36 pt halo blurred 14 at alpha 0.38 (about 30 pt in), and a 10 pt rim blurred 4 at alpha
+  0.78 — over a breath of wash from the top (0.08 → 0 by 0.20 of the height). The owner's second
+  word, from the simulator: "reduce intensity so that the glow is mostly confined to the bezel
+  edges" — the first cut (a 72 pt halo blurred 26 at 0.50, wash 0.26 to a third of the way down)
+  lit the whole top of the page. A vertical mask lets the sides fade from a third of the height
+  and be gone by 0.85 of it. The stroke is the same the whole way round, so
   the top and the corners are one lit edge and the corners are only where it turns. Height 240,
   the pulse, the dither and the opaque composite are unchanged.
 - **The Voice page's seam was not the glow's** (`SettingsSubpage`): measured against the Settings

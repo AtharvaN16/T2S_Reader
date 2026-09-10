@@ -135,14 +135,15 @@ struct WarmRamp: View {
     /// do not show as an arc leaving the corner.
     static let bezelRadius: CGFloat = 55
 
-    /// The faint wash the bezel sits on: the accent bleeding down from the top edge, gone by a
-    /// third of the height, so the glow reads as light coming in over the top and not as a line
-    /// drawn on the page.
+    /// The faint wash the bezel sits on: a breath of the accent under the top edge, gone by a
+    /// fifth of the height, so the rim does not end in a hard line against the page. Kept low
+    /// (owner, 2026-09-10: "reduce intensity so that the glow is mostly confined to the bezel
+    /// edges") — a first cut at 0.26 reaching a third of the way down lit the whole top of the page.
     private static func wash(pulse: Double) -> LinearGradient {
         LinearGradient(stops: [
-            .init(color: Tokens.accent.opacity(0.26 * pulse), location: 0),
-            .init(color: Tokens.accent.opacity(0.10 * pulse), location: 0.14),
-            .init(color: Tokens.accent.opacity(0), location: 0.36),
+            .init(color: Tokens.accent.opacity(0.08 * pulse), location: 0),
+            .init(color: Tokens.accent.opacity(0.03 * pulse), location: 0.10),
+            .init(color: Tokens.accent.opacity(0), location: 0.20),
         ], startPoint: .top, endPoint: .bottom)
     }
 
@@ -155,8 +156,10 @@ struct WarmRamp: View {
     private static func bezel(pulse: Double) -> some View {
         let shape = RoundedRectangle(cornerRadius: bezelRadius, style: .continuous)
         return ZStack {
-            shape.stroke(Tokens.accent.opacity(0.50 * pulse), lineWidth: 72).blur(radius: 26)
-            shape.stroke(Tokens.accent.opacity(0.80 * pulse), lineWidth: 10).blur(radius: 4)
+            // The halo reaches about 30 pt in (half its width plus the blur); wider and softer,
+            // it was a glow over the page rather than on its edge (owner).
+            shape.stroke(Tokens.accent.opacity(0.38 * pulse), lineWidth: 36).blur(radius: 14)
+            shape.stroke(Tokens.accent.opacity(0.78 * pulse), lineWidth: 10).blur(radius: 4)
         }
         .frame(height: height * 3)                                             // the bottom edge is outside the ramp
         .frame(height: height, alignment: .top)

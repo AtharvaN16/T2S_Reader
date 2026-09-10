@@ -57,8 +57,15 @@ Two reports under `T2SReaderKokoro` in the 17 Pro's system crash logs:
    experiment the audit §3.7 asks for; a macOS probe renders one passage under each and prints the
    stage split. The shipped default stays CPU (Harsh, 2026-09-10): on this Mac CPU+GPU is 8% slower
    at steady state, 30 s slower to load and 26 s slower on its first render, and the Neural Engine
-   policies spend minutes per generator stage failing to compile (`ANECCompile() FAILED`). A GPU
-   default for Apple GPU family 7 and up is a ten-line change once the phone shows it winning.
+   policies spend minutes per generator stage failing to compile (`ANECCompile() FAILED`). Then the
+   17 Pro itself answered: under CPU its plan compiler never finishes the 15 s generator (the
+   phone's own plan cache, 2026-09-10; the run Harsh reported as "stuck at half"), under CPU+GPU
+   every plan builds and the voice is ready 159 s after a cold launch. So the default is by chip —
+   `KokoroComputeUnits.defaultPolicy(machine:)`: the A19 generation (`iPhone18,*`) and later on the
+   GPU, everything earlier on the measured CPU path — and the override stays.
+11. **The screen stays awake during the one-time setup** (`isIdleTimerDisabled` while the status is
+    installing or preparing): the foreground gate would otherwise stop the builds at the first
+    auto-lock, and a first launch is minutes of them.
 9. **The cloud route speaks OpenAI's real contract.** Request `{model, input, voice, response_format:
    "pcm"}`; the response is raw 16-bit little-endian mono PCM at 24 kHz (`audio/pcm`) or — from a
    proxy — the JSON `{audio, sample_rate, word_timings}` contract the code already had.

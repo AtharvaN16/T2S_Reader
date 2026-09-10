@@ -179,9 +179,12 @@ struct KokoroComposition {
         // it was staged or downloaded, so the answer for the Core ML route is already here, before
         // the first view is built.
         let coreML = KokoroCoreMLAvailabilityModel(bundle: .main, installRoot: installRoot)
-        let computeUnits = defaults.string(forKey: computeUnitsKey).flatMap(KokoroComputeUnits.init(rawValue:)) ?? .cpu
-        if computeUnits != .cpu {
-            log.notice("Kokoro compute units overridden for this session: \(computeUnits.runtimeName, privacy: .public)")
+        // By chip (`KokoroComputeUnits.defaultPolicy`): the A19 generation's CPU plan compiler never
+        // finishes the big stages, so it gets the GPU; the A13 keeps the measured CPU path.
+        let policy = KokoroComputeUnits.forThisDevice
+        let computeUnits = defaults.string(forKey: computeUnitsKey).flatMap(KokoroComputeUnits.init(rawValue:)) ?? policy
+        if computeUnits != policy {
+            log.notice("Kokoro compute units overridden for this session: \(computeUnits.runtimeName, privacy: .public) (this phone's default is \(policy.runtimeName, privacy: .public))")
         }
         let coreMLEngine = GatedKokoroCoreMLEngine(availability: coreML, computeUnits: computeUnits,
                                                    admission: { await gate.waitUntilForeground() })
@@ -218,7 +221,7 @@ struct KokoroComposition {
         switch coreML.verdict {
         case .available(let decision, _):
             coreMLRouteOpen.withLock { $0 = true }
-            log.notice("Kokoro Core ML route available (\(decision.runtime, privacy: .public), RTF \(decision.measuredRTF, format: .fixed(precision: 3), privacy: .public))")
+            log.notice("Kokoro Core ML route available (\(computeUnits.runtimeName, privacy: .public); the A13 measured RTF \(decision.measuredRTF, format: .fixed(precision: 3), privacy: .public))")
             // Loading the stages takes seconds on a modern phone and minutes on an A13's first
             // launch, and the G2P's lexicons a few hundred milliseconds more. Pay them now, while the
             // reader is still choosing a book, rather than at the first utterance — but only once the
@@ -345,6 +348,7 @@ struct KokoroComposition {
             }
             let elapsed = clock.now - started
             log.notice("Kokoro Core ML model installed in \(Double(elapsed.components.seconds), format: .fixed(precision: 0), privacy: .public) s")
+            KokoroCoreMLEngine.timing("kokoro model installed in \(elapsed.components.seconds) s")
             availability.installed(located)
             routeOpen.withLock { $0 = true }
             status.update(.preparing)
@@ -353,6 +357,7 @@ struct KokoroComposition {
             return
         } catch {
             log.error("Kokoro Core ML install failed: \(String(describing: error), privacy: .public)")
+            KokoroCoreMLEngine.timing("kokoro install failed: \(String(describing: error))")
             status.update(.unavailable(installFailed))
         }
     }
@@ -388,6 +393,7 @@ struct KokoroComposition {
                 let seconds = Double(elapsed.components.seconds)
                     + Double(elapsed.components.attoseconds) * 1e-18
                 log.notice("Kokoro Core ML warm-up finished in \(seconds, format: .fixed(precision: 1), privacy: .public) s")
+                KokoroCoreMLEngine.timing("kokoro warm-up finished in \(KokoroCoreMLEngine.fixed(seconds, 1)) s")
                 status.recordWarmUp(seconds: seconds)
                 // Never an override: the Core ML decision is measured, not a development escape hatch.
                 status.update(.available(isDebugOverride: false))
@@ -400,10 +406,12 @@ struct KokoroComposition {
                     routeOpen.withLock { $0 = false }
                     // The engine's own error, never a request: this string reaches the log only.
                     log.error("Kokoro Core ML warm-up failed, route closed: \(error.localizedDescription, privacy: .public)")
+                    KokoroCoreMLEngine.timing("kokoro warm-up failed, route closed: \(String(describing: error))")
                     status.update(.unavailable(warmUpFailed))
                     return
                 }
                 log.notice("Kokoro Core ML warm-up failed, retrying: \(error.localizedDescription, privacy: .public)")
+                KokoroCoreMLEngine.timing("kokoro warm-up failed, retrying: \(String(describing: error))")
                 do { try await Task.sleep(for: .seconds(2)) } catch { return }
             }
         }

@@ -72,10 +72,52 @@ ships CPU-only until the phone says otherwise. This Mac's probe (`scripts/comput
 The Neural Engine policies (`cpuAndNeuralEngine`, `all`) were stopped: every generator stage
 spends five to nine minutes failing `ANECCompile() FAILED` before Core ML falls back — the audit's
 §3.7 finding, reproduced. So `all` would lengthen the first launch by half an hour and win nothing.
-**The one measurement left:** the 17 Pro with `-kokoro.computeUnits cpuAndGPU` against the
-default; if the GPU wins there by more than noise, wire `.cpuAndGPU` for Apple GPU family 7 and
-up in `KokoroComposition.make` (the family check is `KokoroAvailability.Probe`'s) and keep the A13
-on CPU, where the GPU policy measured twice as slow.
+**The phone answered (2026-09-10, 15:23–16:03, Harsh's 17 Pro, iOS 26.6.1).** His first run on
+the branch — the download and the on-device compile done by 15:23 — then sat "stuck at half" for
+thirty minutes with the phone hot and lagging. The phone's own Core ML plan cache
+(`Library/Caches/<bundle>/com.apple.e5rt.e5bundlecache/23G83/`, listed with
+`devicectl device info files --domain-type appDataContainer`) held seven finished plans and one
+that never finished: under `.cpu` the A19 Pro's plan compiler took under a minute for both
+f0ntrain and decoder-pre stages, 2–5 min for the 3 s generator, 5 min for duration t128, 10 min
+(across a relaunch) for t256, and never finished the 15 s generator — two attempts, one per
+launch, twenty minutes and counting. Same iOS build as the owner's 11 Pro, where the A13 builds
+all eight of its plans in 206 s. Relaunched from the Mac with `-kokoro.computeUnits cpuAndGPU`:
+
+| stage | CPU policy (from the cache) | GPU policy (console) |
+|---|---|---|
+| f0ntrain t120 / t600, decoder-pre 3 s | under a minute | 0.4–0.9 s |
+| decoder-pre 15 s | under a minute | 34 s |
+| duration t128 | ~5 min | 34 s |
+| duration t256 | ~10 min | 158 s |
+| generator 3 s | 2–5 min | 157 s |
+| generator 15 s | **never** | 125 s |
+| ready (8 of 14) | never | **159 s** from a cold cache |
+| 7 s and 10 s buckets, after readiness | — | 0.2–1.3 s each (the Metal kernels are already compiled) |
+
+So `KokoroComputeUnits.defaultPolicy(machine:)` decides by chip: `iPhone18,*` (the A19
+generation) and later get `.cpuAndGPU`; the A13 keeps `.cpu`; the A14–A18 phones between them,
+measured on neither, stay on the measured CPU path (upstream's mixed-unit runs on an iPhone 12
+Pro were slower than the A13 on CPU). `kokoro.computeUnits` still overrides for a session. Two
+more things from that run: the screen now stays awake while the one-time setup runs
+(`isIdleTimerDisabled`; the gate would otherwise stop the builds at the first auto-lock), and the
+timing lines mirror to stderr under `-kokoro.timingConsole YES`, because `devicectl`'s console
+carries stderr but not `os_log` and the phone refuses a network syslog connection.
+
+**Watching the phone from the Mac** (the phone paired and on the network; `log collect --device`
+needs root, `idevicesyslog -n` is refused):
+
+```bash
+xcrun devicectl device install app --device <CoreDevice-UUID> .build/DerivedData-App/Build/Products/Release-iphoneos/T2SReaderKokoro.app
+xcrun devicectl device process launch --console --terminate-existing --device <CoreDevice-UUID> \
+  com.antarlabs.t2sreader -- -kokoro.timingConsole YES        # add -kokoro.computeUnits cpu|cpuAndGPU|all to try a policy
+```
+
+The `--` matters: without it `devicectl` reads `-kokoro…` as its own `-t` flag. The console drops
+when the phone locks; the plan cache and the timing lines survive.
+
+**Still unmeasured:** the GPU's steady-state RTF on the 17 Pro (no book had been played, so the
+launch prime rendered nothing; a relaunch after one has will print `kokoro utterance … RTF` lines),
+and a warm launch's load time with the plans cached.
 
 **Why the 11 Pro and the 17 Pro differ:** not the silicon. The 17 Pro's launches were being killed
 mid-warm-up and restarted from a cold plan cache, then it played at whatever the last kill left; a

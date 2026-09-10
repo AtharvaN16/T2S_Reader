@@ -12,12 +12,14 @@ typealias KokoroPipelineResult = SynthesisResult
 /// Which compute units the stages are loaded for (`MLModelConfiguration.computeUnits`), as a value
 /// the app can read from a user default and a log line can name.
 ///
-/// `.cpu` is the measured policy (`spikes/findings/2026-09-04-pre-a14-runtime.md`: on an A13 the
-/// GPU-assisted default is twice as slow and wants 1.2 GB) and the only one the app ships; the others
-/// exist for the measurement the audit (§3.7) asks for on an A14+ phone — the generator cannot
-/// compile for the Neural Engine as exported, so Core ML falls back per stage where it must. The
-/// choice never enters a render key: the audio differs only at fp16 rounding, and the switch is a
-/// developer's for one session (`kokoro.computeUnits` in the app's defaults).
+/// `.cpu` is the policy measured on the A13 (`spikes/findings/2026-09-04-pre-a14-runtime.md`: the
+/// GPU-assisted default there is twice as slow and wants 1.2 GB); `.cpuAndGPU` is the one the A19
+/// generation needs, because Core ML's CPU plan compiler never finishes the 15 s generator on it —
+/// ``defaultPolicy(machine:)`` decides by chip, and `kokoro.computeUnits` in the app's defaults
+/// overrides it for a session. The Neural Engine policies exist for the measurement the audit
+/// (§3.7) asks for: the generator cannot compile for the Neural Engine as exported, and Core ML
+/// spends minutes per stage finding that out before it falls back. The choice never enters a
+/// render key: the audio differs only at fp16 rounding.
 public enum KokoroComputeUnits: String, Sendable, Hashable, CaseIterable {
     case cpu
     case cpuAndNeuralEngine
@@ -41,6 +43,37 @@ public enum KokoroComputeUnits: String, Sendable, Hashable, CaseIterable {
         case .cpuAndGPU: "coreml-cpu+gpu"
         case .all: "coreml-all"
         }
+    }
+
+    /// The policy for a phone, by its hardware model (`hw.machine`: "iPhone18,1" is the iPhone 17 Pro).
+    ///
+    /// Measured 2026-09-10 on the iPhone 17 Pro (A19 Pro, iOS 26.6.1), from its own Core ML plan
+    /// cache and then the console: under `.cpu` the plan compiler took 5 min for the t128 duration
+    /// model, 10 min for t256, and never finished the 15 s generator in twenty — two launches, the
+    /// phone hot and throttling, the voice stuck at 7 of 14. Under `.cpuAndGPU` every plan built:
+    /// 34 s, 158 s, 157 s and 125 s for the same four, 159 s to readiness from a cold cache, and the
+    /// buckets after readiness in about a second each, the Metal kernels compiled once being reused.
+    /// The owner's 11 Pro runs the same iOS build and builds all its plans on the CPU in 206 s
+    /// (RTF 0.18), so the split is by chip: the A19 generation and whatever follows it get the GPU;
+    /// the A13 keeps the measured CPU path; the A14–A18 phones between them, measured on neither,
+    /// stay with it (upstream's mixed-unit runs on an iPhone 12 Pro were slower than the A13 on CPU).
+    public static func defaultPolicy(machine: String) -> KokoroComputeUnits {
+        guard machine.hasPrefix("iPhone"),
+              let major = Int(machine.dropFirst("iPhone".count).prefix { $0.isNumber })
+        else { return .cpu }
+        return major >= 18 ? .cpuAndGPU : .cpu
+    }
+
+    /// ``defaultPolicy(machine:)`` for the device this runs on.
+    public static var forThisDevice: KokoroComputeUnits { defaultPolicy(machine: hardwareModel()) }
+
+    /// `hw.machine`: "iPhone18,1" on an iPhone 17 Pro, "arm64" on the simulator and on a Mac.
+    static func hardwareModel() -> String {
+        var size = 0
+        guard sysctlbyname("hw.machine", nil, &size, nil, 0) == 0, size > 0 else { return "" }
+        var buffer = [CChar](repeating: 0, count: size)
+        guard sysctlbyname("hw.machine", &buffer, &size, nil, 0) == 0 else { return "" }
+        return String(cString: buffer)
     }
 }
 

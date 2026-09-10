@@ -128,6 +128,21 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// the measurement the performance audit's §8 asks for, read with
     /// `log stream --predicate 'subsystem == "com.t2s.reader" AND category == "kokoro.timing"'`.
     static let timingLog = Logger(subsystem: "com.t2s.reader", category: "kokoro.timing")
+    /// Whether the timing lines are also written to stderr: launched with `-kokoro.timingConsole YES`
+    /// (a user default, so the argument domain sets it). `devicectl device process launch --console`
+    /// carries a phone's stderr but not its `os_log`, and the phone refuses a network syslog
+    /// connection (2026-09-10), so this is how a launch from the Mac is watched. Read once.
+    static let mirrorsTimingToConsole = UserDefaults.standard.bool(forKey: "kokoro.timingConsole")
+
+    /// One timing line: to `kokoro.timing`, and to stderr while ``mirrorsTimingToConsole``.
+    public static func timing(_ line: String) {
+        timingLog.notice("\(line, privacy: .public)")
+        guard mirrorsTimingToConsole else { return }
+        FileHandle.standardError.write(Data((line + "\n").utf8))
+    }
+
+    /// `x` with `digits` decimals, for the timing lines.
+    public static func fixed(_ x: Double, _ digits: Int) -> String { String(format: "%.\(digits)f", x) }
     /// How many times this engine has begun loading its stages. Internal for one test: "loaded once"
     /// and "compiled and loaded twice" differ only in this number and several minutes of Core ML.
     private(set) var loadCount = 0
@@ -230,7 +245,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         let total = KokoroCoreMLResources.stageNames().count
         return { name, seconds in
             let loaded = counter.withLock { $0 += 1; return $0 }
-            Self.timingLog.notice("kokoro stage \(name, privacy: .public) loaded in \(seconds, format: .fixed(precision: 2), privacy: .public) s (\(loaded, privacy: .public)/\(total, privacy: .public))")
+            Self.timing("kokoro stage \(name) loaded in \(Self.fixed(seconds, 2)) s (\(loaded)/\(total))")
             report?(loaded, total)
         }
     }
@@ -276,7 +291,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             let g2pClock = ContinuousClock()
             let g2pStarted = g2pClock.now
             _ = g2p(british: false)
-            Self.timingLog.notice("kokoro g2p built in \(Self.seconds(g2pClock.now - g2pStarted), format: .fixed(precision: 2), privacy: .public) s")
+            Self.timing("kokoro g2p built in \(Self.fixed(Self.seconds(g2pClock.now - g2pStarted), 2)) s")
             loadLaterBuckets(compiled: compiled)
             return loaded
         } catch is CancellationError {
@@ -348,7 +363,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                              linearWeights: loaded.linearWeights, linearBias: loaded.linearBias)
         allStages = merged
         loadedBuckets = buckets
-        Self.timingLog.notice("kokoro bucket \(bucket, privacy: .public) s ready; buckets \(buckets.map(String.init).joined(separator: ","), privacy: .public)")
+        Self.timing("kokoro bucket \(bucket) s ready; buckets \(buckets.map(String.init).joined(separator: ","))")
     }
 
     static func seconds(_ duration: Duration) -> Double {
@@ -436,7 +451,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     private static func logUtterance(_ path: String, g2pSeconds: Double, pieces: Int, audioSeconds: Double, since started: ContinuousClock.Instant) {
         let total = seconds(ContinuousClock().now - started)
         let rtf = audioSeconds > 0 ? total / audioSeconds : 0
-        timingLog.notice("kokoro utterance (\(path, privacy: .public)): g2p \(g2pSeconds, format: .fixed(precision: 3), privacy: .public) s, \(pieces, privacy: .public) pieces, audio \(audioSeconds, format: .fixed(precision: 2), privacy: .public) s, total \(total, format: .fixed(precision: 3), privacy: .public) s, RTF \(rtf, format: .fixed(precision: 3), privacy: .public)")
+        Self.timing("kokoro utterance (\(path)): g2p \(Self.fixed(g2pSeconds, 3)) s, \(pieces) pieces, audio \(Self.fixed(audioSeconds, 2)) s, total \(Self.fixed(total, 3)) s, RTF \(Self.fixed(rtf, 3))")
     }
 
     public func synthesize(_ request: SynthesisRequest) async throws -> T2SCore.SynthesisResult {
@@ -656,7 +671,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         }
         let t = result.timings
         let rtf = result.audioDurationSeconds > 0 ? result.wallTimeSeconds / result.audioDurationSeconds : 0
-        Self.timingLog.notice("kokoro call: bucket \(result.bucketSeconds, privacy: .public) s, audio \(result.audioDurationSeconds, format: .fixed(precision: 2), privacy: .public) s, wall \(result.wallTimeSeconds, format: .fixed(precision: 3), privacy: .public) s, RTF \(rtf, format: .fixed(precision: 3), privacy: .public); duration \(t.durationCoreML, format: .fixed(precision: 3), privacy: .public), f0 \(t.f0ntrainCoreML, format: .fixed(precision: 3), privacy: .public), pre \(t.decoderPre, format: .fixed(precision: 3), privacy: .public), hnsf \(t.hnsfSwift, format: .fixed(precision: 3), privacy: .public) (overlap \(t.decoderPreHnsfOverlap, format: .fixed(precision: 3), privacy: .public)), gen \(t.generatorCoreML, format: .fixed(precision: 3), privacy: .public), trim \(t.trim, format: .fixed(precision: 3), privacy: .public)")
+        Self.timing("kokoro call: bucket \(result.bucketSeconds) s, audio \(Self.fixed(result.audioDurationSeconds, 2)) s, wall \(Self.fixed(result.wallTimeSeconds, 3)) s, RTF \(Self.fixed(rtf, 3)); duration \(Self.fixed(t.durationCoreML, 3)), f0 \(Self.fixed(t.f0ntrainCoreML, 3)), pre \(Self.fixed(t.decoderPre, 3)), hnsf \(Self.fixed(t.hnsfSwift, 3)) (overlap \(Self.fixed(t.decoderPreHnsfOverlap, 3))), gen \(Self.fixed(t.generatorCoreML, 3)), trim \(Self.fixed(t.trim, 3))")
 
         // `selectBucket` falls back to the largest bucket rather than failing, and stage 9 then trims
         // to `min(waveform.count, targetLen)` — so a piece that predicts more speech than its bucket

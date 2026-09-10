@@ -84,8 +84,11 @@ struct ReaderPage: View {
             .animation(.easeInOut(duration: 0.2), value: chromeVisible)
 
             // Over the header's own ground fade, for the same reason as on the root pages. No line
-            // here: the transport says "preparing the voice…" a few points below it.
-            WarmUpVeil(layer: .chrome, showsMessage: false)
+            // here: the transport says "preparing the voice…" a few points below it. The reader is
+            // only for the inset — the veil covers the screen itself.
+            GeometryReader { geo in
+                WarmUpVeil(layer: .chrome, band: geo.safeAreaInsets.top, showsMessage: false)
+            }
         }
         .task(id: summary.id) { await open() }
         .appTheme()

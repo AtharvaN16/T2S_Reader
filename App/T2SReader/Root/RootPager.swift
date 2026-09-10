@@ -125,7 +125,7 @@ struct RootPager: View {
                 TopFade(inset: geo.safeAreaInsets.top)
                 // Over the fade's solid band, which would otherwise cut a pale strip across the
                 // top of the wash; this carries the warm-up's line and bar too.
-                WarmUpVeil(layer: .chrome)
+                WarmUpVeil(layer: .chrome, band: geo.safeAreaInsets.top)
 
                 if !chrome.isSubpageOpen {
                     VStack(spacing: 12) {

@@ -1,6 +1,7 @@
 // App/T2SReader/Design/WarmUpVeil.swift
 import Foundation
 import SwiftUI
+import CoreGraphics
 import UIKit
 
 /// The one-time voice warm-up, shown wherever the reader is (owner, 2026-09-10, Tabby's launch
@@ -42,6 +43,8 @@ struct WarmUpVeil: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var layer: Layer = .behind
+    /// The safe-area top inset, from a host that has a `GeometryProxy` which still reports it.
+    var band: CGFloat? = nil
     /// The line and bar under the status bar; off in the Reader, whose transport already says
     /// "preparing the voice…". Only the `.chrome` layer carries it.
     var showsMessage = true
@@ -55,14 +58,18 @@ struct WarmUpVeil: View {
     /// has to show even while the fixture book plays, or there is nothing to screenshot.
     private static let isFaked = ProcessInfo.processInfo.environment["T2S_WARMUP"] != nil
 
-    /// The status bar's height, from the window rather than from a `GeometryProxy`: this view spans
-    /// the screen with `ignoresSafeArea()`, and a proxy under that reports the insets it is now
-    /// covering as zero — which put the message across the clock and gave the strip no height at
-    /// all. The app is portrait-only iPhone, so one read at draw time is enough.
+    /// How tall the ground bar above the page is — the safe-area top inset. **The host measures it
+    /// and passes it in**: this view spans the screen with `ignoresSafeArea()`, and a proxy under
+    /// that reports the insets it now covers as zero, while asking the key window for them came
+    /// back zero on the owner's phone and left the strip with no height at all — the white band
+    /// across the top of the wash, twice (2026-09-10). A host that cannot measure gets the window,
+    /// and failing that a plain iPhone's inset, so the strip is never nothing.
     private var statusBandHeight: CGFloat {
+        if let band, band > 0 { return band }
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         let window = scenes.compactMap(\.keyWindow).first ?? scenes.flatMap(\.windows).first
-        return window?.safeAreaInsets.top ?? 47
+        let measured = window?.safeAreaInsets.top ?? 0
+        return measured > 0 ? measured : 47
     }
 
     /// Warming, and nothing audible yet. `isCatchingUp` is the stall before the first sound, so a
@@ -79,7 +86,7 @@ struct WarmUpVeil: View {
             GeometryReader { geo in
                 ZStack(alignment: .top) {
                     TimelineView(.animation) { context in
-                        wash(pulse: reduceMotion ? 1 : Self.pulse(at: context.date))
+                        wash(pulse: reduceMotion || Self.isFaked ? 1 : Self.pulse(at: context.date))
                             .frame(height: geo.size.height * Self.coverage)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                             .mask(alignment: .top) { stripMask(band: band) }
@@ -130,15 +137,69 @@ struct WarmUpVeil: View {
     /// Strong orange at the top, held near-peak for the first fifth so the colour reads as a lit
     /// edge rather than an instant fade, then out to nothing (owner: start it higher, more orange
     /// up top).
+    /// Opaque, not a translucent accent laid over the ground: each stop is the colour that
+    /// combination *makes* (`Color.mix`). Dither is the reason — noise blended over a layer that is
+    /// itself mostly transparent has almost nothing to act on, and the first attempt at this barely
+    /// moved the bands. Opaque here, and the pulse applied to the finished layer instead, so the
+    /// noise blends against real colour. Safe because this only ever sits over `Tokens.ground`:
+    /// `RootPager`'s background, the Reader's, or a ground bar.
+    private static let ramp = LinearGradient(stops: [
+        .init(color: Tokens.ground.mix(with: Tokens.accent, by: 0.55), location: 0),
+        .init(color: Tokens.ground.mix(with: Tokens.accent, by: 0.42), location: 0.20),
+        .init(color: Tokens.ground.mix(with: Tokens.accent, by: 0.14), location: 0.62),
+        .init(color: Tokens.ground, location: 1),
+    ], startPoint: .top, endPoint: .bottom)
+
+    /// The ramp, dithered (owner saw banding, 2026-09-10). A wash this long and this shallow is
+    /// asking more of 8 bits than they have: across the top fifth the alpha falls 0.55 → 0.42, some
+    /// 33 of the 255 levels a channel can hold, spread over about 100 pt — so the screen holds one
+    /// value for ten rows and then steps, and the eye reads every step as a line (measured on the
+    /// screenshot before this: flat runs of up to 23 px). The fix is the old one: a tile of noise
+    /// under half a level, blended over the ramp, which scatters each step's edge into a dither
+    /// pattern too fine to see. It is masked by the ramp itself, so it only ever exists where there
+    /// is colour to dither, and it keeps its own strength while the pulse dims the colour — the dim
+    /// end of a pulse is where the levels are thinnest and the banding worst.
     private func wash(pulse: Double) -> some View {
-        LinearGradient(stops: [
-            .init(color: Tokens.accent.opacity(0.55), location: 0),
-            .init(color: Tokens.accent.opacity(0.42), location: 0.20),
-            .init(color: Tokens.accent.opacity(0.14), location: 0.62),
-            .init(color: Tokens.accent.opacity(0), location: 1),
-        ], startPoint: .top, endPoint: .bottom)
-        .opacity(pulse)
+        ZStack {
+            Self.ramp
+            Self.ditherTile
+                .resizable(resizingMode: .tile)
+                .blendMode(.overlay)
+                .opacity(0.85)
+        }
+        .compositingGroup()                 // the noise blends with the ramp here, not with the page
+        // No mask: the ramp's last stop is `ground` itself, so the layer already ends invisible
+        // against the page behind it. Masking as well faded the wash twice and flattened it.
+        .opacity(pulse)                     // the pulse last, so the dither is mixed at full strength
     }
+
+    /// A tile of grey noise around the mid-point, made once. `.overlay` leaves mid-grey alone and
+    /// nudges either side of it, so the average is unchanged and only the step edges move.
+    private static let ditherTile: Image = {
+        let side = 96
+        let bytes = side * side * 4
+        var pixels = [UInt8](repeating: 255, count: bytes)
+        var rng = SystemRandomNumberGenerator()
+        for i in stride(from: 0, to: bytes, by: 4) {
+            let value = UInt8.random(in: 96...160, using: &rng)
+            pixels[i] = value
+            pixels[i + 1] = value
+            pixels[i + 2] = value
+        }
+        let image: CGImage? = pixels.withUnsafeMutableBytes { buffer in
+            guard let context = CGContext(data: buffer.baseAddress, width: side, height: side,
+                                          bitsPerComponent: 8, bytesPerRow: side * 4,
+                                          space: CGColorSpaceCreateDeviceRGB(),
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            else { return nil }
+            return context.makeImage()
+        }
+        guard let image else { return Image(uiImage: UIImage()) }
+        // At scale 3 each cell of noise is one device pixel on a 3x phone (and 1.5 on a 2x one),
+        // which is what makes a dither invisible: a tile drawn point-for-point put a 3 × 3 px
+        // speckle over the wash that read as grain rather than as smoothing.
+        return Image(uiImage: UIImage(cgImage: image, scale: 3, orientation: .up))
+    }()
 
     private func message(_ status: KokoroStatusModel, now: Date) -> some View {
         let elapsed = status.warmUpStarted.map { now.timeIntervalSince($0) } ?? 0
@@ -169,6 +230,9 @@ struct WarmUpVeil: View {
         }
         let left = expected - elapsed
         if left <= 1 { return "Warming up the voice · almost there" }
+        // Nobody counts in hundreds of seconds: past a minute and a half it is minutes (the owner's
+        // phone remembered a 220 s warm-up, and the line read "about 220 s").
+        if left >= 90 { return "Warming up the voice · about \(Int((left / 60).rounded())) min" }
         let rounded = left < 10 ? Int(left.rounded(.up)) : Int((left / 5).rounded(.up)) * 5
         return "Warming up the voice · about \(rounded) s"
     }

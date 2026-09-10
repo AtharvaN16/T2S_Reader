@@ -75,9 +75,12 @@ public final class LibraryModel {
         summaries.filter(\.isFinished).sorted { ($0.lastPlayedAt ?? .distantPast) > ($1.lastPlayedAt ?? .distantPast) }
     }
 
-    /// Every EPUB and PDF, newest first, whatever its queue state (spec §2.3).
+    /// Everything imported, newest first, whatever its queue state: books, PDFs and articles
+    /// alike. Spec §2.3 kept articles off the Collection and on Home; with Home down to the three
+    /// last played (2026-09-09) the Collection is the only shelf an article could stay on, and the
+    /// owner asked for Text and Links filters there.
     public var collection: [DocumentSummary] {
-        summaries.filter { $0.document.sourceType == .epub || $0.document.sourceType == .pdf }
+        summaries
     }
 
     public var visibleRows: [DocumentSummary] { queueView == .queue ? queue : finished }

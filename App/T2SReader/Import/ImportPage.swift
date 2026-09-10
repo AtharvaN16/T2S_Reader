@@ -4,10 +4,12 @@ import T2SApp
 import T2SStore
 import UniformTypeIdentifiers
 
-/// Spec §2.4.5 rev 7: three tiles, then the chosen path in place. The first imported document
-/// is written back through `imported`; the owner opens it from the cover's `onDismiss`, never from
-/// here — presenting the player while this page is still animating out is the classic SwiftUI case
-/// where the second presentation simply never appears.
+/// Spec §2.4.5 rev 7: three tiles, then the chosen path as its own step on `ImportFrame` — a back
+/// circle, a centred title, the path's field, and one Listen bar at the foot (ElevenReader's
+/// import, the owner's reference, 2026-09-09). The first imported document is written back through
+/// `imported`; the owner opens it from the cover's `onDismiss`, never from here — presenting the
+/// player while this page is still animating out is the classic SwiftUI case where the second
+/// presentation simply never appears.
 struct ImportPage: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
@@ -17,42 +19,23 @@ struct ImportPage: View {
     var initialFiles: [URL] = []
 
     enum Path { case link, text, files }
-    @State private var path: Path?
+    @State private var path: Path? = RootPage.launchImportPath                // screenshots: `T2S_OPEN=link` and friends
     @State private var showFilePicker = false
 
     private let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
 
     var body: some View {
         let model = env.importModel
-        // A ScrollView rather than a fixed stack so the link and text fields stay reachable with
-        // the keyboard up.
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.section) {
-                header
-                if let path {
-                    VStack(alignment: .leading, spacing: Spacing.section) {
-                        // No Back when the page opened on files from another app: there was no
-                        // choice to return to. Back also clears the model, so a failure from one
-                        // path is not shown under the next.
-                        if initialFiles.isEmpty {
-                            Pill(label: "Back", glyph: "chevron.left", style: .soft) { model.reset(); self.path = nil }
-                        }
-                        switch path {
-                        case .link: PasteLinkPage()
-                        case .text: PasteTextPage()
-                        case .files: FileImportRows()
-                        }
-                    }
-                } else {
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        tile("Paste a link", "link") { path = .link }
-                        tile("Upload a file", "doc") { path = .files; showFilePicker = true }
-                        tile("Paste text", "text.alignleft") { path = .text }
-                    }
-                }
+        // No Back when the page opened on files from another app: there was no choice to return
+        // to. Back also clears the model, so a failure from one path is not shown under the next.
+        let back: (() -> Void)? = initialFiles.isEmpty ? { model.reset(); path = nil } : nil
+        Group {
+            switch path {
+            case .link: PasteLinkPage(onBack: back)
+            case .text: PasteTextPage(onBack: back)
+            case .files: FileImportPage(onBack: back) { showFilePicker = true }
+            case nil: hub
             }
-            .padding(.horizontal, Spacing.margin)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Tokens.ground)
         // A full-screen cover is its own presentation, so the theme is applied here as on the Reader.
@@ -60,7 +43,7 @@ struct ImportPage: View {
         .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.epub, .pdf], allowsMultipleSelection: true) { result in
             switch result {
             case .success(let urls): Task { await model.importFiles(urls) }
-            case .failure: path = nil
+            case .failure: break                                               // the step stays; Choose files is there again
             }
         }
         .onChange(of: model.phase) { _, phase in
@@ -76,6 +59,23 @@ struct ImportPage: View {
             }
         }
         .onDisappear { model.reset() }
+    }
+
+    /// The three ways in, as tiles under the page's own title.
+    private var hub: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Spacing.section) {
+                header
+                LazyVGrid(columns: columns, spacing: 16) {
+                    tile("Paste a link", "link") { path = .link }
+                    tile("Upload a file", "doc") { path = .files; showFilePicker = true }
+                    tile("Write text", "text.alignleft") { path = .text }
+                }
+            }
+            .padding(.horizontal, Spacing.margin)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .overlay { GeometryReader { geo in TopFade(inset: geo.safeAreaInsets.top) } }
     }
 
     private var header: some View {

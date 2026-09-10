@@ -1,8 +1,55 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-09 late evening (books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 just after midnight (top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-09, latest) — books stand on one shelf on Home and in the Collection
+## Resume here (2026-09-10, latest) — top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps
+
+The owner's four-item batch after the shelf change, with ElevenReader (via the Mobbin MCP,
+flow "Importing an article (website link)") as the reference for the last one.
+
+- **Top fade** (`Design/TopFade.swift`): the root pages' content scrolled up under the status bar
+  and was cut dead by it — a row's title under the clock. Now solid ground through the top inset
+  and a 30 pt eased fade below it (`fadeHeight`, a sixth of the bottom bar's; the same
+  smoothstep-squared ramp as `RootPager.bottomFill`, mirrored), drawn over the pager in
+  `RootPager` and over the Import cover's hub and steps. Owner's word: "not very intense or
+  tall". Cannot be seen in a script-driven screenshot (nothing scrolls); the code is the same
+  shape as the bottom fill that was seen.
+- **Autoplay next** is gone from Settings (owner's call). `ReaderPreferences.autoplayNext` and
+  `QueueContinuation` are untouched underneath — default `true`, so a finished book still hands
+  over to the next on Home. Take the preference out too if the owner never wants it back.
+- **Collection: everything imported, five tabs, no pills.** `LibraryModel.collection` is every
+  summary now (spec §2.3 kept articles on Home; with Home down to three there is nowhere else for
+  an article to live). `CollectionPage.Filter` gained `text` (an article with no `sourceURL`,
+  i.e. pasted text) and `links` (one with a URL). The chips are `Design/FilterTabs.swift`: words,
+  the chosen one in ink with a 2 pt bar under it that slides (`matchedGeometryEffect`), the rest
+  `ink2` — the owner found the pills "too similar to search". `ShelfArt` (private, in
+  `CollectionPage.swift`) puts an article on the shelf slot as a flat square — its image, else
+  `link` / `text.alignleft` on `surface` — the way the Home row draws one; books unchanged.
+  **Not seen with an article in it**: the simulator library has none and a script cannot type
+  one; the book sheet still opens for an article and draws it as a placeholder book — worth a
+  flat hero or a straight-to-Reader tap, not done.
+- **Import steps** (`Import/ImportFrame.swift`, `ImportAction`): each path is its own step — a
+  back circle (an × when files came in from another app and there is no hub), the step's title
+  centred in a bar, the path's field bare on the ground, and one full-width bar pinned to the
+  foot as a `safeAreaInset` (so it rides the keyboard): ink when it can be pressed, `surface` +
+  `ink2` while there is nothing to act on, a spinner with "Fetching…" / "Importing…" while the
+  model works. `PasteLinkPage` ("Paste website link"): address prefilled from the clipboard, a
+  hairline tip card ("open any page in Safari and use Share" — the extension is "Add to t2s"),
+  and Listen fetches then **imports straight away** unless the extraction is thin
+  (`isThinPreview`), in which case the title, word count and warning show and the bar says
+  "Listen anyway". The Reader that opens on the result plays it — that is ElevenReader's flow.
+  `PasteTextPage` ("Write text"): bare title line, `TextEditor` with a placeholder, grows with the
+  page (`scrollDisabled`). `FileImportPage` ("Upload a file") wraps the rows with "Choose files"
+  at the foot. The hub's third tile is "Write text" now. Screenshot hooks: `T2S_OPEN=import`,
+  `link`, `text`, `files` (`RootPage.launchImportPath`, opened from the Collection page).
+
+Tests: `swift test --filter LibraryModelTests` 8/8 green. `scripts/build-app.sh` → `** BUILD
+SUCCEEDED **`. Seen in the simulator (iPhone 16 Pro, `T2S_SILENT=1`): Collection with the five
+tabs, Settings without the row, the Import hub, the link, text and file steps. Not seen: a fetch
+or an import going through the new bar (no network on the script), an article on the shelf, the
+fade over scrolled content. Nothing on a phone.
+
+## Resume here (2026-09-09) — books stand on one shelf on Home and in the Collection
 
 The owner put the Collection grid and Home side by side and asked whether the books were the
 same size — they were not, and it looked like inconsistency. Two real causes: the grid's cover

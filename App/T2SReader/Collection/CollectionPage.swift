@@ -5,24 +5,29 @@ import T2SCore
 import T2SStore
 
 struct CollectionPage: View {
-    /// Which kinds the page shows. Every EPUB and PDF is in the Collection (spec §2.3) — articles
-    /// live on Home — so the chips are the two kinds and "All".
+    /// Which kinds the page shows. Everything imported is in the Collection now (articles too,
+    /// since 2026-09-09 — see `LibraryModel.collection`): books, PDFs, and the two kinds of
+    /// article, told apart by whether one came from a web address.
     private enum Filter: CaseIterable {
-        case all, books, pdfs
+        case all, books, pdfs, text, links
 
         var title: String {
             switch self {
             case .all: return "All"
             case .books: return "Books"
             case .pdfs: return "PDFs"
+            case .text: return "Text"
+            case .links: return "Links"
             }
         }
 
-        func includes(_ type: SourceType) -> Bool {
+        func includes(_ document: Document) -> Bool {
             switch self {
             case .all: return true
-            case .books: return type == .epub
-            case .pdfs: return type == .pdf
+            case .books: return document.sourceType == .epub
+            case .pdfs: return document.sourceType == .pdf
+            case .text: return document.sourceType == .article && document.sourceURL == nil
+            case .links: return document.sourceType == .article && document.sourceURL != nil
             }
         }
     }
@@ -49,7 +54,7 @@ struct CollectionPage: View {
     /// The page's books: the collection, narrowed to the chip's kind, then by title or author
     /// while a search is typed.
     private var books: [DocumentSummary] {
-        var books = env.libraryModel.collection.filter { filter.includes($0.document.sourceType) }
+        var books = env.libraryModel.collection.filter { filter.includes($0.document) }
         if isSearching, !searchText.isEmpty {
             books = books.filter {
                 $0.document.title.localizedCaseInsensitiveContains(searchText)
@@ -76,7 +81,7 @@ struct CollectionPage: View {
                     }
                 }
                 if all.isEmpty {
-                    Text("Books and PDFs you import appear here; Home keeps the ones you played last.")
+                    Text("Books, PDFs, links and text you import appear here; Home keeps the ones you played last.")
                         .typeRole(.meta).foregroundStyle(Tokens.ink2)
                 } else if books.isEmpty {
                     Text(emptyText).typeRole(.meta).foregroundStyle(Tokens.ink2)
@@ -98,6 +103,9 @@ struct CollectionPage: View {
                let document = RootPage.launchDocument(in: env.libraryModel.summaries) {
                 launchOpened = true
                 selected = document
+            } else if RootPage.launchOpensImport, !launchOpened {
+                launchOpened = true
+                showAdd = true
             }
         }
         .sheet(item: $details) { DetailsSheet(summary: $0) }
@@ -137,20 +145,12 @@ struct CollectionPage: View {
         }
     }
 
-    /// The kind chips on the left — the voice picker's filter row, scrolling rather than wrapping
-    /// at the large text sizes — and the layout switch on the right, a circle like the header's
-    /// `+` showing the layout a tap switches to.
+    /// The kind tabs on the left (`FilterTabs`: words with a bar under the chosen one, not pills —
+    /// the pills read as more buttons beside Search) and the layout switch on the right, a circle
+    /// like the header's `+` showing the layout a tap switches to.
     private func controls(layout: CollectionLayout) -> some View {
         HStack(spacing: Spacing.grid) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: Spacing.grid) {
-                    ForEach(Filter.allCases, id: \.self) { option in
-                        Pill(label: option.title, style: filter == option ? .selected : .soft) {
-                            withAnimation(.snappy) { filter = option }
-                        }
-                    }
-                }
-            }
+            FilterTabs(options: Filter.allCases, title: \.title, selection: $filter)
             Button {
                 withAnimation(.snappy) { env.preferences.collectionLayout = layout == .grid ? .list : .grid }
             } label: {
@@ -168,6 +168,8 @@ struct CollectionPage: View {
         switch filter {
         case .books: return "No books yet."
         case .pdfs: return "No PDFs yet."
+        case .text: return "No text yet."
+        case .links: return "No links yet."
         case .all: return "No matches."
         }
     }
@@ -249,9 +251,7 @@ private struct CollectionTile: View {
             VStack(alignment: .leading, spacing: 12) {
                 // `shelfHeight`, not the column's width: the same book is the same size here and on
                 // Home, and the slot (`shelved`) keeps every title's left edge under its book's.
-                BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: BookCover.shelfHeight,
-                          title: summary.document.title, isPDF: summary.document.sourceType == .pdf)
-                    .shelved
+                ShelfArt(summary: summary, height: BookCover.shelfHeight)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(summary.document.title).typeRole(.pill).foregroundStyle(Tokens.ink).lineLimit(2)
                     if let author = summary.document.author {
@@ -283,9 +283,7 @@ private struct CollectionRow<Items: View>: View {
             Button(action: onOpen) {
                 // 20 pt between the book and its text, as on the Home row: the shadow needs air.
                 HStack(spacing: 20) {
-                    BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: 88,
-                              title: summary.document.title, isPDF: summary.document.sourceType == .pdf)
-                        .shelved                                               // the text column stays put row to row
+                    ShelfArt(summary: summary, height: 88)                     // the text column stays put row to row
                     VStack(alignment: .leading, spacing: 4) {
                         Text(summary.document.title).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
                         if let author = summary.document.author {
@@ -312,6 +310,44 @@ private struct CollectionRow<Items: View>: View {
     }
 }
 
+/// What stands on the shelf for one document: a book (`BookCover`, on its `shelved` slot) for an
+/// EPUB or PDF; for an article — a web page or pasted text, not a book — a flat square in the same
+/// slot, as the Home row draws one: its image if the page had one, else the kind's glyph on
+/// `surface`, a link for a page and lines of text for text. Bottom-leading in the slot like the
+/// books, so the row's text column and the grid's titles hold still whichever kind sits there.
+private struct ShelfArt: View {
+    @Environment(AppEnvironment.self) private var env
+    var summary: DocumentSummary
+    var height: CGFloat
+
+    var body: some View {
+        let document = summary.document
+        if document.sourceType == .article {
+            let side = height * BookCover.widestRatio
+            Group {
+                if document.coverImagePath != nil {
+                    Artwork(relativePath: document.coverImagePath, paths: env.paths, size: side, radius: Spacing.artworkSmall)
+                } else {
+                    RoundedRectangle(cornerRadius: Spacing.artworkSmall, style: .continuous)
+                        .fill(Tokens.surface)
+                        .frame(width: side, height: side)
+                        .overlay {
+                            Image(systemName: document.sourceURL == nil ? "text.alignleft" : "link")
+                                .font(.system(size: side * 0.28, weight: .medium))
+                                .foregroundStyle(Tokens.ink2)
+                        }
+                }
+            }
+            .frame(width: side, height: height, alignment: .bottomLeading)
+            .accessibilityHidden(true)
+        } else {
+            BookCover(relativePath: document.coverImagePath, paths: env.paths, height: height,
+                      title: document.title, isPDF: document.sourceType == .pdf)
+                .shelved
+        }
+    }
+}
+
 /// The words a tile and a row share.
 private enum CollectionText {
     /// "12 chapters · ~5h 10m", in the book sheet's words.
@@ -320,11 +356,15 @@ private enum CollectionText {
         return "\(chapters) · \(DurationFormatter.long(summary.totalSeconds, approximate: !summary.isFullyRendered))"
     }
 
-    /// "Title, by Author, PDF": what VoiceOver reads for a tile or a row.
+    /// "Title, by Author, PDF" (or "link", "text"): what VoiceOver reads for a tile or a row.
     static func accessibilityLabel(for summary: DocumentSummary) -> String {
         var parts = [summary.document.title]
         if let author = summary.document.author { parts.append("by \(author)") }
-        if summary.document.sourceType == .pdf { parts.append("PDF") }
+        switch summary.document.sourceType {
+        case .pdf: parts.append("PDF")
+        case .article: parts.append(summary.document.sourceURL == nil ? "text" : "link")
+        case .epub: break
+        }
         return parts.joined(separator: ", ")
     }
 }

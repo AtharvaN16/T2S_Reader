@@ -2,7 +2,29 @@
 import SwiftUI
 import T2SApp
 
-/// One row per chosen file with its state; the sheet closes itself when the batch ends with a success.
+/// "Upload a file" on the shared frame: one row per chosen file with its state, and "Choose files"
+/// at the foot to open the picker (again, if the first pick failed). The page closes itself when
+/// the batch ends with a success. No back circle when the files came in from another app — the
+/// circle closes instead.
+struct FileImportPage: View {
+    @Environment(AppEnvironment.self) private var env
+    var onBack: (() -> Void)?
+    var choose: () -> Void
+
+    var body: some View {
+        let model = env.importModel
+        ImportFrame(title: "Upload a file", onBack: onBack, action: action(for: model)) {
+            FileImportRows()
+        }
+    }
+
+    private func action(for model: ImportModel) -> ImportAction? {
+        if case .importing = model.phase { return .init(label: "Choose files", busyLabel: "Importing…", perform: {}) }
+        return .init(label: "Choose files", perform: choose)
+    }
+}
+
+/// The rows themselves: the file's name and where its import stands.
 struct FileImportRows: View {
     @Environment(AppEnvironment.self) private var env
 
@@ -10,7 +32,7 @@ struct FileImportRows: View {
         let model = env.importModel
         VStack(alignment: .leading, spacing: 16) {
             if model.fileRows.isEmpty {
-                Text("Choose EPUB or PDF files.").typeRole(.meta).foregroundStyle(Tokens.ink2)
+                Text("EPUB and PDF files from Files, iCloud Drive or another app.").typeRole(.meta).foregroundStyle(Tokens.ink2)
             }
             ForEach(model.fileRows) { row in
                 HStack(spacing: 12) {

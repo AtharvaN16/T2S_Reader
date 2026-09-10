@@ -3,62 +3,92 @@ import SwiftUI
 import T2SApp
 import UIKit
 
-/// URL field prefilled from the clipboard, one `accent` "Listen" pill, then the extraction preview
-/// in place (title, site, first lines, word count) with "Listen" and "Cancel".
+/// "Paste website link" (ElevenReader's page, the owner's reference, 2026-09-09): a bare address
+/// field prefilled from the clipboard, a tip about the Share sheet, and one Listen bar at the foot.
+/// Listen fetches the page and, unless the extraction looks thin, imports it straight away — the
+/// Reader that opens on it plays. Only a thin page stops to ask: its title, its word count, and
+/// "Listen anyway".
 struct PasteLinkPage: View {
     @Environment(AppEnvironment.self) private var env
+    var onBack: (() -> Void)?
     @State private var text = ""
     @FocusState private var focused: Bool
 
     var body: some View {
         let model = env.importModel
-        VStack(alignment: .leading, spacing: 20) {
-            switch model.phase {
-            case .preview(let article):
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(article.content.title).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
-                    HStack(spacing: 6) {
-                        if let site = article.content.siteName { Text(site); Text("·") }
-                        Text("\(article.wordCount) words")
-                    }
-                    .typeRole(.meta).foregroundStyle(Tokens.ink2)
-                    Text(String(article.plainText.prefix(280))).typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(5)
-                    if model.isThinPreview {
-                        Text("This looks thin — the page may not have a readable article.").typeRole(.meta).foregroundStyle(Tokens.destructive)
-                    }
-                }
-                HStack(spacing: 8) {
-                    Pill(label: "Listen", glyph: "play.fill", style: .accent) { Task { await model.confirmPreview() } }
-                    Pill(label: "Cancel", style: .soft) { model.reset() }
-                }
-            case .fetching:
-                HStack(spacing: 10) { ProgressView().tint(Tokens.ink); Text("Fetching…").typeRole(.meta).foregroundStyle(Tokens.ink2) }
-            case .importing:
-                HStack(spacing: 10) { ProgressView().tint(Tokens.ink); Text("Importing…").typeRole(.meta).foregroundStyle(Tokens.ink2) }
-            default:
-                TextField("https://", text: $text)
+        ImportFrame(title: "Paste website link", onBack: onBack, action: action(for: model)) {
+            VStack(alignment: .leading, spacing: Spacing.row) {
+                TextField("https://…", text: $text)
                     .typeRole(.rowTitle)
+                    .foregroundStyle(Tokens.ink)
                     .keyboardType(.URL)
+                    .textContentType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .submitLabel(.go)
                     .focused($focused)
-                    .padding(.horizontal, 14).padding(.vertical, 12)
-                    .background(Tokens.surface, in: Capsule())
                     .onSubmit { fetch() }
-                Pill(label: "Listen", glyph: "play.fill", style: .accent) { fetch() }
                 if case .failed(let message) = model.phase {
                     Text(message).typeRole(.meta).foregroundStyle(Tokens.destructive)
                 }
+                if case .preview(let article) = model.phase, model.isThinPreview {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(article.content.title).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
+                        HStack(spacing: 6) {
+                            if let site = article.content.siteName { Text(site); Text("·") }
+                            Text("\(article.wordCount) words")
+                        }
+                        .typeRole(.meta).foregroundStyle(Tokens.ink2)
+                        Text("This looks thin — the page may not have a readable article.")
+                            .typeRole(.meta).foregroundStyle(Tokens.destructive)
+                    }
+                }
+                tip
             }
         }
         .onAppear {
             if text.isEmpty, UIPasteboard.general.hasURLs, let url = UIPasteboard.general.url { text = url.absoluteString }
             focused = text.isEmpty
         }
+        .onChange(of: model.phase) { _, phase in
+            // A page that read fine goes straight in; there is nothing to confirm about it.
+            if case .preview = phase, !model.isThinPreview { Task { await model.confirmPreview() } }
+        }
+    }
+
+    /// The tip in the reference's card: a hairline box, the sentence, and the share extension's
+    /// name ("Add to t2s") so the reader knows what to look for in the sheet.
+    private var tip: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Tip: open any page in Safari and use Share to send it here.")
+                .typeRole(.rowTitle).foregroundStyle(Tokens.ink)
+            HStack(spacing: 8) {
+                Image(systemName: "square.and.arrow.up").font(.system(size: 13, weight: .semibold))
+                Text("Share  ›  Add to t2s")
+            }
+            .typeRole(.meta).foregroundStyle(Tokens.ink2)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Tokens.ink3, lineWidth: 0.5))
+    }
+
+    private func action(for model: ImportModel) -> ImportAction? {
+        switch model.phase {
+        case .fetching: return .init(label: "Listen", busyLabel: "Fetching…", perform: {})
+        case .importing: return .init(label: "Listen", busyLabel: "Importing…", perform: {})
+        case .preview where model.isThinPreview:
+            return .init(label: "Listen anyway") { Task { await model.confirmPreview() } }
+        default:
+            let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return .init(label: "Listen", isEnabled: hasText, perform: fetch)
+        }
     }
 
     private func fetch() {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        focused = false
         let candidate = trimmed.contains("://") ? trimmed : "https://" + trimmed
         Task { await env.importModel.fetch(link: URL(string: candidate) ?? URL(string: "invalid://")!) }
     }

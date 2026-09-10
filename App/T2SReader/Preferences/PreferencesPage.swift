@@ -58,11 +58,6 @@ struct PreferencesPage: View {
                                 valuePill(SpeedPickerModel.label(for: preferences.defaultRate))
                             }
                         }
-                        row("Autoplay next") {
-                            Toggle("", isOn: $preferences.autoplayNext)
-                                .labelsHidden()
-                                .tint(Tokens.ink)
-                        }
                     }
                     section("Reading") {
                         Button { showAppearance = true } label: {

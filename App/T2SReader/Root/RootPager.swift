@@ -41,6 +41,18 @@ enum RootPage: Hashable, CaseIterable {
     /// title contains `T2S_BOOK`, else the first document. Screenshots only.
     static var launchOpen: String? { ProcessInfo.processInfo.environment["T2S_OPEN"] }
 
+    /// `T2S_OPEN=import`, `link`, `text` or `files`: the Import cover, on its hub or straight on
+    /// that step (screenshots, like the rest of `launchOpen`).
+    static var launchImportPath: ImportPage.Path? {
+        switch launchOpen {
+        case "link": return .link
+        case "text": return .text
+        case "files": return .files
+        default: return nil
+        }
+    }
+    static var launchOpensImport: Bool { launchOpen == "import" || launchImportPath != nil }
+
     static func launchDocument(in summaries: [DocumentSummary]) -> DocumentSummary? {
         guard launchOpen != nil else { return nil }
         if let title = ProcessInfo.processInfo.environment["T2S_BOOK"],
@@ -97,6 +109,7 @@ struct RootPager: View {
                 .environment(\.readerRoute, ReaderRoute(open: { readerDocument = $0 }))
 
                 bottomFill(inset: geo.safeAreaInsets.bottom)
+                TopFade(inset: geo.safeAreaInsets.top)
 
                 VStack(spacing: 12) {
                     if !env.libraryModel.isQueueEmpty || env.player.current != nil {

@@ -65,6 +65,12 @@ public final class PlayerModel {
     /// route is unavailable on this device (spec §6). The stored voice is never rewritten.
     public var voiceRouting: any VoiceRouteResolving = PassthroughVoiceRouting()
     public private(set) var current: DocumentSummary?
+    /// The voice `current` actually plays with — the stored or default choice as the route resolved
+    /// it on this device (spec §6), without the delivery the render carries — so it matches a
+    /// catalog id. Set by every load and cleared by `unload`. The Reader's chip reads this: the
+    /// summary a page was opened with is a snapshot that a voice change never touches, while a
+    /// change reloads through here.
+    public private(set) var routedVoiceID: String?
     /// Load or persistence failures from this model; cleared by the next successful load or persist.
     public private(set) var localError: String?
     /// The coordinator's last render error, else this model's own; the coordinator clears its error on load.
@@ -213,6 +219,7 @@ public final class PlayerModel {
             document.voiceID = Delivery.applied(to: routed)
             coordinator.load(document, timeline: timeline)
             current = summary
+            routedVoiceID = routed
             pendingChapters = []
             localError = nil
             await refreshBookmarks()
@@ -228,6 +235,7 @@ public final class PlayerModel {
     public func unload() {
         coordinator.unload()
         current = nil
+        routedVoiceID = nil
         pendingChapters = []
         bookmarkedUtterances = []
         localError = nil

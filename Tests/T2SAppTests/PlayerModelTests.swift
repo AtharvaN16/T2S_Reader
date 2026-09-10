@@ -367,4 +367,29 @@ import T2SStore
         // The stored choice is untouched, so the book returns to MLX on a phone that has it.
         #expect(try await f.store.document(id: id)?.voiceID == mlxVoiceID)
     }
+
+    /// The Reader's voice chip reads this — the voice the loaded document actually plays with — rather
+    /// than the summary the page was opened with, which a voice change never updates (owner,
+    /// 2026-09-10: "when changing voice in reader, the reader voice UI does not update").
+    @Test func routedVoiceFollowsLoadsAndVoiceChanges() async throws {
+        let coreMLIdentity = "kokoro-coreml-2e878c6a-misaki1.0.6"
+        let heart = "kokoro:\(coreMLIdentity):af_heart"
+        let bella = "kokoro:\(coreMLIdentity):af_bella"
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let player = try makePlayer(f)
+        #expect(player.routedVoiceID == nil)
+        player.voiceRouting = KokoroVoiceRouting(routes: [.init(engineIdentity: coreMLIdentity, isAvailable: { true })], defaultVoice: heart)
+        await player.load(try #require(try await f.store.summary(id: id)), play: false)
+        // The catalog's id: the route as resolved, without the delivery the render carries.
+        #expect(player.routedVoiceID == heart)
+
+        let change = VoiceChangeModel(library: f.library, player: player, libraryModel: LibraryModel(library: f.library))
+        #expect(await change.apply(voiceID: bella, to: try #require(player.current)))
+        #expect(player.routedVoiceID == bella)
+        #expect(player.current?.document.voiceID == bella)
+
+        player.unload()
+        #expect(player.routedVoiceID == nil)
+    }
 }

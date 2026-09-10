@@ -87,10 +87,7 @@ struct ReaderPage: View {
         }
         .task(id: summary.id) { await open() }
         .appTheme()
-        .task(id: summary.id) { await resolveVoiceName() }
-        .onChange(of: showVoiceChange) { _, shown in
-            if !shown { Task { await resolveVoiceName() } }
-        }
+        .onChange(of: shownVoiceID, initial: true) { _, id in resolveVoiceName(id) }
         .onDisappear {
             Task { await env.player.persistRenderedChapters() }
         }
@@ -271,7 +268,7 @@ struct ReaderPage: View {
     }
 
     /// Appearance (left) · voice chip (centred) · bookmark (right). The chip shows the voice
-    /// actually routed for this document, resolved once per document in `resolveVoiceName`. The
+    /// actually routed for this document (`shownVoiceID`), named in `resolveVoiceName`. The
     /// bookmark took the contents circle's place (owner's ask, 2026-09-09; the chapter row above
     /// already opens the list): filled while the sentence under the playhead is bookmarked, and a
     /// tap then removes that bookmark rather than adding a second.
@@ -355,11 +352,18 @@ struct ReaderPage: View {
         text = model
     }
 
-    /// The voice chip's name: not necessarily the document's stored voice, but the one actually
-    /// routed for playback on this device (spec §6), resolved once per document.
-    private func resolveVoiceName() async {
-        let requested = summary.document.voiceID ?? env.preferences.defaultVoiceID ?? VoiceOption.systemDefault.id
-        let id = await env.voiceRouting.effectiveVoiceID(requested)
-        voiceName = env.voices.voices().first { $0.id == id }?.name ?? "Voice"
+    /// The voice the chip names: the one the player routed for this document when it loaded it
+    /// (spec §6) — not the stored choice in `summary`, which is the snapshot this page was opened
+    /// with and which a voice change never updates (the change reloads the player instead, so this
+    /// moves the moment the sheet applies it; owner, 2026-09-10). Nil until the player holds this
+    /// document.
+    private var shownVoiceID: String? {
+        env.player.current?.id == summary.id ? env.player.routedVoiceID : nil
+    }
+
+    /// Names `shownVoiceID` from the catalog. Called from `onChange`, not the body: the catalog is
+    /// built on every `voices()` call, and the body runs at 10 Hz while playing.
+    private func resolveVoiceName(_ id: String?) {
+        voiceName = id.flatMap { id in env.voices.voices().first { $0.id == id }?.name } ?? "Voice"
     }
 }

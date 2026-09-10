@@ -5,6 +5,17 @@ options:
   deploymentTarget:
     iOS: "18.0"
   createIntermediateGroups: true
+# Project-level defaults for the app's identity. A target's `Local.xcconfig` (git-ignored, per Mac)
+# sits *above* project settings and *below* target settings in Xcode's precedence, so these three
+# are the only identity settings a target may not set itself: `Local.xcconfig` overrides them, and
+# the targets reference them through `$(...)`. A second developer's team cannot register the owner's
+# app group, so they put their own `T2S_APP_GROUP` (and `T2S_BUNDLE_ID`, `DEVELOPMENT_TEAM`) there
+# rather than editing tracked files — `AppPaths.appGroupIdentifier` reads the group back out of the
+# bundle's `T2SAppGroupIdentifier`.
+settings:
+  base:
+    T2S_BUNDLE_ID: com.t2s.reader
+    T2S_APP_GROUP: group.com.t2s.reader
 packages:
   T2S:
     path: ..
@@ -35,9 +46,11 @@ targetTemplates:
         excludes:
           - Info.plist
           - Info-Kokoro.plist
-      # `Resources/Kokoro` (~342 MB of MLX weights) and `Resources/KokoroCoreML` (~347 MB of
-      # Core ML stages, voices and runtime JSON) are only usable by the Kokoro target; both are
-      # added under `T2SReaderKokoro` alone so the everyday app never carries them.
+      # `Resources/Kokoro` (~342 MB of MLX weights) is only usable by the Kokoro target and is
+      # added under `T2SReaderKokoro` alone. `Resources/KokoroCoreML` (the Core ML stages, voices
+      # and runtime JSON that `scripts/fetch-kokoro-coreml.sh --app` stages for the package's tests)
+      # is bundled by neither target since 2026-09-10: the phone downloads and compiles the model on
+      # its first launch (`KokoroCoreMLInstall`), so an install is ~60 MB rather than 676 MB.
       - path: Resources
         excludes:
           - Kokoro
@@ -66,10 +79,11 @@ targetTemplates:
     entitlements:
       path: T2SReader/T2SReader.entitlements
       properties:
-        com.apple.security.application-groups: [group.com.t2s.reader]
+        com.apple.security.application-groups: ["$(T2S_APP_GROUP)"]
     info:
       properties:
         CFBundleDisplayName: t2s
+        T2SAppGroupIdentifier: $(T2S_APP_GROUP)
         UILaunchScreen: {}
         UIBackgroundModes: [audio, processing]
         BGTaskSchedulerPermittedIdentifiers: [com.t2s.reader.prepare]
@@ -97,7 +111,7 @@ targetTemplates:
             LSItemContentTypes: [com.adobe.pdf]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.t2s.reader
+        PRODUCT_BUNDLE_IDENTIFIER: $(T2S_BUNDLE_ID)
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         TARGETED_DEVICE_FAMILY: "1"
@@ -132,11 +146,9 @@ targets:
       # Flat-copied to the bundle root, which is where `KokoroResources.bundled(in:)` looks.
       - path: Resources/Kokoro
         buildPhase: resources
-      # Also flat-copied, and Xcode compiles each `coreml/*.mlpackage` into a `<stage>.mlmodelc`
-      # at the bundle root on the way — exactly the layout `KokoroCoreMLResources.locate(in:)`
-      # expects, and the reason the app never pays the on-device compile.
-      - path: Resources/KokoroCoreML
-        buildPhase: resources
+      # The Core ML model is not bundled (see the template above). `KokoroCoreMLResources.locate(in:)`
+      # still looks in the bundle first, so a developer who adds `Resources/KokoroCoreML` back here
+      # gets a build that skips the download.
     dependencies:
       - package: T2SKokoro
         product: T2SKokoro
@@ -172,10 +184,11 @@ targets:
     entitlements:
       path: T2SReaderShare/ShareExtension.entitlements
       properties:
-        com.apple.security.application-groups: [group.com.t2s.reader]
+        com.apple.security.application-groups: ["$(T2S_APP_GROUP)"]
     info:
       path: T2SReaderShare/Info.plist
       properties:
+        T2SAppGroupIdentifier: $(T2S_APP_GROUP)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
@@ -187,7 +200,7 @@ targets:
         CFBundleDisplayName: Add to t2s
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.t2s.reader.share
+        PRODUCT_BUNDLE_IDENTIFIER: $(T2S_BUNDLE_ID).share
         SWIFT_VERSION: "6.0"
         SWIFT_STRICT_CONCURRENCY: complete
         TARGETED_DEVICE_FAMILY: "1"

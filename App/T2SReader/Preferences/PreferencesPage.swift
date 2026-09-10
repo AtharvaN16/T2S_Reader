@@ -106,7 +106,6 @@ struct PreferencesPage: View {
                 }
                 .padding(.horizontal, Spacing.margin)
             }
-            .background(Tokens.ground)
             .background(PagerLock())                                           // holds the pager while a subpage is up
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showVoices) { voiceList }

@@ -23,12 +23,15 @@ struct ReaderPage: View {
     @State private var voiceName = "Voice"
     /// Where the book proper starts, for the "Skip to Chapter 1" pill; nil when there is no front
     /// matter to skip. Read once per document in `open`.
-    @State private var bodyStart: (index: Int, number: Int)?
+    @State private var bodyStart: (index: Int, number: Int?)?
 
     var body: some View {
         let reader = env.readerModel
         ZStack {
             Tokens.ground.ignoresSafeArea()
+            // Over the ground and under the text (`ReaderTextView` draws on a clear background),
+            // so the page is lit from behind rather than washed over (owner, 2026-09-10).
+            WarmUpVeil(showsMessage: false)
             if let text {
                 ReaderTextView(
                     text: text,
@@ -52,8 +55,6 @@ struct ReaderPage: View {
                 ProgressView().tint(Tokens.ink)
             }
 
-            WarmUpVeil(showsMessage: false)
-
             VStack(spacing: 0) {
                 topBar.opacity(chromeVisible ? 1 : 0)
                 Spacer()
@@ -70,7 +71,8 @@ struct ReaderPage: View {
                     // The same pill while the playhead is still in the front matter (owner's ask,
                     // 2026-09-09): one tap past the title page, dedication and reviews to the
                     // first numbered chapter. Goes with the chrome, so a tap on the text dismisses it.
-                    Pill(label: "Skip to Chapter \(skip.number)", glyph: "forward.end.fill", style: .selected) {
+                    Pill(label: skip.number.map { "Skip to Chapter \($0)" } ?? "Skip the front matter",
+                         glyph: "forward.end.fill", style: .selected) {
                         Task { await env.player.seek(toChapter: skip.index) }
                     }
                     .padding(.bottom, 32)
@@ -80,6 +82,10 @@ struct ReaderPage: View {
                 bottomBar.opacity(chromeVisible ? 1 : 0)
             }
             .animation(.easeInOut(duration: 0.2), value: chromeVisible)
+
+            // Over the header's own ground fade, for the same reason as on the root pages. No line
+            // here: the transport says "preparing the voice…" a few points below it.
+            WarmUpVeil(layer: .chrome, showsMessage: false)
         }
         .task(id: summary.id) { await open() }
         .appTheme()
@@ -106,7 +112,7 @@ struct ReaderPage: View {
     }
 
     /// The first numbered chapter, while the playhead is before it.
-    private var skipTarget: (index: Int, number: Int)? {
+    private var skipTarget: (index: Int, number: Int?)? {
         guard let bodyStart, let index = env.player.chapterIndex, index < bodyStart.index else { return nil }
         return bodyStart
     }
@@ -178,8 +184,11 @@ struct ReaderPage: View {
     /// chapter picker sits on ground too (the owner's second cut) and the text fades out above it.
     private var bottomBar: some View {
         let player = env.player
-        return VStack(spacing: 10) {
+        return VStack(spacing: 0) {
+            // 2 pt under the picker rather than the stack's 10, so it sits lower — nearer the
+            // scrubber, further from the text it hangs under (owner, 2026-09-10).
             chapterRow
+                .padding(.bottom, 2)
             VStack(spacing: 2) {
                 ThinScrubber(model: player.scrubber, segments: chapterSegments) { fraction in
                     Task { await player.seek(fraction: fraction) }
@@ -203,7 +212,9 @@ struct ReaderPage: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            .padding(.bottom, 10)
             ReaderControls(onSleepTimer: { showSleepTimer = true }, onSpeed: { showSpeed = true })
+                .padding(.bottom, 10)
             toolRow
         }
         .padding(.horizontal, Spacing.margin)

@@ -46,6 +46,9 @@ struct CollectionPage: View {
     @State private var searchText = ""
     @State private var isSearching = false
     @State private var filter: Filter = .all
+    /// Whether the title's kind menu is down. `T2S_OPEN=kinds` opens it at launch — a scripted
+    /// simulator cannot tap a title, and this is the only way to photograph the menu.
+    @State private var isPickingKind = RootPage.launchOpen == "kinds"
 
     /// Cells align at the top so every book in a row stands on the same shelf line — the cover
     /// slot is a fixed proportion of the width, and only the text below it varies in height.
@@ -71,8 +74,7 @@ struct CollectionPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 VStack(alignment: .leading, spacing: Spacing.row) {
-                    header
-                    if !all.isEmpty { controls(layout: layout) }
+                    header(all: all, layout: layout)
                     if isSearching {
                         TextField("Search", text: $searchText)
                             .typeRole(.rowTitle)
@@ -94,7 +96,15 @@ struct CollectionPage: View {
             }
             .padding(.horizontal, Spacing.margin)
         }
-        .background(Tokens.ground)
+        // The kind menu hangs from the title over the shelf, so it lives on the scroll view rather
+        // than in the column: inside the column the grid, drawn after it, would cover it.
+        .overlayPreferenceValue(TitleAnchorKey.self) { anchor in
+            GeometryReader { page in
+                if isPickingKind, let anchor { kindMenu(under: page[anchor]) }
+            }
+        }
+        // No ground of its own: `RootPager` paints one for all three pages, and a transparent page
+        // is what lets the warm-up wash sit behind this one rather than over it (owner, 2026-09-10).
         .fullScreenCover(isPresented: $showAdd, onDismiss: openPending) { ImportPage(imported: $pendingOpen) }
         .sheet(item: $selected) { BookSheet(summary: $0) }
         .onChange(of: env.libraryModel.summaries.map(\.id), initial: true) { _, _ in
@@ -128,15 +138,35 @@ struct CollectionPage: View {
         readerRoute.open(doc)
     }
 
-    /// No count under the title (owner's call, 2026-09-09): the chips and the shelf say what is here.
-    private var header: some View {
+    /// No count under the title (owner's call, 2026-09-09): the shelf says what is here. The title
+    /// *is* the kind filter now (owner, 2026-09-10): it names what the page is showing and drops the
+    /// menu that changes it, in place of the row of tabs that used to sit under it. That freed the
+    /// second row, so the layout switch joins `+` and Search on the header line.
+    private func header(all: [DocumentSummary], layout: CollectionLayout) -> some View {
         HStack(alignment: .top) {
-            PageTitle(text: "Collection")
+            Button { withAnimation(.snappy) { isPickingKind.toggle() } } label: {
+                PageTitle(text: filter.title) { TitleChevron() }
+                    .fixedSize(horizontal: true, vertical: false)              // only the word is the target, not the gap after it
+                    .contentShape(Rectangle())
+                    .anchorPreference(key: TitleAnchorKey.self, value: .bounds) { $0 }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Showing \(filter.title)")
+            .accessibilityHint("Chooses which kind of thing the page shows")
             Spacer(minLength: 12)
             HStack(spacing: 8) {
                 Button { showAdd = true } label: { CircleGlyph(systemName: "plus") }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Import")                          // Home's word for the same door
+                if !all.isEmpty {
+                    Button {
+                        withAnimation(.snappy) { env.preferences.collectionLayout = layout == .grid ? .list : .grid }
+                    } label: {
+                        CircleGlyph(systemName: layout == .grid ? "list.bullet" : "square.grid.2x2")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(layout == .grid ? "Show as list" : "Show as grid")
+                }
                 Pill(label: isSearching ? "Done" : "Search", style: isSearching ? .selected : .soft) {
                     withAnimation(.snappy) { isSearching.toggle(); if !isSearching { searchText = "" } }
                 }
@@ -145,19 +175,18 @@ struct CollectionPage: View {
         }
     }
 
-    /// The kind tabs on the left (`FilterTabs`: words with a bar under the chosen one, not pills —
-    /// the pills read as more buttons beside Search) and the layout switch on the right, a circle
-    /// like the header's `+` showing the layout a tap switches to.
-    private func controls(layout: CollectionLayout) -> some View {
-        HStack(spacing: Spacing.grid) {
-            FilterTabs(options: Filter.allCases, title: \.title, selection: $filter)
-            Button {
-                withAnimation(.snappy) { env.preferences.collectionLayout = layout == .grid ? .list : .grid }
-            } label: {
-                CircleGlyph(systemName: layout == .grid ? "list.bullet" : "square.grid.2x2")
+    /// The kind menu: the card under the title, over a clear sheet that takes the tap that closes it
+    /// again. Everything imported is in one Collection, so this is the only thing that narrows it.
+    private func kindMenu(under title: CGRect) -> some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { withAnimation(.snappy) { isPickingKind = false } }
+            TitleMenuCard(options: Filter.allCases, title: \.title, selection: filter) { kind in
+                withAnimation(.snappy) { filter = kind; isPickingKind = false }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(layout == .grid ? "Show as list" : "Show as grid")
+            .offset(x: title.minX, y: title.maxY + Spacing.grid)
+            .transition(.scale(scale: 0.94, anchor: .topLeading).combined(with: .opacity))
         }
     }
 

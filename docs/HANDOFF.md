@@ -1,8 +1,57 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 small hours (warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 small hours (the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — the warm-up veil, the team that kept resetting, picker round 7
+## Resume here (2026-09-10, latest) — the share bug, the veil behind the page, the skip pill on any book
+
+Five things from the phone.
+
+- **A shared EPUB was being read as a web link** (owner: "why is it confusing book upload with url?").
+  `ShareImportService.importItems` asked `hasItemConformingToTypeIdentifier(UTType.url)` **first**,
+  and a file shared out of Files declares `public.file-url`, which *conforms to* `public.url` — so
+  every shared book went down the link path and `ImportModel.fetch(link:)` rejected its `file://`
+  scheme with "That doesn't look like a web address." Now EPUB and PDF are asked about before URL,
+  and a file URL that still reaches the link branch is imported as a file when its extension is
+  `epub`/`pdf`. **Kind before container.** Not yet retested from a phone's share sheet.
+- **The warm-up veil sits behind the page now**, in two layers (`Design/WarmUpVeil.swift`):
+  `.behind` is the whole wash at the back of the host's stack — over the ground, under the text —
+  and `.chrome` redraws the same gradient in front of the ground bars that mask the status bar
+  (`TopFade` on the root, the Reader's header fade), clipped to the status band and faded out over
+  `TopFade.fadeHeight` so the two meet without a seam; the message and progress hairline ride on
+  `.chrome`. Both layers take their pulse from the wall clock (`pulse(at:)`, a 3 s cosine, 0.38 → 1)
+  rather than their own `@State`, so they breathe in step. **For any of that to show, the three root
+  pages gave up their own `Tokens.ground`** — `RootPager`'s `.background` is the one ground for all
+  three now, and `QueuePage`'s rows are `.listRowBackground(Color.clear)`. Verified in the simulator
+  that an unwarmed Home and Collection are pixel-alike to before.
+- **The veil was landing in the middle of the Reader's text** (owner). Cause: `GeometryReader` +
+  `.ignoresSafeArea(edges: .top)` on the *inner* stack measured a box that began below the status
+  bar. `.ignoresSafeArea()` is on the GeometryReader itself now. Its proxy then reports zero insets,
+  so the status band's height comes from the key window instead (`statusBandHeight`).
+- **The veil goes when sound does** (owner: "my book is playing sound and the glow is still
+  happening"): `isVisible` is `isWarming && !(isPlaying && !isCatchingUp)` — a tapped Play still
+  stalled keeps the wash, a book actually speaking loses it. `T2S_WARMUP=1` bypasses that, since a
+  faked warm-up has to show over the fixture book for screenshots.
+- **Colour and motion** (owner: start higher, more orange up top, a plainer pulse): coverage 0.5 →
+  0.58 of the screen, the top stop 0.26 → 0.55 held near-peak (0.42) to 20 % before it falls away,
+  and the pulse 1 ↔ 0.5 over 1.8 s → 1 ↔ 0.38 over 3 s.
+- **The chapter picker sits lower**: the gap under it went from the bottom bar's 10 pt stack spacing
+  to 2 pt (the stack is `spacing: 0` with explicit 10 pt gaps elsewhere).
+- **"Skip to Chapter 1" now finds the body in books that never number a chapter** (owner uploaded
+  *Thinking in Systems* and saw no pill). `ChapterLabel.bodyStart` returns `(index, number: Int?)`
+  and reads two ways: a numbered heading as before, now also "Part One", "Section 2", a bare
+  "One: …" or "I. …"; failing that, it walks the **front matter** (`frontMatterTitles`, matched on
+  the whole title or the head before a colon/dash, so "Introduction: The Systems Lens" counts and
+  "Contents of the Vault" does not) and points at the first title past it with `number` nil — the
+  pill then reads **"Skip the front matter"**. "Prologue" is deliberately not front matter.
+
+`swift test` 444/81 green (six new `ChapterLabelTests` cases; the old "no numbered chapter at all"
+nil case is now the fallback's job and was rewritten). `scripts/build-app.sh` → `** BUILD SUCCEEDED
+**`. Seen in the simulator (`T2S_WARMUP=1`): the wash from the very top of Home behind the title and
+covers with the line and bar under the status bar, the same in the Reader behind the text, the
+picker lower, and both pages unchanged unwarmed. Not seen: the real warm-up on a phone, the share
+sheet with a book, the pill on the owner's book.
+
+## Resume here (2026-09-10) — the warm-up veil, the team that kept resetting, picker round 7
 
 Three asks from the phone, plus one mid-turn ("remove the heart from the Reader's voice sheet").
 

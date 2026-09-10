@@ -39,11 +39,10 @@ struct QueuePage: View {
                     .listRowInsets(EdgeInsets())
             }
             .listRowSeparator(.hidden)
-            .listRowBackground(Tokens.ground)
+            .listRowBackground(Color.clear)            // the pager's ground shows through, and the warm-up wash with it
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(Tokens.ground)
         .refreshable { await env.libraryModel.refresh() }
         .fullScreenCover(isPresented: $showAdd, onDismiss: openPending) { ImportPage(imported: $pendingOpen) }
         .sheet(item: $details) { DetailsSheet(summary: $0) }

@@ -37,7 +37,8 @@ enum RootPage: Hashable, CaseIterable {
     }
 
     /// `T2S_OPEN`, the same idea one step further: `reader` opens the Reader, `chapters` the Reader
-    /// with its chapter list up, `book` the Collection's book sheet — on the first document whose
+    /// with its chapter list up, `kinds` the Collection title's kind menu, `book` its book sheet —
+    /// on the first document whose
     /// title contains `T2S_BOOK`, else the first document. Screenshots only.
     static var launchOpen: String? { ProcessInfo.processInfo.environment["T2S_OPEN"] }
 
@@ -100,6 +101,11 @@ struct RootPager: View {
         // row the screen goes, and a fixed frame plus `ignoresSafeArea` alone cannot tell it.
         GeometryReader { geo in
             ZStack(alignment: .bottom) {
+                // First in the stack, so every page's content draws over it: the pages carry no
+                // ground of their own any more (this view's `.background` below is the one ground
+                // for all three), which is what lets the wash read as light behind them.
+                WarmUpVeil()
+
                 TabView(selection: $page) {
                     CollectionPage().tag(RootPage.collection)
                     QueuePage().tag(RootPage.queue)
@@ -117,7 +123,9 @@ struct RootPager: View {
                         .transition(.opacity)
                 }
                 TopFade(inset: geo.safeAreaInsets.top)
-                WarmUpVeil()                                                   // the one-time voice load, over every page
+                // Over the fade's solid band, which would otherwise cut a pale strip across the
+                // top of the wash; this carries the warm-up's line and bar too.
+                WarmUpVeil(layer: .chrome)
 
                 if !chrome.isSubpageOpen {
                     VStack(spacing: 12) {

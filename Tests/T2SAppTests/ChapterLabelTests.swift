@@ -44,11 +44,36 @@ import Testing
     @Test(arguments: [
         ["1 A Chessboard King", "2 Believers and Infidels"],                // nothing before it to skip
         ["Chapter 1", "Chapter 2"],
-        ["Title Page", "Introduction", "The Fall", "Epilogue"],             // no numbered chapter at all
         ["Chapters of My Life", "Chapel"],                                  // words that only start like one
+        ["The Fall", "The Rise"],                                           // opens on the body already
+        ["Title Page", "Contents"],                                         // front matter and nothing else
         [],
     ])
     func bodyStartIsNilWithNothingToSkipTo(titles: [String]) {
         #expect(ChapterLabel.bodyStart(titles: titles) == nil)
+    }
+
+    @Test(arguments: [
+        (["Cover", "One: The Basics"], 1, 1),
+        (["Foreword", "I. Marley's Ghost"], 1, 1),
+        (["Title Page", "Part One", "Part Two"], 1, 1),
+        (["Contents", "Section 2"], 1, 2),
+    ])
+    func bodyStartReadsABareNumberOrAPartHeading(titles: [String], index: Int, number: Int) {
+        let start = ChapterLabel.bodyStart(titles: titles)
+        #expect(start?.index == index && start?.number == number)
+    }
+
+    /// A book with no numbered heading anywhere still has a body: the first title that is not front
+    /// matter, once some front matter has gone by. No number, so the pill says "Skip the front
+    /// matter" (owner's book, 2026-09-10: "Introduction: The Systems Lens" then named chapters).
+    @Test(arguments: [
+        (["Title Page", "Introduction", "The Fall", "Epilogue"], 2),
+        (["Cover", "Copyright", "Contents", "Introduction: The Systems Lens", "The Systems Zoo"], 4),
+        (["Praise", "Also by This Author", "Preface — 2014", "A Brief Visit"], 3),
+    ])
+    func bodyStartFallsBackToTheEndOfTheFrontMatter(titles: [String], index: Int) {
+        let start = ChapterLabel.bodyStart(titles: titles)
+        #expect(start?.index == index && start?.number == nil)
     }
 }

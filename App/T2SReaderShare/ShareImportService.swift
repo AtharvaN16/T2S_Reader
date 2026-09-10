@@ -62,15 +62,30 @@ final class ShareImportService {
         var failures: [String] = []
         for provider in providers {
             do {
-                if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
-                    let url = try await loadedURL(from: provider)
-                    imported += await importedIDs(after: { await self.model.fetch(link: url) }) {
-                        await self.model.confirmPreview()
-                    }
-                } else if provider.hasItemConformingToTypeIdentifier(UTType.epub.identifier) {
+                // The books come first, and the link branch last. A file shared out of Files (or any
+                // document provider) conforms to `public.file-url`, which conforms to `public.url` —
+                // so asking about `.url` first sent every shared EPUB down the web-link path, where
+                // `ImportModel.fetch(link:)` rejected its `file://` scheme with "That doesn't look
+                // like a web address." (owner, 2026-09-10). Kind before container, always.
+                if provider.hasItemConformingToTypeIdentifier(UTType.epub.identifier) {
                     imported += try await importFile(from: provider, type: .epub)
                 } else if provider.hasItemConformingToTypeIdentifier(UTType.pdf.identifier) {
                     imported += try await importFile(from: provider, type: .pdf)
+                } else if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
+                    let url = try await loadedURL(from: provider)
+                    // Belt and braces: a file URL that reached here anyway (a provider that declares
+                    // only `public.url` for a document it holds) is imported as the file it is.
+                    if url.isFileURL {
+                        if ["epub", "pdf"].contains(url.pathExtension.lowercased()) {
+                            imported += await importedIDs(after: { await self.model.importFiles([url]) })
+                        } else {
+                            failures.append("This shared file isn't an EPUB or a PDF.")
+                        }
+                    } else {
+                        imported += await importedIDs(after: { await self.model.fetch(link: url) }) {
+                            await self.model.confirmPreview()
+                        }
+                    }
                 } else if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
                     let text = try await loadedText(from: provider)
                     imported += await importedIDs(after: {

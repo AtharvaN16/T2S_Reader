@@ -43,5 +43,7 @@ spikes/findings/audio-probe/
 spikes/findings/quality-probe/
 # Lever probe output (blends, pitch spread, codec round trips — WAVs for the owner's ears)
 spikes/findings/lever-probe/
+# Voice tail probe output (scripts/voice-tail-probe.sh: every voice's call tails, report.md and WAVs)
+spikes/findings/voice-tail-probe/
 # Per-Mac signing (DEVELOPMENT_TEAM); see App/Local.xcconfig.example
 App/Local.xcconfig

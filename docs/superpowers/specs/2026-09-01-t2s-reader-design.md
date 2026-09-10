@@ -936,6 +936,23 @@ against a pipeline that is already proven.
 
 ## 11. Changelog
 
+**rev 19 (2026-09-10)** — the tail click on every voice; the Reader's voice chip
+- Core ML engine: the click at the tail of every call is removed by *place*, not shape. Measured
+  over all 28 voices (`scripts/voice-tail-probe.sh`; the 2026-09-10 section of
+  `spikes/findings/2026-09-08-ticks-and-hyphens.md`): the burst begins at most 66 ms before the end
+  of every call and ends where the call's 36–45 ms of zeros begin, whatever the voice, while the
+  silence rev 12's island rule looked for around it is Heart's alone — a noise floor laps at it on
+  Alloy, the last word decays straight into it on Jessica — so that rule cleaned six voices and
+  left the burst on twenty-two. `KokoroCoreMLTailClick` now zeroes the last 70 ms of every call
+  and ramps the 10 ms before it down to meet them.
+- **§5** the Kokoro voice route carries the engine's finishing revision after the delivery
+  (`kokoro:<engine>:<voice>@1.25#2`, `KokoroVoiceID.finish`, `Delivery.finish`): the key's lever
+  for a change to the engine's audio that its identity cannot carry. Every Kokoro clip re-renders
+  on its next play; stored voice choices never carry it.
+- **§2.4.5** the Reader's voice chip names the voice the player routed for the loaded document
+  (`PlayerModel.routedVoiceID`), so a change from the Reader's sheet moves it at once; it read the
+  summary the page was opened with, which the change never updated.
+
 **rev 18 (2026-09-09)** — Plan 17: the rest of the audit
 - **§5, §3.7.3** the reader's chapters are retained at import and a re-derivation starts from them;
   only a document's open re-derives it; the old audio is removed in the background.

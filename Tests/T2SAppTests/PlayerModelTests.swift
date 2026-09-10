@@ -307,8 +307,8 @@ import T2SStore
         await player.coordinator.waitForRenderIdle()
 
         let requested = Set(await engine.requests.map(\.voiceID))
-        #expect(requested == ["\(bella)@1.25"])
-        #expect(player.coordinator.document?.voiceID == "\(bella)@1.25")
+        #expect(requested == ["\(bella)@1.25#\(Delivery.finish)"])
+        #expect(player.coordinator.document?.voiceID == Delivery.applied(to: bella))
         #expect(try await f.store.document(id: id)?.voiceID == bella)
     }
 

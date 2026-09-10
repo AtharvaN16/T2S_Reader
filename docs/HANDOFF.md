@@ -1,8 +1,64 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 small hours (the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 early morning (the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — the glow made concave, the Voice page's cut, web ≠ text, PDF in cloth
+## Resume here (2026-09-10, latest) — the click on every voice, and the Reader's voice chip
+
+Two reports from the owner after a voice change in the Reader: "the reader voice UI does not
+update", and "does changing voice reintroduce the click sounds in the playback? I am getting them
+when I change voice."
+
+- **The chip** (commit 7eb243d): `ReaderPage` named the voice from the `summary` the root pager
+  handed it when the cover opened — a snapshot a voice change never touches (the change updates
+  the store and reloads the player). `PlayerModel.routedVoiceID` is the route resolved at every
+  load, cleared by `unload`, and the page names it through `onChange` whenever it moves
+  (`resolveVoiceName` no longer routes for itself; the catalog is built per `voices()` call and
+  the body runs at 10 Hz, so the name stays in `@State`). Test:
+  `PlayerModelTests.routedVoiceFollowsLoadsAndVoiceChanges`.
+- **The click was never the voice change's — it was the voice's.** `KokoroCoreMLTailClick`
+  (Plan 11) looked for the burst's *shape*: an island under 30 ms between two runs of ≥ 10 ms under
+  −80 dBFS. That is Heart's tail. A new probe, `scripts/voice-tail-probe.sh`
+  (`KokoroVoiceTailProbe`, enabled while `spikes/findings/voice-tail-probe/` exists, ~9 min),
+  rendered three of the Dickens utterances through all 28 voices with the pieces plain-appended,
+  sliced every pipeline call by the trace, and ran the shipped rule over each: **it left the burst
+  standing in 45 of 113 calls on 22 voices**, at up to −5 dBFS (George, Daniel, Alloy). On Alloy
+  a −60 dBFS floor laps at the burst, so there is no 10 ms of −80 dBFS silence before it; on
+  Jessica the last word decays straight into it. What every voice shares is the *place*: the burst
+  ends where the call's final 36–45 ms of exact zeros begin (the generator's output for the
+  bucket's zero padding, pulled inside the kept audio by its ~40 ms look-ahead) and begins at most
+  66 ms before the end — the generator's pre-echo of the step into the padding. The rule now goes
+  by place: the last 70 ms of every call are zeroed and the 10 ms before ramp down to meet them.
+  What the window held besides the burst is the EOS token's single 25 ms frame, shifted the same
+  way. Rerun: **0 of 113 calls** keep a burst; the streamed first pieces (the app's path, which a
+  voice change forces because it evicts every clip and Prepare has not run ahead) go from 8 voices
+  with a burst to none; joins unchanged (largest step 0.0048). The measurement is the 2026-09-10
+  section of `spikes/findings/2026-09-08-ticks-and-hyphens.md`; `report-before.md` and `report.md`
+  in the probe directory are the two runs, with WAVs of every flagged tail, raw and after.
+- **Every Kokoro clip re-renders once** (spec §5: audio changed, key must change). The engine
+  identity cannot carry it — an unknown identity re-routes a stored Bella to Heart — so, like the
+  delivery, the finishing revision rides on the voice route: `kokoro:<engine>:<voice>@1.25#2`
+  (`KokoroVoiceID.finish`, written after the spread; `Delivery.finish` = 2, bump it whenever the
+  engine's post-processing changes what it renders). Stored voice choices never carry it; the
+  engine ignores it. `KokoroCoreMLTailClickTests` rewritten for the three tail shapes and the ramp;
+  `KokoroVoiceIDTests` and `DeliveryTests` cover the tag.
+- **Not done**: listening — every number is a proxy, and the phone renders in fp16 where the Mac
+  renders fp32, so the zeros' scatter may differ there (the window has 4 ms over the widest start
+  seen). The pause at a voice change itself is `AVAudioPlayerNode.pause()` mid-waveform, as every
+  pause in the app is; not touched. Spec rev 19.
+
+`swift test` 456/82 green; T2SKokoro `KokoroCoreMLTailClickTests` + `KokoroCoreMLSeamTests` 14/14
+(`xcodebuild`, `-only-testing:`); `scripts/build-app.sh` → `** BUILD SUCCEEDED **`. This Mac's disk
+is at 99 % (≈1–2 GB free): both probe runs logged BNNS "No space left on device" during the Core ML
+compile and finished anyway, and one app build died on it while a probe held the caches — run them
+one at a time, and sweep `$TMPDIR/kokoro_*.mlmodelc` once the private copy under
+`Packages/T2SKokoro/.build/compiled-stages-*` exists.
+
+**The phone listen.** Change a book to Alloy, Jessica, George or Onyx and press Play: no tick after
+"Humbug!" or before "and his breath smoked again"; the chip in the Reader's tool row shows the new
+name the moment the sheet closes. Every Kokoro book renders afresh on its first play after the
+update.
+
+## Resume here (2026-09-10) — the glow made concave, the Voice page's cut, web ≠ text, PDF in cloth
 
 Six asks from two phone crops (the Voice screen while warming, and the text sheet). The first four
 are the warm-up glow — the cut is the Voice page's alone, the shape, height and pulse are the

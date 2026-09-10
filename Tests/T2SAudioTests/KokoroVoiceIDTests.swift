@@ -51,6 +51,29 @@ import Testing
         #expect(KokoroVoiceID(rawValue: rawValue) == nil)
     }
 
+    /// The engine's finishing — what it does to a call's audio after the model: the tail click, the
+    /// seams — is a revision on the route as well, after the delivery, so a change to it re-renders
+    /// every Kokoro clip while the stored voice choice never carries it (2026-09-10).
+    @Test func carriesTheFinishRevisionAfterTheDelivery() throws {
+        let plain = KokoroVoiceID(engineID: "e", voice: "af_heart")
+        #expect(plain.finish == nil)
+        let finished = plain.withSpread(1.25).withFinish(2)
+        #expect(finished.rawValue == "kokoro:e:af_heart@1.25#2")
+        #expect(finished.finish == 2 && finished.spread == 1.25 && finished.voice == "af_heart" && finished.engineID == "e")
+        #expect(try #require(KokoroVoiceID(rawValue: "kokoro:e:af_heart@1.25#2")) == finished)
+        #expect(plain.withFinish(2).rawValue == "kokoro:e:af_heart#2")                       // a finish without a delivery
+        #expect(try #require(KokoroVoiceID(rawValue: "kokoro:e:af_heart#2")).finish == 2)
+        #expect(finished.withFinish(nil).rawValue == "kokoro:e:af_heart@1.25")
+        #expect(finished.withFinish(0).rawValue == "kokoro:e:af_heart@1.25")                // 0 is the first finishing: not written
+        #expect(try #require(KokoroVoiceID(rawValue: "kokoro:e:af_heart#0")) == plain)
+    }
+
+    @Test(arguments: ["kokoro:e:af_heart#", "kokoro:e:af_heart#x", "kokoro:e:af_heart#-1", "kokoro:e:af_heart#1.5",
+                      "kokoro:e:af_heart#2#3", "kokoro:e:af_heart#2@1.25", "kokoro:e:#2"])
+    func rejectsAMalformedFinish(rawValue: String) {
+        #expect(KokoroVoiceID(rawValue: rawValue) == nil)
+    }
+
     @Test func advertisesThePrefixItParses() {
         #expect(KokoroVoiceID.prefix == "kokoro:")
         #expect(KokoroVoiceID(engineID: "e", voice: "v").rawValue.hasPrefix(KokoroVoiceID.prefix))

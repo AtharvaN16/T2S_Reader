@@ -141,3 +141,65 @@ a call; the word timings' assertion in `synthesizesALongPassageInPieces` bounds 
 - The mechanism of the burst (tensor dump at the trim point; compare `waveform_full` to the reference).
 - Listening. Every number above is a proxy; `spikes/findings/quality-probe/*.wav` are for the
   owner's ears — `packed-1.wav` at 10.9 s is the click before the seam.
+
+## 2026-09-10 — the click on every voice: the island rule was Heart's
+
+_The owner, after the voice picker shipped: "does changing voice reintroduce the click sounds in the
+playback? I am getting them when I change voice." Probe: `scripts/voice-tail-probe.sh`
+(`KokoroVoiceTailProbe`, enabled while `spikes/findings/voice-tail-probe/` exists), which renders
+`packed-0`, `packed-1` and `packed-3` above through every one of the 28 voices at the app's delivery
+with the pieces plain-appended — no crossfade, no seam trim, no removal — slices each pipeline call
+out by the trace, describes its tail at the island rule's −80 dBFS bound and at the seam's −50 dBFS
+bound, runs the shipped `KokoroCoreMLTailClick.removed(from:)` over the slice, and reports what is
+left; then streams `packed-1` per voice down the app's own path with the app's options._
+
+**Answer: the click was never voice-specific, but the rule that removed it was.** Every voice
+leaves the burst in the same place — it ends where the call's final 36–45 ms of exact zeros begin
+and begins at most 66 ms before the end (44 clean cases, 28 voices) — because the place is the
+pipeline's: the zeros are the generator's output for the bucket's zero padding, pulled inside the
+kept audio by its ~40 ms look-ahead, and the burst is its pre-echo of the step into that padding.
+What differs by voice is the *surroundings* the island rule keyed on: at least 10 ms under −80 dBFS
+on both sides of a stretch under 30 ms.
+
+| Tail shape (raw, last 120 ms) | Voices | Island rule |
+|---|---|---|
+| Speech, digital zeros, burst, zeros — e.g. Heart `packed-1` call 1: zeros −85…−60 ms, burst −59…−41 (0.303, −10 dBFS), zeros −41…0 | Heart, Bella, Sarah, Michael, Lewis, Santa | removes it |
+| A floor of −60 to −50 dBFS laps at the burst — e.g. Alloy `packed-0`: 0.001–0.003 through −65…−48 ms, burst −48…−41 (0.109) | Alloy, Nova, Onyx, Echo, River, Fable, Isabella … | finds no 10 ms of silence before it: leaves it |
+| The last word decays straight into the burst — e.g. Jessica `packed-0`: "Humbug!" at −30 dBFS to −52 ms, burst −48…−44 (0.178, −15 dBFS), zeros −40…0 | Jessica, Kore, Liam, Puck, George, Daniel … | no island at any bound: leaves it |
+
+Over the 113 calls: 82 had an island bounded at −80 dBFS, but only 44 of those were under the
+rule's 30 ms (the rest were a word's decay fused with the burst); the rule zeroed something in 62
+calls and **left a burst standing right before the final zeros in 45 calls on 22 of the 28 voices**,
+at peaks up to 0.584 (−5 dBFS, George, Daniel, Alloy). The streamed pass — the app's own path, which
+a voice change forces because it evicts every clip and the reader presses Play before Prepare can
+render ahead — left the burst on the first piece for eight voices (Alloy 0.567, River 0.501, Fable,
+Jessica, Echo, Onyx, Santa, Isabella). The joins between streamed pieces are clean everywhere: the
+largest step across a join was 0.0048.
+
+So the rule now goes by place, not shape (`KokoroCoreMLTailClick`): the last 70 ms of every call are
+set to zero — the measured 66 ms plus a margin for the zeros' own scatter — and the 10 ms before
+them ramp down to meet the zeros, so a decay that reaches the window (Jessica's) steps down instead
+of off a cliff. What the window holds besides the burst is the end-of-input pause: the EOS token's
+single 25 ms frame (three of three seams measured above), shifted by the same look-ahead. The
+finishing revision rides on the voice route as `#2` (`KokoroVoiceID.finish`, `Delivery.finish`), so
+every Kokoro clip re-renders once (spec §5) and none finished the old way is served beside one
+finished the new.
+
+### Verification (the same probe, after)
+
+| | Island rule (before) | By place (after) |
+|---|---|---|
+| Calls with a burst standing before the final zeros | 45 of 113, on 22 voices, up to −5 dBFS | **0 of 113** |
+| Trailing silence of every call | 35–45 ms | 70 ms or more (70–91 ms on 44 calls; the rest end in a longer pause) |
+| Streamed first pieces (app path, app options) with a burst | 8 voices, up to −5 dBFS | 0; three pieces (Alloy, Jessica, River) end in a word's decay at −35 to −39 dBFS before the 60 ms word-cut pause — speech, not the burst |
+| Largest step across a streamed join | 0.0048 | 0.0048 |
+
+What the probe still flags after the rule — 37 calls — is the last word's decay before the pause,
+at −25 to −40 dBFS and 70 ms or more from the end, the same stretch it flagged before: speech, left
+where it was. The ramp shows in the bins: Jessica `packed-0` reads 0.028 at −80 ms, 0.013 at −75,
+zero from −70; Alloy 0.009, 0.001, zero. WAVs of every flagged call, raw and after, are in
+`spikes/findings/voice-tail-probe/` for the owner's ears; `report-before.md` beside `report.md` is
+the island rule's run.
+
+Not listened to. Every number is a proxy, and the phone renders in fp16 where this Mac renders in
+fp32 — the zeros' scatter may differ there; the 70 ms window has 4 ms over the widest start seen.

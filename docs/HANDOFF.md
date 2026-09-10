@@ -1,8 +1,46 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 small hours (the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 small hours (generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — one glow: the bars paint it, Settings gets it, it hugs the top
+## Resume here (2026-09-10, latest) — generated covers: cloth for books, a sheet for links and text
+
+The owner's two asks from a phone crop of Home: a better placeholder for URLs and pasted text that
+aligns with the books, and a better placeholder cover for books with no cover. Commit 33d771f.
+
+- **Books with no cover** (`ClothCover`, private to `BookCover` in `Design/Primitives.swift`): a
+  cloth binding in one of eight palette colours (`Tokens.coverInk/coverTint/coverGlow`,
+  `coverText` cream), dealt by the title through `CoverStyle.paletteIndex` (FNV-1a over the
+  lowercased title — stable across launches and devices, unlike `hashValue`), a hairline frame
+  stamped in from the edge, the title top-left in InterDisplay-ExtraBold with the author under it
+  (new `BookCover.author`, passed from Home, both Collection layouts and the book sheet), a short
+  rule at the foot. Lettering is `fixedSize` to the book's height — it is a cover, not UI text.
+  Under 64 pt it carries the title's first letter (`CoverStyle.monogram`). The book sheet's
+  backlight uses `coverGlow` for a placeholder (was `ink3`). PDFs keep their red "PDF" cover.
+- **Links and pasted text** (`SheetCover`, same file): a sheet of paper — `raised`, evenly rounded,
+  hairline `ink3` edge, a thin shadow, no spine, no sheen — 0.72 of its height wide. Masthead in
+  the title's palette colour beside the kind's glyph: the page's host without "www."
+  (`CoverStyle.host`) or the day the text was written (`CoverStyle.dateLabel`, "10 Sep" / "Sep 10"
+  by locale); a rule; the title in Inter-SemiBold, up to four lines; three ruled lines for the body.
+  `.shelved` puts it on the books' slot (`BookCover.widestRatio` wide, bottom-leading), so the Home
+  row's meta line, title and Play pill now start at one x whichever kind sits there — before, the
+  article's 64 pt square pushed its text 32 pt left of the books'. `CollectionPage.ShelfArt` uses
+  it too (its glyph-on-`surface` square is gone).
+- **Mini-player**: `Artwork` takes an optional `document`; without an image it draws `CoverMark` —
+  the cloth with the monogram, the PDF red, or the paper with the glyph — instead of a grey block.
+- **`T2S_SEED=1`** (`RootPage.launchSeeds`, screenshots only, beside `T2S_OPEN`/`T2S_PAGE`): imports
+  a pasted text and a web page (built in place, no network) once, matched by title after that, and
+  notes both as played so they stand at the top of Home. A script-driven simulator cannot type
+  into the Import steps, and the sheets needed something to stand for.
+
+`CoverStyle` lives in `Sources/T2SApp/Formatting/` with `CoverStyleTests` (8 tests). `swift test`
+452/82 green; `scripts/build-app.sh` → `** BUILD SUCCEEDED **`. Seen in the simulator (iPhone 16
+Pro, `T2S_SILENT=1`), light and dark: Home with the two sheets and the cloth Mughal, the Collection
+list and grid, the book sheet on the cloth cover with its glow, the mini-player's monogram and
+link marks. Not seen on a phone. Left alone on purpose: fetching a page's real image for a link
+(the extractor strips images; a placeholder was the ask), and the row's meta line for articles,
+which still shows only the ring and percent.
+
+## Resume here (2026-09-10) — one glow: the bars paint it, Settings gets it, it hugs the top
 
 The owner saw the glow "split in 2" at the status bar, wanted it higher, and asked why Settings had
 none. Three causes, three fixes, all in `Design/WarmUpVeil.swift` and the bars that use it:

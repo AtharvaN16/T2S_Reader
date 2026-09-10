@@ -74,10 +74,13 @@ struct WarmGround: View {
 /// Reader's header background). A fixed height, not a share of the screen, so the glow hugs the
 /// top on every phone (owner: "move the glow more to the top", then "further up").
 ///
-/// **Concave** (owner, 2026-09-10: "only the top and the sides, not the centre"): light comes in
-/// from the two top corners and along the top edge — two elliptical glows anchored at the corners
-/// that reach down the sides, and a short band across the top — so the middle of the screen
-/// clears a few points under the status bar while the sides stay lit further down. The breath
+/// **A bezel** (owner, 2026-09-10: "the corners are more prominent than the top — a bezel glow in
+/// the top part"): one stroke of light along the screen's edge — across the top, round both
+/// corners and a little way down the sides — with its halo blurred inward, over a faint wash from
+/// the top. Every point of the edge is lit the same, so the corners are only where the edge turns,
+/// not two lamps brighter than the top between them (the cut before: two ellipses anchored at the
+/// corners under a weaker top band, and the corners won). The sides let go part-way down, so the
+/// middle of the screen clears under the status bar and the light stays at the top. The breath
 /// takes the whole shape almost out (`pulse` bottoms near zero) and back.
 ///
 /// **Opaque, and dithered.** The glows are the accent at an alpha over `ground`, composited here
@@ -105,13 +108,8 @@ struct WarmRamp: View {
                 .overlay(alignment: .top) {
                     ZStack {
                         Tokens.ground                                          // inside the group, so the noise has something opaque to blend with
-                        Self.edge(pulse: pulse)
-                        // Each corner's glow in its own half of the width, so it dies out exactly
-                        // at the centre line and the middle of the screen stays clear.
-                        HStack(spacing: 0) {
-                            Self.corner(.topLeading, pulse: pulse)
-                            Self.corner(.topTrailing, pulse: pulse)
-                        }
+                        Self.wash(pulse: pulse)
+                        Self.bezel(pulse: pulse)
                         Self.ditherTile
                             .resizable(resizingMode: .tile)
                             .blendMode(.overlay)
@@ -131,29 +129,48 @@ struct WarmRamp: View {
         return 0.05 + 0.95 * (0.5 + 0.5 * cos(2 * .pi * phase))
     }
 
-    /// The lit top edge: a band that holds through the status bar and is gone a little under it,
-    /// so the centre of the screen clears just below the bar while the sides carry on.
-    private static func edge(pulse: Double) -> LinearGradient {
-        // Strong enough across the whole top that the corners read as the ends of one lit edge,
-        // not as two lamps (owner, 2026-09-10: "too side heavy").
+    /// The screen's corner radius, which the bezel follows. Not asked of the system — `UIScreen`
+    /// does not say — so this is the iPhone 14 to 16's 55 pt, within a few points of the phones
+    /// either side (12 and 13: 47; 16 Pro: 62), and the rim is blurred enough that those few points
+    /// do not show as an arc leaving the corner.
+    static let bezelRadius: CGFloat = 55
+
+    /// The faint wash the bezel sits on: a breath of the accent under the top edge, gone by a
+    /// fifth of the height, so the rim does not end in a hard line against the page. Kept low
+    /// (owner, 2026-09-10: "reduce intensity so that the glow is mostly confined to the bezel
+    /// edges") — a first cut at 0.26 reaching a third of the way down lit the whole top of the page.
+    private static func wash(pulse: Double) -> LinearGradient {
         LinearGradient(stops: [
-            .init(color: Tokens.accent.opacity(0.46 * pulse), location: 0),
-            .init(color: Tokens.accent.opacity(0.22 * pulse), location: 0.12),
-            .init(color: Tokens.accent.opacity(0.06 * pulse), location: 0.24),
-            .init(color: Tokens.accent.opacity(0), location: 0.34),
+            .init(color: Tokens.accent.opacity(0.08 * pulse), location: 0),
+            .init(color: Tokens.accent.opacity(0.03 * pulse), location: 0.10),
+            .init(color: Tokens.accent.opacity(0), location: 0.20),
         ], startPoint: .top, endPoint: .bottom)
     }
 
-    /// One top corner's glow, in a frame half the width: an ellipse anchored at the corner that
-    /// reaches the centre line across (at nothing) and the full height down, strongest at the
-    /// corner — what carries the light down the sides and leaves the middle alone.
-    private static func corner(_ center: UnitPoint, pulse: Double) -> EllipticalGradient {
-        EllipticalGradient(stops: [
-            .init(color: Tokens.accent.opacity(0.62 * pulse), location: 0),
-            .init(color: Tokens.accent.opacity(0.30 * pulse), location: 0.3),
-            .init(color: Tokens.accent.opacity(0.08 * pulse), location: 0.65),
-            .init(color: Tokens.accent.opacity(0), location: 1),
-        ], center: center, startRadiusFraction: 0, endRadiusFraction: 1)
+    /// The lit bezel: a rounded rectangle the width of the host and taller than the ramp — its top
+    /// edge on the top of the screen, its bottom edge clipped away — stroked twice on the edge
+    /// itself, half the line off-screen: a wide, soft halo and a narrow, bright rim over it. The
+    /// stroke is the same the whole way round, so the top and the corners are one lit edge. A
+    /// vertical mask lets the sides fade from a third of the height and be gone before the ramp
+    /// ends, so nothing of the halo reaches the ramp's foot.
+    private static func bezel(pulse: Double) -> some View {
+        let shape = RoundedRectangle(cornerRadius: bezelRadius, style: .continuous)
+        return ZStack {
+            // The halo reaches about 30 pt in (half its width plus the blur); wider and softer,
+            // it was a glow over the page rather than on its edge (owner).
+            shape.stroke(Tokens.accent.opacity(0.38 * pulse), lineWidth: 36).blur(radius: 14)
+            shape.stroke(Tokens.accent.opacity(0.78 * pulse), lineWidth: 10).blur(radius: 4)
+        }
+        .frame(height: height * 3)                                             // the bottom edge is outside the ramp
+        .frame(height: height, alignment: .top)
+        .mask(
+            LinearGradient(stops: [
+                .init(color: .white, location: 0),
+                .init(color: .white, location: 0.32),
+                .init(color: .clear, location: 0.85),
+            ], startPoint: .top, endPoint: .bottom)
+        )
+        .clipped()
     }
 
     /// A tile of grey noise around the mid-point, made once. `.overlay` leaves mid-grey alone and

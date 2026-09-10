@@ -39,8 +39,18 @@ struct SettingsSubpage: ViewModifier {
                     .padding(.top, 12)
             }
             // Warm like the root's bar: the page under it is the warm ground now, so a plain bar
-            // fading over it would lighten the fade zone a shade (measured, 2026-09-10).
-            .overlay { GeometryReader { geo in TopFade(inset: geo.safeAreaInsets.top, warm: true) } }
+            // fading over it would lighten the fade zone a shade (measured, 2026-09-10). Anchored
+            // like the background, by measurement: an overlay's reader sits inside the safe area
+            // and reports its inset as zero, so `TopFade(inset:)` from it was a 30 pt bar at the
+            // status bar's foot — a copy of the ramp one inset low, fading over the right one —
+            // and the band it left there was the seam on the Voice page (measured, 2026-09-10).
+            // The content's top in the window is the inset the bar must hold through.
+            .overlay {
+                GeometryReader { geo in
+                    let top = geo.frame(in: .global).minY
+                    TopFade(inset: top, warm: true).offset(y: -top)
+                }
+            }
     }
 }
 

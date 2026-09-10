@@ -1,8 +1,8 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 early morning (the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 evening (the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, evening) — the 17 Pro's two crashes, the model download, the warm-up, the cloud route
+## Resume here (2026-09-10, latest) — the 17 Pro's two crashes, the model download, the warm-up, the cloud route
 
 Branch `phone-warmup-download-cloud` off `dev` @ d849036; spec
 `docs/superpowers/specs/2026-09-10-phone-warmup-download-cloud-design.md`. Harsh's asks: the app
@@ -100,7 +100,39 @@ constant ~180 ms shift between the streamed and whole renders' word starts, from
 `KokoroCoreMLInstallTests` and `KokoroCoreMLLoadTests` pass; the simulator and device builds
 compile. Not verified: the phone itself.
 
-## Resume here (2026-09-10, latest) — the click on every voice, and the Reader's voice chip
+## Resume here (2026-09-10, afternoon) — the glow as a bezel, and the Voice page's seam
+
+The owner, from the phone: "the corners are more prominent than the top — can we implement some
+sort of bezel glow in the top part?"
+
+- **The bezel** (`WarmRamp`): the two elliptical corner glows are gone. The light is one stroke
+  along the screen's edge — a continuous `RoundedRectangle` (`WarmRamp.bezelRadius`, 55 pt: the
+  iPhone 14–16's; `UIScreen` does not say, and the rim is blurred enough to hide the few points
+  the 12/13 (47) and the 16 Pro (62) differ by) the width of the host and three ramps tall, so its
+  bottom edge is clipped away, stroked on the edge itself (half the line off-screen) twice: a
+  36 pt halo blurred 14 at alpha 0.38 (about 30 pt in), and a 10 pt rim blurred 4 at alpha
+  0.78 — over a breath of wash from the top (0.08 → 0 by 0.20 of the height). The owner's second
+  word, from the simulator: "reduce intensity so that the glow is mostly confined to the bezel
+  edges" — the first cut (a 72 pt halo blurred 26 at 0.50, wash 0.26 to a third of the way down)
+  lit the whole top of the page. A vertical mask lets the sides fade from a third of the height
+  and be gone by 0.85 of it. The stroke is the same the whole way round, so
+  the top and the corners are one lit edge and the corners are only where it turns. Height 240,
+  the pulse, the dither and the opaque composite are unchanged.
+- **The Voice page's seam was not the glow's** (`SettingsSubpage`): measured against the Settings
+  root (a Swift tool sampling columns of two screenshots), the pushed page was more orange in the
+  rows 62–92 pt down — with the old cut too. Logged: the reader in the page's `.overlay` sits
+  inside the safe area and reports its inset as zero, so `TopFade(inset: 0)` was a 30 pt bar at
+  the status bar's foot, a copy of the ramp one inset low fading over the right one. The bar is
+  now anchored like the page's background, by measurement (`TopFade(inset: top).offset(y:
+  -top)`, `top` the content's top in the window). After: the two pages' columns agree within the
+  dither.
+
+`swift test` 456/82 green. `scripts/build-app.sh` → `** BUILD SUCCEEDED **`. Seen in the
+simulator (iPhone 16 Pro, `T2S_WARMUP=1`): Home light and dark, the Reader, Settings and the
+pushed Voice page (`T2S_PAGE=preferences T2S_OPEN=voices`). Not seen on a phone — the corner
+radius fit is the thing to look at there.
+
+## Resume here (2026-09-10) — the click on every voice, and the Reader's voice chip
 
 Two reports from the owner after a voice change in the Reader: "the reader voice UI does not
 update", and "does changing voice reintroduce the click sounds in the playback? I am getting them

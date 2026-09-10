@@ -151,9 +151,6 @@ struct BookCover: View {
     var height: CGFloat
     var title: String
     var isPDF: Bool = false
-    /// The Collection grid's cell: a cover wider than the placeholder shrinks to fit it, keeping its
-    /// proportions, so every book in a column stands on the same width. Nil (a row) lets it run.
-    var maxWidth: CGFloat? = nil
     /// Degrees from `MotionTilt`: the book turns a little with the phone so it reads as an object,
     /// not a picture. Only the book sheet's hero passes one.
     var tilt: CGPoint = .zero
@@ -162,12 +159,22 @@ struct BookCover: View {
     /// Internal, not private: the book sheet's hero sizes from it.
     static let ratio: CGFloat = 0.667
     private static let coverRatios: ClosedRange<CGFloat> = 0.55...0.8
-    /// The widest a real cover is allowed to be (`coverRatios.upperBound`). Internal: the Collection
-    /// grid sizes its cell to this ratio, not `ratio`, so `size` below never has to clamp a cover's
-    /// height to fit `maxWidth` — every book in the grid then keeps the cell's full height and only
-    /// its width narrows for a narrower cover, instead of some books going both narrower *and*
-    /// shorter than their neighbours for no reason a reader can see.
+    /// The widest a real cover is allowed to be (`coverRatios.upperBound`): the width of a
+    /// `shelved` slot, so no cover ever has to shrink to fit one.
     static let widestRatio: CGFloat = coverRatios.upperBound
+    /// The one height a book stands at on Home and in the Collection grid (owner, 2026-09-09: the
+    /// same book looked a different size on the two pages — the grid's height came from its column
+    /// width, Home's was 112). One constant, not a derived one, so it matches across pages and phones.
+    static let shelfHeight: CGFloat = 120
+
+    /// The book on a shelf: a slot `widestRatio` wide and `height` tall with the book at its
+    /// bottom-leading corner. Covers keep their own proportions — a wide cover cropped loses its
+    /// lettering, padded looks broken — so a row of them can only be made to read as one by giving
+    /// every book the same slot: a shared baseline, a shared left edge for the text beside or
+    /// under it, and only the fore-edge moving. Apple Books, Kindle and Libby shelve the same way.
+    var shelved: some View {
+        frame(width: height * Self.widestRatio, height: height, alignment: .bottomLeading)
+    }
 
     private var image: UIImage? {
         guard !isPDF, let relativePath,
@@ -177,12 +184,10 @@ struct BookCover: View {
         return image
     }
 
-    /// The book's frame: `height` tall at its own proportions, unless that runs past `maxWidth`.
+    /// The book's frame: `height` tall at its own proportions.
     private var size: CGSize {
         let ratio = image.map { $0.size.width / $0.size.height } ?? Self.ratio
-        var h = height
-        if let maxWidth, h * ratio > maxWidth { h = maxWidth / ratio }
-        return CGSize(width: h * ratio, height: h)
+        return CGSize(width: height * ratio, height: height)
     }
 
     private func shape(_ height: CGFloat) -> UnevenRoundedRectangle {

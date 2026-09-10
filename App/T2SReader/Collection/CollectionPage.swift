@@ -235,8 +235,8 @@ struct CollectionPage: View {
     }
 }
 
-/// One grid cell: the Home row's book, standing at the foot of a cover-proportioned slot, with the
-/// title and author under it. No progress line — the Collection is the shelf, not the Queue.
+/// One grid cell: the Home row's book at the Home row's size, on its shelf slot, with the title and
+/// author under it. No progress line — the Collection is the shelf, not the Queue.
 private struct CollectionTile: View {
     @Environment(AppEnvironment.self) private var env
     var summary: DocumentSummary
@@ -247,19 +247,11 @@ private struct CollectionTile: View {
             // 12 pt between the book and its text: the shadow's visible part clears it, and the
             // three-up grid has no room for the Home row's 20.
             VStack(alignment: .leading, spacing: 12) {
-                GeometryReader { geo in
-                    BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: geo.size.height,
-                              title: summary.document.title, isPDF: summary.document.sourceType == .pdf,
-                              maxWidth: geo.size.width)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                }
-                // The slot's own ratio is the widest a real cover is ever let be (`widestRatio`),
-                // not the placeholder's narrower one — so `BookCover.size` never has to clamp a
-                // cover's height to fit the width, and every book in the row stands the same height,
-                // only narrower for a narrower cover. Sizing the slot to the placeholder ratio
-                // instead was the bug: a wide cover clamped short while a narrow one stayed tall,
-                // so books of no particular kind ended up in visibly different sizes.
-                .aspectRatio(BookCover.widestRatio, contentMode: .fit)
+                // `shelfHeight`, not the column's width: the same book is the same size here and on
+                // Home, and the slot (`shelved`) keeps every title's left edge under its book's.
+                BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: BookCover.shelfHeight,
+                          title: summary.document.title, isPDF: summary.document.sourceType == .pdf)
+                    .shelved
                 VStack(alignment: .leading, spacing: 3) {
                     Text(summary.document.title).typeRole(.pill).foregroundStyle(Tokens.ink).lineLimit(2)
                     if let author = summary.document.author {
@@ -293,6 +285,7 @@ private struct CollectionRow<Items: View>: View {
                 HStack(spacing: 20) {
                     BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: 88,
                               title: summary.document.title, isPDF: summary.document.sourceType == .pdf)
+                        .shelved                                               // the text column stays put row to row
                     VStack(alignment: .leading, spacing: 4) {
                         Text(summary.document.title).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
                         if let author = summary.document.author {

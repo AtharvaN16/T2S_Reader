@@ -1,8 +1,28 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-09 evening (the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-09 late evening (books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-09, latest) — the tilt made bolder, then eased back a step
+## Resume here (2026-09-09, latest) — books stand on one shelf on Home and in the Collection
+
+The owner put the Collection grid and Home side by side and asked whether the books were the
+same size — they were not, and it looked like inconsistency. Two real causes: the grid's cover
+height came from its column width (~130 pt on a 16 Pro) while Home's was 112, so the same book was
+a different size on the two pages; and the Home row had no fixed slot for the book, so a wider
+cover pushed its whole text column right and the rows' left edges went ragged. The owner asked
+whether making every book one identical rectangle would be better; the push-back (cropping cuts
+cover lettering, padding looks broken, and Apple Books / Kindle / Libby all keep real proportions
+on a fixed-height shelf) was accepted. So, in `Design/Primitives.swift`: `BookCover.shelfHeight`
+(120) is the one height for Home and the grid, and `BookCover.shelved` puts the book bottom-leading
+in a slot `widestRatio` (0.8) wide — the widest a real cover is ever let be, so nothing shrinks —
+which the Home row (`Queue/QueueRow.swift`), the grid tile and the 88 pt list row
+(`Collection/CollectionPage.swift`) all use. `maxWidth` on `BookCover` and the tile's
+`GeometryReader` + `aspectRatio` slot are gone with it. Covers keep their own proportions; only the
+fore-edge moves. `scripts/build-app.sh` → `** BUILD SUCCEEDED **`. Seen in the simulator (iPhone
+16 Pro, `T2S_SILENT=1`; `T2S_PAGE=collection`, `-collection.layout list`): Home's three rows share
+one text-column x and one baseline; the grid's books are the same height as Home's; the list's
+text column holds still. Not seen on a phone.
+
+## Resume here (2026-09-09) — the tilt made bolder, then eased back a step
 
 The owner tried the book sheet's gyro tilt (added the round before) and called it "too subtle".
 `System/MotionTilt.swift`: `TiltFilter.scale` 0.35 → 0.9 and `limitDegrees` 3 → 10, with matching

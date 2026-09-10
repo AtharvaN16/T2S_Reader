@@ -33,8 +33,11 @@ struct QueueRow: View {
                 // A web article is not a book: flat art, no spine.
                 Artwork(relativePath: summary.document.coverImagePath, paths: env.paths, size: 64, radius: Spacing.artworkSmall)
             } else {
-                BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: 112,
+                // On its shelf slot so the chapter line, title and Play pill start at one x on every
+                // row, whatever width the cover is; the grid stands its books the same way.
+                BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: BookCover.shelfHeight,
                           title: summary.document.title, isPDF: summary.document.sourceType == .pdf)
+                    .shelved
             }
 
             VStack(alignment: .leading, spacing: 8) {

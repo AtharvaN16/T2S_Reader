@@ -27,8 +27,52 @@ import T2SCore
         let request = try JSONSerialization.jsonObject(with: body) as? [String: Any]
         #expect(request?["model"] as? String == "user-model")
         #expect(request?["voice"] as? String == "voice")
-        #expect(request?["response_format"] as? String == "pcm_f32le")
-        #expect(request?["sample_rate"] as? Int == 24_000)
+        #expect(request?["response_format"] as? String == "pcm")
+        // OpenAI rejects fields it does not know: exactly its four, nothing else.
+        #expect(Set((request ?? [:]).keys) == ["model", "input", "voice", "response_format"])
+    }
+
+    /// What `https://api.openai.com/v1/audio/speech` actually returns for `response_format: "pcm"`:
+    /// raw 16-bit little-endian mono at 24 kHz, no envelope, no timings.
+    @Test func decodesOpenAIsRawSixteenBitPCM() async throws {
+        var pcm = Data()
+        for value in [Int16(0), 16384, -16384, Int16.max, Int16.min] {
+            withUnsafeBytes(of: value.littleEndian) { pcm.append(contentsOf: $0) }
+        }
+        let session = TestURLProtocol.session(status: 200, headers: ["Content-Type": "audio/pcm"], body: pcm)
+        let engine = HTTPVoiceEngine(configuration: .example, key: { "test-key" }, session: session)
+
+        let result = try await engine.synthesize(.init(spoken: "Hello", voiceID: "cloud:v1:alloy"))
+
+        #expect(result.audio.sampleRate == 24_000)
+        #expect(result.audio.samples.count == 5)
+        #expect(result.audio.samples[0] == 0)
+        #expect(abs(result.audio.samples[1] - 0.5) < 0.001)
+        #expect(abs(result.audio.samples[2] + 0.5) < 0.001)
+        #expect(result.audio.samples[3] < 1 && result.audio.samples[3] > 0.999)
+        #expect(result.audio.samples[4] == -1)
+        #expect(result.wordTimings.isEmpty)
+        let body = try #require(TestURLProtocol.lastRequest?.httpBody)
+        let request = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        #expect(request?["voice"] as? String == "alloy")
+    }
+
+    @Test func anOddByteCountOfRawPCMIsMalformed() async {
+        let session = TestURLProtocol.session(status: 200, headers: ["Content-Type": "audio/pcm"], body: Data([1, 2, 3]))
+        let engine = HTTPVoiceEngine(configuration: .example, key: { "test-key" }, session: session)
+        await #expect(throws: HTTPVoiceError.malformedResponse) {
+            try await engine.synthesize(.init(spoken: "x", voiceID: "cloud:v1:v"))
+        }
+    }
+
+    /// A proxy that labels its JSON as such, and one that forgets the header, both decode as JSON.
+    @Test func aJSONBodyWithoutAContentTypeStillDecodesAsJSON() async throws {
+        let session = TestURLProtocol.session(status: 200, headers: [:], json: """
+        {"audio":"","sample_rate":24000}
+        """)
+        let engine = HTTPVoiceEngine(configuration: .example, key: { "test-key" }, session: session)
+        let result = try await engine.synthesize(.init(spoken: "x", voiceID: "cloud:v1:v"))
+        #expect(result.audio.samples.isEmpty)
     }
 
     @Test func statusAndMissingKeySurfaceActionableErrors() async {
@@ -113,8 +157,12 @@ final class TestURLProtocol: URLProtocol, @unchecked Sendable {
     }
 
     static func session(status: Int, headers: [String: String] = [:], json: String) -> URLSession {
+        session(status: status, headers: headers, body: Data(json.utf8))
+    }
+
+    static func session(status: Int, headers: [String: String] = [:], body: Data) -> URLSession {
         lock.lock()
-        response = Response(status: status, headers: headers, data: Data(json.utf8))
+        response = Response(status: status, headers: headers, data: body)
         capturedRequest = nil
         lock.unlock()
 

@@ -2,7 +2,41 @@
 
 _Last updated 2026-09-10 small hours (the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — the Collection title is the filter
+## Resume here (2026-09-10, latest) — the wash dithered, and the white band fixed properly
+
+(Another session landed the Collection's title-as-filter in the section below while this was going
+on; the two do not overlap — the three root pages still hand their ground to `RootPager`, which is
+what the wash needs, and the Simulator scheme builds with both in.)
+
+- **Banding** (owner saw steps in the orange). Measured, not guessed: a script walked a column of
+  the screenshot and reported per-channel run lengths, and the wash held one value for up to 23 px
+  before stepping. Two causes, both fixed in `WarmUpVeil`:
+  - The ramp was **translucent accent over ground**, so noise blended over it had almost nothing to
+    act on — the first dither barely moved the numbers. Each stop is now the colour that
+    combination *makes* (`Color.mix(with:by:)`, resolved per theme — checked in dark, where it
+    reads as warm brown), the last stop being `ground` itself so the layer ends invisible against
+    the page. The pulse is applied to the finished layer, so the dither is mixed at full strength.
+  - The noise tile is drawn at **scale 3, one cell per device pixel**. Point-for-point it was a
+    3 × 3 px speckle that read as grain; at pixel scale it disappears and dithers harder.
+  Result, same column, same pinned pulse: green's longest flat run 9 px → 3 px and blue's 7 px →
+  3 px, mean run 1.0–1.1 px (a dithered ramp has no flat runs at all). Red barely varies in this
+  ramp — 248 → 252 across the whole thing — so its long runs are inherent and invisible.
+  `T2S_WARMUP=1` now also pins the pulse, so two screenshots are comparable.
+- **The white band across the top came back on the phone**, though the simulator was fine. The
+  `.chrome` strip took its height from the key window's safe-area inset, and on the owner's phone
+  that read zero, so the strip had no height and `TopFade`'s solid ground showed through. The host
+  passes the inset in now (`WarmUpVeil(band:)`) — `RootPager` from the same `geo.safeAreaInsets.top`
+  it already gives `TopFade`, so the two bands cannot disagree, and `ReaderPage` from a
+  `GeometryReader` of its own. The window read stays as a fallback, and a plain iPhone's 47 pt
+  behind that, so the strip is never nothing again.
+- **"about 220 s"** is now "about 4 min": past ninety seconds the line counts in minutes.
+
+`scripts/build-app.sh` → `** BUILD SUCCEEDED **`; `swift test` 444/81 green (nothing under
+`Sources/` moved this round). Seen in the simulator, light and dark: no banding, no grain, the wash
+running from the very top. **Not seen on the phone** — which is where both the banding and the white
+band were reported, so this needs the owner's eye.
+
+## Resume here (2026-09-10) — the Collection title is the filter
 
 One ask from the phone, with a reference (a podcast app's "Queue ⌄" dropping a Queue / Favorites
 card): rename the Collection's title to **All**, give it an up-and-down chevron, and let a tap on

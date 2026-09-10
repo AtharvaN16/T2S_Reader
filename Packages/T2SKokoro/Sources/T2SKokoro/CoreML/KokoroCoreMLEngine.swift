@@ -3,6 +3,7 @@ import Foundation
 import KokoroPipeline
 import MisakiSwift
 import MLX
+import os
 // `MToken` — what `EnglishG2P.phonemize` hands back — is declared here, not in MisakiSwift.
 import MLXUtilsLibrary
 import T2SAudio
@@ -78,14 +79,19 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         /// pitch contour's movement is widened before the decoder, 1 being the model's own. The app
         /// ships 1 until the owner's ears say otherwise.
         public var f0Spread: Float
+        /// Which compute units the stages load for. `.cpu` is the measured policy and what the app
+        /// ships; the rest are a developer's switch for one session (``KokoroComputeUnits``).
+        public var computeUnits: KokoroComputeUnits
 
         public init(punctuationSuppression: PunctuationSuppression = .allPunctuation, crossfadePieces: Bool = false,
-                    removeTailClick: Bool = false, trimSeams: Bool = false, f0Spread: Float = 1) {
+                    removeTailClick: Bool = false, trimSeams: Bool = false, f0Spread: Float = 1,
+                    computeUnits: KokoroComputeUnits = .cpu) {
             self.punctuationSuppression = punctuationSuppression
             self.crossfadePieces = crossfadePieces
             self.removeTailClick = removeTailClick
             self.trimSeams = trimSeams
             self.f0Spread = f0Spread
+            self.computeUnits = computeUnits
         }
 
         /// What the app ships with — not this initializer's own defaults, which are upstream's. See
@@ -105,6 +111,23 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// Told `(loaded, total)` as each stage's compute plan finishes building; the app's launch
     /// warm-up sets it so the reader can watch the one-time load go by rather than wait blind.
     private var loadProgress: (@Sendable (Int, Int) -> Void)?
+    /// Awaited before each stage's compute plan is built: the app's foreground gate (see
+    /// `KokoroCoreMLModels.loadStages`). Nil admits every load at once, which is what the tests want.
+    private var loadAdmission: (@Sendable () async -> Void)?
+    /// Every stage loaded so far, ready set and later buckets together, so a later bucket's stages
+    /// can be merged into a fuller provider.
+    private var allStages: KokoroCoreMLModels.LoadedStages?
+    /// The buckets `loaded.models` vends right now, ascending.
+    private(set) var loadedBuckets: [Int] = []
+    /// The load of the buckets after the ready set, once it has started; `awaitFullLoad()` joins it.
+    private var laterBucketsTask: Task<Void, Error>?
+    /// Stages loaded, counted across both phases for the warm-up's veil. A lock rather than actor
+    /// state because the loader reports from its task group, off the actor.
+    private let stagesLoaded = OSAllocatedUnfairLock(initialState: 0)
+    /// `kokoro.timing`: every stage load, every pipeline call and every utterance, with its seconds —
+    /// the measurement the performance audit's §8 asks for, read with
+    /// `log stream --predicate 'subsystem == "com.t2s.reader" AND category == "kokoro.timing"'`.
+    static let timingLog = Logger(subsystem: "com.t2s.reader", category: "kokoro.timing")
     /// How many times this engine has begun loading its stages. Internal for one test: "loaded once"
     /// and "compiled and loaded twice" differ only in this number and several minutes of Core ML.
     private(set) var loadCount = 0
@@ -190,6 +213,28 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         loadProgress = report
     }
 
+    /// Installs (or removes) the gate every stage load waits on before it starts; see ``loadAdmission``.
+    public func setLoadAdmission(_ admit: (@Sendable () async -> Void)?) {
+        loadAdmission = admit
+    }
+
+    /// Waits for the buckets after the ready set, if their load has begun. `preload()` returns at
+    /// readiness; a probe that wants to render in every bucket calls this after it.
+    public func awaitFullLoad() async throws {
+        try await laterBucketsTask?.value
+    }
+
+    /// The stage count for the veil and the log, one closure for both load phases.
+    private func stageReporter() -> @Sendable (String, Double) -> Void {
+        let counter = stagesLoaded, report = loadProgress
+        let total = KokoroCoreMLResources.stageNames().count
+        return { name, seconds in
+            let loaded = counter.withLock { $0 += 1; return $0 }
+            Self.timingLog.notice("kokoro stage \(name, privacy: .public) loaded in \(seconds, format: .fixed(precision: 2), privacy: .public) s (\(loaded, privacy: .public)/\(total, privacy: .public))")
+            report?(loaded, total)
+        }
+    }
+
     @discardableResult
     private func load() async throws -> Loaded {
         if let loaded { return loaded }
@@ -212,18 +257,27 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
 
             let weights = try JSONDecoder().decode(HnsfWeights.self, from: Data(contentsOf: resources.hnsfWeights))
             // Synchronous, so from here to the assignment the actor is never released: no other
-            // render can observe this engine mid-load.
-            let loaded = Loaded(models: try KokoroCoreMLModels(stages: stages),
+            // render can observe this engine mid-load. Ready with the smallest and the largest
+            // bucket (`KokoroCoreMLResources.readyBuckets`); the rest follow on their own task
+            // (`loadLaterBuckets`), each swapping in a fuller provider as it lands, so a cold
+            // launch's first sound waits for eight plans, not fourteen.
+            let loaded = Loaded(models: try KokoroCoreMLModels(stages: stages, buckets: KokoroCoreMLResources.readyBuckets),
                                 linearWeights: weights.linear_weights,
                                 linearBias: weights.linear_bias)
             self.loaded = loaded
+            allStages = stages
+            loadedBuckets = KokoroCoreMLResources.readyBuckets.sorted()
             // The models live in `loaded` now; the task must not keep a second reference to them.
             loadingStages = nil
             // The G2P's lexicons (two 3 MB JSON files, merged) and its fallback network are the other
             // thing the first sentence would otherwise wait for; build the American one here so the
             // launch warm-up pays it. The British G2P stays lazy: a `b*` voice is a choice, not the
             // default, and its lexicon is another 9 MB.
+            let g2pClock = ContinuousClock()
+            let g2pStarted = g2pClock.now
             _ = g2p(british: false)
+            Self.timingLog.notice("kokoro g2p built in \(Self.seconds(g2pClock.now - g2pStarted), format: .fixed(precision: 2), privacy: .public) s")
+            loadLaterBuckets(compiled: compiled)
             return loaded
         } catch is CancellationError {
             // A render cancelled while the stages were compiling is not an engine failure. Wrapping
@@ -243,8 +297,13 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     private func loadedStages(_ compiled: [String: URL]) async throws -> KokoroCoreMLModels.LoadedStages {
         if let loadingStages { return try await loadingStages.value }
         loadCount += 1
-        let report = loadProgress
-        let task = Task { try await KokoroCoreMLModels.loadStages(compiled, onProgress: report) }
+        stagesLoaded.withLock { $0 = 0 }
+        let report = stageReporter(), admission = loadAdmission, computeUnits = options.computeUnits
+        let names = KokoroCoreMLResources.stageNames(buckets: KokoroCoreMLResources.readyBuckets)
+        let task = Task {
+            try await KokoroCoreMLModels.loadStages(compiled, names: names, computeUnits: computeUnits,
+                                                    admission: admission, onStageLoaded: report)
+        }
         loadingStages = task
         do {
             return try await task.value
@@ -252,6 +311,48 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             loadingStages = nil
             throw error
         }
+    }
+
+    /// Loads the buckets after the ready set, one bucket at a time and smallest first, under the same
+    /// admission gate, and installs each into a fuller provider as it lands. A bucket that fails to
+    /// load is logged and skipped: the engine keeps rendering in the buckets it has, splitting what
+    /// does not fit them, rather than close the route over one plan.
+    private func loadLaterBuckets(compiled: [String: URL]) {
+        guard laterBucketsTask == nil else { return }
+        let report = stageReporter(), admission = loadAdmission, computeUnits = options.computeUnits
+        laterBucketsTask = Task { [weak self] in
+            for bucket in KokoroCoreMLResources.laterBuckets {
+                try Task.checkCancellation()
+                let names = KokoroCoreMLResources.stageNames(buckets: [bucket], durationTokenLengths: [])
+                do {
+                    let stages = try await KokoroCoreMLModels.loadStages(
+                        compiled, names: names, computeUnits: computeUnits, admission: admission, onStageLoaded: report
+                    )
+                    guard let self else { return }
+                    try await self.install(bucket: bucket, stages: stages)
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    Self.timingLog.error("kokoro bucket \(bucket, privacy: .public) s failed to load: \(String(describing: error), privacy: .public)")
+                }
+            }
+        }
+    }
+
+    /// Swaps in a provider over every bucket loaded so far, `bucket` now among them.
+    private func install(bucket: Int, stages: KokoroCoreMLModels.LoadedStages) throws {
+        guard let loaded, let known = allStages else { return }
+        let merged = known.merging(stages)
+        let buckets = (loadedBuckets + [bucket]).sorted()
+        self.loaded = Loaded(models: try KokoroCoreMLModels(stages: merged, buckets: buckets),
+                             linearWeights: loaded.linearWeights, linearBias: loaded.linearBias)
+        allStages = merged
+        loadedBuckets = buckets
+        Self.timingLog.notice("kokoro bucket \(bucket, privacy: .public) s ready; buckets \(buckets.map(String.init).joined(separator: ","), privacy: .public)")
+    }
+
+    static func seconds(_ duration: Duration) -> Double {
+        Double(duration.components.seconds) + Double(duration.components.attoseconds) * 1e-18
     }
 
     /// The compiled stage URLs, compiling the `.mlpackage` staging exactly once however many renders
@@ -294,6 +395,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         let phonemes: String
         let ids: [Int32]
         let owners: [Int]
+        /// How long the G2P took, for the utterance's timing line.
+        let g2pSeconds: Double
     }
 
     private func prepare(_ request: SynthesisRequest) async throws -> Prepared {
@@ -316,19 +419,30 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         let loaded = try await load()
         let tokenizer = try tokenizer(voice: id.voice, url: voiceURL)
         // The staged voice names: `a*` are the American voices, `b*` the British ones.
+        let g2pClock = ContinuousClock()
+        let g2pStarted = g2pClock.now
         let words = MLX.Device.withDefaultDevice(.cpu) {
             g2p(british: id.voice.hasPrefix("b")).phonemize(text: request.spoken).1
         }
+        let g2pSeconds = Self.seconds(g2pClock.now - g2pStarted)
         let (phonemes, ownersByCharacter) = Self.phonemeWalk(words)
         let tokenization = tokenizer.tokenize(phonemes: phonemes, ownersByCharacter: ownersByCharacter)
         let spread = id.spread ?? options.f0Spread
         return Prepared(loaded: loaded, spread: spread, tokenizer: tokenizer, words: words, phonemes: phonemes,
-                        ids: tokenization.ids, owners: tokenization.owners)
+                        ids: tokenization.ids, owners: tokenization.owners, g2pSeconds: g2pSeconds)
+    }
+
+    /// One line per utterance: the G2P's share, the pieces, the audio and the whole wall time.
+    private static func logUtterance(_ path: String, g2pSeconds: Double, pieces: Int, audioSeconds: Double, since started: ContinuousClock.Instant) {
+        let total = seconds(ContinuousClock().now - started)
+        let rtf = audioSeconds > 0 ? total / audioSeconds : 0
+        timingLog.notice("kokoro utterance (\(path, privacy: .public)): g2p \(g2pSeconds, format: .fixed(precision: 3), privacy: .public) s, \(pieces, privacy: .public) pieces, audio \(audioSeconds, format: .fixed(precision: 2), privacy: .public) s, total \(total, format: .fixed(precision: 3), privacy: .public) s, RTF \(rtf, format: .fixed(precision: 3), privacy: .public)")
     }
 
     public func synthesize(_ request: SynthesisRequest) async throws -> T2SCore.SynthesisResult {
         // Both checks come before the load, so a misrouted request costs nothing and the tests that
         // pin them need no model.
+        let started = ContinuousClock().now
         let prepared = try await prepare(request)
         let loaded = prepared.loaded, tokenizer = prepared.tokenizer, words = prepared.words
         let phonemes = prepared.phonemes
@@ -403,6 +517,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             words.map { KokoroToken(text: $0.text, whitespace: $0.whitespace, start: nil, end: nil) },
             pieces: folds
         )
+        Self.logUtterance("whole", g2pSeconds: prepared.g2pSeconds, pieces: folds.count, audioSeconds: audio.duration, since: started)
         return T2SCore.SynthesisResult(
             audio: audio,
             wordTimings: KokoroTokenTimingMapper.map(timed, spoken: request.spoken, duration: audio.duration)
@@ -429,6 +544,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// not crossfaded: with both sides trimmed the join lands inside silence. The timings are folded
     /// over the concatenation, exactly as `synthesize` folds over its join.
     private func stream(_ request: SynthesisRequest, emit: @Sendable (SynthesisChunk) -> Void) async throws {
+        let started = ContinuousClock().now
         let prepared = try await prepare(request)
         let pieces = try Self.pieces(ids: prepared.ids, owners: prepared.owners, words: prepared.words,
                                      firstPieceCap: Self.streamingFirstPieceTokenCount)
@@ -483,6 +599,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             pending.removeFirst(emittable)
         }
         guard emittedSamples > 0 else { throw KokoroCoreMLError.emptyAudio }
+        Self.logUtterance("streamed", g2pSeconds: prepared.g2pSeconds, pieces: folds.count,
+                          audioSeconds: Double(emittedSamples) / Double(rate), since: started)
 
         let timed = KokoroCoreMLTimingFold.timedTokens(
             prepared.words.map { KokoroToken(text: $0.text, whitespace: $0.whitespace, start: nil, end: nil) },
@@ -536,6 +654,9 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             // The pipeline's own error and never the request text: this string reaches logs.
             throw KokoroCoreMLError.stageFailed(String(describing: error))
         }
+        let t = result.timings
+        let rtf = result.audioDurationSeconds > 0 ? result.wallTimeSeconds / result.audioDurationSeconds : 0
+        Self.timingLog.notice("kokoro call: bucket \(result.bucketSeconds, privacy: .public) s, audio \(result.audioDurationSeconds, format: .fixed(precision: 2), privacy: .public) s, wall \(result.wallTimeSeconds, format: .fixed(precision: 3), privacy: .public) s, RTF \(rtf, format: .fixed(precision: 3), privacy: .public); duration \(t.durationCoreML, format: .fixed(precision: 3), privacy: .public), f0 \(t.f0ntrainCoreML, format: .fixed(precision: 3), privacy: .public), pre \(t.decoderPre, format: .fixed(precision: 3), privacy: .public), hnsf \(t.hnsfSwift, format: .fixed(precision: 3), privacy: .public) (overlap \(t.decoderPreHnsfOverlap, format: .fixed(precision: 3), privacy: .public)), gen \(t.generatorCoreML, format: .fixed(precision: 3), privacy: .public), trim \(t.trim, format: .fixed(precision: 3), privacy: .public)")
 
         // `selectBucket` falls back to the largest bucket rather than failing, and stage 9 then trims
         // to `min(waveform.count, targetLen)` — so a piece that predicts more speech than its bucket

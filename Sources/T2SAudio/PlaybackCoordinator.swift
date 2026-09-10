@@ -92,16 +92,18 @@ public final class PlaybackCoordinator {
     private var isRenderInFlight: Bool { submitsInFlight > 0 || expectedIdles > 0 }
     private var eventTask: Task<Void, Never>?
 
+    /// `budget` paces this coordinator's renders while the app is in the background (`CPUBudget`);
+    /// nil — tests, the everyday build — renders unpaced.
     public init(engine: any SynthesisEngine, store: any AudioStore, player: any AudioPlaying,
                 playheadStore: any PlayheadStore, timeSource: any TimeSource,
                 configuration: CoordinatorConfiguration = CoordinatorConfiguration(),
-                arbiter: RenderArbiter = RenderArbiter()) {
+                arbiter: RenderArbiter = RenderArbiter(), budget: CPUBudget? = nil) {
         self.engine = engine
         self.store = store
         self.player = player
         self.playheadStore = playheadStore
         self.configuration = configuration
-        self.scheduler = RenderScheduler(engine: engine, store: store, timeSource: timeSource, arbiter: arbiter)
+        self.scheduler = RenderScheduler(engine: engine, store: store, timeSource: timeSource, arbiter: arbiter, budget: budget)
         player.onSegmentFinished = { [weak self] tag in self?.segmentFinished(tag) }
         eventTask = Task { [weak self, scheduler] in
             for await event in scheduler.events {

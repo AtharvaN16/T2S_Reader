@@ -17,6 +17,15 @@ public enum KokoroCoreMLResources: Sendable {
     /// sentence of 8-10 s in the 10 s one rather than padding out the 15 s one. Every weight file is
     /// byte-identical across buckets; only the compute plan differs.
     public static let buckets = [3, 7, 10, 15]
+    /// The buckets the engine is ready with: the smallest and the largest, so a cold launch's first
+    /// sound waits for eight compute plans (both duration models and these two buckets' three stages
+    /// each) rather than fourteen. The streamed first piece of an utterance is about three seconds
+    /// and renders in the 3 s bucket; every other piece fits the 15 s one, so nothing rendered
+    /// before the 7 s and 10 s buckets land is split or seamed any differently — those two only
+    /// save time (`KokoroCoreMLEngine` swaps them in as they arrive).
+    public static let readyBuckets = [3, 15]
+    /// The buckets loaded after readiness, smallest first.
+    public static var laterBuckets: [Int] { buckets.filter { !readyBuckets.contains($0) }.sorted() }
     /// Padded input-token lengths staged for the duration model.
     public static let durationTokenLengths = [128, 256]
 
@@ -52,11 +61,9 @@ public enum KokoroCoreMLResources: Sendable {
         public var errorDescription: String? {
             switch self {
             case .missing(let name):
-                "The Core ML Kokoro model is not installed (\(name) is missing). "
-                    + "Run scripts/fetch-kokoro-coreml.sh --app to install it."
+                "The Core ML Kokoro model is not installed (\(name) is missing)."
             case .noVoices:
-                "The Core ML Kokoro voice table is not installed (no voice files were found). "
-                    + "Run scripts/fetch-kokoro-coreml.sh --app to install it."
+                "The Core ML Kokoro voice table is not installed (no voice files were found)."
             }
         }
     }
@@ -156,6 +163,46 @@ public enum KokoroCoreMLResources: Sendable {
             stages: stages, voices: voices, vocab: vocab, hnsfWeights: hnsfWeights,
             isPrecompiled: stages.values.allSatisfy { $0.pathExtension == "mlmodelc" }
         ))
+    }
+
+    /// Looks for the layout `KokoroCoreMLInstall` leaves under a revision directory: the compiled
+    /// stages as `compiled/<name>.mlmodelc`, the voices as `staging/voices/*.bin` and the runtime
+    /// JSON under `staging/runtime/`. Always precompiled; the installer removes the sources.
+    public static func locate(installedIn root: URL) -> Result<Located, Failure> {
+        let fileManager = FileManager.default
+        let compiled = root.appending(path: "compiled", directoryHint: .isDirectory)
+        let staging = root.appending(path: "staging", directoryHint: .isDirectory)
+
+        var stages: [String: URL] = [:]
+        for name in stageNames() {
+            let url = compiled.appending(path: "\(name).mlmodelc", directoryHint: .isDirectory)
+            var isDirectory: ObjCBool = false
+            guard fileManager.fileExists(atPath: url.path(percentEncoded: false), isDirectory: &isDirectory),
+                  isDirectory.boolValue
+            else { return .failure(.missing(name)) }
+            stages[name] = url
+        }
+
+        let voicesDirectory = staging.appending(path: "voices", directoryHint: .isDirectory)
+        let voiceURLs = (try? fileManager.contentsOfDirectory(at: voicesDirectory, includingPropertiesForKeys: nil))?
+            .filter { $0.pathExtension == "bin" } ?? []
+        guard !voiceURLs.isEmpty else { return .failure(.noVoices) }
+        var voices: [String: URL] = [:]
+        for url in voiceURLs {
+            voices[url.deletingPathExtension().lastPathComponent] = url
+        }
+
+        let runtime = staging.appending(path: "runtime", directoryHint: .isDirectory)
+        let vocab = runtime.appending(path: "kokoro-vocab.json")
+        guard fileManager.fileExists(atPath: vocab.path(percentEncoded: false)) else {
+            return .failure(.missing("kokoro-vocab.json"))
+        }
+        let hnsfWeights = runtime.appending(path: "hnsf_weights.json")
+        guard fileManager.fileExists(atPath: hnsfWeights.path(percentEncoded: false)) else {
+            return .failure(.missing("hnsf_weights.json"))
+        }
+
+        return .success(Located(stages: stages, voices: voices, vocab: vocab, hnsfWeights: hnsfWeights, isPrecompiled: true))
     }
 
     /// Where the files sit when running from the repository rather than an app bundle: the checkout's

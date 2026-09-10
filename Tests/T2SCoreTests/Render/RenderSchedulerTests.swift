@@ -215,3 +215,63 @@ import Testing
         #expect(try await store.read(key(0))?.duration == 0.3)
     }
 }
+
+@Suite struct RenderSchedulerPacingTests {
+    let doc = UUID()
+    func request(_ i: Int) -> RenderRequest {
+        let key = RenderKey(documentID: doc, utteranceIndex: i, voiceID: "v", engineID: "fake", normalizerVersion: 1, segmenterVersion: 1)
+        return RenderRequest(job: RenderJob(documentID: doc, utteranceIndex: i, tier: .prepare), key: key, spoken: "hello there", voiceID: "v")
+    }
+
+    /// A background render behind a full CPU window waits on the budget before it synthesizes;
+    /// the same render in the foreground does not.
+    @Test func aBackgroundRenderWaitsOnTheBudget() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let gate = ForegroundGate(isForeground: false)
+        let clock = ManualTimeSource(0)
+        let cpu = OSAllocatedUnfairLockBox<TimeInterval>(0)
+        let sleeps = OSAllocatedUnfairLockBox<[TimeInterval]>([])
+        let budget = CPUBudget(gate: gate, windowSeconds: 60, budgetSeconds: 36,
+                               clock: { clock.now() }, cpuTime: { cpu.value },
+                               sleeper: { seconds in sleeps.value.append(seconds); clock.advance(by: seconds) })
+        // Forty seconds of CPU burnt since the budget was made, all inside the window.
+        clock.set(50)
+        cpu.value = 40
+        let engine = FakeEngine(secondsPerCharacter: 0.1)
+        let scheduler = RenderScheduler(engine: engine, store: store, timeSource: clock, budget: budget)
+        await scheduler.setPlan([request(0)])
+        var events: [RenderEvent] = []
+        for await event in scheduler.events { events.append(event); if event == .idle { break } }
+
+        #expect(!sleeps.value.isEmpty)                              // it waited
+        #expect(events.contains { if case .rendered = $0 { return true } else { return false } })
+        let requests = await engine.requests
+        #expect(requests.count == 1)                                // and then rendered, once
+
+        // The foreground: the same budget, no wait at all.
+        gate.set(foreground: true)
+        sleeps.value = []
+        await scheduler.setPlan([request(1)])
+        for await event in scheduler.events { if event == .idle { break } }
+        #expect(sleeps.value.isEmpty)
+    }
+
+    @Test func aCacheHitNeverWaits() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let gate = ForegroundGate(isForeground: false)
+        let sleeps = OSAllocatedUnfairLockBox<[TimeInterval]>([])
+        let clock = ManualTimeSource(0)
+        let cpu = OSAllocatedUnfairLockBox<TimeInterval>(0)
+        let budget = CPUBudget(gate: gate, windowSeconds: 60, budgetSeconds: 36,
+                               clock: { clock.now() }, cpuTime: { cpu.value },
+                               sleeper: { seconds in sleeps.value.append(seconds); clock.advance(by: seconds) })
+        clock.set(50)
+        cpu.value = 40
+        let r = request(0)
+        try await store.write(.silence(seconds: 1), for: r.key)
+        let scheduler = RenderScheduler(engine: FakeEngine(), store: store, timeSource: clock, budget: budget)
+        await scheduler.setPlan([r])
+        for await event in scheduler.events { if event == .idle { break } }
+        #expect(sleeps.value.isEmpty)
+    }
+}

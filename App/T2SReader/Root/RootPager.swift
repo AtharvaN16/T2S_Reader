@@ -1,5 +1,6 @@
 // App/T2SReader/Root/RootPager.swift
 import SwiftUI
+import T2SLibrary
 import T2SCore
 import T2SApp
 import T2SStore
@@ -41,6 +42,12 @@ enum RootPage: Hashable, CaseIterable {
     /// on the first document whose
     /// title contains `T2S_BOOK`, else the first document. Screenshots only.
     static var launchOpen: String? { ProcessInfo.processInfo.environment["T2S_OPEN"] }
+
+    /// `T2S_SEED=1`: at launch, when the library holds no web page and no pasted text, import one
+    /// of each (built in place, no network) and put them on Home — a script-driven simulator
+    /// cannot type into the Import steps, and the sheet placeholders need something to stand for.
+    /// Screenshots only, like the rest.
+    static var launchSeeds: Bool { ProcessInfo.processInfo.environment["T2S_SEED"] == "1" }
 
     /// `T2S_OPEN=import`, `link`, `text` or `files`: the Import cover, on its hub or straight on
     /// that step (screenshots, like the rest of `launchOpen`).
@@ -157,6 +164,7 @@ struct RootPager: View {
         .fullScreenCover(item: $readerDocument) { ReaderPage(summary: $0) }
         .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation, nowPlaying: env.nowPlaying)
         .task {
+            if RootPage.launchSeeds { await seedSamples() }
             await env.libraryModel.refresh()
             if ["reader", "chapters", "voice"].contains(RootPage.launchOpen ?? ""),
                let document = RootPage.launchDocument(in: env.libraryModel.summaries) {
@@ -206,6 +214,30 @@ struct RootPager: View {
                 if env.deviceMonitor.deviceState.charging { PrepareTask.schedule() }
             default:
                 break
+            }
+        }
+    }
+
+    /// The `T2S_SEED` fixtures: a pasted text and a web page, a paragraph or two each, imported
+    /// once (matched by title after that) and noted as played, so they stand at the top of Home.
+    private func seedSamples() async {
+        let samples = [
+            PlainTextArticle.content(
+                title: "Notes from the reading group",
+                body: "We agreed to read the middle third slowly, a chapter a week.\n\nThe whole argument turns on one footnote in chapter nine."),
+            ArticleContent(
+                title: "Why the most useful books are the weird ones", byline: "A. Reader", siteName: "Example",
+                sourceURL: URL(string: "https://www.example.com/essays/weirdly-useful-books"),
+                bodyXHTML: "<p>It is ostensibly about architecture, but the ideas around patterns reach much further than buildings.</p>"),
+        ]
+        await env.libraryModel.refresh()
+        for content in samples where !env.libraryModel.summaries.contains(where: { $0.document.title == content.title }) {
+            _ = try? await env.library.importArticle(content, originalHTML: "")
+        }
+        await env.libraryModel.refresh()                                       // `notePlaying` finds a book in `summaries`
+        for content in samples {
+            if let hit = env.libraryModel.summaries.first(where: { $0.document.title == content.title }) {
+                await env.libraryModel.notePlaying(hit.id)
             }
         }
     }

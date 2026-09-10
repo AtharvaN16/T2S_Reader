@@ -239,7 +239,7 @@ struct CollectionPage: View {
 
     private func cover(_ book: DocumentSummary, height: CGFloat) -> BookCover {
         BookCover(relativePath: book.document.coverImagePath, paths: env.paths, height: height,
-                  title: book.document.title, isPDF: book.document.sourceType == .pdf)
+                  title: book.document.title, author: book.document.author, isPDF: book.document.sourceType == .pdf)
     }
 
     // MARK: Menu
@@ -346,10 +346,10 @@ private struct CollectionRow<Items: View>: View {
 }
 
 /// What stands on the shelf for one document: a book (`BookCover`, on its `shelved` slot) for an
-/// EPUB or PDF; for an article — a web page or pasted text, not a book — a flat square in the same
-/// slot, as the Home row draws one: its image if the page had one, else the kind's glyph on
-/// `surface`, a link for a page and lines of text for text. Bottom-leading in the slot like the
-/// books, so the row's text column and the grid's titles hold still whichever kind sits there.
+/// EPUB or PDF; for an article — a web page or pasted text, not a book — a sheet of paper
+/// (`SheetCover`) on the same slot, as the Home row draws one, or its image if the page had one.
+/// Bottom-leading in the slot like the books, so the row's text column and the grid's titles hold
+/// still whichever kind sits there.
 private struct ShelfArt: View {
     @Environment(AppEnvironment.self) private var env
     var summary: DocumentSummary
@@ -358,26 +358,17 @@ private struct ShelfArt: View {
     var body: some View {
         let document = summary.document
         if document.sourceType == .article {
-            let side = height * BookCover.widestRatio
-            Group {
-                if document.coverImagePath != nil {
-                    Artwork(relativePath: document.coverImagePath, paths: env.paths, size: side, radius: Spacing.artworkSmall)
-                } else {
-                    RoundedRectangle(cornerRadius: Spacing.artworkSmall, style: .continuous)
-                        .fill(Tokens.surface)
-                        .frame(width: side, height: side)
-                        .overlay {
-                            Image(systemName: document.sourceURL == nil ? "text.alignleft" : "link")
-                                .font(.system(size: side * 0.28, weight: .medium))
-                                .foregroundStyle(Tokens.ink2)
-                        }
-                }
+            if document.coverImagePath != nil {
+                let side = height * BookCover.widestRatio
+                Artwork(relativePath: document.coverImagePath, paths: env.paths, size: side, radius: Spacing.artworkSmall)
+                    .frame(width: side, height: height, alignment: .bottomLeading)
+            } else {
+                SheetCover(title: document.title, sourceURL: document.sourceURL, addedAt: document.addedAt, height: height)
+                    .shelved
             }
-            .frame(width: side, height: height, alignment: .bottomLeading)
-            .accessibilityHidden(true)
         } else {
             BookCover(relativePath: document.coverImagePath, paths: env.paths, height: height,
-                      title: document.title, isPDF: document.sourceType == .pdf)
+                      title: document.title, author: document.author, isPDF: document.sourceType == .pdf)
                 .shelved
         }
     }

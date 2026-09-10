@@ -101,7 +101,8 @@ struct BookSheet: View {
     /// backlight, blurred wide so it reads as light and not as a shape — turning with the phone.
     private var hero: some View {
         let cover = BookCover(relativePath: live.document.coverImagePath, paths: env.paths, height: Self.heroHeight,
-                              title: live.document.title, isPDF: live.document.sourceType == .pdf, tilt: motion.tilt)
+                              title: live.document.title, author: live.document.author,
+                              isPDF: live.document.sourceType == .pdf, tilt: motion.tilt)
         return ZStack {
             Ellipse()
                 .fill(cover.backlight)

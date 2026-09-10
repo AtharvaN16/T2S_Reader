@@ -29,14 +29,17 @@ struct QueueRow: View {
         // 20 pt between the book and its text: the cover's shadow needs air, and the reference cell
         // (Apple Books' Continue) breathes there too.
         HStack(alignment: .top, spacing: 20) {
+            // On its shelf slot so the chapter line, title and Play pill start at one x on every
+            // row, whatever width the cover is; the grid stands its books the same way.
             if isArticle {
-                // A web article is not a book: flat art, no spine.
-                Artwork(relativePath: summary.document.coverImagePath, paths: env.paths, size: 64, radius: Spacing.artworkSmall)
+                // A web page or pasted text is not a book: a sheet of paper, on the same slot.
+                SheetCover(title: summary.document.title, sourceURL: summary.document.sourceURL,
+                           addedAt: summary.document.addedAt, height: BookCover.shelfHeight)
+                    .shelved
             } else {
-                // On its shelf slot so the chapter line, title and Play pill start at one x on every
-                // row, whatever width the cover is; the grid stands its books the same way.
                 BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: BookCover.shelfHeight,
-                          title: summary.document.title, isPDF: summary.document.sourceType == .pdf)
+                          title: summary.document.title, author: summary.document.author,
+                          isPDF: summary.document.sourceType == .pdf)
                     .shelved
             }
 

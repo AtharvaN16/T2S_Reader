@@ -35,6 +35,40 @@ enum Tokens {
     static let pdfCover = dynamic(light: 0xF6D2CC, dark: 0x4A2521)
     static let pdfInk = dynamic(light: 0xB5362B, dark: 0xFF8E82)
 
+    /// The generated covers' palette: eight cloth-binding colours a title is dealt from
+    /// (`CoverStyle.paletteIndex`). A book is an object, so its colour is the same in both themes,
+    /// like `shade` and `gloss`; the cream `coverText` sits on any of them. Each has a light tint
+    /// for words on paper (`coverTint`, the sheet's masthead in dark mode) and a lifted glow for
+    /// the book sheet's backlight.
+    private static let coverPalette: [(ink: UInt32, tint: UInt32, glow: UInt32)] = [
+        (0x2B4C5C, 0x8FB8CC, 0x7FB4CC),   // slate teal
+        (0x7B3B3B, 0xD98A8A, 0xD98A8A),   // oxblood
+        (0x35563F, 0x8FBF9C, 0x8FC4A0),   // forest
+        (0x8A6B2E, 0xD9B45C, 0xE0B85C),   // ochre
+        (0x4B3F6E, 0xB3A3E0, 0xB3A3E0),   // plum
+        (0x9A5638, 0xE0967A, 0xE8997A),   // terracotta
+        (0x3C4A78, 0x9DA9E6, 0x9DA9E6),   // indigo
+        (0x5A5A52, 0xB5B5A8, 0xB5B5A8),   // charcoal olive
+    ]
+    static var coverCount: Int { coverPalette.count }
+    /// The cloth of cover `index` (from `CoverStyle.paletteIndex(for:count: coverCount)`).
+    static func coverInk(_ index: Int) -> Color {
+        let ink = coverPalette[index % coverPalette.count].ink
+        return dynamic(light: ink, dark: ink)
+    }
+    /// The same hue as words on paper: the cloth colour in light, its tint in dark.
+    static func coverTint(_ index: Int) -> Color {
+        let entry = coverPalette[index % coverPalette.count]
+        return dynamic(light: entry.ink, dark: entry.tint)
+    }
+    /// The same hue as light: what a placeholder book gives off on the book sheet.
+    static func coverGlow(_ index: Int) -> Color {
+        let glow = coverPalette[index % coverPalette.count].glow
+        return dynamic(light: glow, dark: glow)
+    }
+    /// Cream lettering on a generated cover, in both themes.
+    static let coverText = dynamic(light: 0xF3EDE2, dark: 0xF3EDE2)
+
     /// The read-along pair is per `HighlightTheme`: a faint sentence tint and a stronger word mark in
     /// one hue. `amber` is the accent — `accentFaint` / `accentSoft` exactly — so it stays the default
     /// and a reader who never opens the picker sees nothing change.

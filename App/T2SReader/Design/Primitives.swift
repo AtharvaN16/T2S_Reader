@@ -2,6 +2,8 @@
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import SwiftUI
+import T2SApp
+import T2SCore
 import T2SLibrary
 
 /// Fully rounded pill (spec §2.4.3). `.accent` is the one primary action per screen; `.selected`
@@ -158,7 +160,8 @@ struct RadioMark: View {
     }
 }
 
-/// Cover artwork from a container-relative path; a `surface` block when there is none.
+/// Cover artwork from a container-relative path. Without an image: the document's generated
+/// mark (`CoverMark`) when the caller hands the document over, else a plain `surface` block.
 struct Artwork: View {
     /// SwiftUI re-evaluates a `LazyVGrid` cell's body on every scroll pass, so without this the
     /// Collection grid re-reads and re-decodes each visible cover from disk while scrolling.
@@ -168,6 +171,9 @@ struct Artwork: View {
     var paths: LibraryPaths
     var size: CGFloat
     var radius: CGFloat
+    /// What to draw instead of a grey block when there is no image: the mini-player passes its
+    /// document so a placeholder book or a pasted text keeps its identity at 36 pt too.
+    var document: Document? = nil
 
     /// Internal, not private: `BookCover` reads the same cache, and needs the decoded size for
     /// its proportions.
@@ -183,6 +189,8 @@ struct Artwork: View {
         Group {
             if let relativePath, let image = Self.image(at: paths.url(forRelativePath: relativePath).path) {
                 Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
+            } else if let document {
+                CoverMark(document: document, size: size, radius: radius)
             } else {
                 Tokens.surface
             }
@@ -190,6 +198,41 @@ struct Artwork: View {
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         .accessibilityHidden(true)
+    }
+}
+
+/// A document's cover at thumbnail size, for a square slot: too small for words, so the book's
+/// cloth carries the title's first letter, the PDF its red and "PDF", and a web page or pasted
+/// text its paper with the kind's glyph — the same three faces `BookCover` and `SheetCover`
+/// draw at shelf size, so the mini-player's art matches the row the book came from.
+private struct CoverMark: View {
+    var document: Document
+    var size: CGFloat
+    var radius: CGFloat
+
+    private var index: Int { CoverStyle.paletteIndex(for: document.title, count: Tokens.coverCount) }
+
+    var body: some View {
+        switch document.sourceType {
+        case .pdf:
+            Tokens.pdfCover.overlay {
+                Text("PDF").font(.custom("Inter-Bold", fixedSize: size * 0.3)).foregroundStyle(Tokens.pdfInk)
+            }
+        case .article:
+            Tokens.raised
+                .overlay {
+                    Image(systemName: document.sourceURL == nil ? "text.alignleft" : "link")
+                        .font(.system(size: size * 0.4, weight: .semibold))
+                        .foregroundStyle(Tokens.coverTint(index))
+                }
+                .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Tokens.ink3, lineWidth: 0.5))
+        case .epub:
+            Tokens.coverInk(index).overlay {
+                Text(CoverStyle.monogram(for: document.title))
+                    .font(.custom("InterDisplay-ExtraBold", fixedSize: size * 0.5))
+                    .foregroundStyle(Tokens.coverText)
+            }
+        }
     }
 }
 
@@ -201,12 +244,15 @@ struct Artwork: View {
 ///
 /// Covers only look like covers at book proportions: an image narrower than 0.55 or wider than 0.8
 /// of its height (a landscape, a banner, a page scan) and a document with no image both get the
-/// placeholder — the title on a plain cover — and every PDF gets a light red one that says PDF.
+/// placeholder — a cloth binding in the title's colour, lettered (`ClothCover`) — and every PDF
+/// gets a light red one that says PDF.
 struct BookCover: View {
     var relativePath: String?
     var paths: LibraryPaths
     var height: CGFloat
     var title: String
+    /// Lettered under the title on the placeholder, when known.
+    var author: String? = nil
     var isPDF: Bool = false
     /// Degrees from `MotionTilt`: the book turns a little with the phone so it reads as an object,
     /// not a picture. Only the book sheet's hero passes one.
@@ -270,10 +316,11 @@ struct BookCover: View {
     }
 
     /// The colour the book gives off — the book sheet's backlight: the cover's average colour,
-    /// lifted so a dark or greyish cover still glows; the PDF book's red; the placeholder's paper.
+    /// lifted so a dark or greyish cover still glows; the PDF book's red; the placeholder's cloth,
+    /// lifted the same way (`Tokens.coverGlow`).
     var backlight: Color {
         if let image, let average = Self.averageColor(of: image, key: relativePath ?? "") { return average }
-        return isPDF ? Tokens.pdfCover : Tokens.ink3
+        return isPDF ? Tokens.pdfCover : Tokens.coverGlow(CoverStyle.paletteIndex(for: title, count: Tokens.coverCount))
     }
 
     private static let colorCache = NSCache<NSString, UIColor>()
@@ -312,16 +359,7 @@ struct BookCover: View {
                 Text("PDF").typeRole(.sectionHeader).foregroundStyle(Tokens.pdfInk).minimumScaleFactor(0.5).padding(8)
             }
         } else {
-            // The mockup's title band across the lower third, on a plain cover.
-            Tokens.surface.overlay(alignment: .bottom) {
-                Text(title)
-                    .typeRole(.meta).foregroundStyle(Tokens.ink)
-                    .lineLimit(2).minimumScaleFactor(0.7).multilineTextAlignment(.center)
-                    .padding(.horizontal, 6).padding(.vertical, 6)
-                    .frame(maxWidth: .infinity)
-                    .background(Tokens.ground)
-                    .padding(.bottom, height * 0.12)
-            }
+            ClothCover(title: title, author: author, height: height)
         }
     }
 
@@ -347,6 +385,160 @@ struct BookCover: View {
                 .init(color: Tokens.gloss.opacity(0.07), location: 1),
             ], startPoint: .top, endPoint: .bottom)
         }
+    }
+}
+
+/// The generated cover for a book with no art of its own: a cloth binding in one of the eight
+/// palette colours, dealt by the title (`CoverStyle.paletteIndex`, so the same book is always the
+/// same colour), a hairline frame stamped a little in from the edge, the title top-left in cream
+/// display type with the author under it, and a short rule at the foot — the way a plain
+/// hardback is lettered. The type is fixed to the book's height, not to Dynamic Type: it is
+/// lettering on an object, like a real cover. Under 64 pt there is no room for words, so the
+/// cloth carries the title's first letter instead.
+private struct ClothCover: View {
+    var title: String
+    var author: String?
+    var height: CGFloat
+
+    private var index: Int { CoverStyle.paletteIndex(for: title, count: Tokens.coverCount) }
+
+    var body: some View {
+        Tokens.coverInk(index)
+            .overlay {
+                RoundedRectangle(cornerRadius: height * 0.012, style: .continuous)
+                    .strokeBorder(Tokens.coverText.opacity(0.32), lineWidth: max(0.5, height * 0.005))
+                    .padding(height * 0.05)
+            }
+            .overlay {
+                if height < 64 { monogram } else { lettering }
+            }
+    }
+
+    private var monogram: some View {
+        Text(CoverStyle.monogram(for: title))
+            .font(.custom("InterDisplay-ExtraBold", fixedSize: height * 0.42))
+            .foregroundStyle(Tokens.coverText)
+    }
+
+    private var lettering: some View {
+        let titleSize = height * 0.1
+        return VStack(alignment: .leading, spacing: height * 0.035) {
+            Text(title)
+                .font(.custom("InterDisplay-ExtraBold", fixedSize: titleSize))
+                .tracking(-0.02 * titleSize)
+                .lineLimit(4)
+                .minimumScaleFactor(0.7)
+                .foregroundStyle(Tokens.coverText)
+            if let author, !author.isEmpty {
+                Text(author)
+                    .font(.custom("Inter-Regular", fixedSize: height * 0.068))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .foregroundStyle(Tokens.coverText.opacity(0.78))
+            }
+            Spacer(minLength: 0)
+            Capsule()
+                .fill(Tokens.coverText.opacity(0.6))
+                .frame(width: height * 0.12, height: max(0.75, height * 0.008))
+        }
+        .multilineTextAlignment(.leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(height * 0.1)
+    }
+}
+
+/// What stands on the shelf for a web page or pasted text — a sheet of paper, not a book: white
+/// (`raised`), evenly rounded, a hairline edge and a thin shadow; no spine, no sheen. At its head,
+/// where a clipping names its source, the page's site or the day the text was written, in the
+/// title's palette colour beside the kind's glyph; under a rule, the title in the row face; then a
+/// few ruled lines standing for the body. On its `shelved` slot it takes a book's width and
+/// baseline, so a row's text column starts at one x whichever kind sits there. Under 64 pt only
+/// the glyph fits.
+struct SheetCover: View {
+    var title: String
+    var sourceURL: URL?
+    var addedAt: Date
+    var height: CGFloat
+
+    /// A page's proportions, near A4 (the book's are 0.667): a sheet, not a book.
+    static let ratio: CGFloat = 0.72
+
+    /// The sheet on the books' shelf slot: `BookCover.widestRatio` wide, at the bottom-leading corner.
+    var shelved: some View {
+        frame(width: height * BookCover.widestRatio, height: height, alignment: .bottomLeading)
+    }
+
+    private var index: Int { CoverStyle.paletteIndex(for: title, count: Tokens.coverCount) }
+    private var glyph: String { sourceURL == nil ? "text.alignleft" : "link" }
+    /// The site for a page, the day for a text.
+    private var masthead: String {
+        if let sourceURL { return CoverStyle.host(of: sourceURL) }
+        return CoverStyle.dateLabel(for: addedAt)
+    }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: height * 0.025, style: .continuous)
+        Tokens.raised
+            .overlay {
+                if height < 64 { mark } else { page }
+            }
+            .frame(width: height * Self.ratio, height: height)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(Tokens.ink3, lineWidth: 0.5))
+            .compositingGroup()
+            .shadow(color: Tokens.shade.opacity(0.10), radius: height * 0.035, x: 0, y: height * 0.015)
+            .accessibilityHidden(true)
+    }
+
+    private var mark: some View {
+        Image(systemName: glyph)
+            .font(.system(size: height * 0.36, weight: .semibold))
+            .foregroundStyle(Tokens.coverTint(index))
+    }
+
+    private var page: some View {
+        let small = height * 0.066
+        let titleSize = height * 0.095
+        let ruleHeight = max(1, height * 0.012)
+        let ruleGap = height * 0.04
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: small * 0.45) {
+                Image(systemName: glyph).font(.system(size: small, weight: .bold))
+                Text(masthead.uppercased())
+                    .font(.custom("Inter-SemiBold", fixedSize: small))
+                    .tracking(small * 0.04)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)                                   // "EXAMPLE.COM" before "EXA…COM"
+                    .truncationMode(.tail)
+                    .layoutPriority(1)
+            }
+            .foregroundStyle(Tokens.coverTint(index))
+            Rectangle()
+                .fill(Tokens.coverTint(index).opacity(0.4))
+                .frame(height: 0.75)
+                .padding(.top, height * 0.035)
+                .padding(.bottom, height * 0.055)
+            Text(title)
+                .font(.custom("Inter-SemiBold", fixedSize: titleSize))
+                .tracking(-0.01 * titleSize)
+                .lineLimit(4)
+                .minimumScaleFactor(0.85)
+                .foregroundStyle(Tokens.ink)
+                .multilineTextAlignment(.leading)
+            // Three ruled lines, the last short: a paragraph, not a picture of one.
+            GeometryReader { geo in
+                VStack(alignment: .leading, spacing: ruleGap) {
+                    ForEach(Array([1.0, 1.0, 0.62].enumerated()), id: \.offset) { _, fraction in
+                        Capsule().fill(Tokens.ink3).frame(width: geo.size.width * fraction, height: ruleHeight)
+                    }
+                }
+            }
+            .frame(height: ruleHeight * 3 + ruleGap * 2)
+            .padding(.top, height * 0.065)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(height * 0.08)
     }
 }
 

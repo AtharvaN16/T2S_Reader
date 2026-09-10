@@ -20,7 +20,8 @@ struct MiniPlayer: View {
     var body: some View {
         if let shown {
             HStack(spacing: 12) {
-                Artwork(relativePath: shown.document.coverImagePath, paths: env.paths, size: 36, radius: Spacing.artworkSmall)
+                Artwork(relativePath: shown.document.coverImagePath, paths: env.paths, size: 36, radius: Spacing.artworkSmall,
+                        document: shown.document)
                 Button { onOpen(shown) } label: {
                     Text(shown.document.title)
                         .typeRole(.rowTitle)

@@ -98,8 +98,14 @@ final class AppEnvironment {
         // Spec §3.4.1 tier 2: a new document's first 30 s render now, on any power state, so its
         // first tap plays with no spin-up. One at a time, behind whatever the player is rendering —
         // the arbiter gives play-ahead the next utterance.
-        importModel.afterImport = { [prepareRunner] documents in
-            Task { for document in documents { _ = await prepareRunner.prime(document.id) } }
+        // The lists read the store only on a refresh, so the new documents are read in first: the
+        // Import page now stays open on them (Play or Done) and both pages must already show them
+        // behind it (owner, 2026-09-10: an import showed nowhere until the app was reopened).
+        importModel.afterImport = { [prepareRunner, libraryModel] documents in
+            Task {
+                await libraryModel.refresh()
+                for document in documents { _ = await prepareRunner.prime(document.id) }
+            }
         }
         coordinator.setRate(preferences.defaultRate)
         self.importModel = importModel

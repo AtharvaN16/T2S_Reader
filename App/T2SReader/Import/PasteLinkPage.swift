@@ -4,10 +4,10 @@ import T2SApp
 import UIKit
 
 /// "Paste website link" (ElevenReader's page, the owner's reference, 2026-09-09): a bare address
-/// field prefilled from the clipboard, a tip about the Share sheet, and one Listen bar at the foot.
-/// Listen fetches the page and, unless the extraction looks thin, imports it straight away — the
-/// Reader that opens on it plays. Only a thin page stops to ask: its title, its word count, and
-/// "Listen anyway".
+/// field prefilled from the clipboard, a tip about the Share sheet, and one Import bar at the foot
+/// (it was Listen while the import played by itself). Import fetches the page and, unless the extraction looks thin, imports it straight away; the
+/// done step then offers Play or Done. Only a thin page stops to ask first: its title, its word
+/// count, and "Import anyway".
 struct PasteLinkPage: View {
     @Environment(AppEnvironment.self) private var env
     var onBack: (() -> Void)?
@@ -75,13 +75,13 @@ struct PasteLinkPage: View {
 
     private func action(for model: ImportModel) -> ImportAction? {
         switch model.phase {
-        case .fetching: return .init(label: "Listen", busyLabel: "Fetching…", perform: {})
-        case .importing: return .init(label: "Listen", busyLabel: "Importing…", perform: {})
+        case .fetching: return .init(label: "Import", busyLabel: "Fetching…", perform: {})
+        case .importing: return .init(label: "Import", busyLabel: "Importing…", perform: {})
         case .preview where model.isThinPreview:
-            return .init(label: "Listen anyway") { Task { await model.confirmPreview() } }
+            return .init(label: "Import anyway") { Task { await model.confirmPreview() } }
         default:
             let hasText = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            return .init(label: "Listen", isEnabled: hasText, perform: fetch)
+            return .init(label: "Import", isEnabled: hasText, perform: fetch)
         }
     }
 

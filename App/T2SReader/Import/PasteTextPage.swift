@@ -3,7 +3,8 @@ import SwiftUI
 import T2SApp
 
 /// "Write text" (ElevenReader's page, the owner's reference, 2026-09-09): a bare title line, the
-/// text itself under it, and one Listen bar at the foot that stays grey until there is text.
+/// text itself under it, and one Import bar at the foot that stays grey until there is text (it
+/// was Listen while the import played by itself; now the done step offers Play).
 struct PasteTextPage: View {
     @Environment(AppEnvironment.self) private var env
     var onBack: (() -> Void)?
@@ -45,8 +46,8 @@ struct PasteTextPage: View {
     }
 
     private func action(for model: ImportModel, hasText: Bool) -> ImportAction? {
-        if case .importing = model.phase { return .init(label: "Listen", busyLabel: "Importing…", perform: {}) }
-        return .init(label: "Listen", isEnabled: hasText) {
+        if case .importing = model.phase { return .init(label: "Import", busyLabel: "Importing…", perform: {}) }
+        return .init(label: "Import", isEnabled: hasText) {
             focused = false
             Task { await model.importText(title: title, body: body_) }
         }

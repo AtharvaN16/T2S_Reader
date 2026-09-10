@@ -68,6 +68,22 @@ import T2SStore
         #expect(model.lastError == nil)
     }
 
+    /// A document imported after the model last read the store — the Import page's, played from
+    /// its Play bar — is picked up by `notePlaying` rather than ignored (2026-09-10: it showed
+    /// nowhere until the app was reopened).
+    @Test func notePlayingReadsInADocumentImportedSinceTheLastRefresh() async throws {
+        let f = try AppFixtures()
+        let a = try await f.importFake()
+        let model = LibraryModel(library: f.library)
+        await model.refresh()
+        #expect(model.queue.map(\.id) == [a])
+        let b = try await f.importFake()                                     // after the refresh: unknown to the model
+        await model.notePlaying(b)
+        #expect(model.queue.map(\.id) == [b, a])
+        #expect(model.collection.map(\.id).contains(b))
+        #expect(model.lastError == nil)
+    }
+
     @Test func emptyLibraryIsEmptyQueue() async throws {
         let f = try AppFixtures()
         let model = LibraryModel(library: f.library)

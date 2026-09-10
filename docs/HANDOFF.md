@@ -1,8 +1,37 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 evening (the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 evening (an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — the 17 Pro's two crashes, the model download, the warm-up, the cloud route
+## Resume here (2026-09-10, latest) — an import stops to ask, and shows up at once
+
+Two reports from the owner: "when I import a file, weblink, text, don't play it immediately — give
+me the option to play or exit", and "I imported a doc, but could not see it in collections or
+home, till I exited and reentered the app".
+
+- **The done step** (`ImportDonePage`): every path used to end by closing the Import page and
+  opening the Reader on the first document, which loads and plays. Now `ImportPage` switches to a
+  done step whenever the model's phase is `.done`: the documents on their shelf slots (`BookCover`
+  / `SheetCover`, as Home draws them) with the title and one line — author, site, or PDF/Book/Text,
+  and the length — a **Play** bar at the foot and **Done** in plain text under it (`ImportFrame`
+  gained `secondary`), and the circle closes. Play writes the first document through `imported`
+  and dismisses, so the Reader still opens from the cover's `onDismiss` and plays; Done and the
+  circle only dismiss. A file batch that half worked lists its failures under the rows. The paths'
+  bars say **Import** now, not Listen (they no longer listen); "Import anyway" on a thin page.
+- **The missing document**: nothing refreshed `LibraryModel` after an import. The Reader's first
+  play called `notePlaying`, which looked the book up in the stale `summaries`, found nothing and
+  returned without a refresh — so the book was on neither page until the scene came back to the
+  foreground. Two fixes: `notePlaying` refreshes first when it does not know the id (test
+  `LibraryModelTests.notePlayingReadsInADocumentImportedSinceTheLastRefresh`), and
+  `AppEnvironment`'s `afterImport` refreshes the lists before priming, so the pages behind the done
+  step already show the new document whether or not it is played.
+
+`swift test` 477/87 green (one new), on `dev` after PR #16 (the phone warm-up, download and cloud
+route) was merged under it. `scripts/build-app.sh` → `** BUILD SUCCEEDED **`. Not seen in the simulator: the done step needs a
+real import (typing, or a file), which a scripted simulator cannot do — look at it on the phone:
+import a link, a text and a PDF; each should end on "Added to your library" with Play and Done, and
+be on the Collection (and Home, until three others are played) after Done.
+
+## Resume here (2026-09-10, evening) — the 17 Pro's two crashes, the model download, the warm-up, the cloud route
 
 Branch `phone-warmup-download-cloud` off `dev` @ d849036; spec
 `docs/superpowers/specs/2026-09-10-phone-warmup-download-cloud-design.md`. Harsh's asks: the app

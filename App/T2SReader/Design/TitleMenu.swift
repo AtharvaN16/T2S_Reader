@@ -121,6 +121,23 @@ private struct MenuRowStyle: ButtonStyle {
     }
 }
 
+/// The trigger's own pop (owner, 2026-09-10: "I want the kind frame to also scale with a pop") —
+/// the title-and-chevron button that opens the card, not the card itself. Two motions share the
+/// button: a finger pressing it shrinks it a touch, sprung back on release (`TitleTriggerStyle`);
+/// opening or closing it scales it past 1 and back, on `TitleMenuMotion`'s own animation, so the
+/// trigger and the card it opens move on the same spring.
+struct TitleTriggerStyle: ButtonStyle {
+    /// Whether the menu the trigger opens is up: the settled scale is a hair over 1 while open,
+    /// so the title reads as "pulled out" rather than snapping to a size and stopping.
+    var isOpen: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect((isOpen ? 1.035 : 1) * (configuration.isPressed ? 0.95 : 1))
+            .animation(.snappy(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
 /// Where the title sits, carried up to whoever draws the card so it can hang under the word
 /// wherever Dynamic Type puts it — an anchor rather than a frame in a named coordinate space,
 /// which a `ScrollView` between the two does not pass through.

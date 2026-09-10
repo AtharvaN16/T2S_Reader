@@ -1,8 +1,42 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 night (the kind menu's spring pop; before that the black buttons raised — graphite in the dark — and the dark-mode pass; before that the glow in blue and green when the voice lands, the fan re-cast on 2026 books; before that the empty shelf on Home and the Collection — three covers fanned, a raised button; before that an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 night (the kind title pops with its menu; before that the kind menu's spring pop; before that the black buttons raised — graphite in the dark — and the dark-mode pass; before that the glow in blue and green when the voice lands, the fan re-cast on 2026 books; before that the empty shelf on Home and the Collection — three covers fanned, a raised button; before that an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — the kind menu's spring pop
+## Resume here (2026-09-10, latest) — the kind title pops with the menu it opens
+
+The owner: "I want the kind frame to also scale with a pop" — the trigger itself (the "All ⌄"
+title), not only the card it drops.
+
+- **`TitleTriggerStyle`** (`Design/TitleMenu.swift`): the title-and-chevron button's own style now.
+  Two motions share it. A finger on it shrinks it to 0.95, sprung back on release
+  (`.snappy(0.15)`) — felt the moment it is touched, before the menu has even started to move.
+  Independent of that, while the menu it opens is up the settled scale sits at 1.035 rather than 1
+  — the title reads as pulled out, not merely labelled "open". Both are one multiplied
+  `scaleEffect`, so a press during the open state shrinks from 1.035, not from 1.
+- **One state, one transaction.** The 1.035 is driven by the same `isPickingKind` the card's
+  presence is driven by, inside the same `withAnimation(TitleMenuMotion.toggle(opening:))` block at
+  the tap site — so the title and the card move on the exact spring together: the same overshoot,
+  the same 0.34 s open and 0.22 s damped close, confirmed for the card in the previous round's
+  recording. There is nothing to add on the timing side; the trigger simply joined the transaction
+  the card was already in.
+- **Fixed a doubled scale while wiring this**: the first cut set `.scaleEffect(isPickingKind ?
+  1.035 : 1)` on the label *and* gave the button the same factor through the new style, compounding
+  to about 1.07 while open. Caught before commit; the scale lives only in `TitleTriggerStyle` now.
+
+`scripts/build-app.sh` → `** BUILD SUCCEEDED **`. **Not filmed**, and said plainly why: the
+screenshot method used for the menu (`T2S_OPEN=kinds`) sets `isPickingKind = true` at the view's
+`@State` initializer, before the view ever renders — so there is no false→true transition for
+`withAnimation` to animate, and a frame-by-frame measurement of the title's pixel width came back
+flat at 185 px from the first fully-drawn frame on. A tap that starts closed and opens live is what
+would show it, and neither `simctl` nor a UI-test harness is wired up here to script one — the
+options were an XCUITest target (not part of this app) or driving the Mac's own mouse over the
+Simulator window, which risks the mouse mid-task on a Mac the owner may be using for something
+else, so it was not attempted. The mechanism is the one already proven: the trigger's scale is
+computed inside the identical `withAnimation` call whose overshoot the previous round's recording
+already measured on the card. `swift test` not run: nothing under `Sources/` changed. Not seen on
+a phone.
+
+## Resume here (2026-09-10, night) — the kind menu's spring pop
 
 The owner: "add a nice animation when clicking filter in collection page, like spring pop, we have
 in latest iOS."

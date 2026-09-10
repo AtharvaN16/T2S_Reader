@@ -168,7 +168,7 @@ struct CollectionPage: View {
                     .contentShape(Rectangle())
                     .anchorPreference(key: TitleAnchorKey.self, value: .bounds) { $0 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(TitleTriggerStyle(isOpen: isPickingKind))
             .accessibilityLabel("Showing \(filter.title)")
             .accessibilityHint("Chooses which kind of thing the page shows")
             Spacer(minLength: 12)

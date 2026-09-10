@@ -76,7 +76,8 @@ struct VoiceListPage: View {
             }
             .padding(.horizontal, Spacing.margin)
         }
-        .background(Tokens.ground)
+        // No ground of its own: pushed from Settings, `settingsSubpage()` paints the warm one so the
+        // warm-up glow is not cut at the bar; in `VoiceChangeSheet` the sheet adds a plain one.
         .safeAreaInset(edge: .bottom) {
             if isChange, let pending {
                 VStack(spacing: 10) {

@@ -219,9 +219,10 @@ private struct CoverMark: View {
                 Text("PDF").font(.custom("Inter-Bold", fixedSize: size * 0.3)).foregroundStyle(Tokens.pdfInk)
             }
         case .article:
-            Tokens.raised
+            let isWeb = document.sourceURL != nil
+            (isWeb ? Tokens.raised : Tokens.notePaper)
                 .overlay {
-                    Image(systemName: document.sourceURL == nil ? "text.alignleft" : "link")
+                    Image(systemName: isWeb ? "globe" : "text.alignleft")
                         .font(.system(size: size * 0.4, weight: .semibold))
                         .foregroundStyle(Tokens.coverTint(index))
                 }
@@ -245,7 +246,8 @@ private struct CoverMark: View {
 /// Covers only look like covers at book proportions: an image narrower than 0.55 or wider than 0.8
 /// of its height (a landscape, a banner, a page scan) and a document with no image both get the
 /// placeholder — a cloth binding in the title's colour, lettered (`ClothCover`) — and every PDF
-/// gets a light red one that says PDF.
+/// gets the same binding in light red, badged "PDF" at the foot (owner's rule, 2026-09-09; brought
+/// into the cloth design 2026-09-10).
 struct BookCover: View {
     var relativePath: String?
     var paths: LibraryPaths
@@ -355,11 +357,10 @@ struct BookCover: View {
         if let image {
             Image(uiImage: image).resizable().aspectRatio(contentMode: .fill)
         } else if isPDF {
-            Tokens.pdfCover.overlay {
-                Text("PDF").typeRole(.sectionHeader).foregroundStyle(Tokens.pdfInk).minimumScaleFactor(0.5).padding(8)
-            }
+            ClothCover(title: title, author: author, height: height, cloth: Tokens.pdfCover, ink: Tokens.pdfInk, badge: "PDF")
         } else {
-            ClothCover(title: title, author: author, height: height)
+            let index = CoverStyle.paletteIndex(for: title, count: Tokens.coverCount)
+            ClothCover(title: title, author: author, height: height, cloth: Tokens.coverInk(index), ink: Tokens.coverText)
         }
     }
 
@@ -388,36 +389,45 @@ struct BookCover: View {
     }
 }
 
-/// The generated cover for a book with no art of its own: a cloth binding in one of the eight
+/// The generated cover for a book with no art of its own: a cloth binding — one of the eight
 /// palette colours, dealt by the title (`CoverStyle.paletteIndex`, so the same book is always the
-/// same colour), a hairline frame stamped a little in from the edge, the title top-left in cream
-/// display type with the author under it, and a short rule at the foot — the way a plain
-/// hardback is lettered. The type is fixed to the book's height, not to Dynamic Type: it is
-/// lettering on an object, like a real cover. Under 64 pt there is no room for words, so the
-/// cloth carries the title's first letter instead.
+/// same colour), or the PDF's light red — a hairline frame stamped a little in from the edge, the
+/// title top-left in display type with the author under it, and at the foot a short rule, or the
+/// badge ("PDF") when there is one — the way a plain hardback is lettered. The type is fixed to the
+/// book's height, not to Dynamic Type: it is lettering on an object, like a real cover. Under
+/// 64 pt there is no room for words, so the cloth carries the badge or the title's first letter.
 private struct ClothCover: View {
     var title: String
     var author: String?
     var height: CGFloat
-
-    private var index: Int { CoverStyle.paletteIndex(for: title, count: Tokens.coverCount) }
+    /// The cloth and what is lettered on it: the palette colour and cream for a book, `pdfCover`
+    /// and `pdfInk` for a PDF.
+    var cloth: Color
+    var ink: Color
+    /// A word at the foot in place of the rule, and the mark under 64 pt.
+    var badge: String? = nil
 
     var body: some View {
-        Tokens.coverInk(index)
+        cloth
             .overlay {
                 RoundedRectangle(cornerRadius: height * 0.012, style: .continuous)
-                    .strokeBorder(Tokens.coverText.opacity(0.32), lineWidth: max(0.5, height * 0.005))
+                    .strokeBorder(ink.opacity(0.32), lineWidth: max(0.5, height * 0.005))
                     .padding(height * 0.05)
             }
             .overlay {
-                if height < 64 { monogram } else { lettering }
+                if height < 64 { compact } else { lettering }
             }
     }
 
-    private var monogram: some View {
-        Text(CoverStyle.monogram(for: title))
-            .font(.custom("InterDisplay-ExtraBold", fixedSize: height * 0.42))
-            .foregroundStyle(Tokens.coverText)
+    private var compact: some View {
+        Group {
+            if let badge {
+                Text(badge).font(.custom("Inter-Bold", fixedSize: height * 0.26))
+            } else {
+                Text(CoverStyle.monogram(for: title)).font(.custom("InterDisplay-ExtraBold", fixedSize: height * 0.42))
+            }
+        }
+        .foregroundStyle(ink)
     }
 
     private var lettering: some View {
@@ -428,18 +438,25 @@ private struct ClothCover: View {
                 .tracking(-0.02 * titleSize)
                 .lineLimit(4)
                 .minimumScaleFactor(0.7)
-                .foregroundStyle(Tokens.coverText)
+                .foregroundStyle(ink)
             if let author, !author.isEmpty {
                 Text(author)
                     .font(.custom("Inter-Regular", fixedSize: height * 0.068))
                     .lineLimit(2)
                     .minimumScaleFactor(0.8)
-                    .foregroundStyle(Tokens.coverText.opacity(0.78))
+                    .foregroundStyle(ink.opacity(0.78))
             }
             Spacer(minLength: 0)
-            Capsule()
-                .fill(Tokens.coverText.opacity(0.6))
-                .frame(width: height * 0.12, height: max(0.75, height * 0.008))
+            if let badge {
+                Text(badge)
+                    .font(.custom("Inter-Bold", fixedSize: height * 0.07))
+                    .tracking(height * 0.07 * 0.1)
+                    .foregroundStyle(ink.opacity(0.85))
+            } else {
+                Capsule()
+                    .fill(ink.opacity(0.6))
+                    .frame(width: height * 0.12, height: max(0.75, height * 0.008))
+            }
         }
         .multilineTextAlignment(.leading)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -447,17 +464,18 @@ private struct ClothCover: View {
     }
 }
 
-/// What stands on the shelf for a web page or pasted text — a sheet of paper, not a book: white
-/// (`raised`), evenly rounded, a hairline edge and a thin shadow; no spine, no sheen. At its head,
-/// where a clipping names its source, the page's site or the day the text was written, in the
-/// title's palette colour beside the kind's glyph; under a rule, the title in the row face; then a
-/// few ruled lines standing for the body. On its `shelved` slot it takes a book's width and
-/// baseline, so a row's text column starts at one x whichever kind sits there. Under 64 pt only
-/// the glyph fits.
+/// What stands on the shelf for a web page or pasted text — not a book, and not the same as each
+/// other (owner, 2026-09-10: the two must differ, and each must say which it is). A **web page**
+/// is a small browser window: a chrome strip across the top holding an address pill with a globe
+/// and the page's host (`CoverStyle.host`), then the title, a picture block and two lines of text
+/// on white paper. A **text** is a notepad: cream paper (`notePaper`) with a binding strip and a
+/// perforation under it, a "TEXT" tag beside the text glyph, the title, and ruled lines to the
+/// foot. Both are evenly rounded with a hairline edge and a thin shadow — no spine, no sheen —
+/// 0.72 of their height wide, and on their `shelved` slot take a book's width and baseline, so a
+/// row's text column starts at one x whichever kind sits there. Under 64 pt only the glyph fits.
 struct SheetCover: View {
     var title: String
     var sourceURL: URL?
-    var addedAt: Date
     var height: CGFloat
 
     /// A page's proportions, near A4 (the book's are 0.667): a sheet, not a book.
@@ -469,18 +487,15 @@ struct SheetCover: View {
     }
 
     private var index: Int { CoverStyle.paletteIndex(for: title, count: Tokens.coverCount) }
-    private var glyph: String { sourceURL == nil ? "text.alignleft" : "link" }
-    /// The site for a page, the day for a text.
-    private var masthead: String {
-        if let sourceURL { return CoverStyle.host(of: sourceURL) }
-        return CoverStyle.dateLabel(for: addedAt)
-    }
+    private var isWeb: Bool { sourceURL != nil }
+    private var glyph: String { isWeb ? "globe" : "text.alignleft" }
+    private var tint: Color { Tokens.coverTint(index) }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: height * 0.025, style: .continuous)
-        Tokens.raised
+        (isWeb ? Tokens.raised : Tokens.notePaper)
             .overlay {
-                if height < 64 { mark } else { page }
+                if height < 64 { mark } else if isWeb { webPage } else { notepad }
             }
             .frame(width: height * Self.ratio, height: height)
             .clipShape(shape)
@@ -493,52 +508,104 @@ struct SheetCover: View {
     private var mark: some View {
         Image(systemName: glyph)
             .font(.system(size: height * 0.36, weight: .semibold))
-            .foregroundStyle(Tokens.coverTint(index))
+            .foregroundStyle(tint)
     }
 
-    private var page: some View {
-        let small = height * 0.066
-        let titleSize = height * 0.095
-        let ruleHeight = max(1, height * 0.012)
-        let ruleGap = height * 0.04
+    private var titleText: some View {
+        let size = height * 0.09
+        return Text(title)
+            .font(.custom("Inter-SemiBold", fixedSize: size))
+            .tracking(-0.01 * size)
+            .lineLimit(3)
+            .minimumScaleFactor(0.85)
+            .foregroundStyle(Tokens.ink)
+            .multilineTextAlignment(.leading)
+    }
+
+    /// The browser window: the chrome strip with its address pill, then the page.
+    private var webPage: some View {
+        let pad = height * 0.075
+        let small = height * 0.062
         return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: small * 0.45) {
-                Image(systemName: glyph).font(.system(size: small, weight: .bold))
-                Text(masthead.uppercased())
-                    .font(.custom("Inter-SemiBold", fixedSize: small))
-                    .tracking(small * 0.04)
+            HStack(spacing: small * 0.4) {
+                Image(systemName: "globe").font(.system(size: small, weight: .semibold))
+                Text(sourceURL.map(CoverStyle.host(of:)) ?? "")
+                    .font(.custom("Inter-Medium", fixedSize: small))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)                                   // "EXAMPLE.COM" before "EXA…COM"
+                    .minimumScaleFactor(0.8)
                     .truncationMode(.tail)
-                    .layoutPriority(1)
             }
-            .foregroundStyle(Tokens.coverTint(index))
-            Rectangle()
-                .fill(Tokens.coverTint(index).opacity(0.4))
-                .frame(height: 0.75)
-                .padding(.top, height * 0.035)
-                .padding(.bottom, height * 0.055)
-            Text(title)
-                .font(.custom("Inter-SemiBold", fixedSize: titleSize))
-                .tracking(-0.01 * titleSize)
-                .lineLimit(4)
-                .minimumScaleFactor(0.85)
-                .foregroundStyle(Tokens.ink)
-                .multilineTextAlignment(.leading)
-            // Three ruled lines, the last short: a paragraph, not a picture of one.
-            GeometryReader { geo in
-                VStack(alignment: .leading, spacing: ruleGap) {
-                    ForEach(Array([1.0, 1.0, 0.62].enumerated()), id: \.offset) { _, fraction in
-                        Capsule().fill(Tokens.ink3).frame(width: geo.size.width * fraction, height: ruleHeight)
-                    }
-                }
+            .foregroundStyle(tint)
+            .padding(.horizontal, small * 0.9)
+            .frame(maxWidth: .infinity, minHeight: height * 0.085)
+            .background(Tokens.raised, in: Capsule())
+            .overlay(Capsule().strokeBorder(Tokens.ink3, lineWidth: 0.5))
+            .padding(.horizontal, pad * 0.8)
+            .padding(.vertical, height * 0.04)
+            .frame(maxWidth: .infinity)
+            .background(Tokens.surface)
+            .overlay(alignment: .bottom) { Rectangle().fill(Tokens.ink3).frame(height: 0.5) }
+            VStack(alignment: .leading, spacing: height * 0.05) {
+                titleText
+                RoundedRectangle(cornerRadius: height * 0.015, style: .continuous)
+                    .fill(Tokens.ink3.opacity(0.5))
+                    .frame(height: height * 0.12)                              // the page's picture
+                rules([1, 0.7], gap: height * 0.04)
             }
-            .frame(height: ruleHeight * 3 + ruleGap * 2)
-            .padding(.top, height * 0.065)
+            .padding(pad)
             Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(height * 0.08)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// The notepad: the binding strip and its perforation, the TEXT tag, the title, ruled lines.
+    private var notepad: some View {
+        let pad = height * 0.075
+        let small = height * 0.062
+        return VStack(alignment: .leading, spacing: 0) {
+            Tokens.noteBinding.frame(height: height * 0.075)
+            Perforation()
+                .stroke(Tokens.ink3, style: StrokeStyle(lineWidth: 0.75, dash: [1.5, 1.5]))
+                .frame(height: 1)
+            VStack(alignment: .leading, spacing: height * 0.045) {
+                HStack(spacing: small * 0.4) {
+                    Image(systemName: "text.alignleft").font(.system(size: small, weight: .bold))
+                    Text("TEXT")
+                        .font(.custom("Inter-Bold", fixedSize: small))
+                        .tracking(small * 0.08)
+                }
+                .foregroundStyle(tint)
+                titleText
+                rules([1, 1, 1, 0.55], gap: height * 0.04)
+            }
+            .padding(pad)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// Ruled lines, each a fraction of the width, the last usually short: a paragraph, not a
+    /// picture of one.
+    private func rules(_ fractions: [Double], gap: CGFloat) -> some View {
+        let ruleHeight = max(1, height * 0.012)
+        return GeometryReader { geo in
+            VStack(alignment: .leading, spacing: gap) {
+                ForEach(Array(fractions.enumerated()), id: \.offset) { _, fraction in
+                    Capsule().fill(Tokens.ink3).frame(width: geo.size.width * fraction, height: ruleHeight)
+                }
+            }
+        }
+        .frame(height: ruleHeight * CGFloat(fractions.count) + gap * CGFloat(fractions.count - 1))
+    }
+}
+
+/// A horizontal hairline through the middle of its frame, for dashing.
+private struct Perforation: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.midY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+        return path
     }
 }
 

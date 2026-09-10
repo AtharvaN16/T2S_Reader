@@ -6,12 +6,28 @@ import UIKit
 /// and the pager locks while it is up (`Chrome`) — and it draws its own way back, a circle at the top-left, with the page title at exactly the height every root
 /// page's title sits (`Spacing.titleTop` below the safe area, not that plus a navigation bar). The
 /// system bar is hidden for that; the swipe from the left edge still pops, see below.
+///
+/// Its ground is `WarmGround`, not `ground`: a pushed page is opaque (the root would show through
+/// the push otherwise), and a plain ground here hid the warm-up glow behind it, so on the Voice
+/// page only the root bar's slice of the glow showed, cut off at the bar's foot (owner,
+/// 2026-09-10). Painting the same ramp the bars and the veil paint makes it one surface again.
 struct SettingsSubpage: ViewModifier {
     @Environment(\.dismiss) private var dismiss
     @Environment(Chrome.self) private var chrome
 
     func body(content: Content) -> some View {
         content
+            .background {
+                // Anchored to the window's top by measurement, not by `ignoresSafeArea`: with that
+                // alone a pushed page's background sat one status-bar height low, so its copy of
+                // the ramp disagreed with the root bar's and a seam showed under the status bar.
+                GeometryReader { geo in
+                    let top = geo.frame(in: .global).minY
+                    WarmGround()
+                        .frame(width: geo.size.width, height: geo.size.height + top + 120)   // past the foot too
+                        .offset(y: -top)
+                }
+            }
             .toolbar(.hidden, for: .navigationBar)
             .onAppear { chrome.subpageDepth += 1 }
             .onDisappear { chrome.subpageDepth -= 1 }
@@ -22,7 +38,9 @@ struct SettingsSubpage: ViewModifier {
                     .padding(.leading, Spacing.margin)
                     .padding(.top, 12)
             }
-            .overlay { GeometryReader { geo in TopFade(inset: geo.safeAreaInsets.top) } }
+            // Warm like the root's bar: the page under it is the warm ground now, so a plain bar
+            // fading over it would lighten the fade zone a shade (measured, 2026-09-10).
+            .overlay { GeometryReader { geo in TopFade(inset: geo.safeAreaInsets.top, warm: true) } }
     }
 }
 

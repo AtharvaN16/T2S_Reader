@@ -73,8 +73,7 @@ struct CloudVoicesPage: View {
             }
             .padding(.horizontal, Spacing.margin)
         }
-        .background(Tokens.ground)
-        .settingsSubpage()
+        .settingsSubpage()                                                 // paints the (warm) ground
         .task { refreshKeyStatus() }
         .alert("Rendered audio will be replaced", isPresented: routeChangeAlert) {
             Button("Keep current", role: .cancel) { pendingRouteID = nil }

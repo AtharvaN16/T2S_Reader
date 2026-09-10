@@ -33,8 +33,7 @@ struct QueueRow: View {
             // row, whatever width the cover is; the grid stands its books the same way.
             if isArticle {
                 // A web page or pasted text is not a book: a sheet of paper, on the same slot.
-                SheetCover(title: summary.document.title, sourceURL: summary.document.sourceURL,
-                           addedAt: summary.document.addedAt, height: BookCover.shelfHeight)
+                SheetCover(title: summary.document.title, sourceURL: summary.document.sourceURL, height: BookCover.shelfHeight)
                     .shelved
             } else {
                 BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: BookCover.shelfHeight,

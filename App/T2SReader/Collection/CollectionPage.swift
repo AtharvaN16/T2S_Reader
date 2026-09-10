@@ -363,7 +363,7 @@ private struct ShelfArt: View {
                 Artwork(relativePath: document.coverImagePath, paths: env.paths, size: side, radius: Spacing.artworkSmall)
                     .frame(width: side, height: height, alignment: .bottomLeading)
             } else {
-                SheetCover(title: document.title, sourceURL: document.sourceURL, addedAt: document.addedAt, height: height)
+                SheetCover(title: document.title, sourceURL: document.sourceURL, height: height)
                     .shelved
             }
         } else {

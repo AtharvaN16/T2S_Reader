@@ -68,6 +68,10 @@ enum Tokens {
     }
     /// Cream lettering on a generated cover, in both themes.
     static let coverText = dynamic(light: 0xF3EDE2, dark: 0xF3EDE2)
+    /// The pasted-text sheet's paper and binding strip: a notepad's cream, so a text and a web page
+    /// (on `raised`) never read as the same object.
+    static let notePaper = dynamic(light: 0xFBF6E8, dark: 0x25221B)
+    static let noteBinding = dynamic(light: 0xEFE6CF, dark: 0x332E22)
 
     /// The read-along pair is per `HighlightTheme`: a faint sentence tint and a stronger word mark in
     /// one hue. `amber` is the accent — `accentFaint` / `accentSoft` exactly — so it stays the default

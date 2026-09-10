@@ -68,37 +68,50 @@ struct WarmGround: View {
     }
 }
 
-/// The glow: `height` points of orange from the top of whatever frame it is given, ground below
-/// that, so it fills any host and lines up with every other copy of itself as long as the host's
-/// frame begins at the top of the screen (they all do — `ignoresSafeArea` on the veil, on
-/// `TopFade`, on the Reader's header background). A fixed height, not a share of the screen, so
-/// the glow hugs the top on every phone (owner: "move the glow more to the top").
+/// The glow: `height` points from the top of whatever frame it is given, ground below that, so it
+/// fills any host and lines up with every other copy of itself as long as the host's frame begins
+/// at the top of the screen (they all do — `ignoresSafeArea` on the veil, on `TopFade`, on the
+/// Reader's header background). A fixed height, not a share of the screen, so the glow hugs the
+/// top on every phone (owner: "move the glow more to the top", then "further up").
 ///
-/// **Opaque, and dithered.** Each stop is the colour the accent and the ground *make*
-/// (`Color.mix`), and the pulse scales the mix rather than an alpha — see `WarmUpVeil` for why. A
-/// ramp this shallow is asking more of 8 bits than they have: it would hold one value for ten or
-/// twenty rows and then step, and the eye reads every step as a line (measured on a screenshot:
-/// flat runs of up to 23 px). A tile of noise a few levels wide, blended over the ramp at one cell
-/// per device pixel, scatters each step's edge into a pattern too fine to see — measured after:
-/// no run longer than 3 px.
+/// **Concave** (owner, 2026-09-10: "only the top and the sides, not the centre"): light comes in
+/// from the two top corners and along the top edge — two elliptical glows anchored at the corners
+/// that reach down the sides, and a short band across the top — so the middle of the screen
+/// clears a few points under the status bar while the sides stay lit further down. The breath
+/// takes the whole shape almost out (`pulse` bottoms near zero) and back.
+///
+/// **Opaque, and dithered.** The glows are the accent at an alpha over `ground`, composited here
+/// into one opaque layer, so a bar painting this view over the veil shows exactly the veil's
+/// pixels (see `WarmUpVeil`). A ramp this shallow is asking more of 8 bits than they have: it
+/// would hold one value for ten or twenty rows and then step, and the eye reads every step as a
+/// line (measured on a screenshot: flat runs of up to 23 px). A tile of noise a few levels wide,
+/// blended over the ramp at one cell per device pixel, scatters each step's edge into a pattern
+/// too fine to see — measured after: no run longer than 3 px.
 struct WarmRamp: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    static let height: CGFloat = 320
+    static let height: CGFloat = 240
     /// One breath, in seconds.
     private static let period: Double = 3
 
     var body: some View {
         TimelineView(.animation) { context in
             let pulse = reduceMotion || WarmUpVeil.isFaked ? 1 : Self.pulse(at: context.date)
-            // Ground the size of whatever frame this is given, and the ramp laid over its top as
-            // an overlay — which takes no part in layout. As a child it did: a fixed 320 pt inside
-            // a 90 pt bar made the stack 320 pt, the bar's frame then *centred* it, and the bar
-            // showed a paler slice from 115 pt down the ramp — the band the owner saw across the
-            // top of Home and Settings, while the Reader's taller header hid most of it.
+            // Ground the size of whatever frame this is given, and the glow laid over its top as
+            // an overlay — which takes no part in layout. As a child it did: a fixed height inside
+            // a 90 pt bar made the stack that tall, the bar's frame then *centred* it, and the bar
+            // showed a paler slice from part-way down the ramp — the band the owner saw across
+            // the top of Home and Settings, while the Reader's taller header hid most of it.
             Tokens.ground
                 .overlay(alignment: .top) {
                     ZStack {
-                        Self.gradient(pulse: pulse)
+                        Tokens.ground                                          // inside the group, so the noise has something opaque to blend with
+                        Self.edge(pulse: pulse)
+                        // Each corner's glow in its own half of the width, so it dies out exactly
+                        // at the centre line and the middle of the screen stays clear.
+                        HStack(spacing: 0) {
+                            Self.corner(.topLeading, pulse: pulse)
+                            Self.corner(.topTrailing, pulse: pulse)
+                        }
                         Self.ditherTile
                             .resizable(resizingMode: .tile)
                             .blendMode(.overlay)
@@ -110,22 +123,34 @@ struct WarmRamp: View {
         }
     }
 
-    /// 0.38 … 1 and back, once every ``period``, read from the wall clock so every copy of the
-    /// ramp on screen is at the same point of the breath.
+    /// 0.05 … 1 and back, once every ``period``, read from the wall clock so every copy of the
+    /// ramp on screen is at the same point of the breath. The low end is all but gone (owner:
+    /// "the pulse out almost completely not visible").
     private static func pulse(at date: Date) -> Double {
         let phase = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
-        return 0.38 + 0.62 * (0.5 + 0.5 * cos(2 * .pi * phase))
+        return 0.05 + 0.95 * (0.5 + 0.5 * cos(2 * .pi * phase))
     }
 
-    /// Strong at the top, held near-peak for the first 15 % so the colour reads as a lit edge
-    /// rather than an instant fade, then out to ground.
-    private static func gradient(pulse: Double) -> LinearGradient {
+    /// The lit top edge: a short band, gone within the status bar's height, so the centre of the
+    /// screen clears right under it.
+    private static func edge(pulse: Double) -> LinearGradient {
         LinearGradient(stops: [
-            .init(color: Tokens.ground.mix(with: Tokens.accent, by: 0.55 * pulse), location: 0),
-            .init(color: Tokens.ground.mix(with: Tokens.accent, by: 0.42 * pulse), location: 0.15),
-            .init(color: Tokens.ground.mix(with: Tokens.accent, by: 0.14 * pulse), location: 0.55),
-            .init(color: Tokens.ground, location: 1),
+            .init(color: Tokens.accent.opacity(0.26 * pulse), location: 0),
+            .init(color: Tokens.accent.opacity(0.08 * pulse), location: 0.1),
+            .init(color: Tokens.accent.opacity(0), location: 0.22),
         ], startPoint: .top, endPoint: .bottom)
+    }
+
+    /// One top corner's glow, in a frame half the width: an ellipse anchored at the corner that
+    /// reaches the centre line across (at nothing) and the full height down, strongest at the
+    /// corner — what carries the light down the sides and leaves the middle alone.
+    private static func corner(_ center: UnitPoint, pulse: Double) -> EllipticalGradient {
+        EllipticalGradient(stops: [
+            .init(color: Tokens.accent.opacity(0.62 * pulse), location: 0),
+            .init(color: Tokens.accent.opacity(0.30 * pulse), location: 0.3),
+            .init(color: Tokens.accent.opacity(0.08 * pulse), location: 0.65),
+            .init(color: Tokens.accent.opacity(0), location: 1),
+        ], center: center, startRadiusFraction: 0, endRadiusFraction: 1)
     }
 
     /// A tile of grey noise around the mid-point, made once. `.overlay` leaves mid-grey alone and

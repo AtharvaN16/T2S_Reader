@@ -77,8 +77,7 @@ struct StoragePage: View {
             }
             .padding(.horizontal, Spacing.margin)
         }
-        .background(Tokens.ground)
-        .settingsSubpage()
+        .settingsSubpage()                                                 // paints the (warm) ground
         .task { await storage.refresh() }
     }
 

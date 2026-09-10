@@ -34,6 +34,7 @@ struct VoiceChangeSheet: View {
             },
             showsFavorites: false
         )
+        .background(Tokens.ground)
         .overlay { GeometryReader { geo in TopFade(inset: geo.safeAreaInsets.top) } }
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)

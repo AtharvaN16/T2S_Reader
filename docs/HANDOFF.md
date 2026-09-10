@@ -1,8 +1,49 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 small hours (generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 small hours (the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — generated covers: cloth for books, a sheet for links and text
+## Resume here (2026-09-10, latest) — the glow made concave, the Voice page's cut, web ≠ text, PDF in cloth
+
+Six asks from two phone crops (the Voice screen while warming, and the text sheet). The first four
+are the warm-up glow — the cut is the Voice page's alone, the shape, height and pulse are the
+shared `WarmRamp` every host draws — the last two are the covers from the section below.
+
+- **Cut on the Voice page.** `VoiceListPage` (and the other pushed Settings pages) painted a plain
+  opaque `ground`, so under the root bar's slice of the glow the page hid the veil: the glow
+  stopped at the bar's foot. `settingsSubpage()` now paints `WarmGround` as the page's background
+  and the four pages dropped their own ground (`VoiceChangeSheet` adds a plain one for the sheet).
+  Two things measured on the way, not guessed: (1) `.background(WarmGround().ignoresSafeArea())`
+  left the page's copy of the ramp **one status-bar height low** (a column scan down the left
+  edge: 30 levels more orange than Home from the bar's foot down), so the background is anchored
+  by `geo.frame(in: .global).minY` and offset up by it instead; (2) the subpage's own `TopFade`
+  was plain and lightened the fade zone a shade under the warm root bar, so it is `warm: true`
+  too. After both, a 24 pt grid of the green channel over the top 300 pt of the Voice page matches
+  Home's within ±3 everywhere.
+- **Concave, higher, breathing almost out** (`WarmRamp`): `height` 320 → 240; the ramp is no
+  longer a top-to-bottom band but a short lit edge (gone within the status bar, 0.22 of the
+  height) plus two elliptical glows anchored at the top corners, each in its own half of the
+  width so it dies exactly at the centre line — corners strongest, light carried down the sides,
+  the middle of the screen clear right under the status bar. The colours are the accent at an
+  alpha over `ground`, composited into one opaque layer inside the dither group (the earlier
+  `mix` stops assumed one vertical gradient); the pulse floor is 0.05 (was 0.38), so the low of
+  each breath is all but invisible. `T2S_WARMUP=1` still pins the pulse at 1 for screenshots.
+- **Web page ≠ text** (`SheetCover`, supersedes the sheet description in the section below): a
+  web page is a small browser window — a `surface` chrome strip with an address pill holding a
+  globe and the host, the title, a picture block, two lines — on white; a text is a notepad —
+  cream `notePaper`, a `noteBinding` strip with a dashed perforation, a "TEXT" tag beside the text
+  glyph, the title, ruled lines. The date masthead is gone (`SheetCover` no longer takes
+  `addedAt`). `CoverMark` (mini-player) follows: globe on white / text glyph on cream.
+- **PDF in the cloth design**: `ClothCover` takes its cloth and ink (`pdfCover`/`pdfInk` for a
+  PDF) and a `badge` lettered at the foot in place of the rule — title and author on the red,
+  "PDF" below; under 64 pt the badge is the mark. The owner's "light red PDF cover" rule stands.
+
+`scripts/build-app.sh` → `** BUILD SUCCEEDED **`; nothing under `Sources/` moved (452/82 stands).
+Seen in the simulator, light and dark: the Voice page warming (no seam; `T2S_WARMUP=1
+T2S_PAGE=preferences T2S_OPEN=voices` — the page hook is needed too, `T2S_OPEN=voices` alone opens
+Home), Home warming, Home and both Collection layouts with the browser window, the notepad and the
+red cloth PDF. Not seen on a phone.
+
+## Resume here (2026-09-10) — generated covers: cloth for books, a sheet for links and text
 
 The owner's two asks from a phone crop of Home: a better placeholder for URLs and pasted text that
 aligns with the books, and a better placeholder cover for books with no cover. Commit 33d771f.

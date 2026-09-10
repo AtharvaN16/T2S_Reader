@@ -19,7 +19,11 @@ struct QueuePage: View {
                 header
                     .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
                 if rows.isEmpty {
-                    // Header's Import pill is the only control; nothing else to show here.
+                    EmptyShelf(title: "Nothing playing yet",
+                               line: "Import a book, PDF or article and it plays right away.",
+                               button: "Import") { showAdd = true }
+                        .padding(.top, Spacing.section)
+                        .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
                 } else {
                     SectionHeader(title: "Continue Listening")
                         .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))

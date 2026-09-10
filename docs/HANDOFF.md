@@ -1,8 +1,52 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 evening (an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 evening (the empty shelf on Home and the Collection — three covers fanned, a raised button; before that an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — an import stops to ask, and shows up at once
+## Resume here (2026-09-10, latest) — the empty shelf: three covers fanned, one raised button
+
+The owner, with Klarna's "Nothing saved" screen and a blue "Join school" key as references: "create
+empty states on home and collections page similar to the reference, use 3 book covers from online
+(popular, beautiful covers), stagger them with a nice animation and show a CTA below. Use a
+skeuomorphic button for the CTA." And: "don't plan, directly implement."
+
+- **`EmptyShelf`** (`Design/EmptyShelf.swift`): the one empty state Home (`rows.isEmpty`) and the
+  Collection (`all.isEmpty`) share — a fan of three real covers over a pool of light, a headline
+  in `playerTitle`, one line in `rowTitle`/`ink2`, and the button. Home says "Nothing playing yet /
+  Import a book, PDF or article and it plays right away."; the Collection "Your shelf is empty /
+  Books, PDFs, links and text you import live here." Both buttons open the Import cover. The
+  header's Import pill / `+` stay: the owner asked for a CTA below, not for the header to change.
+- **The fan** (`CoverFan`): The Midnight Library and The Song of Achilles behind at ±13°, 136 pt,
+  70 pt out and 16 pt down; Circe in front, upright, 158 pt. Each is a `BookCover` — hinge, sheen,
+  shadow, the proportion rule — through a new `BookCover.asset` (a bundled image name; wins over
+  `relativePath`, keys the backlight cache). The covers are Open Library's ISBN scans
+  (`Assets.xcassets/EmptyCovers/*`, ~330 × 500, 190 KB for the three), chosen from fifteen for
+  clean scans and a gold / navy / teal trio. The pool is a `Circle` of `accentSoft → accentFaint →
+  clear` squashed to 0.68 — a plain `RadialGradient` in a rectangular frame showed its frame as a
+  faint hard-edged patch at the first look.
+- **The entrance**: each book starts 44 pt low, at 0.9, a third of its tilt, clear, and springs
+  (response 0.68, damping 0.74) to its place — the two behind first (0 s, 0.15 s), the hero last
+  (0.32 s). After 1.3 s the hero breathes: ±5 pt, 2.8 s each way, forever. Reduce Motion: nothing
+  moves, the three fade in together in 0.35 s and there is no breath. Verified with a burst of
+  screenshots on a warm launch: one frame with the first book alone mid-rise, the next with all
+  three landing.
+- **`RaisedButton`** (`Design/RaisedButton.swift`): the skeuomorphic key, in the accent. A capsule
+  filled `accent`, a gloss-to-shade gradient over it (light from above), a bevel hairline bright on
+  the top rim and dark on the bottom, and two shadows — a tight contact one in `shade` and a wide
+  one in the accent's own hue (radius 18, y 10). Pressed: a shade wash, the shadows tighten, 0.965
+  scale, `.snappy(0.18)`. `Pill(.accent)` is still the flat one-word header action; this is for an
+  empty page's one "do this first".
+
+`scripts/build-app.sh` → `** BUILD SUCCEEDED **`. Seen in the simulator (iPhone 16 Pro): Home and
+the Collection, light and dark, and the burst. Root `swift test` not run: nothing under `Sources/`
+changed in this round. Not seen on a phone. Owed: the owner's look at the fan and the key there —
+whether 500 px covers hold up at 158 pt on a 3× screen, and whether the accent shadow under the
+key is too much on the OLED black.
+
+A second session was rebasing `dev` onto PR #16 (92fd0ac) with its import-done commit while this
+was built in the same folder; it briefly swept these files into that commit with `git add -A`,
+then took them back out. This round was committed on top once that rebase had finished.
+
+## Resume here (2026-09-10, evening) — an import stops to ask, and shows up at once
 
 Two reports from the owner: "when I import a file, weblink, text, don't play it immediately — give
 me the option to play or exit", and "I imported a doc, but could not see it in collections or

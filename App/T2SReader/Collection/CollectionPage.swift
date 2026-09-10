@@ -83,8 +83,10 @@ struct CollectionPage: View {
                     }
                 }
                 if all.isEmpty {
-                    Text("Books, PDFs, links and text you import appear here; Home keeps the ones you played last.")
-                        .typeRole(.meta).foregroundStyle(Tokens.ink2)
+                    EmptyShelf(title: "Your shelf is empty",
+                               line: "Books, PDFs, links and text you import live here.",
+                               button: "Import") { showAdd = true }
+                        .padding(.top, Spacing.grid)
                 } else if books.isEmpty {
                     Text(emptyText).typeRole(.meta).foregroundStyle(Tokens.ink2)
                 } else if layout == .grid {

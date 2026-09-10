@@ -259,6 +259,9 @@ struct BookCover: View {
     /// Degrees from `MotionTilt`: the book turns a little with the phone so it reads as an object,
     /// not a picture. Only the book sheet's hero passes one.
     var tilt: CGPoint = .zero
+    /// A cover from the app bundle in place of one from the library: the empty shelf's three
+    /// (`EmptyShelf`). Wins over `relativePath`; the same proportion rule applies.
+    var asset: String? = nil
 
     /// The mockup's own proportions (1461 × 2192); a real cover uses its own, within the book range.
     /// Internal, not private: the book sheet's hero sizes from it.
@@ -282,9 +285,16 @@ struct BookCover: View {
     }
 
     private var image: UIImage? {
-        guard !isPDF, let relativePath,
-              let image = Artwork.image(at: paths.url(forRelativePath: relativePath).path),
-              image.size.height > 0, Self.coverRatios.contains(image.size.width / image.size.height)
+        let loaded: UIImage?
+        if let asset {
+            loaded = UIImage(named: asset)
+        } else if !isPDF, let relativePath {
+            loaded = Artwork.image(at: paths.url(forRelativePath: relativePath).path)
+        } else {
+            loaded = nil
+        }
+        guard let image = loaded, image.size.height > 0,
+              Self.coverRatios.contains(image.size.width / image.size.height)
         else { return nil }
         return image
     }
@@ -321,7 +331,7 @@ struct BookCover: View {
     /// lifted so a dark or greyish cover still glows; the PDF book's red; the placeholder's cloth,
     /// lifted the same way (`Tokens.coverGlow`).
     var backlight: Color {
-        if let image, let average = Self.averageColor(of: image, key: relativePath ?? "") { return average }
+        if let image, let average = Self.averageColor(of: image, key: asset ?? relativePath ?? "") { return average }
         return isPDF ? Tokens.pdfCover : Tokens.coverGlow(CoverStyle.paletteIndex(for: title, count: Tokens.coverCount))
     }
 

@@ -131,13 +131,16 @@ struct WarmRamp: View {
         return 0.05 + 0.95 * (0.5 + 0.5 * cos(2 * .pi * phase))
     }
 
-    /// The lit top edge: a short band, gone within the status bar's height, so the centre of the
-    /// screen clears right under it.
+    /// The lit top edge: a band that holds through the status bar and is gone a little under it,
+    /// so the centre of the screen clears just below the bar while the sides carry on.
     private static func edge(pulse: Double) -> LinearGradient {
+        // Strong enough across the whole top that the corners read as the ends of one lit edge,
+        // not as two lamps (owner, 2026-09-10: "too side heavy").
         LinearGradient(stops: [
-            .init(color: Tokens.accent.opacity(0.26 * pulse), location: 0),
-            .init(color: Tokens.accent.opacity(0.08 * pulse), location: 0.1),
-            .init(color: Tokens.accent.opacity(0), location: 0.22),
+            .init(color: Tokens.accent.opacity(0.46 * pulse), location: 0),
+            .init(color: Tokens.accent.opacity(0.22 * pulse), location: 0.12),
+            .init(color: Tokens.accent.opacity(0.06 * pulse), location: 0.24),
+            .init(color: Tokens.accent.opacity(0), location: 0.34),
         ], startPoint: .top, endPoint: .bottom)
     }
 

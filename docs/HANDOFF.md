@@ -20,8 +20,8 @@ shared `WarmRamp` every host draws — the last two are the covers from the sect
   too. After both, a 24 pt grid of the green channel over the top 300 pt of the Voice page matches
   Home's within ±3 everywhere.
 - **Concave, higher, breathing almost out** (`WarmRamp`): `height` 320 → 240; the ramp is no
-  longer a top-to-bottom band but a short lit edge (gone within the status bar, 0.22 of the
-  height) plus two elliptical glows anchored at the top corners, each in its own half of the
+  longer a top-to-bottom band but a lit edge (0.46 alpha at the top, gone by 0.34 of the height —
+  raised from a first cut the owner called "too side heavy") plus two elliptical glows anchored at the top corners, each in its own half of the
   width so it dies exactly at the centre line — corners strongest, light carried down the sides,
   the middle of the screen clear right under the status bar. The colours are the accent at an
   alpha over `ground`, composited into one opaque layer inside the dither group (the earlier

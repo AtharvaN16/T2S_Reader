@@ -47,8 +47,9 @@ actor GatedKokoroCoreMLEngine: SynthesisEngine {
         self.placement = placement
     }
 
-    /// Waits for the background set, where the options ask for one (`awaitBackgroundSet`).
-    func awaitBackgroundSet() async throws {
+    /// Waits for the background set, where the options ask for one, and says whether the engine can
+    /// render in the background now (`KokoroCoreMLEngine.awaitBackgroundSet`).
+    func awaitBackgroundSet() async throws -> Bool {
         await try engine().awaitBackgroundSet()
     }
 

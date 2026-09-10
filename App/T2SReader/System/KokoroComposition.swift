@@ -75,6 +75,9 @@ final class KokoroStatusModel {
     /// what a background Prepare launch checks before it touches the engine. True in the everyday
     /// build, which has no plans to build.
     private(set) var warmedInstall: Bool
+    /// True while the engine's background set is still compiling on a phone that needs one: the
+    /// last part of the one-time setup, which only runs in front, so the screen stays awake for it.
+    private(set) var isBuildingBackgroundSet = false
 
     init(_ status: KokoroStatus, warmedInstall: Bool = true) {
         self.status = status
@@ -100,6 +103,10 @@ final class KokoroStatusModel {
 
     func updateInstall(_ progress: KokoroInstallProgress) {
         installProgress = progress
+    }
+
+    func updateBackgroundSet(building: Bool) {
+        isBuildingBackgroundSet = building
     }
 
     func markWarmedInstall() {
@@ -412,9 +419,11 @@ struct KokoroComposition {
                 // "Warmed" is what a background Prepare launch checks before it renders: on a phone
                 // whose main set is on the GPU that means the CPU set behind it, which follows the
                 // main load and may take minutes — so the record waits for it, the status does not.
+                status.updateBackgroundSet(building: true)
                 Task {
-                    try? await engine.awaitBackgroundSet()
-                    markWarmed()
+                    let canRenderBehind = (try? await engine.awaitBackgroundSet()) ?? false
+                    await MainActor.run { status.updateBackgroundSet(building: false) }
+                    if canRenderBehind { markWarmed() }
                 }
                 return
             } catch is CancellationError {

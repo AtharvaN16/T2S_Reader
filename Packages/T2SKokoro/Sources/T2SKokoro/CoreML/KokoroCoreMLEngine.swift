@@ -310,9 +310,12 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         renderPlacement = placement
     }
 
-    /// Waits for the background set, if the options ask for one and its load has begun.
-    public func awaitBackgroundSet() async {
+    /// Waits for the background set, if the options ask for one and its load has begun, and says
+    /// whether the engine can now render in the background: the set is there, or none was asked for.
+    @discardableResult
+    public func awaitBackgroundSet() async -> Bool {
         await backgroundLoadTask?.value
+        return options.backgroundComputeUnits == nil || backgroundLoaded != nil
     }
 
     /// Whether the background set is loaded.

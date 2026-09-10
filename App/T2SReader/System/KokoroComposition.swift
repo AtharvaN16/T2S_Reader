@@ -69,6 +69,15 @@ final class KokoroStatusModel {
     private(set) var warmUpStages: (loaded: Int, total: Int)?
     private(set) var warmUpStarted: Date?
     private(set) var expectedWarmUpSeconds: Double?
+    /// Set the moment a warm-up ends, cleared ``readyBeat`` seconds later: the last beat of the
+    /// glow, which turns green before it goes (owner, 2026-09-10). One date in one model, so every
+    /// copy of `WarmRamp` on screen — the veil, each ground bar — turns green on the same frame.
+    private(set) var readyAt: Date?
+    /// How long the green is held before the glow fades. Short: it is a confirmation, not a step.
+    static let readyBeat: Double = 0.55
+    private var readyBeatTask: Task<Void, Never>?
+    /// `T2S_WARMUP=green` holds the beat instead of ending it, so it can be photographed.
+    private static let holdsReadyBeat = ProcessInfo.processInfo.environment["T2S_WARMUP"] == "green"
     /// The install as it stands, while `status` is `.installing`.
     private(set) var installProgress: KokoroInstallProgress?
     /// Whether a foreground warm-up has built this install's compute plans (`KokoroWarmUpRecord`):
@@ -82,6 +91,7 @@ final class KokoroStatusModel {
     }
 
     func update(_ status: KokoroStatus) {
+        let wasWarming = self.status.isWarming
         self.status = status
         if case .preparing = status {
             warmUpStarted = Date()
@@ -91,7 +101,22 @@ final class KokoroStatusModel {
             warmUpStarted = nil
             warmUpStages = nil
         }
+        if wasWarming, !status.isWarming { beginReadyBeat() }
         if case .installing = status {} else { installProgress = nil }
+    }
+
+    /// The green beat: `readyAt` now, cleared once it has been held, which is what takes the glow
+    /// off the screen. Cancelling any beat already running keeps a second warm-up in the same
+    /// launch (an install, then the stages) from cutting the first one's beat short.
+    private func beginReadyBeat() {
+        readyBeatTask?.cancel()
+        readyAt = Date()
+        guard !Self.holdsReadyBeat else { return }
+        readyBeatTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(Self.readyBeat))
+            guard !Task.isCancelled else { return }
+            self?.readyAt = nil
+        }
     }
 
     func updateWarmUp(loaded: Int, total: Int) {
@@ -282,7 +307,7 @@ struct KokoroComposition {
         // `T2S_WARMUP=1` (screenshots): the everyday build has no warm-up, so this stands in for
         // one — `preparing` for the launch, with a remembered 12 s and stages ticking by.
         let status = KokoroStatusModel(.notLinked)
-        if ProcessInfo.processInfo.environment["T2S_WARMUP"] != nil {
+        if let fake = ProcessInfo.processInfo.environment["T2S_WARMUP"] {
             status.recordWarmUp(seconds: 12)
             status.update(.preparing)
             Task { @MainActor in
@@ -290,6 +315,9 @@ struct KokoroComposition {
                     try? await Task.sleep(for: .seconds(1.5))
                     status.updateWarmUp(loaded: loaded, total: 8)
                 }
+                // `T2S_WARMUP=1` leaves the glow warming for as long as the screenshot needs;
+                // `ready` runs the green beat through once, `green` stops on it and holds.
+                if fake != "1" { status.update(.available(isDebugOverride: true)) }
             }
         }
         return KokoroComposition(engines: [], voiceRouting: KokoroVoiceRouting.unavailable,

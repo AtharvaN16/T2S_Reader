@@ -5,9 +5,16 @@ import SwiftUI
 import UIKit
 
 /// The one-time voice warm-up, shown wherever the reader is (owner, 2026-09-10, Tabby's launch
-/// gradient as the reference): an orange glow down from the very top of the screen that breathes
+/// gradient as the reference): a blue glow down from the very top of the screen that breathes
 /// until the stages are loaded, and one short line with how long it usually takes on this phone
 /// over a hairline of progress (`WarmUpLine`).
+///
+/// **It ends on green.** The last half-second belongs to `Tokens.glowReady` (owner, 2026-09-10:
+/// "just as the model is ready, change the glow to green before ending the animation"): the moment
+/// the stages are in, the light stops breathing, turns green, holds
+/// (`KokoroStatusModel.readyBeat`), and only then fades. The beat is one date on the status model
+/// (`readyAt`), so the veil and every ground bar turn on the same frame; the model clearing it is
+/// what takes the glow off the screen.
 ///
 /// **One surface.** The glow is `WarmRamp`, and everything that shows it draws that same view:
 /// this veil at the back of a host's stack, under the text; and every ground bar across the top
@@ -22,7 +29,7 @@ import UIKit
 /// the same reason), and `ReaderTextView` draws on a clear background.
 ///
 /// **It goes when sound does.** Warming is only worth saying while nothing is speaking; a book
-/// already playing through a fallback voice with an orange pulse over it read as an alarm rather
+/// already playing through a fallback voice with a pulse over it read as an alarm rather
 /// than a wait (owner). So the glow hides the moment audio is actually flowing, even if the Kokoro
 /// stages are still loading behind it.
 struct WarmUpVeil: View {
@@ -42,10 +49,14 @@ struct WarmUpVeil: View {
     /// Warming, and nothing audible yet. `isCatchingUp` is the stall before the first sound, so a
     /// tapped Play that is still waiting keeps the glow; a book actually speaking loses it.
     static func isShowing(_ env: AppEnvironment) -> Bool {
-        guard env.kokoroStatus.status.isWarming else { return false }
+        guard env.kokoroStatus.status.isWarming || env.kokoroStatus.readyAt != nil else { return false }
         if isFaked { return true }
         return !(env.player.isPlaying && !env.player.isCatchingUp)
     }
+
+    /// Whether the glow is on its last beat — ready, and green. The same gate as `isShowing`, so a
+    /// warm-up that was never on screen (a book already speaking) does not flash green at the end.
+    static func isReady(_ env: AppEnvironment) -> Bool { env.kokoroStatus.readyAt != nil }
 
     /// `T2S_WARMUP=1` fakes a warm-up in the everyday build (`KokoroComposition`). A faked one has
     /// to show even while the fixture book plays, or there is nothing to screenshot, and it holds
@@ -54,7 +65,7 @@ struct WarmUpVeil: View {
 }
 
 /// What a ground bar paints: `ground`, or the ramp while the warm-up shows, crossfading between
-/// them so a bar does not snap from orange to grey when the voice comes ready.
+/// them so a bar does not snap from a lit edge to grey when the voice comes ready.
 struct WarmGround: View {
     @Environment(AppEnvironment.self) private var env
 
@@ -83,7 +94,7 @@ struct WarmGround: View {
 /// middle of the screen clears under the status bar and the light stays at the top. The breath
 /// takes the whole shape almost out (`pulse` bottoms near zero) and back.
 ///
-/// **Opaque, and dithered.** The glows are the accent at an alpha over `ground`, composited here
+/// **Opaque, and dithered.** The glows are `Tokens.glow` at an alpha over `ground`, composited here
 /// into one opaque layer, so a bar painting this view over the veil shows exactly the veil's
 /// pixels (see `WarmUpVeil`). A ramp this shallow is asking more of 8 bits than they have: it
 /// would hold one value for ten or twenty rows and then step, and the eye reads every step as a
@@ -91,6 +102,7 @@ struct WarmGround: View {
 /// blended over the ramp at one cell per device pixel, scatters each step's edge into a pattern
 /// too fine to see — measured after: no run longer than 3 px.
 struct WarmRamp: View {
+    @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     static let height: CGFloat = 240
     /// One breath, in seconds.
@@ -98,7 +110,10 @@ struct WarmRamp: View {
 
     var body: some View {
         TimelineView(.animation) { context in
-            let pulse = reduceMotion || WarmUpVeil.isFaked ? 1 : Self.pulse(at: context.date)
+            // Ready: the breath stops at full and the light turns green for the last beat.
+            let ready = WarmUpVeil.isReady(env)
+            let pulse = ready || reduceMotion || WarmUpVeil.isFaked ? 1 : Self.pulse(at: context.date)
+            let light = ready ? Tokens.glowReady : Tokens.glow
             // Ground the size of whatever frame this is given, and the glow laid over its top as
             // an overlay — which takes no part in layout. As a child it did: a fixed height inside
             // a 90 pt bar made the stack that tall, the bar's frame then *centred* it, and the bar
@@ -108,8 +123,8 @@ struct WarmRamp: View {
                 .overlay(alignment: .top) {
                     ZStack {
                         Tokens.ground                                          // inside the group, so the noise has something opaque to blend with
-                        Self.wash(pulse: pulse)
-                        Self.bezel(pulse: pulse)
+                        Self.wash(pulse: pulse, light: light)
+                        Self.bezel(pulse: pulse, light: light)
                         Self.ditherTile
                             .resizable(resizingMode: .tile)
                             .blendMode(.overlay)
@@ -117,6 +132,7 @@ struct WarmRamp: View {
                     }
                     .compositingGroup()                                    // the noise blends with the ramp, not the page
                     .frame(height: Self.height)
+                    .animation(.easeInOut(duration: 0.28), value: ready)    // blue into green, not a cut
                 }
         }
     }
@@ -139,11 +155,11 @@ struct WarmRamp: View {
     /// fifth of the height, so the rim does not end in a hard line against the page. Kept low
     /// (owner, 2026-09-10: "reduce intensity so that the glow is mostly confined to the bezel
     /// edges") — a first cut at 0.26 reaching a third of the way down lit the whole top of the page.
-    private static func wash(pulse: Double) -> LinearGradient {
+    private static func wash(pulse: Double, light: Color) -> LinearGradient {
         LinearGradient(stops: [
-            .init(color: Tokens.accent.opacity(0.08 * pulse), location: 0),
-            .init(color: Tokens.accent.opacity(0.03 * pulse), location: 0.10),
-            .init(color: Tokens.accent.opacity(0), location: 0.20),
+            .init(color: light.opacity(0.08 * pulse), location: 0),
+            .init(color: light.opacity(0.03 * pulse), location: 0.10),
+            .init(color: light.opacity(0), location: 0.20),
         ], startPoint: .top, endPoint: .bottom)
     }
 
@@ -153,13 +169,13 @@ struct WarmRamp: View {
     /// stroke is the same the whole way round, so the top and the corners are one lit edge. A
     /// vertical mask lets the sides fade from a third of the height and be gone before the ramp
     /// ends, so nothing of the halo reaches the ramp's foot.
-    private static func bezel(pulse: Double) -> some View {
+    private static func bezel(pulse: Double, light: Color) -> some View {
         let shape = RoundedRectangle(cornerRadius: bezelRadius, style: .continuous)
         return ZStack {
             // The halo reaches about 30 pt in (half its width plus the blur); wider and softer,
             // it was a glow over the page rather than on its edge (owner).
-            shape.stroke(Tokens.accent.opacity(0.38 * pulse), lineWidth: 36).blur(radius: 14)
-            shape.stroke(Tokens.accent.opacity(0.78 * pulse), lineWidth: 10).blur(radius: 4)
+            shape.stroke(light.opacity(0.38 * pulse), lineWidth: 36).blur(radius: 14)
+            shape.stroke(light.opacity(0.78 * pulse), lineWidth: 10).blur(radius: 4)
         }
         .frame(height: height * 3)                                             // the bottom edge is outside the ramp
         .frame(height: height, alignment: .top)
@@ -228,12 +244,16 @@ struct WarmUpLine: View {
     }
 
     private func message(_ status: KokoroStatusModel, now: Date) -> some View {
+        // The green beat: the wait is over, so the line says so and the bar fills, rather than
+        // holding the last estimate — which reads as a countdown that stopped short.
+        let ready = WarmUpVeil.isReady(env)
         let elapsed = status.warmUpStarted.map { now.timeIntervalSince($0) } ?? 0
         let byStages = status.warmUpStages.map { Double($0.loaded) / Double(max(1, $0.total)) } ?? 0
         let byClock = status.expectedWarmUpSeconds.map { min(0.92, elapsed / max(1, $0)) } ?? 0
-        let progress = status.status == .installing ? (status.installProgress?.fraction ?? 0) : max(byStages, byClock)
+        let warming = status.status == .installing ? (status.installProgress?.fraction ?? 0) : max(byStages, byClock)
+        let progress = ready ? 1 : warming
         return VStack(spacing: 7) {
-            Text(line(status, elapsed: elapsed))
+            Text(ready ? "Voice ready" : line(status, elapsed: elapsed))
                 .typeRole(.caption)
                 .foregroundStyle(Tokens.ink)
             Capsule().fill(Tokens.ink3.opacity(0.6))

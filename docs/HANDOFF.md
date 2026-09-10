@@ -1,8 +1,48 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 evening (the empty shelf on Home and the Collection — three covers fanned, a raised button; before that an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 evening (the glow in blue and green when the voice lands, the fan re-cast on 2026 books; before that the empty shelf on Home and the Collection — three covers fanned, a raised button; before that an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — the empty shelf: three covers fanned, one raised button
+## Resume here (2026-09-10, latest) — the glow in blue, green when the voice lands, and the fan re-cast
+
+Three words from the owner, with the blue "Join school" key as the palette: "make the warm-up and
+the skeuomorphic button glow blue, see the palette from the reference, also account for dark mode";
+"in the warm-up glow just as the model is ready, change the glow to green before ending the
+animation"; and "use our book mockup for the covers, don't include 2 books from the same author,
+also include 2026 popular books".
+
+- **The glow is blue** (`Tokens.glow` 0x2F5BFF / dark 0x5F84FF, with `glowSoft` and `glowFaint`).
+  Not the accent, and it says so in the token: the accent marks the app's own things — progress,
+  the read-along, the one primary pill — and the glow is a state of the engine. `WarmRamp`'s wash
+  and both bezel strokes take the colour as an argument now rather than naming `Tokens.accent`.
+  Dark mode gets a lighter blue: the light one on near-black read as a dim navy. The warm-up's two
+  other marks followed it — `WarmingDot` and the Reader's two "preparing the voice…" lines.
+- **It ends on green** (`Tokens.glowReady`, `KokoroStatusModel.readyAt` / `readyBeat` = 0.55 s).
+  When a warm-up ends, the model stamps `readyAt`, and a task clears it half a second later; that
+  clearing is what takes the glow off the screen. One date on one model, so the veil and every
+  ground bar turn on the same frame — the same rule the pulse follows. On the beat the breath stops
+  at full, the light crossfades to green over 0.28 s, and `WarmUpLine` says "Voice ready" with its
+  bar filled instead of holding the estimate it had reached.
+- **The fan re-cast**: Alex Aster's *Starside* and Kate Quinn's *The Astral Library* — both 2026,
+  both popular (Open Library's 2026 reading-log ranking, picked from sixteen candidates on a
+  contact sheet) — behind Madeline Miller's *Circe*. Three authors, one each: the first cut had
+  *Circe* and *The Song of Achilles*, both Miller's. Each book now carries a `BookCover.tilt`, the
+  3D turn the book sheet's hero uses, so the fan reads as three objects standing at angles rather
+  than three pictures laid flat. They stand 82 pt out, not 70: at 70 the hero cut both their titles
+  in half.
+- **The key is the reference's blue** (`Tokens.keyTop` → `keyBottom`, royal blue falling to indigo),
+  its wide shadow in `Tokens.glow`. The empty shelf's pool of light went blue with it, so the page's
+  one colour is the same as the warm-up's.
+- **`T2S_WARMUP` takes a word now** (screenshots): `1` holds the warm-up as before, `ready` runs the
+  green beat through once and ends, `green` stops on the beat and holds it.
+
+`scripts/build-app.sh` → `** BUILD SUCCEEDED **`. `swift test` not run: nothing under `Sources/`
+changed. Seen in the simulator (iPhone 16 Pro), light and dark: Home, the Collection, the blue
+warm-up, the green beat, and a burst through the real transition — blue, "Voice ready", green,
+gone. Measured on the top 120 rows: warming R137 G149 B194, the beat R129 G169 B146, and after it
+R193 G193 B192 — the plain ground's own value to the digit, so the glow leaves nothing behind.
+Not seen on a phone.
+
+## Resume here (2026-09-10, evening) — the empty shelf: three covers fanned, one raised button
 
 The owner, with Klarna's "Nothing saved" screen and a blue "Join school" key as references: "create
 empty states on home and collections page similar to the reference, use 3 book covers from online

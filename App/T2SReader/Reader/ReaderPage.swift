@@ -51,7 +51,7 @@ struct ReaderPage: View {
             } else if env.kokoroStatus.status.isWarming {
                 VStack(spacing: 10) {
                     WarmingDot()
-                    Text("Preparing the voice…").typeRole(.meta).foregroundStyle(Tokens.accent)
+                    Text("Preparing the voice…").typeRole(.meta).foregroundStyle(Tokens.glow)
                 }
             } else {
                 ProgressView().tint(Tokens.ink)
@@ -196,7 +196,7 @@ struct ReaderPage: View {
                     Text(player.elapsedText).monospacedDigit()
                     Spacer()
                     if env.isWarmingUp {
-                        Text("preparing the voice…").foregroundStyle(Tokens.accent)
+                        Text("preparing the voice…").foregroundStyle(Tokens.glow)
                     } else if player.isCatchingUp {
                         Text("catching up…")
                     }

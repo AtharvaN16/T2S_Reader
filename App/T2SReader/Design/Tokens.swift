@@ -18,6 +18,23 @@ enum Tokens {
     static let accentFaint = dynamic(light: 0xFF7A1A, dark: 0xFF8C3A, lightAlpha: 0.08, darkAlpha: 0.12)
     /// text on `accent`
     static let onAccent = dynamic(light: 0xFFFFFF, dark: 0xFFFFFF)
+    /// The light of the voice warm-up (`WarmRamp`) and of the raised key (`RaisedButton`): blue,
+    /// on the owner's word (2026-09-10, a blue CTA as the reference). Not `accent` — the accent is
+    /// what the app marks *its own* things with (progress, the read-along, the one primary pill),
+    /// and the glow is a state of the engine, not a mark on the page. Lighter in dark mode: the
+    /// same blue on near-black reads as a dim navy.
+    static let glow = dynamic(light: 0x2F5BFF, dark: 0x5F84FF)
+    static let glowSoft = dynamic(light: 0x2F5BFF, dark: 0x5F84FF, lightAlpha: 0.18, darkAlpha: 0.24)
+    static let glowFaint = dynamic(light: 0x2F5BFF, dark: 0x5F84FF, lightAlpha: 0.08, darkAlpha: 0.14)
+    /// The last beat of the warm-up, when the voice is ready (owner, 2026-09-10: "just as the model
+    /// is ready, change the glow to green before ending the animation"): the same light, green — a
+    /// deeper green than `positive`, which is a tick on a row, not a light on the screen's edge.
+    static let glowReady = dynamic(light: 0x12A150, dark: 0x37D97C)
+    /// The raised key's face, lit from above: the reference's gradient, royal blue at the top rim
+    /// falling to indigo at the foot. One object in both themes, like a book's cloth — a key does
+    /// not change colour when the room does — but a touch lighter on black so its bevel still reads.
+    static let keyTop = dynamic(light: 0x5477FF, dark: 0x5F81FF)
+    static let keyBottom = dynamic(light: 0x2A1FE0, dark: 0x3226E8)
     static let positive = dynamic(light: 0x22A559, dark: 0x34C070)
     static let destructive = dynamic(light: 0xE5453B, dark: 0xFF5A50)
     /// The voice picker's avatar discs: pink for a female voice, blue for a male one. Categorical,

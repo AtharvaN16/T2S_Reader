@@ -653,7 +653,8 @@ struct CircularProgress: View {
     }
 }
 
-/// A pulsing accent dot for the one-time voice warm-up — visually distinct from the routine
+/// A pulsing dot for the one-time voice warm-up, in the warm-up's own blue (`Tokens.glow`, not
+/// the accent — see the token) — visually distinct from the routine
 /// buffering spinner (`ProgressView`) so a reader can tell "this is the long one-time wait" from
 /// "this resolves in a second or two." Respects Reduce Motion with a static dot instead of a loop.
 struct WarmingDot: View {
@@ -662,7 +663,7 @@ struct WarmingDot: View {
 
     var body: some View {
         Circle()
-            .fill(Tokens.accent)
+            .fill(Tokens.glow)
             .frame(width: 10, height: 10)
             .opacity(bright ? 1 : 0.35)
             // Conditioned on `reduceMotion` here, not inside `onAppear`, so a live toggle of the

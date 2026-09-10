@@ -39,6 +39,14 @@ actor GatedKokoroCoreMLEngine: SynthesisEngine {
         try await engine().preload()
     }
 
+    /// `preload`, reporting `(loaded, total)` stages as they come, for the warm-up's veil.
+    func preload(onProgress: @escaping @Sendable (Int, Int) -> Void) async throws {
+        let engine = try engine()
+        await engine.setLoadProgress(onProgress)
+        defer { Task { await engine.setLoadProgress(nil) } }
+        try await engine.preload()
+    }
+
     func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
         try await engine().synthesize(request)
     }

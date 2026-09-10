@@ -42,6 +42,11 @@ final class KokoroStatusModel {
     /// build with no weights staged). Two "not available" lines would only invite a reader to look
     /// for a second set of voices that is not there; the full reason is in the log either way.
     private(set) var mlxLine: String?
+    /// The warm-up as the veil shows it: stages loaded over the total once the load has begun,
+    /// when it started, and how long the last one on this phone took (nil before the first).
+    private(set) var warmUpStages: (loaded: Int, total: Int)?
+    private(set) var warmUpStarted: Date?
+    private(set) var expectedWarmUpSeconds: Double?
 
     init(_ status: KokoroStatus) {
         self.status = status
@@ -49,6 +54,35 @@ final class KokoroStatusModel {
 
     func update(_ status: KokoroStatus) {
         self.status = status
+        if case .preparing = status {
+            warmUpStarted = Date()
+            warmUpStages = nil
+            expectedWarmUpSeconds = Self.storedWarmUpSeconds
+        } else {
+            warmUpStarted = nil
+            warmUpStages = nil
+        }
+    }
+
+    func updateWarmUp(loaded: Int, total: Int) {
+        warmUpStages = (loaded, total)
+    }
+
+    /// Remembered so the next launch's veil can say "about 6 s" instead of guessing. A first
+    /// launch after install builds compute plans (minutes on an A13) and would mislead every
+    /// later launch; the veil already knows a first launch by the absence of a stored number, so
+    /// a duration that long is kept only if there was none before.
+    func recordWarmUp(seconds: Double) {
+        let previous = Self.storedWarmUpSeconds
+        if let previous, seconds > previous * 4 { return }                   // a one-off stall, not the new normal
+        UserDefaults.standard.set(seconds, forKey: Self.warmUpKey)
+        expectedWarmUpSeconds = seconds
+    }
+
+    private static let warmUpKey = "kokoro.lastWarmUpSeconds"
+    private static var storedWarmUpSeconds: Double? {
+        let value = UserDefaults.standard.double(forKey: warmUpKey)
+        return value > 0 ? value : nil
     }
 
     func updateMLXLine(_ line: String?) {
@@ -158,8 +192,21 @@ struct KokoroComposition {
         )
         #else
         log.notice("Kokoro engine not linked in this build")
+        // `T2S_WARMUP=1` (screenshots): the everyday build has no warm-up, so this stands in for
+        // one — `preparing` for the launch, with a remembered 12 s and stages ticking by.
+        let status = KokoroStatusModel(.notLinked)
+        if ProcessInfo.processInfo.environment["T2S_WARMUP"] != nil {
+            status.recordWarmUp(seconds: 12)
+            status.update(.preparing)
+            Task { @MainActor in
+                for loaded in 1...8 {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    status.updateWarmUp(loaded: loaded, total: 8)
+                }
+            }
+        }
         return KokoroComposition(engines: [], voiceRouting: KokoroVoiceRouting.unavailable,
-                                 status: KokoroStatusModel(.notLinked), catalogEngines: { [] })
+                                 status: status, catalogEngines: { [] })
         #endif
     }
 
@@ -202,11 +249,14 @@ struct KokoroComposition {
         let started = clock.now
         for attempt in 1...2 {
             do {
-                try await engine.preload()
+                try await engine.preload { loaded, total in
+                    Task { @MainActor in status.updateWarmUp(loaded: loaded, total: total) }
+                }
                 let elapsed = clock.now - started
                 let seconds = Double(elapsed.components.seconds)
                     + Double(elapsed.components.attoseconds) * 1e-18
                 log.notice("Kokoro Core ML warm-up finished in \(seconds, format: .fixed(precision: 1), privacy: .public) s")
+                status.recordWarmUp(seconds: seconds)
                 // Never an override: the Core ML decision is measured, not a development escape hatch.
                 status.update(.available(isDebugOverride: false))
                 return

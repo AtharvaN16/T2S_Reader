@@ -31,7 +31,8 @@ struct VoiceChangeSheet: View {
                 let applied = await env.voiceChange.apply(voiceID: voiceID, to: summary)
                 if applied { dismiss() }
                 return applied
-            }
+            },
+            showsFavorites: false
         )
         .overlay { GeometryReader { geo in TopFade(inset: geo.safeAreaInsets.top) } }
         .presentationDetents([.large])

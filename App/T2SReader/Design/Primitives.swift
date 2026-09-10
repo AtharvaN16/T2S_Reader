@@ -141,9 +141,9 @@ struct RadioMark: View {
         ZStack {
             if isOn {
                 Circle().fill(Tokens.ink)
-                Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Tokens.ground)
+                Image(systemName: "checkmark").font(.system(size: 12, weight: .heavy)).foregroundStyle(Tokens.ground)
             } else {
-                Circle().strokeBorder(Tokens.ink3, lineWidth: 1.5)
+                Circle().strokeBorder(Tokens.ink2, lineWidth: 2)             // the heart outline's weight, so the two marks match
             }
         }
         .frame(width: 24, height: 24)

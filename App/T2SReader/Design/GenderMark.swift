@@ -10,23 +10,27 @@ struct GenderMark: View {
     var size: CGFloat = 14
 
     var body: some View {
+        // Venus is taller than it is wide — the stem under the ring is as long as the ring — so it
+        // gets a taller canvas than Mars, whose arrow fits a square.
+        let width = size
+        let height = gender == .female ? size * 1.3 : size
         Canvas { context, canvasSize in
             let w = canvasSize.width, h = canvasSize.height
             let line = size * 0.16
             var path = Path()
             switch gender {
             case .female:
-                // A ring in the upper part, a stem down from it, a bar across the stem.
-                let r = w * 0.32
+                let r = w * 0.3
                 let center = CGPoint(x: w / 2, y: r + line / 2)
                 path.addEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: 2 * r, height: 2 * r))
-                path.move(to: CGPoint(x: center.x, y: center.y + r))
-                path.addLine(to: CGPoint(x: center.x, y: h - line / 2))
-                let barY = center.y + r + (h - line / 2 - center.y - r) * 0.55
-                path.move(to: CGPoint(x: center.x - r * 0.75, y: barY))
-                path.addLine(to: CGPoint(x: center.x + r * 0.75, y: barY))
+                let stemTop = center.y + r
+                let stemBottom = h - line / 2
+                path.move(to: CGPoint(x: center.x, y: stemTop))
+                path.addLine(to: CGPoint(x: center.x, y: stemBottom))
+                let barY = stemTop + (stemBottom - stemTop) * 0.58
+                path.move(to: CGPoint(x: center.x - r * 0.85, y: barY))
+                path.addLine(to: CGPoint(x: center.x + r * 0.85, y: barY))
             case .male:
-                // A ring in the lower left, an arrow out to the top right.
                 let r = w * 0.32
                 let center = CGPoint(x: r + line / 2, y: h - r - line / 2)
                 path.addEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: 2 * r, height: 2 * r))
@@ -42,7 +46,7 @@ struct GenderMark: View {
             context.stroke(path, with: .color(gender == .female ? Tokens.voiceFemale : Tokens.voiceMale),
                            style: StrokeStyle(lineWidth: line, lineCap: .round, lineJoin: .round))
         }
-        .frame(width: size, height: size)
+        .frame(width: width, height: height)
         .accessibilityLabel(gender == .female ? "Female voice" : "Male voice")
     }
 }

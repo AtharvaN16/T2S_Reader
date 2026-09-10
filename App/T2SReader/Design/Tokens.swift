@@ -29,6 +29,9 @@ enum Tokens {
     static let shade = dynamic(light: 0x000000, dark: 0x000000)
     static let gloss = dynamic(light: 0xFFFFFF, dark: 0xFFFFFF)
     /// The PDF placeholder cover: a light red book that says PDF (owner's call, 2026-09-09).
+    /// The "Default" tag in the voice list (owner, 2026-09-10: "light blue with dark blue text").
+    static let tagBlue = dynamic(light: 0xDCEAFF, dark: 0x1B2D4A)
+    static let tagBlueInk = dynamic(light: 0x1D4ED8, dark: 0x8AB4FF)
     static let pdfCover = dynamic(light: 0xF6D2CC, dark: 0x4A2521)
     static let pdfInk = dynamic(light: 0xB5362B, dark: 0xFF8E82)
 

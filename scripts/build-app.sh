@@ -11,6 +11,8 @@ cd "$(dirname "$0")/../App"
 # missing source path outright. Empty is enough to generate a project: the Kokoro target then
 # builds an app whose on-device routes report their files missing.
 mkdir -p Resources/Kokoro Resources/KokoroCoreML
+# The per-Mac signing team lives in Local.xcconfig (git-ignored), so a regenerate keeps it.
+[[ -f Local.xcconfig ]] || cp Local.xcconfig.example Local.xcconfig
 xcodegen generate --quiet
 if [[ -n "${CI:-}" ]]; then
   signing=(CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO)

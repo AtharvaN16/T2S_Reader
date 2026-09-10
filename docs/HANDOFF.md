@@ -1,8 +1,50 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 small hours (voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 small hours (warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — voice picker round 6, from the first phone look: twelve asks
+## Resume here (2026-09-10, latest) — the warm-up veil, the team that kept resetting, picker round 7
+
+Three asks from the phone, plus one mid-turn ("remove the heart from the Reader's voice sheet").
+
+- **The warm-up veil** (`Design/WarmUpVeil.swift`, from Tabby's launch gradient): while
+  `KokoroStatusModel.status.isWarming`, a soft accent wash over the top half of every root page
+  (opacity 0.26 → 0, breathing 0.5 ↔ 1 over 1.8 s, still under Reduce Motion) and, under the
+  status bar, one line — "Warming up the voice · about 7 s" / "· a few minutes the first time" /
+  "· almost there" — over a 120 × 3 pt progress hairline. The Reader gets the wash only
+  (`showsMessage: false`; its transport already says "preparing the voice…"). Nothing is
+  hit-tested. **The progress is real**: `KokoroCoreMLModels.loadStages` takes an `onProgress`
+  `(loaded, total)`, `KokoroCoreMLEngine.setLoadProgress` installs it, `GatedKokoroCoreMLEngine
+  .preload(onProgress:)` passes it, and `warmUp` writes it to `KokoroStatusModel.updateWarmUp`.
+  **The estimate is remembered**: `recordWarmUp(seconds:)` stores the last warm-up in
+  `UserDefaults` (`kokoro.lastWarmUpSeconds`; a value over 4× the previous is ignored as a stall,
+  and a first launch after install — no stored value — is what "a few minutes the first time"
+  means). The bar is the larger of stages/8 and elapsed/expected (capped at 0.92). So: yes, the
+  time can be estimated (from the last run) and the stages give a true progress; the first launch
+  after install is the one that can't be predicted, and says so. `T2S_WARMUP=1` fakes a warm-up
+  in the everyday build for screenshots (12 s remembered, a stage every 1.5 s).
+- **Why the team kept going back to None**: `scripts/build-app.sh` runs `xcodegen generate`, which
+  rewrites the git-ignored `project.pbxproj` from `project.yml`; a team picked in Xcode's Signing
+  panel lives only in that file, so every build-script run (every code change from here) lost
+  it. The pin in `project.yml` was dropped on 2026-09-09 because Xcode showed it red while not
+  signed in. Now: `App/Local.xcconfig` (git-ignored) holds `DEVELOPMENT_TEAM`, `project.yml`
+  wires it into every target with `configFiles`, both build scripts create it from
+  `Local.xcconfig.example` if missing, and this Mac's copy already carries `5HZ38K43M9`. A
+  regenerate keeps it. Not verified from Xcode's panel (no Xcode GUI here) — if the panel still
+  shows None after the next regenerate, the setting is still applied at build time from the
+  xcconfig; check `xcodebuild -showBuildSettings | grep DEVELOPMENT_TEAM`.
+- **Picker round 7**: `RadioMark`'s ring is `ink2` at 2 pt and its check 12 pt heavy (the heart
+  outline's weight); the "Default" tag is `Tokens.tagBlue` / `tagBlueInk` (light blue, dark blue
+  text); `GenderMark`'s Venus is redrawn on a taller canvas (ring 0.3 w, a stem as long as the
+  ring, the bar at 58 % down it); the pause glyph is `ink`, not accent; and `VoiceListPage
+  .showsFavorites` is false from `VoiceChangeSheet`, so the Reader's sheet is hear + choose.
+
+`scripts/build-app.sh` → `** BUILD SUCCEEDED **`; `scripts/build-device.sh` (the Phone scheme,
+which is what compiles the `T2SKokoro` changes) → `** BUILD SUCCEEDED **`. Seen in the simulator
+(`T2S_WARMUP=1`): the veil on Home with the line and the bar advancing, the wash alone in the
+Reader, the sheet without hearts. Not seen: the real warm-up on the phone, the stage count
+arriving, the remembered estimate, the redrawn ♀ (system voices carry no gender).
+
+## Resume here (2026-09-10) — voice picker round 6, from the first phone look: twelve asks
 
 The owner installed round 5 on the phone (Kokoro rows visible at last) and sent twelve items. All
 on `dev`:

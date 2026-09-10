@@ -18,6 +18,9 @@ struct VoiceListPage: View {
     var note: (VoiceOption) -> String? = { _ in nil }
     /// Applies the choice; true dismisses the bar. Async so a document's audio can be discarded.
     var onConfirm: (VoiceOption) async -> Bool
+    /// The heart per row. Off in the Reader's sheet (owner, 2026-09-10): there it is hear and
+    /// choose only; keeping favorites is Settings' job.
+    var showsFavorites: Bool = true
 
     /// What "no override" resolves to on this device (Kokoro Heart on the phone build), loaded
     /// once: the voice that wears the "Default" tag when Settings has no pick of its own.
@@ -227,7 +230,7 @@ struct VoiceListPage: View {
                     } else {
                         Image(systemName: previewing ? "pause.fill" : "waveform")
                             .font(.system(size: 20, weight: .medium))
-                            .foregroundStyle(previewing ? Tokens.accent : Tokens.ink2)
+                            .foregroundStyle(previewing ? Tokens.ink : Tokens.ink2)
                     }
                 }
                 .frame(width: 40, height: 40)
@@ -236,7 +239,7 @@ struct VoiceListPage: View {
             .buttonStyle(.plain)
             .accessibilityLabel(previewing ? "Stop preview" : "Preview \(option.name)")
 
-            if option.gender != nil {                                                // only the on-device voices are starred
+            if showsFavorites, option.gender != nil {                                // only the on-device voices are starred
                 HeartButton(isOn: isFavorite,
                             label: isFavorite ? "Remove \(option.name) from favorites" : "Add \(option.name) to favorites") {
                     env.preferences.toggleFavoriteVoice(option.id)
@@ -253,12 +256,14 @@ struct VoiceListPage: View {
         .padding(.vertical, Spacing.grid)   // room between rows, on top of the tap-target minimum
     }
 
+    /// Light blue with dark blue text (owner, 2026-09-10): a grey tag on grey rows was missed.
     private func tag(_ text: String) -> some View {
         Text(text)
             .typeRole(.caption)
-            .foregroundStyle(Tokens.ink2)
+            .fontWeight(.medium)
+            .foregroundStyle(Tokens.tagBlueInk)
             .padding(.horizontal, 7).padding(.vertical, 3)
-            .background(Tokens.surface, in: Capsule())
+            .background(Tokens.tagBlue, in: Capsule())
     }
 
     /// The Kokoro section is only rendered by a build that links the engine, so this is only ever

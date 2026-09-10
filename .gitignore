@@ -43,3 +43,5 @@ spikes/findings/audio-probe/
 spikes/findings/quality-probe/
 # Lever probe output (blends, pitch spread, codec round trips — WAVs for the owner's ears)
 spikes/findings/lever-probe/
+# Per-Mac signing (DEVELOPMENT_TEAM); see App/Local.xcconfig.example
+App/Local.xcconfig

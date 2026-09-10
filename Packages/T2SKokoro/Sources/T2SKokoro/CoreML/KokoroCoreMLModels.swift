@@ -68,9 +68,11 @@ final class KokoroCoreMLModels: KokoroModelProvider {
     /// `MLModel` is not `Sendable`: ``LoadedStages`` carries them out of the group unchecked, under
     /// the rule the engine already keeps — nothing touches a model until every load has returned
     /// and the set is on the engine's actor.
-    static func loadStages(_ compiled: [String: URL]) async throws -> LoadedStages {
+    static func loadStages(_ compiled: [String: URL],
+                           onProgress: (@Sendable (_ loaded: Int, _ total: Int) -> Void)? = nil) async throws -> LoadedStages {
         var models: [String: MLModel] = [:]
-        var pending = KokoroCoreMLResources.stageNames()[...]
+        let names = KokoroCoreMLResources.stageNames()
+        var pending = names[...]
         try await withThrowingTaskGroup(of: StageLoad.self) { group in
             func addNext() throws {
                 guard let name = pending.popFirst() else { return }
@@ -84,6 +86,7 @@ final class KokoroCoreMLModels: KokoroModelProvider {
             for _ in 0 ..< loadWindow { try addNext() }
             for try await load in group {
                 models[load.name] = load.model
+                onProgress?(models.count, names.count)                   // the warm-up's veil counts stages by this
                 try addNext()
             }
         }

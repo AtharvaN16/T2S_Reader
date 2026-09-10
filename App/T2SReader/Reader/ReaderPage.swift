@@ -52,6 +52,8 @@ struct ReaderPage: View {
                 ProgressView().tint(Tokens.ink)
             }
 
+            WarmUpVeil(showsMessage: false)
+
             VStack(spacing: 0) {
                 topBar.opacity(chromeVisible ? 1 : 0)
                 Spacer()

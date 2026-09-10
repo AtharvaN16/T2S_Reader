@@ -102,6 +102,9 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     private var compiling: Task<[String: URL], Error>?
     /// The concurrent stage load in flight, if one is: shared for the same reason as the compile.
     private var loadingStages: Task<KokoroCoreMLModels.LoadedStages, Error>?
+    /// Told `(loaded, total)` as each stage's compute plan finishes building; the app's launch
+    /// warm-up sets it so the reader can watch the one-time load go by rather than wait blind.
+    private var loadProgress: (@Sendable (Int, Int) -> Void)?
     /// How many times this engine has begun loading its stages. Internal for one test: "loaded once"
     /// and "compiled and loaded twice" differ only in this number and several minutes of Core ML.
     private(set) var loadCount = 0
@@ -182,6 +185,11 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         _ = try await load()
     }
 
+    /// Installs (or removes) the stage-load progress report; see ``loadProgress``.
+    public func setLoadProgress(_ report: (@Sendable (_ loaded: Int, _ total: Int) -> Void)?) {
+        loadProgress = report
+    }
+
     @discardableResult
     private func load() async throws -> Loaded {
         if let loaded { return loaded }
@@ -235,7 +243,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     private func loadedStages(_ compiled: [String: URL]) async throws -> KokoroCoreMLModels.LoadedStages {
         if let loadingStages { return try await loadingStages.value }
         loadCount += 1
-        let task = Task { try await KokoroCoreMLModels.loadStages(compiled) }
+        let report = loadProgress
+        let task = Task { try await KokoroCoreMLModels.loadStages(compiled, onProgress: report) }
         loadingStages = task
         do {
             return try await task.value

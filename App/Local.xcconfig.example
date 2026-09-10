@@ -1,0 +1,9 @@
+// Per-Mac build settings that must not be committed. Copied to Local.xcconfig by the build
+// scripts if that file is missing; xcodegen wires Local.xcconfig into every target, so a
+// regenerate no longer loses the team. Put your Apple Developer team id here once:
+//
+//     DEVELOPMENT_TEAM = ABCDE12345
+//
+// (Xcode → Settings → Accounts → your Apple ID → the team's id; or Signing & Capabilities shows
+// it beside the team name.) Leave the line commented on a Mac that only builds for the simulator.
+// DEVELOPMENT_TEAM =

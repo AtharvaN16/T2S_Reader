@@ -117,6 +117,7 @@ struct RootPager: View {
                         .transition(.opacity)
                 }
                 TopFade(inset: geo.safeAreaInsets.top)
+                WarmUpVeil()                                                   // the one-time voice load, over every page
 
                 if !chrome.isSubpageOpen {
                     VStack(spacing: 12) {

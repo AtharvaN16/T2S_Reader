@@ -1,8 +1,42 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 night (the black buttons raised — graphite in the dark — and the dark-mode pass; before that the glow in blue and green when the voice lands, the fan re-cast on 2026 books; before that the empty shelf on Home and the Collection — three covers fanned, a raised button; before that an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 night (the kind menu's spring pop; before that the black buttons raised — graphite in the dark — and the dark-mode pass; before that the glow in blue and green when the voice lands, the fan re-cast on 2026 books; before that the empty shelf on Home and the Collection — three covers fanned, a raised button; before that an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — the black buttons raised, and the dark-mode pass
+## Resume here (2026-09-10, latest) — the kind menu's spring pop
+
+The owner: "add a nice animation when clicking filter in collection page, like spring pop, we have
+in latest iOS."
+
+- **`TitleMenuMotion`** (`Design/TitleMenu.swift`) holds the whole thing, so the card and its call
+  site cannot drift apart. Opening is a spring with real overshoot (response 0.34, damping 0.66);
+  closing is critically damped and two-thirds the length — a menu that springs shut feels
+  undecided. The transition is asymmetric: in, the card grows from 0.82 at its top-left corner and
+  drops 12 pt; out, it leaves from 0.94 without the offset, so a close reads as a dismissal rather
+  than a rewind.
+- **The rows stagger.** `TitleMenuCard` flips a `rowsIn` state on appear; each row rises 10 pt,
+  scales from 0.96 and fades, delayed 32 ms per row from the top. This is the part that reads as
+  iOS — a card that only fades in reads as a web dropdown. Reduce Motion starts `rowsIn` true and
+  passes a nil animation, so the rows are simply there with the card.
+- **Rows press.** A `MenuRowStyle` button style now owns both films — the chosen row's `ink` at
+  0.07 and a finger's at 0.07 over it (0.13 when both) — with the row giving to 0.97 under the
+  press. One surface, so the two states cross into each other instead of stacking; the label's own
+  `.background` is gone.
+- **Two haptics**, the app's first: a light knock (intensity 0.7) as the menu drops, and the
+  selection tick when a kind is taken. Nothing on a close by tapping outside — there is nothing to
+  confirm. `.sensoryFeedback` needs iOS 17; the target is 18.
+- The title's word crossfades to the new kind (`.contentTransition(.opacity)`) instead of snapping.
+- `AnyTransition` is not `Sendable`, so `TitleMenuMotion.transition` is a computed `static var`, not
+  a `let` — a stored one is a Swift 6 concurrency error.
+
+`scripts/build-app.sh` → `** BUILD SUCCEEDED **`. Measured from a screen recording of the simulator
+(`xcrun simctl io <udid> recordVideo`, frames pulled with an `AVAssetImageGenerator` tool — a burst
+of `simctl io screenshot` is far too slow to catch a 450 ms animation, about one frame per 300 ms):
+at 60 fps the card is up at 50 ms with only "All" legible, "Books" and "PDFs" arrive by 100 ms,
+"Text" by 150, "Links" by 200, and the overshoot has settled by 300. `T2S_OPEN=kinds` opens the
+menu at launch, which is how it was filmed; the press film and the close were not filmed (a script
+cannot press). `swift test` not run: nothing under `Sources/` changed. Not seen on a phone.
+
+## Resume here (2026-09-10, night) — the black buttons raised, and the dark-mode pass
 
 Two asks from the owner: "replace the black buttons with skeumorphic versions of black buttons,
 and in dark mode idk what the color should be"; "a lot of UI does not have dark mode equivalent,

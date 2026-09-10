@@ -66,6 +66,30 @@ Two reports under `T2SReaderKokoro` in the 17 Pro's system crash logs:
 11. **The screen stays awake during the one-time setup** (`isIdleTimerDisabled` while the status is
     installing or preparing): the foreground gate would otherwise stop the builds at the first
     auto-lock, and a first launch is minutes of them.
+12. **A GPU phone renders in front on the GPU and behind on a small CPU set.** iOS refuses GPU work
+    from a backgrounded app: on the 17 Pro every render after the phone locked failed with
+    "E5RT: GPU sync execute failed: Insufficient Permission (to submit GPU work from background)"
+    (16:38, 2026-09-10), and MisakiSwift's fallback network, on MLX, crashed the process the same
+    way at 16:16 — so MLX's global default device is now the CPU, not only the task-local one. The
+    engine takes a second set (`Options.backgroundComputeUnits`, `.cpu` on such a phone) over the 3 s
+    bucket and the t128 duration model — the four CPU plans that phone's compiler does build, in
+    minutes — loaded after the main set and its predictor warm-up, one stage at a time, at utility
+    priority, under the foreground gate and only while the phone is not thermally serious. Every
+    piece asks the app's placement (`setRenderPlacement`, the foreground gate's answer): in front,
+    the main set; behind, the background set, or, until it exists, a wait for the foreground. A GPU
+    call the system refused as the app left the foreground is rendered again where it is allowed.
+    Pieces cut for t256 are split for t128 the way an overflowing bucket splits them. The record a
+    background Prepare launch checks (`KokoroWarmUpRecord`) is written once the background set is
+    ready, and such a phone renders ten minutes ahead while in front (`playAheadWindowSeconds`),
+    30 s of GPU at RTF 0.05, so a lock right after Play still has audio while that set compiles.
+13. **First predictions are warmed at readiness.** On the GPU, Core ML finishes specializing a
+    stage at its first prediction — 4–5 s for t128 and 14–15 s for t256 on the 17 Pro, on every
+    launch, and the load-time `fastPrediction` hint did not move it — so the engine runs each stage
+    once on zeros right after readiness (`warmKokoroStages`, a vendored addition), t128 and the 3 s
+    bucket first, one step per actor turn, under the foreground gate; the whole set was warm 20 s
+    after readiness. The timing lines also mirror to stderr under `-kokoro.timingConsole YES` and
+    to `Library/Caches/kokoro-timing.log`, through POSIX writes: the `FileHandle` write that first
+    carried them raised an uncatchable exception when the console pipe died with the lock (16:07).
 9. **The cloud route speaks OpenAI's real contract.** Request `{model, input, voice, response_format:
    "pcm"}`; the response is raw 16-bit little-endian mono PCM at 24 kHz (`audio/pcm`) or — from a
    proxy — the JSON `{audio, sample_rate, word_timings}` contract the code already had.

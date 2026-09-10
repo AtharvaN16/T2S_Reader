@@ -115,9 +115,34 @@ xcrun devicectl device process launch --console --terminate-existing --device <C
 The `--` matters: without it `devicectl` reads `-kokoro…` as its own `-t` flag. The console drops
 when the phone locks; the plan cache and the timing lines survive.
 
-**Still unmeasured:** the GPU's steady-state RTF on the 17 Pro (no book had been played, so the
-launch prime rendered nothing; a relaunch after one has will print `kokoro utterance … RTF` lines),
-and a warm launch's load time with the plans cached.
+**Then the afternoon's runs (16:00–17:00), each from the phone's own log** — the numbers that shaped
+the rest of the branch:
+
+- **Steady state on the GPU:** RTF 0.042–0.07 across the 7, 10 and 15 s buckets (calls of 0.27 s
+  for 6 s of audio, 0.49 s for 9 s), against 0.18 on the 11 Pro's CPU.
+- **A relaunch of the same build loads all fourteen stages in 1.3 s**; a reinstall pays the cold
+  build again (the plan cache is keyed to the install), so every app update is a ~3 min first launch.
+- **The first prediction on each stage costs once per launch, cached or not:** 4–5 s for the t128
+  duration model, 14–15 s for t256, 1–2 s per generator; the load-time `fastPrediction` hint changed
+  nothing. The engine now warms every stage on zeros right after readiness, t128 and the 3 s bucket
+  first (4.9 s), t256 next (14.6 s), the buckets in under a second each — the whole set 20 s after
+  readiness, with renders interleaving between steps.
+- **iOS refuses GPU work from a backgrounded app.** Two crashes and then the real thing: at 16:07 the
+  timing mirror's `FileHandle` write raised when the console pipe died with the lock (POSIX writes
+  now, and a per-launch `Library/Caches/kokoro-timing.log`); at 16:16 MisakiSwift's fallback network
+  crashed in MLX's Metal completion handler with "Insufficient Permission (to submit GPU work from
+  background)" — the task-local CPU pin had not held, so MLX's global default device is the CPU
+  now; and at 16:38, with the phone locked, every Core ML render failed with the same permission
+  error as a plain `stageFailed` — the Reader's "utterance 233: stageFailed" banner, and 200 ms of
+  silence per utterance.
+- **So the phone renders in front on the GPU and behind on a small CPU set** (spec §2 decision 12):
+  the 3 s bucket and t128, the four CPU plans this chip's compiler does build, loaded after the main
+  set one stage at a time and only while the phone is cool; a piece placed in the background waits
+  for the foreground until that set exists; a GPU call refused as the app left the foreground is
+  rendered again where it is allowed; the live player renders ten minutes ahead while in front.
+
+**Still unmeasured:** the background CPU set's own compile time and RTF on the 17 Pro (its first
+build was under way as this was written), and the A14–A18 phones, on neither policy.
 
 **Why the 11 Pro and the 17 Pro differ:** not the silicon. The 17 Pro's launches were being killed
 mid-warm-up and restarted from a cold plan cache, then it played at whatever the last kill left; a

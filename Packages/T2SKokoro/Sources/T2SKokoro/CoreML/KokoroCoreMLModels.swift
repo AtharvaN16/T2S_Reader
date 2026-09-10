@@ -96,6 +96,9 @@ final class KokoroCoreMLModels: KokoroModelProvider {
     /// Largest staged duration model. The caller pads `inputIds` to this and the executor copies only
     /// the prefix the model it chose actually needs.
     static let maxDurationTokenLength = KokoroCoreMLResources.durationTokenLengths.reduce(0, max)
+    /// The largest duration model *this* set holds — 256 for the full set, 128 for the background
+    /// set — which is what a piece rendered through it must fit, frame tokens included.
+    let maxDurationTokenLength: Int
 
     private let durationModels: [Int: MLModel]      // padded token length -> model
     private let f0ntrainModels: [Int: MLModel]      // T frames -> model
@@ -149,6 +152,7 @@ final class KokoroCoreMLModels: KokoroModelProvider {
     static func loadStages(_ compiled: [String: URL],
                            names: [String] = KokoroCoreMLResources.stageNames(),
                            computeUnits: KokoroComputeUnits = .cpu,
+                           window: Int = loadWindow,
                            admission: (@Sendable () async -> Void)? = nil,
                            onStageLoaded: (@Sendable (_ name: String, _ seconds: Double) -> Void)? = nil) async throws -> LoadedStages {
         var models: [String: MLModel] = [:]
@@ -171,7 +175,7 @@ final class KokoroCoreMLModels: KokoroModelProvider {
                     return StageLoad(name: name, url: url, model: model, seconds: seconds)
                 }
             }
-            for _ in 0 ..< loadWindow { try await addNext() }
+            for _ in 0 ..< max(1, window) { try await addNext() }
             for try await load in group {
                 models[load.name] = load.model
                 urls[load.name] = load.url
@@ -209,7 +213,8 @@ final class KokoroCoreMLModels: KokoroModelProvider {
     /// decoder-pre and its generator, all of which must be in `stages`. Synchronous on purpose: it
     /// runs to completion on the engine's actor, so no second render can arrive between the first
     /// one's decision to load and the loaded stages being there.
-    init(stages: LoadedStages, buckets: [Int] = KokoroCoreMLResources.buckets) throws {
+    init(stages: LoadedStages, buckets: [Int] = KokoroCoreMLResources.buckets,
+         durationTokenLengths: [Int] = KokoroCoreMLResources.durationTokenLengths) throws {
         func load(_ name: String) throws -> (model: MLModel, url: URL) {
             guard let model = stages.models[name], let url = stages.urls[name] else {
                 throw KokoroCoreMLResources.Failure.missing(name)
@@ -221,7 +226,7 @@ final class KokoroCoreMLModels: KokoroModelProvider {
         var durationChoices: [DurationModelChoice] = []
         // Ascending, because `selectDurationChoice` returns the first padded choice that fits and
         // upstream sorts its choices the same way — the smallest model that holds the tokens wins.
-        for tokens in KokoroCoreMLResources.durationTokenLengths.sorted() {
+        for tokens in durationTokenLengths.sorted() {
             let stage = try load("kokoro_duration_t\(tokens)")
             durations[tokens] = stage.model
             durationChoices.append(DurationModelChoice(
@@ -234,6 +239,7 @@ final class KokoroCoreMLModels: KokoroModelProvider {
         }
         durationModels = durations
         choices = durationChoices
+        maxDurationTokenLength = durationTokenLengths.max() ?? 0
 
         let staged = buckets.sorted()
         var f0ntrain: [Int: MLModel] = [:]

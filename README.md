@@ -160,14 +160,19 @@ scheme — **Phone** for an iPhone, **Simulator** for the Mac:
   a Kokoro voice plays through the system default here, and the log says so
   (`voice route resolved: kokoro → default`).
 - **Phone** (the `T2SReaderKokoro` target) — device only (`SUPPORTED_PLATFORMS: iphoneos`),
-  the app you install on a phone. It links `Packages/T2SKokoro`, compiles with
-  `KOKORO_ENGINE`, and bundles `Resources/KokoroCoreML` — Xcode compiles the
-  eight `.mlpackage` stages into `.mlmodelc`, which is most of the 433 MB app.
-  Core ML is CPU-only, so it runs on any iPhone the app supports. The MLX route
-  inside it needs an A14 or newer phone (iPhone 12+): MLX's fused GEMM kernels
-  need `simdgroup_matrix`, which Metal provides from Apple GPU family 7 upward,
-  and the app probes for that at launch. Both targets come from one
-  `targetTemplates` entry in `App/project.yml`, so they cannot drift apart.
+  the app you install on a phone. It links `Packages/T2SKokoro` and compiles with
+  `KOKORO_ENGINE`; the model is not in the bundle (an install is ~85 MB) — the
+  phone downloads the fourteen Core ML stages, the voices and the runtime files
+  on its first launch, over Wi-Fi, verifies them and compiles them into
+  Application Support (`KokoroCoreMLInstall`), once per phone. Core ML runs on
+  the CPU on phones before the A19 generation, and on the GPU from the A19 on
+  (`KokoroComputeUnits.defaultPolicy`: the 17 Pro's CPU plan compiler never
+  finishes the 15 s generator), with a small CPU set for the background, where
+  iOS refuses GPU work. The MLX route inside it needs an A14 or newer phone
+  (iPhone 12+): MLX's fused GEMM kernels need `simdgroup_matrix`, which Metal
+  provides from Apple GPU family 7 upward, and the app probes for that at
+  launch. Both targets come from one `targetTemplates` entry in
+  `App/project.yml`, so they cannot drift apart.
   Its Run action builds Release: the app you listen to is the optimised one, and the RTF the app
   measures is the one the spike measured (`docs/superpowers/specs/2026-09-08-performance-audit.md`
   §6.1). The Simulator scheme stays Debug. For a debugging session on the phone, set the Run action

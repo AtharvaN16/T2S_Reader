@@ -74,6 +74,56 @@ import T2SCore
     }
 }
 
+extension KokoroCoreMLLoadTests {
+    /// A piece cut for the t256 duration model, rendered through a set whose largest is t128 — the
+    /// background set — is split before any render, like a piece whose audio overflows its bucket.
+    @Test func aPieceTooLongForTheSetIsSplitBeforeItRenders() throws {
+        let words = (0 ..< 40).map { KokoroCoreMLEngineTests.word("w\($0)", phonemes: "abcd") }
+        var ids: [Int32] = [], owners: [Int] = []
+        for index in 0 ..< 40 {
+            ids += [1, 2, 3, 4, 0]
+            owners += Array(repeating: index, count: 4) + [KokoroCoreMLTimingFold.noOwner]
+        }
+        // 200 ids: the chunker's own cap makes a 175-id first piece, which is what the set must split.
+        let piece = try #require(try KokoroCoreMLEngine.pieces(ids: ids, owners: owners, words: words).first)
+        let rendered = OSAllocatedUnfairLockBox<[Int]>([])
+        let outcome = try KokoroCoreMLEngine.renderSplittingOnOverflow(piece, isFinal: true, words: words, maxTokens: 128) { attempted in
+            rendered.value.append(attempted.ids.count)
+            return KokoroCoreMLEngineTests.fakeRenderResult(frames: Array(repeating: 1, count: attempted.ids.count + 2))
+        }
+        #expect(rendered.value.allSatisfy { $0 + 2 <= 128 })
+        #expect(outcome.count >= 2)
+        #expect(outcome.map(\.piece.ids.count).reduce(0, +) == piece.ids.count)
+    }
+
+    /// With a background set and a placement that says "background", a long sentence renders in
+    /// that set's 3 s bucket, in pieces; placed in the foreground it renders in the main set.
+    @Test(.enabled(if: KokoroTestSupport.haveCoreMLFiles))
+    func aBackgroundPlacementRendersThroughTheBackgroundSet() async throws {
+        KokoroTestSupport.locatePackageResourceBundles()
+        var options = KokoroCoreMLEngine.Options.default
+        options.backgroundComputeUnits = .cpu
+        let engine = KokoroCoreMLEngine(resources: try await KokoroTestSupport.compiledCoreMLResources(), options: options)
+        let placement = OSAllocatedUnfairLockBox(KokoroCoreMLEngine.RenderPlacement.foreground)
+        await engine.setRenderPlacement { placement.value }
+        try await engine.preload()
+        await engine.awaitBackgroundSet()
+        #expect(await engine.hasBackgroundSet)
+
+        let buckets = OSAllocatedUnfairLockBox<[Int]>([])
+        await engine.setUtteranceTrace { trace in buckets.value = trace.pieces.map(\.bucketSeconds) }
+        placement.value = .background
+        let behind = try await engine.synthesize(.init(spoken: KokoroCoreMLEngineTests.longSentence, voiceID: Self.voiceID("af_heart")))
+        #expect(await engine.lastRenderSet == "background")
+        #expect(buckets.value.allSatisfy { $0 == 3 } && buckets.value.count >= 4)
+        #expect(behind.audio.duration > 15)
+
+        placement.value = .foreground
+        _ = try await engine.synthesize(.init(spoken: "The quick brown fox jumps over the lazy dog.", voiceID: Self.voiceID("af_heart")))
+        #expect(await engine.lastRenderSet == "main")
+    }
+}
+
 /// A value the test can read from any task.
 final class OSAllocatedUnfairLockBox<Value: Sendable>: @unchecked Sendable {
     private let lock = NSLock()

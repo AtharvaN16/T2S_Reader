@@ -22,6 +22,9 @@
 - `KokoroSynthesisExecutor.swift` (Plan 16): the hn-nsf build (Stage 7) runs on another core
   while the DecoderPre prediction (Stage 6) holds the thread; `StageTimings.decoderPreHnsfOverlap`,
   which upstream declares and never sets, records the overlap.
+- `KokoroSynthesisExecutor.swift` (2026-09-10): `warmKokoroStages(modelProvider:tokenLengths:buckets:)`
+  runs listed duration models and buckets once on zero inputs, so the first real prediction pays no
+  specialization; `warmModels` shares its bucket half (`warmBucketStages`).
 
 Every default matches upstream's own behaviour and every output is unchanged, so the changes are
 a strict superset; the remaining files are byte-identical.

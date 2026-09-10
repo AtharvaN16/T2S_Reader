@@ -25,17 +25,31 @@ actor GatedKokoroCoreMLEngine: SynthesisEngine {
     /// decided in the model's `init` and moves once, when an install completes.
     private let availability: KokoroCoreMLAvailabilityModel
     private let computeUnits: KokoroComputeUnits
+    /// The compute units of the background set, on a phone whose main set is on the GPU; nil where
+    /// the main set may render anywhere (`KokoroCoreMLEngine.Options.backgroundComputeUnits`).
+    private let backgroundComputeUnits: KokoroComputeUnits?
     /// Awaited before every stage's compute-plan build: the app's foreground gate.
     private let admission: @Sendable () async -> Void
+    /// Where a render is, as the same gate sees it: the engine asks before every piece.
+    private let placement: @Sendable () -> KokoroCoreMLEngine.RenderPlacement
     /// The one engine. Fourteen `MLModel`s are far too expensive to hold twice, and every caller —
     /// live playback, Prepare, the launch warm-up — must reach the same instance.
     private var constructed: KokoroCoreMLEngine?
 
     init(availability: KokoroCoreMLAvailabilityModel, computeUnits: KokoroComputeUnits = .cpu,
-         admission: @escaping @Sendable () async -> Void) {
+         backgroundComputeUnits: KokoroComputeUnits? = nil,
+         admission: @escaping @Sendable () async -> Void,
+         placement: @escaping @Sendable () -> KokoroCoreMLEngine.RenderPlacement = { .foreground }) {
         self.availability = availability
         self.computeUnits = computeUnits
+        self.backgroundComputeUnits = backgroundComputeUnits
         self.admission = admission
+        self.placement = placement
+    }
+
+    /// Waits for the background set, where the options ask for one (`awaitBackgroundSet`).
+    func awaitBackgroundSet() async throws {
+        await try engine().awaitBackgroundSet()
     }
 
     /// Loads the stages now rather than on the first utterance. The launch warm-up calls this so the
@@ -84,8 +98,10 @@ actor GatedKokoroCoreMLEngine: SynthesisEngine {
         if let constructed { return constructed }                 // a second caller crossed the hop first
         var options = KokoroCoreMLEngine.Options.default
         options.computeUnits = computeUnits
+        options.backgroundComputeUnits = backgroundComputeUnits
         let engine = KokoroCoreMLEngine(resources: resources, options: options)
         await engine.setLoadAdmission(admission)
+        await engine.setRenderPlacement(placement)
         constructed = engine
         return engine
     }

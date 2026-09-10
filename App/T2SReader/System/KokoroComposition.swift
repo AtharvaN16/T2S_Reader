@@ -144,6 +144,10 @@ struct KokoroComposition {
     /// How `PlayerModel` and `PrepareRunner` decide a document's effective voice.
     let voiceRouting: any VoiceRouteResolving
     let status: KokoroStatusModel
+    /// How far ahead the live player renders, or nil for the spec's 60 s: ten minutes on a phone
+    /// whose main set is on the GPU (30 s of GPU at RTF 0.05), because it cannot render while locked
+    /// until its CPU set has compiled — a first foreground session's work — and that set is slower.
+    let playAheadWindowSeconds: TimeInterval?
     /// The runtimes whose voices the picker lists, with the qualifier each row carries — asked every
     /// time the list is drawn, because the MLX probe answers seconds after the composition root has
     /// finished. Returns an empty list in the everyday build.
@@ -186,8 +190,15 @@ struct KokoroComposition {
         if computeUnits != policy {
             log.notice("Kokoro compute units overridden for this session: \(computeUnits.runtimeName, privacy: .public) (this phone's default is \(policy.runtimeName, privacy: .public))")
         }
+        // A main set on the GPU cannot render while the app is in the background — iOS refuses the
+        // work — so such a phone keeps a small CPU set for what the gate says is in the background
+        // (`KokoroCoreMLResources.backgroundBuckets`), loaded after the main one during the first
+        // foreground session; until it exists, a background render waits for the foreground.
+        let backgroundComputeUnits: KokoroComputeUnits? = computeUnits == .cpu ? nil : .cpu
         let coreMLEngine = GatedKokoroCoreMLEngine(availability: coreML, computeUnits: computeUnits,
-                                                   admission: { await gate.waitUntilForeground() })
+                                                   backgroundComputeUnits: backgroundComputeUnits,
+                                                   admission: { await gate.waitUntilForeground() },
+                                                   placement: { gate.isForeground ? .foreground : .background })
         // The MLX route costs a 340 MB hash, so one probe per launch, started below and memoized —
         // the route's `isAvailable` joins this same work rather than starting a second.
         let mlx = KokoroAvailabilityModel(probe: .live(defaults: defaults))
@@ -278,6 +289,7 @@ struct KokoroComposition {
                 defaultVoice: KokoroVoiceID(engineID: KokoroCoreMLEngine.identity, voice: "af_heart").rawValue
             ),
             status: status,
+            playAheadWindowSeconds: computeUnits == .cpu ? nil : 600,
             catalogEngines: catalogEngines(mlxListed: mlxListed)
         )
         #else
@@ -296,7 +308,7 @@ struct KokoroComposition {
             }
         }
         return KokoroComposition(engines: [], voiceRouting: KokoroVoiceRouting.unavailable,
-                                 status: status, catalogEngines: { [] })
+                                 status: status, playAheadWindowSeconds: nil, catalogEngines: { [] })
         #endif
     }
 
@@ -397,7 +409,13 @@ struct KokoroComposition {
                 status.recordWarmUp(seconds: seconds)
                 // Never an override: the Core ML decision is measured, not a development escape hatch.
                 status.update(.available(isDebugOverride: false))
-                markWarmed()
+                // "Warmed" is what a background Prepare launch checks before it renders: on a phone
+                // whose main set is on the GPU that means the CPU set behind it, which follows the
+                // main load and may take minutes — so the record waits for it, the status does not.
+                Task {
+                    try? await engine.awaitBackgroundSet()
+                    markWarmed()
+                }
                 return
             } catch is CancellationError {
                 return

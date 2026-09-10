@@ -6,9 +6,8 @@
 # This produces an unsigned .app. Installing on a phone is done from Xcode with a team selected —
 # the recipe is in HANDOFF.
 # The first run compiles mlx-swift for iphoneos: 10-15 minutes and about 2 GB of DerivedData.
-# When App/Resources/KokoroCoreML is staged (scripts/fetch-kokoro-coreml.sh --app), the build also
-# compiles the eight .mlpackage stages into .mlmodelc bundles inside the .app, which is what makes
-# Core ML Kokoro the default voice on the phone.
+# The Core ML model is not bundled (App/project.yml): the phone downloads and compiles it on its
+# first launch (KokoroCoreMLInstall), so this .app is about 60 MB.
 # Usage: scripts/build-device.sh [extra xcodebuild args]
 set -euo pipefail
 cd "$(dirname "$0")/../App"

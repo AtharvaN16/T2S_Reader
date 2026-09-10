@@ -2,10 +2,14 @@ import CryptoKit
 import Foundation
 import T2SCore
 
-/// Non-secret configuration for the generic, OpenAI-compatible cloud voice contract. The endpoint
-/// is deliberately user supplied: T2S does not run a proxy or provider account (spec §1.1).
+/// Non-secret configuration for the OpenAI-compatible cloud voice contract. The endpoint is
+/// deliberately user supplied: T2S does not run a proxy or provider account (spec §1.1).
 public struct HTTPVoiceConfiguration: Hashable, Sendable {
-    public static let formatVersion = "pcm-f32le-word-v1"
+    /// `pcm-v2` (2026-09-10): the request is OpenAI's own — `response_format: "pcm"`, nothing the
+    /// API would reject — and the answer is raw 16-bit PCM, or a proxy's JSON. The `v1` contract
+    /// asked for `pcm_f32le` with `sample_rate` and `timestamps` fields no real provider accepts,
+    /// so it never rendered anything outside the tests.
+    public static let formatVersion = "pcm-v2"
 
     public let endpoint: URL
     public let model: String
@@ -158,13 +162,23 @@ public actor RequestRateLimiter {
     }
 }
 
-/// Generic adapter for a deliberately narrow, OpenAI-compatible PCM-over-JSON contract:
+/// Adapter for OpenAI's speech endpoint and anything that speaks its contract.
 ///
-/// `POST endpoint` with a Bearer key and `{model,input,voice,response_format:"pcm_f32le",
-/// sample_rate:24000,timestamps:"word"}`, returning base64 little-endian mono Float32 PCM plus
-/// optional UTF-16 word timings. It neither guesses provider media formats nor retains keys.
+/// `POST endpoint` with a Bearer key and `{model, input, voice, response_format: "pcm"}` — exactly
+/// what `https://api.openai.com/v1/audio/speech` takes (`gpt-4o-mini-tts`, `tts-1`; voices such as
+/// `alloy`); OpenAI rejects a request carrying fields it does not know, so nothing else is sent.
+/// Two answers are understood, told apart by the response's content type:
+///
+/// - **raw PCM** (`audio/pcm`, or any non-JSON type): 16-bit little-endian mono at 24 kHz, which is
+///   what OpenAI returns for `pcm`. No word timings; the Reader's highlight falls back to its
+///   per-utterance estimate.
+/// - **JSON** (`application/json`): `{"audio": <base64 little-endian mono Float32 PCM>,
+///   "sample_rate": 24000, "word_timings": [{"start", "end", "start_utf16", "end_utf16"}]}` — the
+///   shape a proxy uses to add word timings in front of a provider.
+///
+/// It neither guesses other media formats nor retains keys.
 public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
-    public let engineID = "http-voice-v1"
+    public let engineID = "http-voice-v2"
 
     private let configuration: HTTPVoiceConfiguration
     private let key: @Sendable () async throws -> String?
@@ -193,9 +207,7 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
             model: configuration.model,
             input: request.spoken,
             voice: providerVoice,
-            responseFormat: "pcm_f32le",
-            sampleRate: 24_000,
-            timestamps: "word"
+            responseFormat: "pcm"
         ))
 
         do {
@@ -220,6 +232,12 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
                 throw HTTPVoiceError.server(status: http.statusCode, message: Self.safeServerMessage(status: http.statusCode))
             }
             guard data.count <= Self.maximumResponseBytes else { throw HTTPVoiceError.malformedResponse }
+
+            guard Self.isJSON(http, data) else {
+                // OpenAI's `pcm`: 16-bit little-endian mono at 24 kHz, no timings.
+                let samples = try Self.sixteenBitSamples(data)
+                return SynthesisResult(audio: PCMAudio(sampleRate: 24_000, samples: samples), wordTimings: [])
+            }
 
             let wire: WireResponse
             do {
@@ -253,6 +271,23 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
     }
 
     private static let maximumResponseBytes = 10 * 1024 * 1024
+
+    /// A JSON answer is one the provider labels as such, or — for a proxy that forgot the header —
+    /// one that starts with an object. Raw PCM never begins with `{`.
+    static func isJSON(_ response: HTTPURLResponse, _ data: Data) -> Bool {
+        if let type = response.mimeType?.lowercased(), type.contains("json") { return true }
+        return data.first == UInt8(ascii: "{")
+    }
+
+    /// Little-endian signed 16-bit samples scaled to ±1. An odd byte count or nothing at all is
+    /// not audio.
+    static func sixteenBitSamples(_ data: Data) throws -> [Float] {
+        guard !data.isEmpty, data.count.isMultiple(of: MemoryLayout<Int16>.size) else { throw HTTPVoiceError.malformedResponse }
+        return stride(from: 0, to: data.count, by: MemoryLayout<Int16>.size).map { offset in
+            let bits: Int16 = data.withUnsafeBytes { pointer in pointer.loadUnaligned(fromByteOffset: offset, as: Int16.self) }
+            return Float(Int16(littleEndian: bits)) / 32768
+        }
+    }
 
     private static func safeServerMessage(status: Int) -> String {
         // Do not surface provider-controlled error bodies: a proxy can echo credentials or other
@@ -294,13 +329,10 @@ private struct WireRequest: Encodable {
     var input: String
     var voice: String
     var responseFormat: String
-    var sampleRate: Int
-    var timestamps: String
 
     enum CodingKeys: String, CodingKey {
-        case model, input, voice, timestamps
+        case model, input, voice
         case responseFormat = "response_format"
-        case sampleRate = "sample_rate"
     }
 }
 

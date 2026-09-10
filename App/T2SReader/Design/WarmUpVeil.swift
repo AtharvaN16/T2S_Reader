@@ -231,7 +231,7 @@ struct WarmUpLine: View {
         let elapsed = status.warmUpStarted.map { now.timeIntervalSince($0) } ?? 0
         let byStages = status.warmUpStages.map { Double($0.loaded) / Double(max(1, $0.total)) } ?? 0
         let byClock = status.expectedWarmUpSeconds.map { min(0.92, elapsed / max(1, $0)) } ?? 0
-        let progress = max(byStages, byClock)
+        let progress = status.status == .installing ? (status.installProgress?.fraction ?? 0) : max(byStages, byClock)
         return VStack(spacing: 7) {
             Text(line(status, elapsed: elapsed))
                 .typeRole(.caption)
@@ -252,6 +252,7 @@ struct WarmUpLine: View {
     /// remembered a 220 s warm-up, and the line read "about 220 s"). Once the estimate is spent,
     /// "almost there" rather than a number that has gone wrong.
     private func line(_ status: KokoroStatusModel, elapsed: TimeInterval) -> String {
+        if status.status == .installing { return Self.installLine(status.installProgress) }
         guard let expected = status.expectedWarmUpSeconds else {
             return "Warming up the voice · a few minutes the first time"
         }
@@ -261,4 +262,20 @@ struct WarmUpLine: View {
         let rounded = left < 10 ? Int(left.rounded(.up)) : Int((left / 5).rounded(.up)) * 5
         return "Warming up the voice · about \(rounded) s"
     }
+
+    /// The install's line: what is being waited for, downloaded or compiled, and how far along.
+    static func installLine(_ progress: KokoroInstallProgress?) -> String {
+        switch progress {
+        case .none:
+            return "Downloading the voice · once, over Wi-Fi"
+        case .waitingForNetwork(let total):
+            return "Waiting for Wi-Fi to download the voice · \(megabytes(total)) MB, once"
+        case .downloading(let bytes, let total):
+            return "Downloading the voice · \(megabytes(bytes)) of \(megabytes(total)) MB"
+        case .compiling(let stage, let total):
+            return "Preparing the voice · \(stage) of \(total)"
+        }
+    }
+
+    private static func megabytes(_ bytes: Int) -> Int { Int((Double(bytes) / 1_000_000).rounded()) }
 }

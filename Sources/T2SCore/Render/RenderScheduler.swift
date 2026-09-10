@@ -60,6 +60,13 @@ public actor RenderScheduler {
     private let timeSource: any TimeSource
     private let rtfWindow: Int
     private let arbiter: RenderArbiter
+    /// Holds a background render until the process's CPU fits iOS's limit (``CPUBudget``); nil
+    /// renders unpaced, which is what tests and the everyday build want.
+    private let budget: CPUBudget?
+    /// What the last synthesis cost in CPU seconds — the estimate the budget is asked to fit next
+    /// time. A render before the first is guessed at ``firstRenderCPUEstimate``.
+    private var lastRenderCPUSeconds: TimeInterval?
+    static let firstRenderCPUEstimate: TimeInterval = 5
 
     public private(set) var pending: [RenderRequest] = []
     public private(set) var isPausedForStorage = false
@@ -74,12 +81,13 @@ public actor RenderScheduler {
     private var hasSkippedFirstSample = false
 
     public init(engine: any SynthesisEngine, store: any AudioStore, timeSource: any TimeSource,
-                rtfWindow: Int = 20, arbiter: RenderArbiter = RenderArbiter()) {
+                rtfWindow: Int = 20, arbiter: RenderArbiter = RenderArbiter(), budget: CPUBudget? = nil) {
         self.engine = engine
         self.store = store
         self.timeSource = timeSource
         self.rtfWindow = max(1, rtfWindow)
         self.arbiter = arbiter
+        self.budget = budget
         (events, continuation) = AsyncStream.makeStream(of: RenderEvent.self, bufferingPolicy: .unbounded)
     }
 
@@ -154,7 +162,13 @@ public actor RenderScheduler {
         }
 
         var events: [RenderEvent] = []
+        // In the background, only when the trailing window has room for what a render costs: the
+        // lease is held meanwhile, so the other tier waits behind this one rather than pile on.
+        if let budget {
+            await budget.waitForHeadroom(estimatedSeconds: lastRenderCPUSeconds ?? Self.firstRenderCPUEstimate)
+        }
         let t0 = timeSource.now()
+        let cpu0 = budget.map { _ in CPUBudget.processCPUSeconds() }
         var result: SynthesisResult
         do {
             result = request.stream
@@ -162,6 +176,7 @@ public actor RenderScheduler {
                 : try await engine.synthesize(SynthesisRequest(spoken: request.spoken, voiceID: request.voiceID))
             let synthSeconds = timeSource.now() - t0
             if result.audio.duration > 0 { record(rtf: synthSeconds / result.audio.duration) }
+            if let cpu0 { lastRenderCPUSeconds = max(0, CPUBudget.processCPUSeconds() - cpu0) }
         } catch {
             events.append(.failed(documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, message: "\(error)"))
             result = SynthesisResult(audio: .silence(seconds: Self.failureSilenceSeconds), wordTimings: [])

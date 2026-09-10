@@ -1,4 +1,5 @@
 import Foundation
+import Metal
 import Testing
 @testable import T2SKokoro
 
@@ -66,10 +67,13 @@ import Testing
 
     /// The app's own inputs. `Bundle.main` here is the `xctest` tool, which carries no model, so the
     /// live probe finds no resource directory — the check that the bundle lookup is wired up at all.
+    /// The GPU answer is this machine's, not the probe's: a GitHub runner is a virtual machine whose
+    /// paravirtual GPU is below Apple family 7, and `== true` here failed every `dev` run of
+    /// 2026-09-10. What the probe promises is an answer exactly when a Metal device exists.
     @Test func theLiveProbeReadsThisMachine() {
         let probe = KokoroAvailability.Probe.live()
         #expect(probe.isSimulator == false)
-        #expect(probe.supportsRequiredGPUFamily() == true)
+        #expect((probe.supportsRequiredGPUFamily() == nil) == (MTLCreateSystemDefaultDevice() == nil))
         #expect(probe.resourcesDirectory == nil)
     }
 

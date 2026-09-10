@@ -100,7 +100,12 @@ public final class AudioPlayer: AudioPlaying {
         // whose speakers are in use: `SIMCTL_CHILD_T2S_SILENT=1 xcrun simctl launch <udid> com.t2s.reader`.
         // Playback, timing and highlights behave exactly as with sound; only the mixer's gain is zero.
         if Self.isSilenced { freshEngine.mainMixerNode.outputVolume = 0 }
-        try freshEngine.start()
+        // The live graph starts on the first `play()`, not here: a running engine is an audio app
+        // "playing" as far as iOS is concerned, and it kept the process alive — and eligible for
+        // the background CPU kill — from launch, before anything had been tapped (the iPhone 17
+        // Pro, 2026-09-09 15:14: killed mid warm-up after the phone locked). Manual rendering has
+        // no hardware and must be running before `renderOffline`.
+        if manual { try freshEngine.start() }
         engine = freshEngine
         player = freshPlayer
         timePitch = freshTimePitch
@@ -112,14 +117,23 @@ public final class AudioPlayer: AudioPlaying {
         configurationObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.restartEngineIfNeeded() }
+            MainActor.assumeIsolated {
+                // A route or format change while paused needs nothing now; the next `play()` starts
+                // the engine on the new configuration.
+                guard let self, self.isPlaying else { return }
+                self.restartEngineIfNeeded()
+            }
         }
     }
 
-    /// Restarts the engine if the graph was torn down, and resumes the player if we were playing.
+    /// Starts the engine when the graph was never started or was torn down, and resumes the
+    /// player if we were playing. Only `play()` and a configuration change while playing reach
+    /// here: a paused or idle app leaves the engine alone.
     private func restartEngineIfNeeded() {
         guard !manual else { return }
-        if !engine.isRunning { try? engine.start() }
+        if !engine.isRunning {
+            do { try engine.start() } catch { Self.log.error("Audio engine start failed: \(error.localizedDescription, privacy: .public)") }
+        }
         if isPlaying { player.play() }
     }
 

@@ -110,12 +110,18 @@ open App/T2SReader.xcodeproj   # after scripts/build-app.sh has generated it
 scripts/fetch-readability.sh   # re-vendor Readability.js (committed under App/Resources/Readability)
 ```
 
-Run `scripts/fetch-kokoro-coreml.sh --app` once per machine before anything
-Kokoro-related: it stages the eight Core ML stages, the 28 English voices and
-the two runtime JSON files into `App/Resources/KokoroCoreML` (54 files, 347 MB,
+Run `scripts/fetch-kokoro-coreml.sh --app` once per machine before running the
+Core ML tests: it stages the fourteen Core ML stages, the 28 English voices and
+the two runtime JSON files into `App/Resources/KokoroCoreML` (72 files, 619 MB,
 git-ignored, every file verified against a published SHA-256). Without them the
-Core ML tests in `Packages/T2SKokoro` skip and a device build produces an app
-whose Kokoro route reports its files missing.
+Core ML tests in `Packages/T2SKokoro` skip. **The phone build does not bundle
+them** (since 2026-09-10): the app downloads the same 72 files from the pinned
+Hugging Face revision on its first launch, over Wi-Fi, verifies each against
+the hashes in `KokoroCoreMLManifest`, compiles the stages on the phone and keeps
+them under its own Application Support (`KokoroCoreMLInstall`), so an install
+is about 60 MB instead of 676 MB and a reinstall never downloads again. A
+developer who would rather bundle them adds `Resources/KokoroCoreML` back to the
+`T2SReaderKokoro` target in `App/project.yml`; the bundle is looked in first.
 
 `scripts/fetch-kokoro-model.sh` is for the MLX route only, and is not needed to
 run the app: it installs `kokoro-v1_0.safetensors` (327,115,152 bytes) and
@@ -170,16 +176,46 @@ scheme — **Phone** for an iPhone, **Simulator** for the Mac:
 
 Import a document with the `+` button on the Queue page.
 
-**Kokoro is the default voice on the phone build, after a one-time warm-up.**
-On `T2SReaderKokoro` a document with no voice of its own plays through Kokoro
-Heart on the Core ML route; `KokoroCoreMLDecision.current` carries the A13
-measurement (RTF 0.181, 119 MB — `spikes/findings/2026-09-04-pre-a14-runtime.md`),
-so every rate up to 4x is offered. The first launch after an install builds
-Core ML's compute plans, which took 206 s on the A13 in the spike, so
-Preferences → Voice shows "Preparing the Kokoro voice (one-time, up to a few
-minutes on the first launch)…" until it finishes and then "Runs on this
-device."; later launches take seconds. The everyday `T2SReader` target links no
+**Kokoro is the default voice on the phone build, after a one-time download and
+warm-up.** On `T2SReaderKokoro` a document with no voice of its own plays
+through Kokoro Heart on the Core ML route; `KokoroCoreMLDecision.current`
+carries the A13 measurement (RTF 0.181, 119 MB —
+`spikes/findings/2026-09-04-pre-a14-runtime.md`), so every rate up to 4x is
+offered. The first launch downloads and compiles the model (the glow across the
+top says "Downloading the voice · 120 of 619 MB", then "Preparing the voice · 3
+of 14"), then builds Core ML's compute plans — 206 s on the A13 in the spike —
+and later launches take seconds: the engine is ready once the two duration
+models and the 3 s and 15 s buckets have loaded (eight of fourteen stages), and
+the 7 s and 10 s buckets follow behind. The everyday `T2SReader` target links no
 engine and keeps the system voice.
+
+**Keep the app in front while it warms up.** iOS kills a process that is not
+frontmost and holds 80% of a core for a minute, and a compute-plan build is
+exactly that (the iPhone 17 Pro's `cpu_resource_fatal` of 2026-09-09). So the
+app builds plans and compiles the download only while the scene is active
+(`ForegroundGate`): lock the phone or switch away and the warm-up pauses until
+you come back; a background launch (the overnight Prepare task) never builds
+them, and a Prepare pass waits for a foreground warm-up on a fresh install.
+Renders made while the app is in the background — play-ahead with the screen
+off, Prepare on charge — are paced by `CPUBudget` under 60% of a core over a
+minute, and the log (`render.pacing`) says when that engages.
+
+**Measuring on a phone.** Every stage load, every pipeline call and every
+utterance writes its seconds to the unified log under subsystem
+`com.t2s.reader`, category `kokoro.timing`:
+
+```bash
+log stream --predicate 'subsystem == "com.t2s.reader"' --style compact   # everything
+log stream --predicate 'subsystem == "com.t2s.reader" AND category == "kokoro.timing"' --style compact
+```
+
+A stage load well under a second means Core ML found its compute plan in its
+cache; many seconds means it built one. The compute units are a per-session
+switch for the experiment the performance audit's §3.7 asks for: set the user
+default `kokoro.computeUnits` to `cpuAndNeuralEngine`, `cpuAndGPU` or `all`
+(Xcode → Edit Scheme → Run → Arguments: `-kokoro.computeUnits cpuAndNeuralEngine`)
+and compare the `kokoro call` lines; unset is `cpu`, the measured policy.
+`scripts/compute-probe.sh` runs the same comparison on this Mac.
 
 The MLX route stays wired beside Core ML, gated on the iPhone 17 Pro
 measurements (spec §7.2–§7.5, §7.7): `KokoroRuntimeDecision.current` is `nil`
@@ -201,11 +237,21 @@ probe.
 `App/T2SReaderShare` is a Share Extension: from Safari, Files, or any share
 sheet, "T2S Reader" accepts a link, plain text, an EPUB, or a PDF, copies it
 into a `ShareInbox` inside the app group, and opens the host app on a hand-off
-URL to finish the import. Both targets are members of the app group
-`group.com.t2s.reader` and the library lives in that group's container, so **the app will not open its library
-without the `application-groups` entitlement**. `scripts/build-app.sh` signs
-ad hoc for exactly this reason (unsigned only under `CI`); an unsigned build
-shows "The library could not be opened."
+URL to finish the import. Both targets are members of one app group
+(`group.com.t2s.reader` by default) and the library lives in that group's
+container, so **the app will not open its library without the
+`application-groups` entitlement**. `scripts/build-app.sh` signs ad hoc for
+exactly this reason (unsigned only under `CI`); an unsigned build shows "The
+library could not be opened."
+
+**Another team, another Mac.** A team that is not the owner's cannot register
+the owner's app group, so the bundle id, the app group and the team are
+per-Mac settings in `App/Local.xcconfig` (git-ignored; the build scripts copy
+`Local.xcconfig.example` there): `DEVELOPMENT_TEAM`, `T2S_BUNDLE_ID` and
+`T2S_APP_GROUP`, with the defaults in `App/project.yml`. The Share Extension
+takes `$(T2S_BUNDLE_ID).share`, the entitlements take `$(T2S_APP_GROUP)`, and
+`AppPaths.appGroupIdentifier` reads the group back out of the bundle's
+`T2SAppGroupIdentifier`. Nothing tracked changes.
 
 ### Prepare, on charge
 
@@ -221,7 +267,12 @@ is cache, so nothing is lost when it does not run.
 
 There is no backend and no account. Preferences → Cloud voices takes an HTTPS
 endpoint, a model, a voice, and a request rate, plus **your** provider's API
-key. The key goes to the Keychain and nowhere else; the non-secret
+key. The contract is OpenAI's speech endpoint —
+`https://api.openai.com/v1/audio/speech`, a model such as `gpt-4o-mini-tts`, a
+voice such as `alloy` — asked for raw 16-bit PCM at 24 kHz; a proxy in front of
+another provider may answer with JSON (`{"audio": <base64 float32 PCM>,
+"sample_rate": 24000, "word_timings": [...]}`) to add word timings, which
+OpenAI does not give. The key goes to the Keychain and nowhere else; the non-secret
 configuration (endpoint, model, voice, rate) is all that the settings store
 keeps, and only the endpoint/model/voice/format fingerprint enters the render
 key, so changing the rate limit does not invalidate cached audio. "Remove key"

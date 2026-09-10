@@ -7,7 +7,9 @@
 #                  into spikes/SpikeHarness/Resources/CoreML/, one voice, plus the source clone.
 #   --app          Plan 6 Task 1: the same model files into App/Resources/KokoroCoreML/, with all
 #                  28 of Kokoro's English voices instead of just af_heart, and no clone — the app
-#                  builds against the vendored copy at Packages/KokoroPipeline.
+#                  builds against the vendored copy at Packages/KokoroPipeline. Since 2026-09-10
+#                  this staging feeds the package's tests only: the phone downloads the same 72
+#                  files itself (KokoroCoreMLManifest / KokoroCoreMLInstall carry these pins).
 #
 # What is fetched, all git-ignored and never committed:
 #

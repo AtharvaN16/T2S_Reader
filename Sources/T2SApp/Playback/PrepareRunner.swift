@@ -79,12 +79,15 @@ public final class PrepareRunner {
     private let defaults: UserDefaults
     private let arbiter: RenderArbiter
     private let timeSource: any TimeSource
+    /// Paces every pass's renders while the app is in the background (`CPUBudget`): a Prepare pass
+    /// is minutes of Core ML, which is exactly what iOS kills a background process for.
+    private let cpuBudget: CPUBudget?
     private var currentScheduler: RenderScheduler?
     private var cancelRequested = false
 
     public init(library: Library, store: LibraryStore, audioStore: any AudioStore,
                 engine: any SynthesisEngine, defaults: UserDefaults = .standard,
-                arbiter: RenderArbiter, timeSource: any TimeSource = SystemTimeSource()) {
+                arbiter: RenderArbiter, timeSource: any TimeSource = SystemTimeSource(), budget: CPUBudget? = nil) {
         self.library = library
         self.store = store
         self.audioStore = audioStore
@@ -92,6 +95,7 @@ public final class PrepareRunner {
         self.defaults = defaults
         self.arbiter = arbiter
         self.timeSource = timeSource
+        self.cpuBudget = budget
     }
 
     /// Looks up the persisted continuation document and Queue before executing a normal app or
@@ -283,7 +287,7 @@ public final class PrepareRunner {
     /// a prime is a handful of utterances whose timings must be on disk before the next load.
     private func render(_ jobs: [RenderJob], document: PreparedDocument, writeEveryUtterance: Bool = false) async -> GroupResult {
         guard !jobs.isEmpty else { return GroupResult() }
-        let scheduler = RenderScheduler(engine: engine, store: audioStore, timeSource: timeSource, arbiter: arbiter)
+        let scheduler = RenderScheduler(engine: engine, store: audioStore, timeSource: timeSource, arbiter: arbiter, budget: cpuBudget)
         currentScheduler = scheduler
 
         let requests = jobs.map { job in

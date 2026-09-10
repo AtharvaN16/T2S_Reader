@@ -273,9 +273,11 @@ struct VoiceListPage: View {
         switch env.kokoroStatus.status {
         case .notLinked, .checking:
             return "Checking this device…"
+        case .installing:
+            return "Downloading the Kokoro voice (about 620 MB, over Wi-Fi, once per install)…"
         case .preparing:
-            // The eight Core ML stages load once per launch, and on a first launch the system may
-            // still be building their compute plans — minutes on an A13. Say so, rather than let a
+            // The Core ML stages load once per launch, and on a first launch the system may still
+            // be building their compute plans — minutes on an A13. Say so, rather than let a
             // reader wonder why the first sentence is slow to arrive.
             return "Preparing the Kokoro voice (one-time, up to a few minutes on the first launch)…"
         case .available(let isDebugOverride):

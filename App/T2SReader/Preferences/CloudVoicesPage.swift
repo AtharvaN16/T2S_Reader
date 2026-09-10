@@ -20,7 +20,7 @@ struct CloudVoicesPage: View {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 PageTitle(text: "Cloud voices", subtitle: "Use your own provider and API key.")
                 section("Provider contract") {
-                    Text("This is a generic OpenAI-compatible PCM endpoint. It receives model, input, voice, pcm_f32le at 24 kHz, and optional word timestamps.")
+                    Text("OpenAI's speech endpoint, or any that speaks its contract: https://api.openai.com/v1/audio/speech with a model such as gpt-4o-mini-tts and a voice such as alloy. The app asks for raw PCM at 24 kHz; a proxy may answer with JSON that adds word timings.")
                         .typeRole(.meta)
                         .foregroundStyle(Tokens.ink2)
                     Text("Requests and charges go directly to your provider.")

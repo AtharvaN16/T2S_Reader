@@ -93,6 +93,7 @@ struct RootPager: View {
     /// Set by that page; opened once it has actually gone.
     @State private var pendingOpen: DocumentSummary?
     @State private var readerDocument: DocumentSummary?
+    @State private var chrome = Chrome()
 
     var body: some View {
         // The reader is for the safe-area inset: `bottomFill` has to know how far below the page
@@ -108,18 +109,29 @@ struct RootPager: View {
                 .ignoresSafeArea(edges: .bottom)
                 .environment(\.readerRoute, ReaderRoute(open: { readerDocument = $0 }))
 
-                bottomFill(inset: geo.safeAreaInsets.bottom)
+                // A page pushed from Settings owns the screen (owner, 2026-09-10): the bar and
+                // its fill go, and `PagerLock` (in `PreferencesPage`) holds the pager still, so the
+                // only swipe left is the one back to Settings.
+                if !chrome.isSubpageOpen {
+                    bottomFill(inset: geo.safeAreaInsets.bottom)
+                        .transition(.opacity)
+                }
                 TopFade(inset: geo.safeAreaInsets.top)
 
-                VStack(spacing: 12) {
-                    if !env.libraryModel.isQueueEmpty || env.player.current != nil {
-                        MiniPlayer { readerDocument = $0 }
+                if !chrome.isSubpageOpen {
+                    VStack(spacing: 12) {
+                        if !env.libraryModel.isQueueEmpty || env.player.current != nil {
+                            MiniPlayer { readerDocument = $0 }
+                        }
+                        PageIndicator(page: $page)
                     }
-                    PageIndicator(page: $page)
+                    .padding(.bottom, Spacing.grid)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .padding(.bottom, Spacing.grid)
             }
+            .animation(.snappy, value: chrome.isSubpageOpen)
         }
+        .environment(chrome)
         .background(Tokens.ground.ignoresSafeArea())
         .appTheme()
         .onOpenURL { url in

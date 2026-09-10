@@ -1,56 +1,54 @@
 import SwiftUI
 import T2SApp
 
-/// Preferences → Voice (spec §2.4.5): the default voice, in sections, with preview. Also the
-/// per-document voice change (`VoiceChangeSheet`) through `selection`, `onSelect` and `confirm`.
+/// The voice list, for Settings (the default voice) and for one document (`VoiceChangeSheet`).
 ///
-/// Round 5 (2026-09-10, from the owner's references — Beside's "Choose Voice", Uptime's "Change
-/// your default voice"): every row wears its two verbs. The avatar, with a play badge, is *hear*;
-/// the radio at the end — and the name beside it — is *choose*. Nothing is a mode any more: the
-/// "Change" pill and its armed state (round 4) are gone, and with them the question the owner asked
-/// three rounds running, "what does tapping a row do". Without `confirm`, choosing applies at once
-/// and the radio follows (Settings). With it, the radio moves and the bar at the foot applies —
-/// the per-document change, where applying throws rendered audio away and deserves one more tap.
+/// Round 6 (2026-09-10, from the owner's first look at round 5 on the phone): no avatar disc — the
+/// name carries a ♀ / ♂ mark and, on the voice that plays by default, a "Default" tag; the old
+/// "Default" pointer row is gone with it. Three marks at the end of every row, each its own verb:
+/// a waveform (hear), a heart (keep), a radio (choose). Choosing moves the radio and slides a bar
+/// up from the foot — "Make default" here, "Change voice" for a document — so nothing applies
+/// until that bar is pressed and nothing needs a mode. Sections by accent under no group title.
 struct VoiceListPage: View {
     @Environment(AppEnvironment.self) private var env
-    var selection: String?
-    var onSelect: (VoiceOption) -> Void
-    /// The bar at the foot, when choosing needs confirming; nil applies on the radio's tap.
-    var confirm: Confirm? = nil
+    /// The id in effect before anything is chosen: the document's voice, or the default.
+    var current: String?
+    /// The bar's word — "Make default" / "Change voice" — and its line above, per choice.
+    var confirmLabel: String
+    var note: (VoiceOption) -> String? = { _ in nil }
+    /// Applies the choice; true dismisses the bar. Async so a document's audio can be discarded.
+    var onConfirm: (VoiceOption) async -> Bool
 
-    struct Confirm {
-        var label: String
-        var busyLabel: String? = nil
-        /// A line over the bar — "Replaces 12m of rendered audio" — when there is one to say.
-        var note: String? = nil
-        var isEnabled: Bool
-        var perform: () -> Void
-    }
-
-    /// What "no override" resolves to on this device, loaded once so the right row starts checked —
-    /// Kokoro Heart on the phone build; on the simulator the routing echoes "default" back, which is
-    /// the `systemDefault` row's own id. Until it loads, `option.isDefault` marks a row instead (spec §6).
+    /// What "no override" resolves to on this device (Kokoro Heart on the phone build), loaded
+    /// once: the voice that wears the "Default" tag when Settings has no pick of its own.
     @State private var resolvedDefault: String?
-    /// The Kokoro list's quick filter — only the Kokoro rows carry the gender and favorite data a
-    /// filter needs, so System and Cloud are unaffected.
     @State private var filter: VoiceFilter = .all
+    /// The radio's choice, not yet applied.
+    @State private var pending: VoiceOption?
+    @State private var isApplying = false
+
+    /// The default voice's id: the Settings pick, else the device's own.
+    private var defaultID: String? { env.preferences.defaultVoiceID ?? resolvedDefault }
+    private var selectedID: String? { pending?.id ?? current ?? defaultID }
+    private var isChange: Bool { pending != nil && pending?.id != (current ?? defaultID) }
 
     var body: some View {
-        let options = env.voices.voices()
-        let hasDefaultRow = options.contains(where: \.isDefault)
+        let options = env.voices.voices().filter { !$0.isDefault }             // the pointer row is a tag now
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 PageTitle(text: "Voice")
                 ForEach(VoiceGroup.allCases, id: \.self) { group in
                     let groupOptions = options.filter { $0.group == group }
                     if !groupOptions.isEmpty {
-                        SectionHeader(title: group.title)
-                            .padding(.top, Spacing.section)
-                            .padding(.bottom, Spacing.grid)
+                        if group != .kokoro {                                          // the on-device voices need no banner (owner)
+                            SectionHeader(title: group.title)
+                                .padding(.top, Spacing.section)
+                                .padding(.bottom, Spacing.grid)
+                        }
                         if group == .kokoro {
-                            kokoroRows(groupOptions, options: options, hasDefaultRow: hasDefaultRow)
+                            kokoroRows(groupOptions)
                         } else {
-                            ForEach(groupOptions) { option in row(option, options: options, hasDefaultRow: hasDefaultRow) }
+                            ForEach(groupOptions) { row($0) }
                         }
                         if group == .kokoro {
                             VStack(alignment: .leading, spacing: 4) {
@@ -71,51 +69,56 @@ struct VoiceListPage: View {
                         .foregroundStyle(Tokens.destructive)
                         .padding(.top, Spacing.section)
                 }
-                Color.clear.frame(height: confirm == nil ? 160 : Spacing.section)
+                Color.clear.frame(height: Spacing.section + 80)
             }
             .padding(.horizontal, Spacing.margin)
         }
         .background(Tokens.ground)
         .safeAreaInset(edge: .bottom) {
-            if let confirm {
+            if isChange, let pending {
                 VStack(spacing: 10) {
-                    if let note = confirm.note {
-                        Text(note).typeRole(.meta).foregroundStyle(Tokens.ink2).multilineTextAlignment(.center)
+                    if let line = note(pending) {
+                        Text(line).typeRole(.meta).foregroundStyle(Tokens.ink2).multilineTextAlignment(.center)
                     }
-                    BarButton(label: confirm.label, busyLabel: confirm.busyLabel, isEnabled: confirm.isEnabled, action: confirm.perform)
+                    BarButton(label: confirmLabel, busyLabel: isApplying ? "Applying…" : nil) { apply(pending) }
                 }
                 .padding(.horizontal, Spacing.margin)
                 .padding(.top, 12)
                 .padding(.bottom, Spacing.grid)
                 .background(Tokens.ground)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .navigationBarBackButtonHidden(false)
+        .animation(.snappy, value: isChange)
         .onDisappear { env.voicePreview.stop() }
         .task {
             resolvedDefault = await env.voiceRouting.effectiveVoiceID(VoiceOption.systemDefault.id)
         }
     }
 
-    /// The Kokoro section reads as two sub-sections by language, under the one group header above
-    /// them (spec: Plan 9 voice quality) — "American English" leads because the default route's
-    /// default voice is American (Heart).
-    private func kokoroRows(_ groupOptions: [VoiceOption], options: [VoiceOption], hasDefaultRow: Bool) -> some View {
-        let defaults = groupOptions.filter(\.isDefault)
-        let candidates = groupOptions.filter { !$0.isDefault && matchesFilter($0) }
+    private func apply(_ option: VoiceOption) {
+        isApplying = true
+        Task {
+            if await onConfirm(option) { pending = nil }
+            isApplying = false
+        }
+    }
+
+    /// The on-device voices in two blocks by accent, the filter pills above them — "American
+    /// English" leads because the default route's default voice is American (Heart).
+    private func kokoroRows(_ groupOptions: [VoiceOption]) -> some View {
+        let candidates = groupOptions.filter { matchesFilter($0) }
         let american = candidates.filter { $0.language == "en-US" }
         let british = candidates.filter { $0.language == "en-GB" }
         return VStack(alignment: .leading, spacing: 0) {
-            FilterTabs(options: VoiceFilter.allCases, title: \.title, selection: $filter)
-                .padding(.bottom, Spacing.row)
-            ForEach(defaults) { row($0, options: options, hasDefaultRow: hasDefaultRow) }
+            filterPills().padding(.top, Spacing.section)
             if !american.isEmpty {
                 subsectionHeader("American English", flag: "🇺🇸")
-                ForEach(american) { row($0, options: options, hasDefaultRow: hasDefaultRow) }
+                ForEach(american) { row($0) }
             }
             if !british.isEmpty {
                 subsectionHeader("British English", flag: "🇬🇧")
-                ForEach(british) { row($0, options: options, hasDefaultRow: hasDefaultRow) }
+                ForEach(british) { row($0) }
             }
             if american.isEmpty && british.isEmpty {
                 emptyFilterMessage
@@ -124,8 +127,7 @@ struct VoiceListPage: View {
     }
 
     /// One filter is live at a time — "All" clears it. Only the Kokoro rows carry `gender`, and only
-    /// they can be starred, so this is the Kokoro list's own filter, not a picker-wide one. Tabs, not
-    /// pills, since the Collection's round (a pill is what this app presses).
+    /// they can be starred, so this is the Kokoro list's own filter, not a picker-wide one.
     private enum VoiceFilter: CaseIterable {
         case all, favorites, female, male
 
@@ -148,138 +150,115 @@ struct VoiceListPage: View {
         }
     }
 
+    /// Pills, as the owner wants them here (round 6 put them back after a round as tabs).
+    private func filterPills() -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: Spacing.grid) {
+                ForEach(VoiceFilter.allCases, id: \.self) { option in
+                    Pill(label: option.title, style: filter == option ? .selected : .soft) { filter = option }
+                }
+            }
+        }
+    }
+
     private var emptyFilterMessage: some View {
         Text(filter == .favorites
              ? "No favorites yet — tap the heart on a voice to add one."
              : "No voices match this filter.")
             .typeRole(.meta)
             .foregroundStyle(Tokens.ink2)
-            .padding(.top, Spacing.grid)
+            .padding(.top, Spacing.row)
     }
 
-    /// A flag and the accent's name, with room above and below so each accent reads as its own
-    /// block rather than as one more row. The flag is decorative: the title already says which.
+    /// A flag and the accent's name at group-title weight, with a section's air above and a row's
+    /// air below (owner, 2026-09-10: bigger, and further from its list).
     private func subsectionHeader(_ title: String, flag: String) -> some View {
         HStack(spacing: Spacing.grid) {
             Text(flag)
-                .font(.system(size: 22))
+                .font(.system(size: 24))
                 .accessibilityHidden(true)
             Text(title)
-                .typeRole(.sectionHeader)
+                .typeRole(.groupTitle)
                 .foregroundStyle(Tokens.ink)
         }
-        .padding(.top, Spacing.row)
-        .padding(.bottom, Spacing.grid)
+        .padding(.top, Spacing.section)
+        .padding(.bottom, 20)
     }
 
-    /// One row, three buttons that each look like what they do: the avatar with its play badge
-    /// (hear), the name through to the radio (choose), the heart (keep). The "Default" pointer row
-    /// has no voice of its own to hear and nothing to keep, so it is the name and the radio alone.
-    private func row(_ option: VoiceOption, options: [VoiceOption], hasDefaultRow: Bool) -> some View {
-        // No override chosen: the "Default" row is the one checked wherever the list has one; where it
-        // has none (the simulator's system list), the resolved default's own row is.
-        let isSelected = option.id == selection
-            || (selection == nil && (hasDefaultRow ? option.isDefault : (resolvedDefault.map { $0 == option.id } ?? false)))
+    /// One row: the name with its ♀ / ♂ mark and, on the default voice, a "Default" tag; the
+    /// character line under it; then a waveform (hear), a heart (keep) and a radio (choose). The
+    /// name and the radio are one button; the other two are their own.
+    private func row(_ option: VoiceOption) -> some View {
+        let isSelected = option.id == selectedID
+        let isDefault = option.id == defaultID
         let previewing = env.voicePreview.previewing == option.id
         let rendering = previewing && env.voicePreview.isRendering
-        return HStack(spacing: 12) {
-            if option.isDefault {
-                avatar(for: option, previewing: false, rendering: false)
-            } else {
-                Button { env.voicePreview.toggle(option.id) } label: {
-                    avatar(for: option, previewing: previewing, rendering: rendering)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(previewing ? "Stop preview" : "Preview \(option.name)")
-            }
-
-            Button { onSelect(option) } label: {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 6) {
+        let isFavorite = env.preferences.favoriteVoiceIDs.contains(option.id)
+        return HStack(spacing: 4) {
+            Button { pending = option } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
                         Text(option.name)
                             .typeRole(.rowTitle)
                             .foregroundStyle(Tokens.ink)
                             .lineLimit(1)
-                        if let detail = detailText(for: option, options: options) {
-                            Text(detail)
-                                .typeRole(.meta)
-                                .foregroundStyle(Tokens.ink2)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
+                        if let gender = option.gender { GenderMark(gender: gender) }
+                        if isDefault { tag("Default") }
                     }
-                    Spacer(minLength: 0)
-                    if !option.isDefault { favoriteButton(for: option) }
-                    RadioMark(isOn: isSelected)
+                    if let detail = option.detail {
+                        Text(detail)
+                            .typeRole(.meta)
+                            .foregroundStyle(Tokens.ink2)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-            .accessibilityHint(confirm == nil ? "Makes this the voice" : "Chooses this voice")
+            .accessibilityHint("Chooses this voice")
+
+            Button { env.voicePreview.toggle(option.id) } label: {
+                ZStack {
+                    if rendering {
+                        ProgressView().tint(Tokens.ink)
+                    } else {
+                        Image(systemName: previewing ? "pause.fill" : "waveform")
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundStyle(previewing ? Tokens.accent : Tokens.ink2)
+                    }
+                }
+                .frame(width: 40, height: 40)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(previewing ? "Stop preview" : "Preview \(option.name)")
+
+            if option.gender != nil {                                                // only the on-device voices are starred
+                HeartButton(isOn: isFavorite,
+                            label: isFavorite ? "Remove \(option.name) from favorites" : "Add \(option.name) to favorites") {
+                    env.preferences.toggleFavoriteVoice(option.id)
+                }
+            }
+
+            Button { pending = option } label: {
+                RadioMark(isOn: isSelected).frame(width: 40, height: 40).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isSelected ? "\(option.name), chosen" : "Choose \(option.name)")
         }
         .frame(minHeight: 56)
         .padding(.vertical, Spacing.grid)   // room between rows, on top of the tap-target minimum
     }
 
-    /// The "Default" row says which voice it currently means, once the routing has answered.
-    private func detailText(for option: VoiceOption, options: [VoiceOption]) -> String? {
-        guard option.isDefault, option.group == .kokoro else { return option.detail }
-        if let resolvedDefault, let resolved = options.first(where: { $0.id == resolvedDefault }) {
-            return "Currently \(resolved.name)"
-        }
-        return option.detail
-    }
-
-    /// The voice's initial, tinted by gender — pink for female, blue for male, neutral `surface`
-    /// where there is none (the "Default" pointer row, a system or cloud voice) — with a small ink
-    /// play badge at its foot that says the disc can be heard; the badge turns to pause while this
-    /// row's voice is the one playing, and the disc shows a spinner while its preview is rendering.
-    private func avatar(for option: VoiceOption, previewing: Bool, rendering: Bool) -> some View {
-        let tint: Color? = switch option.gender {
-        case .female: Tokens.voiceFemale
-        case .male: Tokens.voiceMale
-        case nil: nil
-        }
-        let foreground = tint == nil ? Tokens.ink : Tokens.onAccent
-        return ZStack {
-            Circle().fill(tint ?? Tokens.surface)
-            if rendering {
-                ProgressView().tint(foreground)
-            } else {
-                Text(option.name.prefix(1).uppercased())
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(foreground)
-            }
-        }
-        .frame(width: 44, height: 44)
-        .overlay(alignment: .bottomTrailing) {
-            if !option.isDefault {
-                Image(systemName: previewing ? "pause.fill" : "play.fill")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(Tokens.ground)
-                    .frame(width: 18, height: 18)
-                    .background(Tokens.ink, in: Circle())
-                    .overlay(Circle().strokeBorder(Tokens.ground, lineWidth: 2))
-                    .offset(x: 3, y: 3)
-            }
-        }
-        .accessibilityHidden(true)
-    }
-
-    /// A heart, independent of the radio: the checked row is what plays by default, the starred
-    /// rows are what "Favorites" filters to. A voice can be both, neither, or starred without being
-    /// default. Persisted in `ReaderPreferences.favoriteVoiceIDs`, so it survives a relaunch.
-    private func favoriteButton(for option: VoiceOption) -> some View {
-        let isFavorite = env.preferences.favoriteVoiceIDs.contains(option.id)
-        return Button { env.preferences.toggleFavoriteVoice(option.id) } label: {
-            Image(systemName: isFavorite ? "heart.fill" : "heart")
-                .font(.system(size: 20))
-                .foregroundStyle(isFavorite ? Tokens.accent : Tokens.ink2)
-                .frame(width: 40, height: 40)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(isFavorite ? "Remove \(option.name) from favorites" : "Add \(option.name) to favorites")
+    private func tag(_ text: String) -> some View {
+        Text(text)
+            .typeRole(.caption)
+            .foregroundStyle(Tokens.ink2)
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .background(Tokens.surface, in: Capsule())
     }
 
     /// The Kokoro section is only rendered by a build that links the engine, so this is only ever

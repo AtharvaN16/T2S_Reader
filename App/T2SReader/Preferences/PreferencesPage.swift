@@ -107,6 +107,7 @@ struct PreferencesPage: View {
                 .padding(.horizontal, Spacing.margin)
             }
             .background(Tokens.ground)
+            .background(PagerLock())                                           // holds the pager while a subpage is up
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showVoices) { voiceList }
         }
@@ -118,11 +119,13 @@ struct PreferencesPage: View {
         }
     }
 
-    /// The default voice: a radio's tap applies it (no confirm bar — nothing is thrown away).
+    /// The default voice: the radio moves, "Make default" applies.
     private var voiceList: some View {
-        VoiceListPage(selection: env.preferences.defaultVoiceID) { option in
-            env.preferences.defaultVoiceID = option.isDefault ? nil : option.id
+        VoiceListPage(current: nil, confirmLabel: "Make default") { option in
+            env.preferences.defaultVoiceID = option.id
+            return true
         }
+        .settingsSubpage()
     }
 
     /// The row shows the voice that will speak, not the token stored for it: a reader who has never

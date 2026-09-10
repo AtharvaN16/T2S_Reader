@@ -1,8 +1,62 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 small hours (voice picker round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 small hours (voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — voice picker round 5: a radio per row, the avatar plays, no "Change" mode
+## Resume here (2026-09-10, latest) — voice picker round 6, from the first phone look: twelve asks
+
+The owner installed round 5 on the phone (Kokoro rows visible at last) and sent twelve items. All
+on `dev`:
+
+1. **Settings subpages own the screen.** No page swipe under them, no mini-player. First cut
+   wrapped the whole pager in one `NavigationStack` so a push covered everything — but a paged
+   `TabView` inside a stack hands its pages 20 pt less top inset than the screen has (measured:
+   root titles 17 pt higher than the pushed page's; `safeAreaPadding` back made it worse), so that
+   is reverted. Instead: `Root/Chrome.swift` — an `@Observable` `Chrome` (`subpageDepth`) in the
+   environment; `.settingsSubpage()` (`Design/SettingsSubpage.swift`) counts itself in and out on
+   appear/disappear; `RootPager` drops the bottom fill, mini-player and page dots while it is
+   open; and **`PagerLock`**, a `UIViewRepresentable` in `PreferencesPage`'s background, walks up
+   to the nearest `UIScrollView` — the page controller's queuing view — and sets
+   `isScrollEnabled` false. Introspection, but small and re-applied on every update.
+2. **Subpage titles at the root titles' height**: `.settingsSubpage()` hides the system bar and
+   draws its own back circle (top-left, 12 pt under the safe area); `PageTitle` then sits at
+   `titleTop` exactly as on the root pages (measured 126 pt on all three). The edge swipe back
+   survives the hidden bar through a `UINavigationController` extension in the same file
+   (`interactivePopGestureRecognizer.delegate`, allowed past the root only). Applied to Voice,
+   Storage, Cloud voices, Pronunciation.
+3. "On-device voices" group header gone (System / Cloud headers stay).
+4. Voice filter chips are `Pill`s again (the tabs stay on the Collection).
+5. **No "Default" row.** `VoiceListPage` filters `isDefault` rows out and puts a "Default" tag
+   after the name of the voice that plays by default (`preferences.defaultVoiceID`, else the
+   device's resolved default). In the Reader, choosing the tagged voice stores `nil` — the
+   document follows Settings again, which is what the row used to mean.
+6. **Heart** (`HeartButton`, `Design/GenderMark.swift`): 24 pt like the radio, red top-lit
+   gradient with a gloss and a shadow when filled, outline `ink2` when not, and a spring pop
+   (×1.3) on filling.
+7. **The bar rises on a choice.** `VoiceListPage` now owns `pending`; a radio (or the name) sets
+   it, and a `BarButton` slides up from the foot — "Make default" in Settings, "Change voice" in
+   the Reader — with an optional note line ("Replaces 12m of rendered audio…"). New signature:
+   `VoiceListPage(current:confirmLabel:note:onConfirm:)`; `onConfirm` is async and returns whether
+   it applied. `VoiceChangeSheet` is that plus the dismiss.
+8. **Personalities de-warmed**: `KokoroVoiceCatalog.personalities` had "Warm" in 12 of 28 lines;
+   now none, each reworded from the same listener profiles (Heart "Breathy, Intimate and Tender",
+   Emma "Inviting, Rounded and Gracious", Santa "Deep, Jolly and Grandfatherly"…). Tests updated.
+   Still not heard by anyone here.
+9. **A waveform button** before the heart plays the voice (pause glyph in accent while playing, a
+   spinner while rendering).
+10. **No avatar discs.** A drawn ♀ / ♂ (`GenderMark`, `Canvas` strokes, pink / blue) sits after the
+    name. Only voices with a gender (Kokoro) get the heart.
+11. Accent headers ("American English") at `groupTitle` weight, a section's air above and 20 pt
+    below.
+12. Cloud: answered in the summary to the owner, nothing built — one row per configured provider
+    voice, no gender, no traits, no filter; a provider library would need its own list.
+
+`scripts/build-app.sh` → `** BUILD SUCCEEDED **`; `swift test --filter KokoroVoiceCatalogTests`
+6/6. Seen in the simulator (system voices only): the Voice subpage with the back circle, no bar
+underneath, waveform + radio per row; titles measured equal on Home, Settings and Voice. Not seen:
+the pager lock (cannot swipe by script), the Kokoro rows with marks, tags, hearts and pills, the
+bar rising, the heart's pop. Owed a phone look.
+
+## Resume here (2026-09-10) — voice picker round 5: a radio per row, the avatar plays, no "Change" mode
 
 The owner sent two Mobbin references (Beside's "Choose Voice": name, language chips, traits, a radio
 per row; Uptime's "Change your default voice": name, play + waveform per row, a radio, one

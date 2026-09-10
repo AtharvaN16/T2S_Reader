@@ -48,6 +48,7 @@ struct PronunciationPage: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(Tokens.ground)
+        .settingsSubpage()
         .task { await model.refresh() }
         .sheet(isPresented: $adding) { PronunciationEditor(entry: nil) }
         .sheet(item: $editing) { PronunciationEditor(entry: $0) }

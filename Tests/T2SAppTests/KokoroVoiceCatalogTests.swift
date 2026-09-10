@@ -28,13 +28,13 @@ import T2SAudio
         // sub-section (`language`) and the avatar tint (`gender`), so neither is repeated in words.
         let heart = try #require(kokoro.first)
         #expect(heart.name == "Heart")
-        #expect(heart.detail == "Warm, Breathy and Intimate")
+        #expect(heart.detail == "Breathy, Intimate and Tender")
         #expect(heart.language == "en-US")
         #expect(heart.gender == .female)
 
         let emma = try #require(voices.first { KokoroVoiceID(rawValue: $0.id)?.voice == "bf_emma" })
         #expect(emma.name == "Emma")
-        #expect(emma.detail == "Polished, Warm and Inviting")
+        #expect(emma.detail == "Inviting, Rounded and Gracious")
         #expect(emma.language == "en-GB")
         #expect(emma.gender == .female)
 
@@ -87,11 +87,11 @@ import T2SAudio
         // The label is a runtime qualifier: the everyday route reads as it always has, and only the
         // second runtime has to name itself to be told apart.
         #expect(kokoro.first?.name == "Heart")
-        #expect(kokoro.first?.detail == "Warm, Breathy and Intimate")
+        #expect(kokoro.first?.detail == "Breathy, Intimate and Tender")
         #expect(kokoro.dropFirst(28).first?.name == "Heart")
-        #expect(kokoro.dropFirst(28).first?.detail == "Warm, Breathy and Intimate · MLX")
+        #expect(kokoro.dropFirst(28).first?.detail == "Breathy, Intimate and Tender · MLX")
         let mlxEmma = try #require(kokoro.dropFirst(28).first { KokoroVoiceID(rawValue: $0.id)?.voice == "bf_emma" })
-        #expect(mlxEmma.detail == "Polished, Warm and Inviting · MLX")
+        #expect(mlxEmma.detail == "Inviting, Rounded and Gracious · MLX")
         #expect(mlxEmma.language == "en-GB")
         #expect(voices.allSatisfy { $0.group == .kokoro })
     }
@@ -117,7 +117,7 @@ import T2SAudio
         let afterTheProbe = Array(catalog.voices().dropFirst())
         #expect(afterTheProbe.count == 56)
         #expect(afterTheProbe.dropFirst(28).allSatisfy { KokoroVoiceID(rawValue: $0.id)?.engineID == mlx })
-        #expect(afterTheProbe.dropFirst(28).first?.detail == "Warm, Breathy and Intimate · MLX")
+        #expect(afterTheProbe.dropFirst(28).first?.detail == "Breathy, Intimate and Tender · MLX")
     }
 }
 

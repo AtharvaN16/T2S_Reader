@@ -2,7 +2,39 @@
 
 _Last updated 2026-09-10 small hours (the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — the wash dithered, and the white band fixed properly
+## Resume here (2026-09-10, latest) — one glow: the bars paint it, Settings gets it, it hugs the top
+
+The owner saw the glow "split in 2" at the status bar, wanted it higher, and asked why Settings had
+none. Three causes, three fixes, all in `Design/WarmUpVeil.swift` and the bars that use it:
+
+- **The split was arithmetic.** The strip drawn over the status bar was a second, translucent copy
+  of the wash, and two layers at opacity *p* stacked do not make one layer at *p*: the band was
+  always a shade stronger than the page under it, and pulsed against it. Gone. There is one view,
+  `WarmRamp` — **opaque**, its pulse a `Color.mix` fraction rather than an alpha — and everything
+  that shows the glow draws that same view: `WarmUpVeil` at the back of a stack, and every ground
+  bar through **`WarmGround`** (ground normally, the ramp while warming, a 0.6 s crossfade between).
+  `TopFade` takes a mask over a fill now (`shape(solidThrough:fade:)`) and paints `WarmGround` when
+  its host says `warm:`; the Reader's header does the same with its own `groundShape`. A bar
+  painting the ramp over the veil shows the pixels the veil would have shown, so there is nothing to
+  line up. `WarmUpLine` is the message alone. Measured: averaged over 60 empty columns, the old
+  build stepped 6.5 (G) / 10.3 (B) levels at exactly the inset edge; the unified one's largest steps
+  are 2.0 / 3.2, at a different row on each page — the ramp's own slope, no seam.
+- **Then a second, inverted band**: the bar showed a *paler* slice. The 320 pt ramp was a fixed-height
+  child inside the bar's 90 pt frame, SwiftUI centred it, and the bar drew the ramp from 115 pt
+  down. The ramp is an `.overlay` on the ground now — no part in layout — so it starts at the top
+  of any frame. Worth remembering: a fixed-size child inside a smaller frame is centred, not
+  top-aligned, whatever the stack's alignment says.
+- **Higher**: the glow is a fixed 320 pt from the top (`WarmRamp.height`) instead of 58 % of the
+  screen, plateau to 15 %, out by 55 %. Same on every phone.
+- **Settings had no glow** because its `NavigationStack` paints an opaque container background over
+  the pager's ground; `.containerBackground(Color.clear, for: .navigation)` clears it, and the page
+  is as transparent as Home and the Collection.
+
+`scripts/build-app.sh` → `** BUILD SUCCEEDED **`. Seen in the simulator (`T2S_WARMUP=1`, pulse
+pinned): Home, Settings and the Reader lit from the very top with no join, dither still clean
+(longest flat run 4 px). Not seen on the phone.
+
+## Resume here (2026-09-10) — the wash dithered, and the white band fixed properly
 
 (Another session landed the Collection's title-as-filter in the section below while this was going
 on; the two do not overlap — the three root pages still hand their ground to `RootPager`, which is

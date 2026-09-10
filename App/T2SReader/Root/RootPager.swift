@@ -103,7 +103,7 @@ struct RootPager: View {
             ZStack(alignment: .bottom) {
                 // First in the stack, so every page's content draws over it: the pages carry no
                 // ground of their own any more (this view's `.background` below is the one ground
-                // for all three), which is what lets the wash read as light behind them.
+                // for all three), which is what lets the glow read as light behind them.
                 WarmUpVeil()
 
                 TabView(selection: $page) {
@@ -122,10 +122,10 @@ struct RootPager: View {
                     bottomFill(inset: geo.safeAreaInsets.bottom)
                         .transition(.opacity)
                 }
-                TopFade(inset: geo.safeAreaInsets.top)
-                // Over the fade's solid band, which would otherwise cut a pale strip across the
-                // top of the wash; this carries the warm-up's line and bar too.
-                WarmUpVeil(layer: .chrome, band: geo.safeAreaInsets.top)
+                // The bar paints the glow itself while the warm-up shows, so bar and page are one
+                // surface; the warm-up's line rides over it.
+                TopFade(inset: geo.safeAreaInsets.top, warm: WarmUpVeil.isShowing(env))
+                WarmUpLine(band: geo.safeAreaInsets.top)
 
                 if !chrome.isSubpageOpen {
                     VStack(spacing: 12) {

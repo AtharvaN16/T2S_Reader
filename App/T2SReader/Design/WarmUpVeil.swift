@@ -1,180 +1,137 @@
 // App/T2SReader/Design/WarmUpVeil.swift
+import CoreGraphics
 import Foundation
 import SwiftUI
-import CoreGraphics
 import UIKit
 
 /// The one-time voice warm-up, shown wherever the reader is (owner, 2026-09-10, Tabby's launch
-/// gradient as the reference): an orange wash down from the very top of the screen that breathes
+/// gradient as the reference): an orange glow down from the very top of the screen that breathes
 /// until the stages are loaded, and one short line with how long it usually takes on this phone
-/// over a hairline of progress.
+/// over a hairline of progress (`WarmUpLine`).
 ///
-/// **It sits behind the page, not over it** (owner's second look): every host puts the `.behind`
-/// layer at the back of its stack, over the ground fill and under the text, so the page reads as
-/// lit from behind rather than filmed over. That only works because the pages themselves are
-/// transparent — the root pages let `RootPager`'s ground show through, and `ReaderTextView` draws
-/// on a clear background.
-///
-/// **The `.chrome` layer is the top strip.** A page's ground bars — `TopFade` on the root, the
-/// Reader's own header fade — are painted over the content to mask what scrolls under the status
-/// bar, and being over the content they are also over the `.behind` layer, which left a pale band
-/// across the top of the wash. So the same gradient is drawn a second time in front of them,
-/// clipped to the safe-area inset where no app content ever sits, and the message rides with it.
-/// Both layers take their pulse from the wall clock rather than their own animation state, so they
-/// breathe in step no matter when each appeared.
+/// **One surface.** The glow is `WarmRamp`, and everything that shows it draws that same view:
+/// this veil at the back of a host's stack, under the text; and every ground bar across the top
+/// of a page — `TopFade` on the root, the Reader's header — through `WarmGround`, which is the
+/// bar's ground normally and the ramp while warming. Two earlier cuts drew a second, translucent
+/// strip over the bars to cover them, and the owner saw the join: two layers at opacity *p* stacked
+/// do not make one layer at *p*, so the band under the status bar was always a shade stronger
+/// than the page below it. The ramp is opaque and its pulse is a colour mix, not an alpha, so a
+/// bar painting it over the veil shows exactly the pixels the veil would have — there is nothing
+/// to line up. The pages under it are transparent so it can reach them: the root pages let
+/// `RootPager`'s ground show through (Settings' stack has its container background cleared for
+/// the same reason), and `ReaderTextView` draws on a clear background.
 ///
 /// **It goes when sound does.** Warming is only worth saying while nothing is speaking; a book
 /// already playing through a fallback voice with an orange pulse over it read as an alarm rather
-/// than a wait (owner). So the wash hides the moment audio is actually flowing, even if the Kokoro
+/// than a wait (owner). So the glow hides the moment audio is actually flowing, even if the Kokoro
 /// stages are still loading behind it.
-///
-/// What it knows: the stage count as each compute plan finishes (`KokoroStatusModel.warmUpStages`,
-/// eight stages), and the last warm-up's length on this phone (`expectedWarmUpSeconds`). The bar is
-/// the larger of the two readings — stages are exact but coarse, the clock is smooth but a guess —
-/// and never claims done. A first launch after install has no remembered length, and says so.
 struct WarmUpVeil: View {
-    enum Layer {
-        /// The whole wash, for the back of a host's stack.
-        case behind
-        /// The top strip and the message, for the front — over whatever ground bar the host paints.
-        case chrome
-    }
-
     @Environment(AppEnvironment.self) private var env
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    var layer: Layer = .behind
-    /// The safe-area top inset, from a host that has a `GeometryProxy` which still reports it.
-    var band: CGFloat? = nil
-    /// The line and bar under the status bar; off in the Reader, whose transport already says
-    /// "preparing the voice…". Only the `.chrome` layer carries it.
-    var showsMessage = true
 
-    /// The share of the screen the wash covers, top down.
-    private static let coverage: CGFloat = 0.58
-    /// One breath, in seconds.
-    private static let period: Double = 3
-
-    /// `T2S_WARMUP=1` fakes a warm-up in the everyday build (`KokoroComposition`), and a faked one
-    /// has to show even while the fixture book plays, or there is nothing to screenshot.
-    private static let isFaked = ProcessInfo.processInfo.environment["T2S_WARMUP"] != nil
-
-    /// How tall the ground bar above the page is — the safe-area top inset. **The host measures it
-    /// and passes it in**: this view spans the screen with `ignoresSafeArea()`, and a proxy under
-    /// that reports the insets it now covers as zero, while asking the key window for them came
-    /// back zero on the owner's phone and left the strip with no height at all — the white band
-    /// across the top of the wash, twice (2026-09-10). A host that cannot measure gets the window,
-    /// and failing that a plain iPhone's inset, so the strip is never nothing.
-    private var statusBandHeight: CGFloat {
-        if let band, band > 0 { return band }
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let window = scenes.compactMap(\.keyWindow).first ?? scenes.flatMap(\.windows).first
-        let measured = window?.safeAreaInsets.top ?? 0
-        return measured > 0 ? measured : 47
+    var body: some View {
+        if Self.isShowing(env) {
+            WarmRamp()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+                .transition(.opacity)
+                .accessibilityHidden(true)
+        }
     }
 
     /// Warming, and nothing audible yet. `isCatchingUp` is the stall before the first sound, so a
-    /// tapped Play that is still waiting keeps the wash; a book actually speaking loses it.
-    private var isVisible: Bool {
+    /// tapped Play that is still waiting keeps the glow; a book actually speaking loses it.
+    static func isShowing(_ env: AppEnvironment) -> Bool {
         guard env.kokoroStatus.status.isWarming else { return false }
-        if Self.isFaked { return true }
+        if isFaked { return true }
         return !(env.player.isPlaying && !env.player.isCatchingUp)
     }
 
+    /// `T2S_WARMUP=1` fakes a warm-up in the everyday build (`KokoroComposition`). A faked one has
+    /// to show even while the fixture book plays, or there is nothing to screenshot, and it holds
+    /// the pulse still, so two screenshots are comparable.
+    static let isFaked = ProcessInfo.processInfo.environment["T2S_WARMUP"] != nil
+}
+
+/// What a ground bar paints: `ground`, or the ramp while the warm-up shows, crossfading between
+/// them so a bar does not snap from orange to grey when the voice comes ready.
+struct WarmGround: View {
+    @Environment(AppEnvironment.self) private var env
+
     var body: some View {
-        if isVisible {
-            let band = statusBandHeight
-            GeometryReader { geo in
-                ZStack(alignment: .top) {
-                    TimelineView(.animation) { context in
-                        wash(pulse: reduceMotion || Self.isFaked ? 1 : Self.pulse(at: context.date))
-                            .frame(height: geo.size.height * Self.coverage)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                            .mask(alignment: .top) { stripMask(band: band) }
+        let showing = WarmUpVeil.isShowing(env)
+        ZStack(alignment: .top) {
+            Tokens.ground
+            if showing { WarmRamp().transition(.opacity) }
+        }
+        .animation(.easeOut(duration: 0.6), value: showing)
+    }
+}
+
+/// The glow: `height` points of orange from the top of whatever frame it is given, ground below
+/// that, so it fills any host and lines up with every other copy of itself as long as the host's
+/// frame begins at the top of the screen (they all do — `ignoresSafeArea` on the veil, on
+/// `TopFade`, on the Reader's header background). A fixed height, not a share of the screen, so
+/// the glow hugs the top on every phone (owner: "move the glow more to the top").
+///
+/// **Opaque, and dithered.** Each stop is the colour the accent and the ground *make*
+/// (`Color.mix`), and the pulse scales the mix rather than an alpha — see `WarmUpVeil` for why. A
+/// ramp this shallow is asking more of 8 bits than they have: it would hold one value for ten or
+/// twenty rows and then step, and the eye reads every step as a line (measured on a screenshot:
+/// flat runs of up to 23 px). A tile of noise a few levels wide, blended over the ramp at one cell
+/// per device pixel, scatters each step's edge into a pattern too fine to see — measured after:
+/// no run longer than 3 px.
+struct WarmRamp: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    static let height: CGFloat = 320
+    /// One breath, in seconds.
+    private static let period: Double = 3
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let pulse = reduceMotion || WarmUpVeil.isFaked ? 1 : Self.pulse(at: context.date)
+            // Ground the size of whatever frame this is given, and the ramp laid over its top as
+            // an overlay — which takes no part in layout. As a child it did: a fixed 320 pt inside
+            // a 90 pt bar made the stack 320 pt, the bar's frame then *centred* it, and the bar
+            // showed a paler slice from 115 pt down the ramp — the band the owner saw across the
+            // top of Home and Settings, while the Reader's taller header hid most of it.
+            Tokens.ground
+                .overlay(alignment: .top) {
+                    ZStack {
+                        Self.gradient(pulse: pulse)
+                        Self.ditherTile
+                            .resizable(resizingMode: .tile)
+                            .blendMode(.overlay)
+                            .opacity(0.85)
                     }
-                    if layer == .chrome, showsMessage {
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
-                            message(env.kokoroStatus, now: context.date)
-                        }
-                        .padding(.top, band + 8)
-                    }
+                    .compositingGroup()                                    // the noise blends with the ramp, not the page
+                    .frame(height: Self.height)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            }
-            // On the GeometryReader itself, so `geo` measures the whole screen and its origin is the
-            // screen's top corner. Inside the Reader the same veil had been reading a stack that
-            // began below the status bar, and the wash landed in the middle of the text (owner).
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
-            .transition(.opacity)
-            .accessibilityElement(children: .combine)
         }
     }
 
-    /// The `.chrome` layer is cut to the ground bar it covers: solid through the status band, then
-    /// out over `TopFade.fadeHeight` — the same span the bar underneath takes to fade to clear, so
-    /// the two hand over without a seam. The `.behind` layer is not cut at all.
-    @ViewBuilder private func stripMask(band: CGFloat) -> some View {
-        if layer == .chrome {
-            let total = band + TopFade.fadeHeight
-            LinearGradient(stops: [
-                .init(color: .black, location: 0),
-                .init(color: .black, location: band / total),
-                .init(color: .clear, location: 1),
-            ], startPoint: .top, endPoint: .bottom)
-            .frame(height: total)
-        } else {
-            Color.black
-        }
-    }
-
-    /// 0.38 … 1 and back, once every ``period``, read from the wall clock so two layers drawn at
-    /// different moments are never out of step.
+    /// 0.38 … 1 and back, once every ``period``, read from the wall clock so every copy of the
+    /// ramp on screen is at the same point of the breath.
     private static func pulse(at date: Date) -> Double {
         let phase = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
         return 0.38 + 0.62 * (0.5 + 0.5 * cos(2 * .pi * phase))
     }
 
-    /// Strong orange at the top, held near-peak for the first fifth so the colour reads as a lit
-    /// edge rather than an instant fade, then out to nothing (owner: start it higher, more orange
-    /// up top).
-    /// Opaque, not a translucent accent laid over the ground: each stop is the colour that
-    /// combination *makes* (`Color.mix`). Dither is the reason — noise blended over a layer that is
-    /// itself mostly transparent has almost nothing to act on, and the first attempt at this barely
-    /// moved the bands. Opaque here, and the pulse applied to the finished layer instead, so the
-    /// noise blends against real colour. Safe because this only ever sits over `Tokens.ground`:
-    /// `RootPager`'s background, the Reader's, or a ground bar.
-    private static let ramp = LinearGradient(stops: [
-        .init(color: Tokens.ground.mix(with: Tokens.accent, by: 0.55), location: 0),
-        .init(color: Tokens.ground.mix(with: Tokens.accent, by: 0.42), location: 0.20),
-        .init(color: Tokens.ground.mix(with: Tokens.accent, by: 0.14), location: 0.62),
-        .init(color: Tokens.ground, location: 1),
-    ], startPoint: .top, endPoint: .bottom)
-
-    /// The ramp, dithered (owner saw banding, 2026-09-10). A wash this long and this shallow is
-    /// asking more of 8 bits than they have: across the top fifth the alpha falls 0.55 → 0.42, some
-    /// 33 of the 255 levels a channel can hold, spread over about 100 pt — so the screen holds one
-    /// value for ten rows and then steps, and the eye reads every step as a line (measured on the
-    /// screenshot before this: flat runs of up to 23 px). The fix is the old one: a tile of noise
-    /// under half a level, blended over the ramp, which scatters each step's edge into a dither
-    /// pattern too fine to see. It is masked by the ramp itself, so it only ever exists where there
-    /// is colour to dither, and it keeps its own strength while the pulse dims the colour — the dim
-    /// end of a pulse is where the levels are thinnest and the banding worst.
-    private func wash(pulse: Double) -> some View {
-        ZStack {
-            Self.ramp
-            Self.ditherTile
-                .resizable(resizingMode: .tile)
-                .blendMode(.overlay)
-                .opacity(0.85)
-        }
-        .compositingGroup()                 // the noise blends with the ramp here, not with the page
-        // No mask: the ramp's last stop is `ground` itself, so the layer already ends invisible
-        // against the page behind it. Masking as well faded the wash twice and flattened it.
-        .opacity(pulse)                     // the pulse last, so the dither is mixed at full strength
+    /// Strong at the top, held near-peak for the first 15 % so the colour reads as a lit edge
+    /// rather than an instant fade, then out to ground.
+    private static func gradient(pulse: Double) -> LinearGradient {
+        LinearGradient(stops: [
+            .init(color: Tokens.ground.mix(with: Tokens.accent, by: 0.55 * pulse), location: 0),
+            .init(color: Tokens.ground.mix(with: Tokens.accent, by: 0.42 * pulse), location: 0.15),
+            .init(color: Tokens.ground.mix(with: Tokens.accent, by: 0.14 * pulse), location: 0.55),
+            .init(color: Tokens.ground, location: 1),
+        ], startPoint: .top, endPoint: .bottom)
     }
 
     /// A tile of grey noise around the mid-point, made once. `.overlay` leaves mid-grey alone and
-    /// nudges either side of it, so the average is unchanged and only the step edges move.
+    /// nudges either side of it, so the average is unchanged and only the step edges move. Scale 3
+    /// so each cell is one device pixel on a 3x phone (1.5 on a 2x one): drawn point-for-point it
+    /// was a 3 × 3 px speckle that read as grain.
     private static let ditherTile: Image = {
         let side = 96
         let bytes = side * side * 4
@@ -195,11 +152,35 @@ struct WarmUpVeil: View {
             return context.makeImage()
         }
         guard let image else { return Image(uiImage: UIImage()) }
-        // At scale 3 each cell of noise is one device pixel on a 3x phone (and 1.5 on a 2x one),
-        // which is what makes a dither invisible: a tile drawn point-for-point put a 3 × 3 px
-        // speckle over the wash that read as grain rather than as smoothing.
         return Image(uiImage: UIImage(cgImage: image, scale: 3, orientation: .up))
     }()
+}
+
+/// The warm-up's one line and its hairline of progress, under the status bar, over the bar there.
+/// What it knows: the stage count as each compute plan finishes (`KokoroStatusModel.warmUpStages`,
+/// eight stages), and the last warm-up's length on this phone (`expectedWarmUpSeconds`). The bar is
+/// the larger of the two readings — stages are exact but coarse, the clock is smooth but a guess —
+/// and never claims done. A first launch after install has no remembered length, and says so.
+struct WarmUpLine: View {
+    @Environment(AppEnvironment.self) private var env
+    /// The safe-area top inset, from a host whose `GeometryProxy` still reports it: this view
+    /// spans the screen with `ignoresSafeArea`, and a proxy under that reports the insets it now
+    /// covers as zero.
+    var band: CGFloat
+
+    var body: some View {
+        if WarmUpVeil.isShowing(env) {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                message(env.kokoroStatus, now: context.date)
+            }
+            .padding(.top, band + 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+            .transition(.opacity)
+            .accessibilityElement(children: .combine)
+        }
+    }
 
     private func message(_ status: KokoroStatusModel, now: Date) -> some View {
         let elapsed = status.warmUpStarted.map { now.timeIntervalSince($0) } ?? 0
@@ -222,16 +203,15 @@ struct WarmUpVeil: View {
     }
 
     /// "Warming up the voice · about 6 s", or on a first launch "Warming up the voice · a few
-    /// minutes the first time". Once the estimate is spent, "almost there" rather than a number
-    /// that has gone wrong.
+    /// minutes the first time". Past a minute and a half it counts in minutes (the owner's phone
+    /// remembered a 220 s warm-up, and the line read "about 220 s"). Once the estimate is spent,
+    /// "almost there" rather than a number that has gone wrong.
     private func line(_ status: KokoroStatusModel, elapsed: TimeInterval) -> String {
         guard let expected = status.expectedWarmUpSeconds else {
             return "Warming up the voice · a few minutes the first time"
         }
         let left = expected - elapsed
         if left <= 1 { return "Warming up the voice · almost there" }
-        // Nobody counts in hundreds of seconds: past a minute and a half it is minutes (the owner's
-        // phone remembered a 220 s warm-up, and the line read "about 220 s").
         if left >= 90 { return "Warming up the voice · about \(Int((left / 60).rounded())) min" }
         let rounded = left < 10 ? Int(left.rounded(.up)) : Int((left / 5).rounded(.up)) * 5
         return "Warming up the voice · about \(rounded) s"

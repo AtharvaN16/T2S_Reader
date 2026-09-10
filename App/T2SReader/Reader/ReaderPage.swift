@@ -30,8 +30,10 @@ struct ReaderPage: View {
         ZStack {
             Tokens.ground.ignoresSafeArea()
             // Over the ground and under the text (`ReaderTextView` draws on a clear background),
-            // so the page is lit from behind rather than washed over (owner, 2026-09-10).
-            WarmUpVeil(showsMessage: false)
+            // so the page is lit from behind rather than washed over (owner, 2026-09-10). The
+            // header's ground paints the same glow while it shows (`WarmGround`), so there is no
+            // join between the bar and the page.
+            WarmUpVeil()
             if let text {
                 ReaderTextView(
                     text: text,
@@ -82,13 +84,6 @@ struct ReaderPage: View {
                 bottomBar.opacity(chromeVisible ? 1 : 0)
             }
             .animation(.easeInOut(duration: 0.2), value: chromeVisible)
-
-            // Over the header's own ground fade, for the same reason as on the root pages. No line
-            // here: the transport says "preparing the voice…" a few points below it. The reader is
-            // only for the inset — the veil covers the screen itself.
-            GeometryReader { geo in
-                WarmUpVeil(layer: .chrome, band: geo.safeAreaInsets.top, showsMessage: false)
-            }
         }
         .task(id: summary.id) { await open() }
         .appTheme()
@@ -158,27 +153,29 @@ struct ReaderPage: View {
         .padding(.top, 2 * Spacing.grid)
         .padding(.bottom, 2 * Spacing.grid)                                  // a taller band, at the owner's ask
         .background(alignment: .top) {
-            Self.groundFade(solidAtTop: true, span: 0.5)
+            WarmGround()
+                .mask(Self.groundShape(solidAtTop: true, span: 0.5))
                 .padding(.bottom, -48)                                     // hangs below the bar, over the text
                 .ignoresSafeArea(edges: .top)
         }
     }
 
-    /// `ground` easing between solid and clear with zero slope at both ends, so neither edge of a
-    /// fade reads as a line across the text (the Home bar's lesson). `solidAtTop`: solid from the
-    /// top, easing to clear over the bottom `span` of the height. Otherwise clear at the top, easing
-    /// to solid over the top `span`, then solid to the bottom.
-    private static func groundFade(solidAtTop: Bool, span: Double = 1) -> LinearGradient {
+    /// The shape of a ground bar, as a mask over whatever it paints (`ground`, or the warm-up glow
+    /// through `WarmGround`): easing between solid and clear with zero slope at both ends, so
+    /// neither edge of a fade reads as a line across the text (the Home bar's lesson).
+    /// `solidAtTop`: solid from the top, easing to clear over the bottom `span` of the height.
+    /// Otherwise clear at the top, easing to solid over the top `span`, then solid to the bottom.
+    private static func groundShape(solidAtTop: Bool, span: Double = 1) -> LinearGradient {
         let steps = 12
         var stops: [Gradient.Stop] = []
-        if solidAtTop, span < 1 { stops.append(.init(color: Tokens.ground, location: 0)) }
+        if solidAtTop, span < 1 { stops.append(.init(color: .black, location: 0)) }
         stops += (0...steps).map { i -> Gradient.Stop in
             let t = Double(i) / Double(steps)
             let s = t * t * (3 - 2 * t)
-            return .init(color: Tokens.ground.opacity(solidAtTop ? 1 - s : s),
+            return .init(color: Color.black.opacity(solidAtTop ? 1 - s : s),
                          location: solidAtTop ? (1 - span) + t * span : t * span)
         }
-        if !solidAtTop, span < 1 { stops.append(.init(color: Tokens.ground, location: 1)) }
+        if !solidAtTop, span < 1 { stops.append(.init(color: .black, location: 1)) }
         return LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
     }
 
@@ -224,7 +221,8 @@ struct ReaderPage: View {
         .padding(.top, 12)
         .padding(.bottom, Spacing.grid)
         .background(alignment: .bottom) {
-            Self.groundFade(solidAtTop: false, span: 0.25)
+            Tokens.ground
+                .mask(Self.groundShape(solidAtTop: false, span: 0.25))
                 .padding(.top, -64)                                        // hangs above the block, over the text
                 .ignoresSafeArea(edges: .bottom)
         }

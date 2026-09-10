@@ -56,22 +56,7 @@ struct ImportFrame<Content: View>: View {
     }
 
     private func button(_ action: ImportAction) -> some View {
-        let busy = action.busyLabel != nil
-        let enabled = action.isEnabled && !busy
-        return Button(action: action.perform) {
-            HStack(spacing: 10) {
-                if busy { ProgressView().tint(Tokens.ink2) }
-                Text(action.busyLabel ?? action.label).typeRole(.rowTitle)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 56)
-            .foregroundStyle(enabled ? Tokens.ground : Tokens.ink2)
-            .background(enabled ? Tokens.ink : Tokens.surface, in: Capsule())
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .animation(.snappy, value: enabled)
+        BarButton(label: action.label, busyLabel: action.busyLabel, isEnabled: action.isEnabled, action: action.perform)
     }
 }
 

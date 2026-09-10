@@ -1,8 +1,41 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 just after midnight (top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 small hours (voice picker round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps
+## Resume here (2026-09-10, latest) — voice picker round 5: a radio per row, the avatar plays, no "Change" mode
+
+The owner sent two Mobbin references (Beside's "Choose Voice": name, language chips, traits, a radio
+per row; Uptime's "Change your default voice": name, play + waveform per row, a radio, one
+"Select voice" bar) and asked for ways to make voice selection better in Settings and in the Reader.
+What both references do that rounds 1–4 never did: **each row shows its two verbs as two controls**,
+so nothing has to be a mode. Done on `dev`:
+
+- **`VoiceListPage`**: the avatar (44 pt, initial, gender tint) carries a small ink **play badge** at
+  its foot and is the *hear* button — pause while that voice plays, a spinner while it renders. The
+  name through to the end of the row is the *choose* button, ending in a **`RadioMark`** (new in
+  `Primitives.swift`: an `ink3` ring, or an ink disc with a check) — Beside's mark in this palette.
+  The heart stays between them, Kokoro or not. The "Change" / "Done" pill, `isChanging` and the
+  hint line are gone. The Kokoro filter chips are `FilterTabs` now (the Collection's reasoning).
+  New parameter `confirm: Confirm?` — nil applies on the radio's tap (Settings); set, the radio
+  moves and a `BarButton` at the foot applies, with an optional note line above it.
+- **`VoiceChangeSheet`** is one screen: the picker with `confirm` — "Change voice", grey until the
+  radio is off the document's current voice, "Replaces 12m of rendered audio; it renders again
+  with the new voice." above it when there is audio to lose — and the sheet's grabber to leave.
+  The second "Rendered audio will be replaced" page, its Keep/Change pills and the toolbar Done are
+  gone. `pending` is the radio's choice; `apply` writes it through `env.voiceChange.apply`.
+- **`BarButton`** (`Primitives.swift`) is the pinned bar from the import steps, extracted;
+  `ImportFrame` uses it.
+- Screenshot hooks: `T2S_OPEN=voices` (Settings with the list pushed, `PreferencesPage.showVoices`
+  via `navigationDestination`) and `T2S_OPEN=voice` (the Reader with the sheet up).
+- Left alone on purpose: the system blue "Back" on the Settings page (every Settings subpage uses
+  it); the reference's bar-with-back-circle would be a Settings-wide change.
+
+`scripts/build-app.sh` → `** BUILD SUCCEEDED **`. Seen in the simulator (system voices only, no
+Kokoro rows, no filter tabs): the Settings list with radios and play badges, the Reader's sheet with
+the grey "Change voice" bar. Not seen: a radio moving and the bar turning ink, a preview playing,
+the Kokoro tabs. Still nothing on a phone — and this picker is now five rounds blind.
+
+## Resume here (2026-09-10) — top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps
 
 The owner's four-item batch after the shelf change, with ElevenReader (via the Mobbin MCP,
 flow "Importing an article (website link)") as the reference for the last one.

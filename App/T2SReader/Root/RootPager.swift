@@ -137,7 +137,7 @@ struct RootPager: View {
         .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation, nowPlaying: env.nowPlaying)
         .task {
             await env.libraryModel.refresh()
-            if ["reader", "chapters"].contains(RootPage.launchOpen ?? ""),
+            if ["reader", "chapters", "voice"].contains(RootPage.launchOpen ?? ""),
                let document = RootPage.launchDocument(in: env.libraryModel.summaries) {
                 readerDocument = document
             }

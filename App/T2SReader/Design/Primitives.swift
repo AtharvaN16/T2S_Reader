@@ -101,6 +101,57 @@ extension PageTitle where Menu == EmptyView {
     }
 }
 
+/// The one action of a step, as a full-width bar pinned to a page's foot (ElevenReader's "Listen",
+/// Uptime's "Select voice" — the owner's references, 2026-09-09/10): ink when it can be pressed,
+/// `surface` and `ink2` while there is nothing to act on, a spinner and `busyLabel` while the model
+/// works. Pages pin it with `safeAreaInset(edge: .bottom)` so it rides above the keyboard.
+struct BarButton: View {
+    var label: String
+    var busyLabel: String? = nil
+    var isEnabled: Bool = true
+    var action: () -> Void
+
+    var body: some View {
+        let busy = busyLabel != nil
+        let enabled = isEnabled && !busy
+        Button(action: action) {
+            HStack(spacing: 10) {
+                if busy { ProgressView().tint(Tokens.ink2) }
+                Text(busyLabel ?? label).typeRole(.rowTitle)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 56)
+            .foregroundStyle(enabled ? Tokens.ground : Tokens.ink2)
+            .background(enabled ? Tokens.ink : Tokens.surface, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .animation(.snappy, value: enabled)
+    }
+}
+
+/// A radio mark: the empty ring of a choice not taken, or an ink disc with a check for the one
+/// that is (Beside's voice list, the owner's reference, 2026-09-10). Visual only — the row it sits
+/// in is the button — so a list of them reads as "pick one" before anything is tapped.
+struct RadioMark: View {
+    var isOn: Bool
+
+    var body: some View {
+        ZStack {
+            if isOn {
+                Circle().fill(Tokens.ink)
+                Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Tokens.ground)
+            } else {
+                Circle().strokeBorder(Tokens.ink3, lineWidth: 1.5)
+            }
+        }
+        .frame(width: 24, height: 24)
+        .animation(.snappy, value: isOn)
+        .accessibilityHidden(true)
+    }
+}
+
 /// Cover artwork from a container-relative path; a `surface` block when there is none.
 struct Artwork: View {
     /// SwiftUI re-evaluates a `LazyVGrid` cell's body on every scroll pass, so without this the

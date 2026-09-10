@@ -14,6 +14,8 @@ struct PreferencesPage: View {
     /// returns at once — so the subtitle is settled a redraw after the page appears. The MLX probe
     /// is not on this path; it is only ever woken by an MLX voice ID.
     @State private var resolvedDefaultVoiceID: String?
+    /// `T2S_OPEN=voices` (screenshots): the page opens with the voice list pushed.
+    @State private var showVoices = RootPage.launchOpen == "voices"
 
     var body: some View {
         @Bindable var preferences = env.preferences
@@ -23,9 +25,7 @@ struct PreferencesPage: View {
                     PageTitle(text: "Settings")
                     section("Voice") {
                         NavigationLink {
-                            VoiceListPage(selection: preferences.defaultVoiceID) { option in
-                                preferences.defaultVoiceID = option.isDefault ? nil : option.id
-                            }
+                            voiceList
                         } label: {
                             row("Default voice", subtitle: defaultVoiceSubtitle)
                         }
@@ -108,12 +108,20 @@ struct PreferencesPage: View {
             }
             .background(Tokens.ground)
             .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(isPresented: $showVoices) { voiceList }
         }
         .sheet(isPresented: $showAppearance) { AppearanceSheet(showsTextControls: false) }
         .task {
             resolvedDefaultVoiceID = await env.voiceRouting.effectiveVoiceID(VoiceOption.systemDefault.id)
             await env.pronunciation.refresh()
             await env.storage.refresh()
+        }
+    }
+
+    /// The default voice: a radio's tap applies it (no confirm bar — nothing is thrown away).
+    private var voiceList: some View {
+        VoiceListPage(selection: env.preferences.defaultVoiceID) { option in
+            env.preferences.defaultVoiceID = option.isDefault ? nil : option.id
         }
     }
 

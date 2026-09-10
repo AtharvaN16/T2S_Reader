@@ -18,7 +18,7 @@ struct ReaderPage: View {
     @State private var showSpeed = false
     @State private var showBookmarks = false
     @State private var showSleepTimer = false
-    @State private var showVoiceChange = false
+    @State private var showVoiceChange = RootPage.launchOpen == "voice"       // screenshots, see `RootPage.launchOpen`
     @State private var showDetails = false
     @State private var voiceName = "Voice"
     /// Where the book proper starts, for the "Skip to Chapter 1" pill; nil when there is no front

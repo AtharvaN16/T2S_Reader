@@ -2,6 +2,87 @@
 
 _Last updated 2026-09-10 early morning (the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
+## Resume here (2026-09-10, evening) — the 17 Pro's two crashes, the model download, the warm-up, the cloud route
+
+Branch `phone-warmup-download-cloud` off `dev` @ d849036; spec
+`docs/superpowers/specs/2026-09-10-phone-warmup-download-cloud-design.md`. Harsh's asks: the app
+crashing after three lines on the 17 Pro, the warm-up, "decouple the model from the app install",
+"are we leaving performance on the table", "does the cloud integration work".
+
+**The crash, from the phone's own reports** (pulled with `xcrun devicectl device copy from
+--domain-type systemCrashLogs`; the two `.ips` are worth keeping beside this file):
+
+- **15:14 on 2026-09-09, `cpu_resource_fatal`** — "48 seconds cpu time over 48 seconds (100% cpu
+  average), exceeding limit of 80% cpu over 60 seconds. Process killed." Non-Frontmost App, on
+  battery. Symbolicated against the iOS 26.6.1 device-support symbols, the heaviest stack is
+  `MLModel.load` → `MLE5ProgramLibraryOnDeviceAOTCompilationImpl` → `E5RT::E5CompilerImpl::Compile`
+  → `bnns::GraphCompile`: the warm-up building Core ML compute plans, after the phone locked (or the
+  app was switched away). `AudioPlayer` started its `AVAudioEngine` at launch, which is what kept
+  the process alive in the background instead of suspended. The 11 Pro never hit it because the
+  owner sat through the first warm-up in front of the phone.
+- **03:33 on 2026-09-09, `EXC_BREAKPOINT`** in `closure #1 in static PrepareTask.register()` on
+  `com.apple.BGTaskScheduler (com.t2s.reader.prepare)`, 0.4 s after a launch: the launch handler
+  inherited main-actor isolation and trapped on the scheduler's queue. Every overnight Prepare
+  launch died this way, on every phone.
+
+**What changed:**
+
+- `ForegroundGate` (T2SCore), set from `scenePhase` in `RootPager`: the stage loader awaits it
+  before each compute-plan build (`KokoroCoreMLModels.loadStages(admission:)`), the installer
+  before each compile, the warm-up before it starts, the launch prime before it runs. A process
+  launched for a background task never opens it.
+- `CPUBudget` (T2SCore): `RenderScheduler` waits, while the app is not frontmost, until the trailing
+  60 s window holds under 36 s of CPU before a synthesis; logs under `render.pacing` when it engages.
+  Shared by the coordinator and `PrepareRunner`.
+- `AudioPlayer` starts the live engine on `play()`, not in `init`.
+- `PrepareTask.register`'s handler is `@Sendable`; a background Prepare pass skips until a
+  foreground warm-up has built this install's plans (`KokoroWarmUpRecord`, keyed on bundle path,
+  OS build, model path and revision).
+- **The model is downloaded, not bundled.** `KokoroCoreMLManifest` (72 files, 619,234,624 bytes,
+  the fetch script's pins) and `KokoroCoreMLInstall` (Wi-Fi only, resumable per file, SHA-256
+  verified, compiled on the phone under the foreground gate, into
+  `Application Support/KokoroCoreML/2e878c6a/`). `App/project.yml` no longer bundles
+  `Resources/KokoroCoreML`; the bundle is still looked in first. The veil says "Downloading the
+  voice · 120 of 619 MB", then "Preparing the voice · 3 of 14", then warms up as before.
+- **Ready after eight stages:** the duration models plus the 3 s and 15 s buckets; the 7 s and
+  10 s buckets load behind on the engine's own task and swap in as they land. Nothing rendered
+  meanwhile is split or seamed differently — the 15 s bucket holds every piece.
+- **Timing log:** `kokoro.timing` — every stage load (its seconds say whether the plan came from
+  the cache or was built), every pipeline call's stage split, every utterance's G2P/pieces/RTF.
+  `kokoro.computeUnits` user default (`cpuAndNeuralEngine`, `cpuAndGPU`, `all`) for the audit's
+  §3.7 experiment; `scripts/compute-probe.sh` runs it on a Mac.
+- **The cloud route speaks OpenAI's contract** (`response_format: "pcm"`, raw 16-bit PCM back;
+  a proxy's JSON with word timings still accepted). It never worked against a real provider
+  before: it sent `pcm_f32le`, `sample_rate` and `timestamps`, which OpenAI rejects. Not tried
+  against the live API (no key here); tests cover both shapes.
+- **Per-Mac identity:** `T2S_BUNDLE_ID`, `T2S_APP_GROUP`, `DEVELOPMENT_TEAM` in `App/Local.xcconfig`
+  (defaults in `project.yml`; `AppPaths` reads the group from Info.plist). Harsh's Mac has
+  `com.antarlabs.t2sreader` / `group.com.antarlabs.t2sreader` / `6U8JR7LCRZ` there — what his
+  installed app already used — instead of edits to tracked files.
+
+**Why the 11 Pro and the 17 Pro differ:** not the silicon. The 17 Pro's launches were being killed
+mid-warm-up and restarted from a cold plan cache, then it played at whatever the last kill left; a
+CPU-only Core ML pipeline scales with one or two performance cores, not with the A19 Pro's Neural
+Engine, so the raw speed-up over an A13 is 2–3×, no more. The `kokoro.timing` lines on the next
+launches answer the two open questions: does the plan cache survive a reinstall now that the model
+lives in the data container, and what does `.cpuAndNeuralEngine` do to the generator's share.
+
+**The phone run** (Harsh; the branch is built for it): Phone scheme, Release, run from Xcode with the
+phone in front; the first launch downloads (Wi-Fi) and compiles, then warms up — watch
+`log stream --predicate 'subsystem == "com.t2s.reader"' --style compact`. Lock the phone during the
+warm-up on purpose: the loads must pause (no `kokoro stage … loaded` lines) and resume on unlock,
+and the app must survive. Play a book, lock the phone, listen for a minute. Then kill the app,
+relaunch, and read the `kokoro stage` seconds: under a second each means the cache survived. Then
+`-kokoro.computeUnits cpuAndNeuralEngine` in the scheme's arguments and compare `kokoro call` lines.
+Charge overnight: `Prepare skipped` or a pass in the log, no crash report.
+
+**Verified here:** `swift test` 476/87; `scripts/test-kokoro.sh` — every suite but one test:
+`streamsALongPassageInPiecesThatFoldToTheSameTimings` fails on the original sources as well (a
+constant ~180 ms shift between the streamed and whole renders' word starts, from the streamed
+48-id first piece's seam — Plan 15 owed this test and never ran it); the new
+`KokoroCoreMLInstallTests` and `KokoroCoreMLLoadTests` pass; the simulator and device builds
+compile. Not verified: the phone itself.
+
 ## Resume here (2026-09-10, latest) — the click on every voice, and the Reader's voice chip
 
 Two reports from the owner after a voice change in the Reader: "the reader voice UI does not

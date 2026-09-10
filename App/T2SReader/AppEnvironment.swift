@@ -46,6 +46,10 @@ final class AppEnvironment {
     let deviceMonitor: DeviceMonitor
     /// What Preferences tells the reader about the on-device engine on this device.
     let kokoroStatus: KokoroStatusModel
+    /// Whether the scene is active, for work iOS only allows in the foreground: the Kokoro
+    /// warm-up's compute-plan builds and the model install's compiles wait on it, and `CPUBudget`
+    /// paces background renders by it. `RootPager` sets it from `scenePhase`.
+    let foregroundGate: ForegroundGate
 
     /// Whether the transport is waiting on the voice's one-time warm-up rather than routine
     /// buffering — the single definition every playback surface (Reader, its transport controls,
@@ -58,8 +62,9 @@ final class AppEnvironment {
          importModel: ImportModel, coordinator: PlaybackCoordinator, engine: any SynthesisEngine,
          renderArbiter: RenderArbiter, cloudVoiceSettings: CloudVoiceSettings,
          cloudVoiceSecrets: any SecretStoring, cloudRouter: RoutedEngine,
-         kokoro: KokoroComposition) {
+         kokoro: KokoroComposition, foregroundGate: ForegroundGate, cpuBudget: CPUBudget?) {
         self.paths = paths
+        self.foregroundGate = foregroundGate
         self.store = store
         self.audioStore = audioStore
         self.library = library
@@ -78,7 +83,7 @@ final class AppEnvironment {
         pronunciation = PronunciationModel(store: store)
         storage = StorageModel(library: library, audioStore: audioStore, player: player, libraryModel: libraryModel)
         prepareRunner = PrepareRunner(library: library, store: store, audioStore: audioStore,
-                                      engine: engine, arbiter: renderArbiter)
+                                      engine: engine, arbiter: renderArbiter, budget: cpuBudget)
         voiceChange = VoiceChangeModel(library: library, player: player, libraryModel: libraryModel)
         readerModel = ReaderModel(player: player)
         sleepTimer = SleepTimer(player: player)
@@ -124,7 +129,11 @@ final class AppEnvironment {
         let cloudVoiceSecrets = KeychainSecretStore()
         let configurationStore = cloudVoiceSettings.configurationStore
         let systemEngine = SystemSpeechEngine()
-        let kokoro = KokoroComposition.make()
+        // Closed until the scene reports itself active; a process launched for a background task
+        // never opens it, so nothing that needs the foreground ever starts there.
+        let foregroundGate = ForegroundGate(isForeground: false)
+        let cpuBudget = CPUBudget(gate: foregroundGate)
+        let kokoro = KokoroComposition.make(gate: foregroundGate)
         let cloudRouter = RoutedEngine(
             system: systemEngine,
             // Both on-device runtimes, keyed by identity: a `kokoro:` voice ID names which one
@@ -137,13 +146,13 @@ final class AppEnvironment {
         let coordinator = PlaybackCoordinator(engine: cloudRouter, store: shared.audioStore, player: try AudioPlayer(),
                                               playheadStore: shared.store, timeSource: SystemTimeSource(),
                                               configuration: CoordinatorConfiguration(prepareBudgetSeconds: prepareBudget),
-                                              arbiter: renderArbiter)
+                                              arbiter: renderArbiter, budget: cpuBudget)
         return AppEnvironment(paths: shared.paths, store: shared.store, audioStore: shared.audioStore,
                               library: shared.library, importModel: shared.importModel, coordinator: coordinator,
                               engine: cloudRouter, renderArbiter: renderArbiter,
                               cloudVoiceSettings: cloudVoiceSettings,
                               cloudVoiceSecrets: cloudVoiceSecrets, cloudRouter: cloudRouter,
-                              kokoro: kokoro)
+                              kokoro: kokoro, foregroundGate: foregroundGate, cpuBudget: cpuBudget)
     }
 }
 

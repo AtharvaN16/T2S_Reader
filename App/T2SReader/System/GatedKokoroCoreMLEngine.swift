@@ -5,13 +5,14 @@ import T2SAudio
 import T2SCore
 import T2SKokoro
 
-/// The Core ML `kokoro:` route the router sees, gated on the configuration-time verdict exactly like
+/// The Core ML `kokoro:` route the router sees, gated on the availability verdict exactly like
 /// ``GatedKokoroEngine`` (spec §3, §6).
 ///
 /// The gate is cheaper here than on the MLX route — ``KokoroCoreMLAvailabilityModel`` answered
-/// synchronously at launch, so this type only reads its verdict — but it is still a gate: an
-/// unavailable verdict throws `KokoroRouteError.unavailable`, which the render policy surfaces as a
-/// failed utterance, and a document should have been routed away from Kokoro long before that.
+/// synchronously at launch, and an install that finishes later moves its verdict — but it is still
+/// a gate: an unavailable verdict throws `KokoroRouteError.unavailable`, which the render policy
+/// surfaces as a failed utterance, and a document should have been routed away from Kokoro long
+/// before that.
 ///
 /// Only the *construction* of the engine is memoized here. Loading it is not: `KokoroCoreMLEngine`
 /// owns its own idempotent, self-retrying ``KokoroCoreMLEngine/preload()`` — it clears its in-flight
@@ -20,16 +21,21 @@ import T2SKokoro
 actor GatedKokoroCoreMLEngine: SynthesisEngine {
     nonisolated let engineID = KokoroCoreMLEngine.identity
 
-    /// Read once, at construction, on the main actor where the model lives: the verdict is a
-    /// `let` decided in the model's `init` and never changes for the life of the launch.
-    private let verdict: KokoroCoreMLAvailability.Verdict
-    /// The one engine. Eight `MLModel`s are far too expensive to hold twice, and every caller —
+    /// Read when the engine is first needed, on the main actor where the model lives: the verdict is
+    /// decided in the model's `init` and moves once, when an install completes.
+    private let availability: KokoroCoreMLAvailabilityModel
+    private let computeUnits: KokoroComputeUnits
+    /// Awaited before every stage's compute-plan build: the app's foreground gate.
+    private let admission: @Sendable () async -> Void
+    /// The one engine. Fourteen `MLModel`s are far too expensive to hold twice, and every caller —
     /// live playback, Prepare, the launch warm-up — must reach the same instance.
     private var constructed: KokoroCoreMLEngine?
 
-    @MainActor
-    init(availability: KokoroCoreMLAvailabilityModel) {
-        verdict = availability.verdict
+    init(availability: KokoroCoreMLAvailabilityModel, computeUnits: KokoroComputeUnits = .cpu,
+         admission: @escaping @Sendable () async -> Void) {
+        self.availability = availability
+        self.computeUnits = computeUnits
+        self.admission = admission
     }
 
     /// Loads the stages now rather than on the first utterance. The launch warm-up calls this so the
@@ -41,7 +47,7 @@ actor GatedKokoroCoreMLEngine: SynthesisEngine {
 
     /// `preload`, reporting `(loaded, total)` stages as they come, for the warm-up's veil.
     func preload(onProgress: @escaping @Sendable (Int, Int) -> Void) async throws {
-        let engine = try engine()
+        let engine = try await engine()
         await engine.setLoadProgress(onProgress)
         defer { Task { await engine.setLoadProgress(nil) } }
         try await engine.preload()
@@ -65,15 +71,21 @@ actor GatedKokoroCoreMLEngine: SynthesisEngine {
         }
     }
 
-    /// Constructing the engine only stores the resource URLs the verdict already vouched for, so
-    /// there is nothing here that can fail transiently and nothing that suspends — which is why this
-    /// needs no shared `Task`: the actor's own isolation is enough to make it happen once.
-    private func engine() throws -> KokoroCoreMLEngine {
+    /// Constructing the engine only stores the resource URLs the verdict vouched for, so there is
+    /// nothing here that can fail transiently. The verdict is read on the main actor — one hop —
+    /// and the actor's own isolation makes the construction happen once.
+    private func engine() async throws -> KokoroCoreMLEngine {
         if let constructed { return constructed }
+        let availability = self.availability
+        let verdict = await MainActor.run { availability.verdict }
         guard case .available(_, let resources) = verdict else {
             throw KokoroRouteError.unavailable(engineID: engineID)
         }
-        let engine = KokoroCoreMLEngine(resources: resources)
+        if let constructed { return constructed }                 // a second caller crossed the hop first
+        var options = KokoroCoreMLEngine.Options.default
+        options.computeUnits = computeUnits
+        let engine = KokoroCoreMLEngine(resources: resources, options: options)
+        await engine.setLoadAdmission(admission)
         constructed = engine
         return engine
     }

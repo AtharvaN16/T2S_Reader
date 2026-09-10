@@ -202,6 +202,12 @@ struct RootPager: View {
                 startForegroundPrepareIfNeeded()
             }
         }
+        // The foreground gate, first and on the initial value: everything that must not run in
+        // the background — the Kokoro warm-up's plan builds, the model install's compiles, an
+        // unpaced render — waits on it (`AppEnvironment.foregroundGate`).
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            env.foregroundGate.set(foreground: phase == .active)
+        }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:

@@ -110,9 +110,11 @@ extension PageTitle where Menu == EmptyView {
 }
 
 /// The one action of a step, as a full-width bar pinned to a page's foot (ElevenReader's "Listen",
-/// Uptime's "Select voice" — the owner's references, 2026-09-09/10): ink when it can be pressed,
-/// `surface` and `ink2` while there is nothing to act on, a spinner and `busyLabel` while the model
-/// works. Pages pin it with `safeAreaInset(edge: .bottom)` so it rides above the keyboard.
+/// Uptime's "Select voice" — the owner's references, 2026-09-09/10). Since 2026-09-10 it is the
+/// raised ink key (`RaisedButton`, `.ink`, `.bar`): black and lifted when it can be pressed,
+/// graphite in the dark, the flat `surface` slab in `ink2` while there is nothing to act on, a
+/// spinner and `busyLabel` while the model works. Pages pin it with `safeAreaInset(edge: .bottom)`
+/// so it rides above the keyboard.
 struct BarButton: View {
     var label: String
     var busyLabel: String? = nil
@@ -120,22 +122,7 @@ struct BarButton: View {
     var action: () -> Void
 
     var body: some View {
-        let busy = busyLabel != nil
-        let enabled = isEnabled && !busy
-        Button(action: action) {
-            HStack(spacing: 10) {
-                if busy { ProgressView().tint(Tokens.ink2) }
-                Text(busyLabel ?? label).typeRole(.rowTitle)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 56)
-            .foregroundStyle(enabled ? Tokens.ground : Tokens.ink2)
-            .background(enabled ? Tokens.ink : Tokens.surface, in: Capsule())
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .animation(.snappy, value: enabled)
+        RaisedButton(label: label, tone: .ink, size: .bar, busyLabel: busyLabel, isEnabled: isEnabled, action: action)
     }
 }
 

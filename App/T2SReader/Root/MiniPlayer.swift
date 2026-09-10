@@ -78,6 +78,7 @@ struct MiniPlayer: View {
             .padding(.trailing, 8)
             .padding(.vertical, 8)
             .background(Tokens.raised, in: Capsule())
+            .overlay(Capsule().strokeBorder(Tokens.edge, lineWidth: 1))      // its rim in the dark, where the shadow is nothing
             .shadow(color: Tokens.ink.opacity(0.08), radius: 12, y: 4)
             .padding(.horizontal, Spacing.margin)
             .contentShape(Capsule())

@@ -55,6 +55,9 @@ struct TitleMenuCard<Option: Hashable>: View {
         .fixedSize(horizontal: true, vertical: false)
         .padding(6)
         .background(Tokens.raised, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        // The edge the shadow cannot draw in the dark (`Tokens.edge`): on black a shadow is nothing,
+        // and the card was a slightly-less-black rectangle with no rim.
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Tokens.edge, lineWidth: 1))
         .shadow(color: Tokens.shade.opacity(0.16), radius: 18, y: 8)
     }
 }

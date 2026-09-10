@@ -35,6 +35,29 @@ enum Tokens {
     /// not change colour when the room does — but a touch lighter on black so its bevel still reads.
     static let keyTop = dynamic(light: 0x5477FF, dark: 0x5F81FF)
     static let keyBottom = dynamic(light: 0x2A1FE0, dark: 0x3226E8)
+    /// The ink key — the bar at the foot of an Import step, the Voice page's "Make default", the
+    /// Reader's skip pill — as a raised key (owner, 2026-09-10: "replace the black buttons with
+    /// skeuomorphic versions"). Light: black, with a lighter top face. Dark: *not* the inversion
+    /// `ink` would give (a white key on a black page was the one thing the owner was sure they did
+    /// not want to decide on) but graphite — the same object in a dark room, lifted from `ground`
+    /// by its lit top edge (`keyInkRim`) rather than by a shadow, which has nothing to fall on.
+    /// Its foot is `surface`'s grey exactly, so it sits in the page's own family of greys.
+    static let keyInkTop = dynamic(light: 0x333333, dark: 0x3E3E3E)
+    static let keyInkBottom = dynamic(light: 0x0C0C0C, dark: 0x1E1E1E)
+    /// The rim light on the ink key's top edge: strong in the dark, where it does the lifting.
+    static let keyInkRim = dynamic(light: 0xFFFFFF, dark: 0xFFFFFF, lightAlpha: 0.30, darkAlpha: 0.42)
+    /// Lettering on the ink key: the page's ground in light (white on black), and in the dark a
+    /// white that is not the ground (the ground is black there).
+    static let onKeyInk = dynamic(light: 0xF8F8F7, dark: 0xF4F4F2)
+    /// A hairline round a surface that a shadow lifts in the light — the kind menu's card, the
+    /// mini-player's capsule — so it keeps an edge in the dark, where a shadow on black is nothing.
+    /// All but invisible in light; a faint light line in dark.
+    static let edge = dynamic(light: 0x000000, dark: 0xFFFFFF, lightAlpha: 0.05, darkAlpha: 0.11)
+    /// The favorite heart (`HeartButton`): a top-lit red, a shade lighter in the dark so it does
+    /// not sink into the page.
+    static let heartTop = dynamic(light: 0xFF6B6B, dark: 0xFF7A7A)
+    static let heartBottom = dynamic(light: 0xDB1729, dark: 0xE62E3E)
+    static let heartShade = dynamic(light: 0x99000D, dark: 0x000000)
     static let positive = dynamic(light: 0x22A559, dark: 0x34C070)
     static let destructive = dynamic(light: 0xE5453B, dark: 0xFF5A50)
     /// The voice picker's avatar discs: pink for a female voice, blue for a male one. Categorical,

@@ -1,8 +1,48 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 evening (the glow in blue and green when the voice lands, the fan re-cast on 2026 books; before that the empty shelf on Home and the Collection — three covers fanned, a raised button; before that an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 night (the black buttons raised — graphite in the dark — and the dark-mode pass; before that the glow in blue and green when the voice lands, the fan re-cast on 2026 books; before that the empty shelf on Home and the Collection — three covers fanned, a raised button; before that an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — the glow in blue, green when the voice lands, and the fan re-cast
+## Resume here (2026-09-10, latest) — the black buttons raised, and the dark-mode pass
+
+Two asks from the owner: "replace the black buttons with skeumorphic versions of black buttons,
+and in dark mode idk what the color should be"; "a lot of UI does not have dark mode equivalent,
+voices page for e.g, fix this". And: "start directly, skip superpowers planning".
+
+- **`RaisedButton` grew a tone and a size.** `.blue` is the reference key (the empty shelf);
+  `.ink` is the app's black button raised: the same gloss-to-shade face, bevel and two shadows over
+  `Tokens.keyInkTop` → `keyInkBottom`. Sizes: `.bar` (full width, 56 — what `BarButton` is now, a
+  one-line wrapper), `.key` (hugs, 56), `.compact` (hugs, 40 — the Reader's "Back to current" and
+  "Skip to Chapter" pills, which were `Pill(.selected)`). Disabled it is the flat `surface` slab it
+  always was, and `busyLabel` still puts a spinner before the words: a key that cannot be pressed
+  is not drawn as one.
+- **In the dark the ink key is graphite, not white.** `ink` inverts to near-white in dark mode,
+  which is what "Choose files" had become: a white bar on a black page — the thing the owner did
+  not want to decide. The answer taken: a key is an object and keeps its colour in a dark room;
+  `keyInkTop`/`keyInkBottom` are 0x3E3E3E → 0x1E1E1E there (the foot is `surface`'s own grey), and
+  since a shadow on black is nothing, the lift comes from the top rim (`keyInkRim`, gloss at 0.42
+  in dark, 0.30 in light) instead. Words in `onKeyInk`.
+- **The dark-mode audit** (26 screenshots, every page, both routes — system dark, and the in-app
+  theme set dark over a light system with `defaults write com.t2s.reader reader.theme -string
+  dark`): every page adapts, the Voice page included, in both routes. What did not hold up: the
+  ink bar (above); surfaces that a shadow lifts in the light and nothing lifted in the dark — the
+  kind menu's card and the mini-player's capsule now carry a hairline `Tokens.edge` (0.05 black in
+  light, 0.11 white in dark); and the favorite heart's three literal colours, now `heartTop`,
+  `heartBottom`, `heartShade` with a lighter red in the dark. No other literal colour is left in
+  the app's views — the grep finds only the mask gradients (`.black`/`.white` in `TopFade`, the
+  Reader's fades, the ramp's mask), which are alpha shapes, not colours.
+- **Not found: what on the Voice page.** On the simulator the Voice page is dark in both routes and
+  every element on it has a dark token (rows, marks, the Default tag, the heart, the chips, the
+  confirm bar). Whatever the owner saw is either on the phone build's Kokoro section or something
+  the simulator cannot reach; a screenshot from the phone is the fastest way to it.
+
+`scripts/build-app.sh` → `** BUILD SUCCEEDED **`. `swift test` not run: nothing under `Sources/`
+changed. Seen in the simulator: the ink bar on the Files step, light and dark, at full
+resolution; the kind card and the mini-player in the dark with their rims; Home in both. Not
+seen: the compact pills in the Reader (they need a scroll or front matter, which a script cannot
+give) and the Voice page's "Make default" bar (needs a tap) — same component, same code path.
+Not seen on a phone.
+
+## Resume here (2026-09-10, night) — the glow in blue, green when the voice lands, and the fan re-cast
 
 Three words from the owner, with the blue "Join school" key as the palette: "make the warm-up and
 the skeuomorphic button glow blue, see the palette from the reference, also account for dark mode";

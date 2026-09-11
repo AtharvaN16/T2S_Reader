@@ -263,6 +263,41 @@ Expected result if 8-bit holds up: the 227 MB distinct download (and the ~240 MB
 footprint) drops to roughly **120 MB**, with no change in the A13's inference speed or memory, and a
 plan-build time that has to be measured rather than assumed.
 
+## Outcome: the candidate was built and passed a blind listen (2026-09-11, later)
+
+Everything above was research. The candidate now exists and has been judged.
+
+`scripts/quantize-kokoro-coreml.py` built it from the staged fp16 packages in about six minutes, no
+PyTorch. Distinct weight bytes went 204.9 MB -> 109.7 MB, so the ~227 MB download becomes ~132 MB;
+the compiled stages on disk went 578 MB -> 326 MB, confirming the compression survives compilation
+and the phone's footprint shrinks with it. The sharing groups the hard-link dedupe depends on came
+through unchanged (5 distinct weight files before and after), which the script checks and fails on.
+
+Kept in float, by op type and shape rather than by the packages' generated names: the generator's
+two `conv_transpose` upsamplers, its final conv (the layer two independent people found adds static),
+and f0ntrain's LSTM weights. About 13 MB of the theoretical saving, spent on the three places with
+either published evidence of sensitivity or no evidence at all.
+
+**Numbers.** f0ntrain and decoder_pre match at cosine >= 0.9999. The duration model shifts about 1%
+of phonemes by one 12.5 ms frame on real phoneme sequences (`scripts/compare-kokoro-durations.py`),
+0.025 s across 13.1 s of speech — 27x smaller than the streamed-vs-whole difference this repo already
+ships. Rendered audio differs by roughly 3 dB mean mel distance, and four of nine passages gained
+1.6-6.3 percentage points of energy above 4 kHz, which is the signature of quantization static and
+was the reason to listen rather than ship on the numbers.
+
+**The listen settled it.** `scripts/quantization-probe.sh` renders each passage through both model
+sets plus two controls, and the controls are what made the result readable: the engine is
+deterministic (8 of 9 passages render byte-identically twice), so anything heard is quantization and
+not variation. In a blind A/B over the three passages the measurements flagged, the owner did not
+identify the candidate as worse in any of them — calling one pair "both are good", hearing the
+candidate in another as "a bit fast" (it is: 25 ms shorter, exactly the duration drift above), and
+hearing it in the third as "more loud and livelier" (its peak is genuinely higher, 0.42 vs 0.51).
+The 42% high-frequency increase on held vowels was not audible as grain. Verdict: ship it.
+
+Noted in passing and **not** caused by quantization: the click after "Humbug!" is present in both the
+fp16 and int8 renders, so it is a pre-existing artefact of the shipped pipeline, unrelated to this
+work and worth its own look.
+
 ## What this corrects in the earlier research doc
 
 `docs/research/2026-09-11-kokoro-quantization-quality.md` says "nobody has published a quantized Core ML

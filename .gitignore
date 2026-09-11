@@ -49,6 +49,8 @@ spikes/findings/lever-probe/
 spikes/findings/voice-tail-probe/
 # Compute-unit probe output (scripts/compute-probe.sh: load and render times per policy)
 spikes/findings/compute-probe/
+# Quantization probe output (scripts/quantization-probe.sh: fp16 and int8 WAV pairs, report.txt)
+spikes/findings/quantization-probe/
 # Per-Mac signing (DEVELOPMENT_TEAM); see App/Local.xcconfig.example
 App/Local.xcconfig
 

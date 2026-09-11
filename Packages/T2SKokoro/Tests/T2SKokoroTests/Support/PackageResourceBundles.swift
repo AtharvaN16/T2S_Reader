@@ -61,7 +61,30 @@ enum KokoroTestSupport {
     /// nothing else in the process runs while this compiles and assigns the cache.
     static func compiledCoreMLResources() async throws -> KokoroCoreMLResources.Located {
         if let compiledCoreMLResources { return compiledCoreMLResources }
-        let staged = try KokoroCoreMLResources.locate(inDirectory: KokoroCoreMLResources.developmentDirectory).get()
+        let compiled = try await compiledCoreMLResources(
+            inDirectory: KokoroCoreMLResources.developmentDirectory,
+            cacheKey: KokoroCoreMLResources.revisionPrefix
+        )
+        Self.compiledCoreMLResources = compiled
+        return compiled
+    }
+
+    /// The same compile-once-and-keep behaviour for a staging *other* than the development one —
+    /// a quantized candidate built by `scripts/quantize-kokoro-coreml.py`, say — so a probe can hold
+    /// two model sets at once and render the same text through both.
+    ///
+    /// `cacheKey` names the kept copy under `.build/compiled-stages-<cacheKey>`, so each staging
+    /// keeps its own and neither compiles twice. It is a separate argument rather than derived from
+    /// the directory because the model revision is a property of the *files*, which a candidate
+    /// shares with the staging it was built from.
+    ///
+    /// Unlike ``compiledCoreMLResources()`` this does not memoise: the caller holds the result for
+    /// as long as it needs it. The on-disk copy is what makes a second call cheap.
+    static func compiledCoreMLResources(
+        inDirectory directory: URL,
+        cacheKey: String
+    ) async throws -> KokoroCoreMLResources.Located {
+        let staged = try KokoroCoreMLResources.locate(inDirectory: directory).get()
         // `MLModel.compileModel` writes every stage to a fixed name in the per-user temporary
         // directory, which every checkout and every session on this Mac shares: two test runs at once
         // compile onto and sweep out from under each other ("The model is not found at URL …" at the
@@ -71,7 +94,7 @@ enum KokoroTestSupport {
         // checkout skips the five-minute compile as well.
         let privateDirectory = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appending(path: ".build/compiled-stages-\(KokoroCoreMLResources.revisionPrefix)", directoryHint: .isDirectory)
+            .appending(path: ".build/compiled-stages-\(cacheKey)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: privateDirectory, withIntermediateDirectories: true)
         var stages: [String: URL] = [:]
         let kept = KokoroCoreMLResources.stageNames().reduce(into: [String: URL]()) { result, name in
@@ -93,7 +116,6 @@ enum KokoroTestSupport {
             stages: stages, voices: staged.voices, vocab: staged.vocab, hnsfWeights: staged.hnsfWeights,
             isPrecompiled: true
         )
-        Self.compiledCoreMLResources = compiled
         return compiled
     }
     private nonisolated(unsafe) static var compiledCoreMLResources: KokoroCoreMLResources.Located?

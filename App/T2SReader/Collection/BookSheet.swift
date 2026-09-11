@@ -16,6 +16,9 @@ struct BookSheet: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     var summary: DocumentSummary
+    /// Only Home's book tap asks for the scroll-and-pulse (owner, 2026-09-11) — Collection's tile
+    /// and row open on the chapter list as it's always shown, at the top.
+    var pulseOnOpen: Bool = false
 
     @State private var chapters: [ChapterEntry] = []
     @State private var bookmarks: BookmarkListModel?
@@ -109,11 +112,11 @@ struct BookSheet: View {
 
     /// Lands the eye on where the book picks up (owner, 2026-09-11): centres the resume chapter —
     /// off-screen below the fold on any book past its first few chapters — then flashes it once.
-    /// No scroll and no flash without a resume chapter (a book never opened has nothing to jump to).
-    /// The short wait first gives the list one run-loop turn to lay out the rows `chapters` just
-    /// populated — `scrollTo` finds nothing to scroll to before that frame lands.
+    /// Only from Home's book tap (`pulseOnOpen`), and only for a book already in progress — a fresh
+    /// book's resume chapter is the first row, already on screen, and the Collection tile opens
+    /// straight on the chapter list every time regardless of state.
     private func scrollToResumeChapterAndPulse(_ proxy: ScrollViewProxy) async {
-        guard let resumeIndex else { return }
+        guard pulseOnOpen, hasProgress, let resumeIndex else { return }
         try? await Task.sleep(for: .milliseconds(50))
         withAnimation(.easeOut(duration: 0.4)) { proxy.scrollTo(resumeIndex, anchor: .center) }
         withAnimation(.easeOut(duration: 0.2)) { pulsingChapter = resumeIndex }

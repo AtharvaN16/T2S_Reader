@@ -48,7 +48,7 @@ struct QueuePage: View {
         .refreshable { await env.libraryModel.refresh() }
         .fullScreenCover(isPresented: $showAdd, onDismiss: openPending) { ImportPage(imported: $pendingOpen) }
         .sheet(item: $details) { DetailsSheet(summary: $0) }
-        .sheet(item: $selectedBook) { BookSheet(summary: $0) }
+        .sheet(item: $selectedBook) { BookSheet(summary: $0, pulseOnOpen: true) }
     }
 
     private func openPending() {

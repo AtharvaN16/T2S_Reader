@@ -49,3 +49,7 @@ spikes/findings/voice-tail-probe/
 spikes/findings/compute-probe/
 # Per-Mac signing (DEVELOPMENT_TEAM); see App/Local.xcconfig.example
 App/Local.xcconfig
+
+# Claude Code: per-session agent worktrees and local settings
+.claude/worktrees/
+.claude/settings.local.json

@@ -345,9 +345,11 @@ import Testing
     }
 
     /// The live session against a scripted server, every request through the one `URLSession`: a
-    /// drop mid-file leaves what arrived in the part, the next request asks to continue it, a 206
-    /// is appended, a 200 replaces, a 416 is asked again from the start, and a 429 comes back as its
-    /// status and wait with the part untouched.
+    /// part left by a drop is asked to be continued, a 206 is appended, a 200 replaces, a 416 is
+    /// asked again from the start, and a 429 comes back as its status and wait with the part
+    /// untouched. The drop itself is not scripted: a `URLProtocol` that fails after delivering a
+    /// response makes `URLSession.bytes(for:)` throw as a whole (probed 2026-09-11), so the bytes
+    /// that a real drop leaves — headers in, body cut — can only be left here by hand.
     @Test func theLiveSessionResumesWithARangeOverOneURLSession() async throws {
         let part = FileManager.default.temporaryDirectory.appending(path: "T2SKokoroResume-\(UUID().uuidString).part")
         defer { try? FileManager.default.removeItem(at: part) }
@@ -362,18 +364,8 @@ import Testing
         func rangeAsked() -> String? { ScriptedServer.requests.value.last?.value(forHTTPHeaderField: "Range") }
         ScriptedServer.requests.value = []
 
-        // A drop after four bytes: they stay in the part, and the failure is the passing kind.
-        ScriptedServer.answers.value = [.init(body: body, dropsAfter: 4)]
-        do {
-            try await session.download(url, part, onBytes, {})
-            Issue.record("the drop was not reported")
-        } catch {
-            #expect(KokoroCoreMLInstall.isRetryable(error), "\(error)")
-        }
-        #expect(rangeAsked() == nil)
-        #expect(try Data(contentsOf: part) == body.prefix(4))
-
-        // The next request asks for the rest; a 206 is appended.
+        // The four bytes a drop left in the part: the next request asks for the rest; a 206 is appended.
+        try body.prefix(4).write(to: part)
         ScriptedServer.answers.value = [.init(status: 206, headers: ["Content-Range": "bytes 4-9/10"], body: body.dropFirst(4))]
         try await session.download(url, part, onBytes, {})
         #expect(rangeAsked() == "bytes=4-")
@@ -398,7 +390,7 @@ import Testing
             try await session.download(url, part, onBytes, {})
         }
         #expect(try Data(contentsOf: part) == body.prefix(7))
-        #expect(ScriptedServer.requests.value.count == 6)
+        #expect(ScriptedServer.requests.value.count == 5)
     }
 
     /// Two manifest files with the same content are one download: the second is copied from the
@@ -501,7 +493,6 @@ private final class ScriptedServer: URLProtocol {
         var status = 200
         var headers: [String: String] = [:]
         var body = Data()
-        var dropsAfter: Int? = nil
     }
     static let answers = OSAllocatedUnfairLockBox<[Answer]>([])
     static let requests = OSAllocatedUnfairLockBox<[URLRequest]>([])
@@ -516,10 +507,8 @@ private final class ScriptedServer: URLProtocol {
         Self.answers.value = answers
         let response = HTTPURLResponse(url: request.url!, statusCode: answer.status, httpVersion: "HTTP/1.1", headerFields: answer.headers)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        if let dropsAfter = answer.dropsAfter {
-            client?.urlProtocol(self, didLoad: answer.body.prefix(dropsAfter))
-            client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
-        } else {
+        // The body after the response has been handed over, as a server's would arrive.
+        DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(20)) { [self] in
             client?.urlProtocol(self, didLoad: answer.body)
             client?.urlProtocolDidFinishLoading(self)
         }

@@ -92,6 +92,17 @@ builds; the phone as above.
   fake network has produced one).
 - Plan 18, `docs/superpowers/plans/2026-09-11-render-ahead-by-chapter.md` (written 02:07): render to
   the end of the chapter while frontmost and listening, so the background loop only tops up.
+
+**The installer's three follow-ups (`7c0f1dc`, merged at `ab4617c`, 02:20).** One `URLSession` per
+install (`KokoroCoreMLInstall.Session.wifi()`, closed before the compiles; the app's call site takes
+the default); `Range` resume — the `.part` survives a drop, a 5xx, a 429 and a killed launch, the next
+attempt asks `bytes=<size>-`, a 206 appends, a 200 replaces, a 416 restarts once — checked against
+Hugging Face from the Mac: the resolve URL answers 302 and the CDN 206 with `content-range`; and the
+wait on a 429 from `Retry-After`, `RateLimit-Reset`, `X-RateLimit-Reset` or `RateLimit` `t=`, clamped
+to 120 s, quoted in the timing line (`asked 217 s (ratelimit: …)`) so the next phone 429 says quota or
+blocklist. Nineteen installer tests. One lesson for the tests: a scripted `URLProtocol` that fails
+after its response makes `URLSession.bytes(for:)` throw as a whole, so a mid-body drop cannot be
+scripted — the live-session test starts from a part left by hand.
 - Harsh, on the 17 Pro: playback locked on the GPU path with the CPU set behind it; whether
   serializing the GPU plan builds (the research's WhisperKit pattern) is worth its ~2× load time
   there; the §7.3 MLX spike if MLX for A14+ is ever revisited.

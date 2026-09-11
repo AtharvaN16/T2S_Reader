@@ -109,9 +109,10 @@ extension LibraryStore {
         if let row = try bookmarkRow(bookmark.id) {
             row.href = bookmark.position.resourceHref; row.progression = bookmark.position.progression
             row.charOffset = bookmark.position.charOffset; row.cssSelector = bookmark.position.cssSelector
-            row.note = bookmark.note; row.updatedAt = bookmark.updatedAt
+            row.note = bookmark.note; row.userNote = bookmark.userNote; row.updatedAt = bookmark.updatedAt
         } else {
             let row = StoredBookmark(id: bookmark.id, documentID: document.id, position: bookmark.position, note: bookmark.note, createdAt: bookmark.createdAt)
+            row.userNote = bookmark.userNote
             row.updatedAt = bookmark.updatedAt
             modelContext.insert(row)
         }
@@ -223,6 +224,7 @@ extension LibraryStore {
     }
 
     static func synced(_ r: StoredBookmark, contentKey: String) -> SyncedBookmark {
-        SyncedBookmark(id: r.id, contentKey: contentKey, position: r.position, note: r.note, createdAt: r.createdAt, updatedAt: r.updatedAt ?? r.createdAt)
+        SyncedBookmark(id: r.id, contentKey: contentKey, position: r.position, note: r.note, userNote: r.userNote,
+                       createdAt: r.createdAt, updatedAt: r.updatedAt ?? r.createdAt)
     }
 }

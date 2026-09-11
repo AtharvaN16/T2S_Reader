@@ -160,4 +160,25 @@ import T2SCore
         #expect(try await s.dirtyRecords(deviceName: "iPhone").isEmpty)
         #expect(try await s.documentsMissingContentKey().map(\.id) == [id])
     }
+
+    /// Editing just the note re-dirties the row like any other bookmark edit, and the push carries
+    /// the new `userNote` alongside the unchanged passage.
+    @Test func editingANoteMarksTheBookmarkDirtyAndPushesIt() async throws {
+        let s = try store()
+        let doc = document("sha256:eee")
+        try await s.insert(doc, timeline: timeline())
+        var bookmark = Bookmark(documentID: doc.id, position: Position(resourceHref: "c1.xhtml", progression: 0.2), passageText: "the passage")
+        try await s.add(bookmark)
+        try await s.markClean(try await s.dirtyRecords(deviceName: "Mac"))
+
+        bookmark.userNote = "written later"
+        try await s.add(bookmark)
+
+        let records = try await s.dirtyRecords(deviceName: "Mac")
+        let notes = records.compactMap { record -> String?? in
+            if case .bookmark(let b) = record, b.id == bookmark.id { return b.userNote }
+            return nil
+        }
+        #expect(notes == ["written later"])
+    }
 }

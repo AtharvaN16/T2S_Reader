@@ -39,13 +39,18 @@ public struct SyncedBookmark: Sendable, Codable, Hashable {
     public var id: UUID
     public var contentKey: String
     public var position: Position
+    /// The passage the app captured. Named `note` because that is this record's CloudKit key and
+    /// has been since iCloud sync shipped; it must never be reused for the reader's writing.
     public var note: String?
+    /// The reader's own note. Absent from records written by a build older than 2026-09-11.
+    public var userNote: String?
     public var createdAt: Date
     public var updatedAt: Date
     public var deletedAt: Date?
-    public init(id: UUID, contentKey: String, position: Position, note: String? = nil, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil) {
+    public init(id: UUID, contentKey: String, position: Position, note: String? = nil, userNote: String? = nil,
+                createdAt: Date, updatedAt: Date, deletedAt: Date? = nil) {
         self.id = id; self.contentKey = contentKey; self.position = position; self.note = note
-        self.createdAt = createdAt; self.updatedAt = updatedAt; self.deletedAt = deletedAt
+        self.userNote = userNote; self.createdAt = createdAt; self.updatedAt = updatedAt; self.deletedAt = deletedAt
     }
 }
 

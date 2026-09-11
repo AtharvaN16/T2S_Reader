@@ -210,11 +210,13 @@ struct KokoroComposition {
     /// finished. Returns an empty list in the everyday build.
     private let catalogEngines: @Sendable () -> [(identity: String, label: String)]
 
-    /// Backs `noteScene(isBackground:)`; in the Kokoro build the same lock is captured by the
-    /// placement closure passed to `GatedKokoroCoreMLEngine`, so a write here is what that closure
-    /// sees on its next read. Defaulted so the everyday build's `KokoroComposition(...)` call does
-    /// not need to know about it — nothing there reads it.
-    let sceneIsBackground = OSAllocatedUnfairLock(initialState: false)
+    /// Backs `noteScene(isBackground:)`; in the Kokoro build the same lock instance is captured by
+    /// the placement closure passed to `GatedKokoroCoreMLEngine`, so a write here is what that
+    /// closure sees on its next read. No default: a stored property with a default value but no
+    /// explicit type annotation is excluded from the memberwise init entirely, which is how the
+    /// Kokoro branch's `sceneIsBackground:` argument once went missing at the call site. Both build
+    /// branches now pass their own instance — the everyday build's is never read.
+    let sceneIsBackground: OSAllocatedUnfairLock<Bool>
 
     /// The user default that picks the compute units for the session (`KokoroComputeUnits`
     /// raw values: `cpu`, `cpuAndNeuralEngine`, `cpuAndGPU`, `all`); unset is `cpu`, the measured
@@ -314,7 +316,15 @@ struct KokoroComposition {
         // `ScenePlacement`), not the gate: `.inactive` closes the gate (plan builds must not run
         // once the app is actually backgrounded a moment later) but must not place a streamed head
         // in the background too (2026-09-11 review §5 item 3, R4). `admission` stays the gate.
-        let sceneIsBackground = OSAllocatedUnfairLock(initialState: false)
+        // Starts `true` — background until a scene says otherwise. `RootPager`'s `onChange(of:
+        // scenePhase, initial: true)` corrects it to the real phase on the first scene event, but a
+        // process launched for a `BGProcessingTask` (`PrepareTaskOperation.run()`, its own
+        // `AppEnvironment.live()`) never connects a scene at all, so this default is the only value
+        // such a process ever sees — exactly the case the CPU background set exists for. `false`
+        // here defaulted placement to the foreground's GPU main set, which a background process has
+        // no GPU submission for, and the refusal-retry only fires from `.background` placement, so
+        // it never caught this either (2026-09-11 GPU-path review, Task C).
+        let sceneIsBackground = OSAllocatedUnfairLock(initialState: true)
         let coreMLEngine = GatedKokoroCoreMLEngine(availability: coreML, computeUnits: computeUnits,
                                                    backgroundComputeUnits: backgroundComputeUnits,
                                                    admission: { await gate.waitUntilForeground() },
@@ -444,7 +454,8 @@ struct KokoroComposition {
             }
         }
         return KokoroComposition(engines: [], voiceRouting: KokoroVoiceRouting.unavailable,
-                                 status: status, playAheadWindowSeconds: nil, foregroundFillSeconds: nil, catalogEngines: { [] })
+                                 status: status, playAheadWindowSeconds: nil, foregroundFillSeconds: nil, catalogEngines: { [] },
+                                 sceneIsBackground: OSAllocatedUnfairLock(initialState: true))
         #endif
     }
 

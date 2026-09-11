@@ -116,13 +116,30 @@ ready. Not verified on any phone: Plan 18, the 180 s window locked for four minu
    hard links (`KokoroCoreMLInstall.linkDuplicateWeights`, after every compile and once per revision
    after the warm-up for installs that predate it; the download was already 240 MB). Still
    owed from the review: improvement 5 (the refusal retry as a decision) and 6 (the "keep the phone
-   unlocked" line on the veil). The mirror: Cloudflare R2 (free egress, cents a month, a plain URL as a
-   second source). Nothing technical blocks it — it needs a Cloudflare account and a public bucket (the
-   owner's), then a `mirror` base URL beside `repositoryURL` in the manifest and the installer trying it
-   first with Hugging Face as the fallback; it does not depend on the paid developer account. When the
-   model is re-exported smaller, host that export there: `docs/research/2026-09-11-kokoro-quantization-quality.md`
-   has what people report (8-bit is free if the sensitive layers stay fp16; 6-bit is Apple's floor; nobody has
-   done it for Core ML yet).
+   unlocked" line on the veil).
+
+   **The model mirror — Harsh, this one is yours if you have a domain on Cloudflare.** The only download
+   failure seen on a phone was Hugging Face rate-limiting anonymous phones (429s); the retries and the
+   `Range` resume work around it, but every first launch still depends on their policy. The fix is a copy of
+   the 42 distinct model files (227 MB) on Cloudflare R2, tried first with Hugging Face as the fallback.
+   Cost: none — R2's free tier is 10 GB stored, 10 M reads a month and *free egress*, so ~238,000 first
+   installs a month before a cent is billed; there is no hard spending cap on R2, only usage alerts
+   (Notifications → Billing). What it needs: (1) an R2 subscription on a Cloudflare account ($0 now, a
+   card on file); (2) a bucket, e.g. `t2s-kokoro`; (3) public access — the instant `r2.dev` address is
+   rate-limited and marked not-for-production, so it is fine to test with but the shipped URL should be a
+   **custom domain** attached to the bucket (Bucket → Settings → Custom Domains; the domain must be on
+   the same Cloudflare account — which is why this is better done from an account that already has one);
+   (4) the files uploaded with `npx wrangler login` then `wrangler r2 object put` (or `rclone`) under the
+   same relative paths the manifest lists (`coreml/…/weight.bin`, `voices/…`, `runtime/…`), taken from
+   `App/Resources/KokoroCoreML` on any Mac that has run `scripts/fetch-kokoro-coreml.sh --app`; (5) the
+   code: a `mirrorURL` beside `KokoroCoreMLManifest.repositoryURL`, `KokoroCoreMLManifest.File.url`
+   resolving against the mirror first, and the installer's retry loop falling back to the Hugging Face URL
+   on a non-retryable failure (a 404 on the mirror must not fail the install) — one test each in
+   `KokoroCoreMLInstallTests` with the fake network, then one real fresh install over Wi-Fi (`kokoro install
+   finished: …` in the timing log names what was fetched). Not a dependency on the paid developer
+   account. When the model is later re-exported smaller, it goes into the same bucket:
+   `docs/research/2026-09-11-kokoro-quantization-quality.md` has what people report (8-bit is free if the
+   sensitive layers stay fp16; 6-bit is Apple's floor; nobody has done it for Core ML yet).
 5. **Four minutes locked during playback on the CPU path** with the 180 s window (the owner skipped it
    — the change is a constant and a bookkeeping fix, both unit-tested — and the control on the MLX
    class needs a text that exercises the G2P fallback).

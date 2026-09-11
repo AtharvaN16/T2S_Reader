@@ -33,6 +33,9 @@ public struct DocumentSummary: Hashable, Sendable, Identifiable {
     /// The persisted versions differ from `Versions` (spec §3.7.3): the chapters — and the resume
     /// time measured against them — are about to be re-derived.
     public var isStale: Bool
+    /// A placeholder's device, or the device offering a pending remote position: the Collection's
+    /// "on iPhone" line (sync spec §5).
+    public var remoteDeviceName: String?
 
     public var id: UUID { document.id }
     /// The Queue row's `positive` check (spec §3.4.1): plays with no synthesis and no network.
@@ -40,7 +43,8 @@ public struct DocumentSummary: Hashable, Sendable, Identifiable {
 
     public init(document: Document, chapterCount: Int, utteranceCount: Int, totalSeconds: TimeInterval,
                 renderedCount: Int, isFinished: Bool, queueOrder: Int?, lastPlayedAt: Date?,
-                resumeElapsedSeconds: TimeInterval? = nil, resumeChapterIndex: Int? = nil, isStale: Bool = false) {
+                resumeElapsedSeconds: TimeInterval? = nil, resumeChapterIndex: Int? = nil, isStale: Bool = false,
+                remoteDeviceName: String? = nil) {
         self.document = document
         self.chapterCount = chapterCount
         self.utteranceCount = utteranceCount
@@ -52,6 +56,7 @@ public struct DocumentSummary: Hashable, Sendable, Identifiable {
         self.resumeElapsedSeconds = resumeElapsedSeconds
         self.resumeChapterIndex = resumeChapterIndex
         self.isStale = isStale
+        self.remoteDeviceName = remoteDeviceName
     }
 }
 
@@ -65,7 +70,7 @@ public enum LibraryStoreError: Error, Equatable, Sendable {
 /// see value types.
 @ModelActor
 public actor LibraryStore {
-    static let schema = Schema(versionedSchema: LibrarySchemaV2.self)
+    static let schema = Schema(versionedSchema: LibrarySchemaV3.self)
 
     /// SwiftData crashes intermittently when several containers are created at once (Swift Testing
     /// runs suites in parallel and each test opens its own store). Creation is rare and cheap, so
@@ -104,10 +109,13 @@ public actor LibraryStore {
                                  segmenterVersion: timeline.segmenterVersion,
                                  normalizerVersion: timeline.normalizerVersion)
         Self.setResume(row, document.resumePosition)
+        row.contentKey = document.contentKey
+        row.isDirty = true
         modelContext.insert(row)
         try replaceChapters(of: row, with: timeline)
         if queued { row.queueOrder = (try queueRows().last?.queueOrder ?? -1) + 1 }
         try commit()
+        noteLocalChange()
     }
 
     public func document(id: UUID) throws -> Document? { try row(id).map(Self.domain) }
@@ -148,14 +156,20 @@ public actor LibraryStore {
         row.coverImagePath = document.coverImagePath
         row.sourceURL = document.sourceURL?.absoluteString
         row.updatedAt = Date()
+        row.isDirty = true
         try commit()
+        noteLocalChange()
     }
 
-    public func delete(id: UUID) throws {
+    /// `recordingDeletion`: the reader chose "everywhere" (sync spec §4) — a marker stays behind
+    /// for the next push. The plain delete leaves the record, so the book returns as a placeholder.
+    public func delete(id: UUID, recordingDeletion: Bool = false) throws {
         let row = try existing(id)
+        if recordingDeletion, let key = row.contentKey { addTombstone(kind: Self.documentTombstone, key: key) }
         try deleteBookmarks(for: id)
         modelContext.delete(row)
         try commit()
+        if recordingDeletion { noteLocalChange() }
     }
 
     // MARK: Queue
@@ -197,7 +211,9 @@ public actor LibraryStore {
         let row = try existing(id)
         row.isFinished = finished
         row.updatedAt = Date()
+        row.isDirty = true
         try commit()
+        noteLocalChange()
     }
 
     /// Finished leaves the Queue; un-finishing puts the document back at the end — one save, so the
@@ -212,7 +228,9 @@ public actor LibraryStore {
         }
         try renumberQueue()
         row.updatedAt = Date()
+        row.isDirty = true
         try commit()
+        noteLocalChange()
     }
 
     // MARK: Timelines
@@ -315,7 +333,7 @@ public actor LibraryStore {
         try commit()
     }
 
-    private func queueRows() throws -> [StoredDocument] {
+    func queueRows() throws -> [StoredDocument] {
         try modelContext.fetch(FetchDescriptor<StoredDocument>(
             predicate: #Predicate { $0.queueOrder != nil },
             sortBy: [SortDescriptor(\.queueOrder)]))
@@ -327,7 +345,7 @@ public actor LibraryStore {
         for (i, r) in try queueRows().enumerated() { r.queueOrder = i }
     }
 
-    private func replaceChapters(of row: StoredDocument, with timeline: Timeline) throws {
+    func replaceChapters(of row: StoredDocument, with timeline: Timeline) throws {
         for c in row.chapters { modelContext.delete(c) }
         row.chapters = []
         // The resume time described the chapters just discarded; the row decodes once more instead.
@@ -384,7 +402,8 @@ public actor LibraryStore {
                         sourceType: SourceType(rawValue: r.sourceType) ?? .epub,
                         sourceURL: r.sourceURL.flatMap(URL.init(string:)),
                         coverImagePath: r.coverImagePath, addedAt: r.addedAt, voiceID: r.voiceID,
-                        resumePosition: resumePosition)
+                        resumePosition: resumePosition,
+                        contentKey: r.contentKey, isPlaceholder: r.isPlaceholder)
     }
 
     static func summary(_ r: StoredDocument) -> DocumentSummary {
@@ -398,6 +417,7 @@ public actor LibraryStore {
                                renderedCount: r.chapters.reduce(0) { $0 + $1.renderedCount },
                                isFinished: r.isFinished, queueOrder: r.queueOrder, lastPlayedAt: r.lastPlayedAt,
                                resumeElapsedSeconds: elapsed, resumeChapterIndex: r.resumeChapterIndex,
-                               isStale: isStale(r))
+                               isStale: isStale(r),
+                               remoteDeviceName: r.isPlaceholder ? r.resumeDevice : r.pendingRemoteDevice)
     }
 }

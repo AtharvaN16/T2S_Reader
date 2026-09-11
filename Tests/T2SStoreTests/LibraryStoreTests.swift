@@ -201,7 +201,8 @@ import T2SCore
     @Test func schemaIsVersioned() async throws {
         #expect(LibrarySchemaV1.versionIdentifier == Schema.Version(1, 0, 0))
         #expect(LibrarySchemaV2.versionIdentifier == Schema.Version(2, 0, 0))
-        #expect(LibraryMigrationPlan.stages.count == 1)
+        #expect(LibrarySchemaV3.versionIdentifier == Schema.Version(3, 0, 0))
+        #expect(LibraryMigrationPlan.stages.count == 2)
         let store = try LibraryStore.inMemory()
         let doc = makeDocument()
         try await store.insert(doc, timeline: makeTimeline([[makeUtterance("One.")]]))

@@ -96,10 +96,23 @@ public final class PlayerModel {
     /// is inside one and clear it on a tap. Read from the store at load and after every change here
     /// or in `BookmarkListModel`.
     public private(set) var bookmarkedUtterances: Set<Int> = []
+    /// The changed chapters are written every `persistInterval` while playing (Plan 18, Step 7): a
+    /// foreground fill renders for minutes, and its refs used to reach the store only on pause, lock,
+    /// or the next load — a jetsam in front, and the Storage page's count, lagged it by up to ten
+    /// minutes. Thirty seconds mirrors `PrepareRunner.chapterWriteInterval`'s idea at a third of the
+    /// rate: one chapter blob per half-minute, and free when nothing changed.
+    public static let persistInterval: TimeInterval = 30
+    private let timeSource: any TimeSource
+    /// When the chapters were last written, by any path; `tick()` measures from here.
+    private var lastPersist: TimeInterval
+    /// The periodic write in flight, so a tick never starts a second beside it.
+    @ObservationIgnored private var periodicPersist: Task<Void, Never>?
 
-    public init(coordinator: PlaybackCoordinator, library: Library) {
+    public init(coordinator: PlaybackCoordinator, library: Library, timeSource: any TimeSource = SystemTimeSource()) {
         self.coordinator = coordinator
         self.library = library
+        self.timeSource = timeSource
+        lastPersist = timeSource.now()
     }
 
     // MARK: Derived state
@@ -318,7 +331,24 @@ public final class PlayerModel {
     /// Drive from a 10 Hz timer while playing (spec §3: the coordinator polls the player clock).
     public func tick() {
         coordinator.tick()
+        persistIfDue()
     }
+
+    /// Starts a write of the changed chapters once `persistInterval` has passed since the last
+    /// write of any kind and there is something to write — O(1) at 10 Hz otherwise. The write runs
+    /// beside playback; a pause or a lock in the meantime writes what it finds, as before.
+    private func persistIfDue() {
+        guard periodicPersist == nil, current != nil,
+              !coordinator.changedChapters.isEmpty || !pendingChapters.isEmpty,
+              timeSource.now() - lastPersist >= Self.persistInterval else { return }
+        periodicPersist = Task { [weak self] in
+            await self?.persistRenderedChapters()
+            self?.periodicPersist = nil
+        }
+    }
+
+    /// Awaits the periodic write in flight, if any — for tests that tick a manual clock.
+    func settlePersist() async { await periodicPersist?.value }
 
     // MARK: Persistence of phase 2
 
@@ -326,6 +356,7 @@ public final class PlayerModel {
     /// timings, audio refs from `.rendered` events) — the coordinator says which (Plan 16; a pass
     /// hashing every chapter used to find them). Free when nothing changed.
     public func persistRenderedChapters() async {
+        lastPersist = timeSource.now()
         pendingChapters.formUnion(coordinator.takeChangedChapters())
         guard let current, let timeline = coordinator.timeline else { return }
         var failed = false

@@ -1,8 +1,66 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-11 small hours (Harsh's branch tested on the 11 Pro and merged, six fixes on dev, the research; before that the kind title pops with its menu; before that the kind menu's spring pop; before that the black buttons raised — graphite in the dark — and the dark-mode pass; before that the glow in blue and green when the voice lands, the fan re-cast on 2026 books; before that the empty shelf on Home and the Collection — three covers fanned, a raised button; before that an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-11 (Plan 18 — render ahead by chapter while in front — on `render-ahead-by-chapter`; before that Harsh's branch tested on the 11 Pro and merged, six fixes on dev, the research; before that the kind title pops with its menu; before that the kind menu's spring pop; before that the black buttons raised — graphite in the dark — and the dark-mode pass; before that the glow in blue and green when the voice lands, the fan re-cast on 2026 books; before that the empty shelf on Home and the Collection — three covers fanned, a raised button; before that an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-11, latest) — the 11 Pro test of Harsh's branch, the merge, seven fixes, the phone, and the research
+## Resume here (2026-09-11, render-ahead) — Plan 18: the foreground renders the chapter; a lock only tops up
+
+The 11 Pro, locked during playback, ran dry once a minute (crashreport.md, Finding 2b): the
+`CPUBudget` renders ~70 s of audio in a ~14 s burst and then sleeps ~60 s, so the background loop
+sustains about 0.9 audio-seconds per wall-second at 1x — it can *hold* a buffer, never *grow* one,
+and at 1.5x it loses 0.6 s/s. `b5b34fa` widened the window to 180 s so one cycle's burstiness is
+absorbed. Plan 18 (`docs/superpowers/plans/2026-09-11-render-ahead-by-chapter.md`) builds the
+buffer where there is no budget and the A13 renders at RTF 0.17 — the screen on, the listener
+listening — so that after a lock the same loop finds its window already rendered. Branch
+`render-ahead-by-chapter` off dev @ b83da6a, one commit per step, root package first:
+
+- **The tier.** `RenderTier.chapterAhead` between `prime` and `prepare`: an import during
+  playback must not wait ten minutes behind a fill, and the fill beats Prepare, which on a charger
+  plans the same utterances. `RenderArbiter.release()` walks `RenderTier.allCases` instead of a
+  literal list — a tier missing from it waited forever.
+- **The snapshot.** `RenderSnapshot.chapterStarts` and `chapterEnd(containing:)`; the array init
+  defaults to one chapter, so every caller compiles unchanged.
+- **The policy.** `PolicyInput.foregroundFill: ClosedRange<TimeInterval>?` (nil: only the window).
+  Tier 2b walks the playing document from the playhead for `clamp(secondsToEndOfChapter, min...max)`
+  at 1x — a 20-minute chapter to its end, a 2-minute remainder topped up to the minimum into the
+  next chapter, an hour-long article cut at the maximum — not on a hot, low-power, or full device;
+  never rate-scaled (the window is a time-to-dry, the fill a CPU and disk spend). `seen` keeps the
+  window's jobs out of the fill and the fill's out of Prepare.
+- **The coordinator.** `CoordinatorConfiguration.foregroundFill` (nil by default — nothing changes
+  in the everyday build or any old test), `isForeground { didSet { replan() } }`, and the range is
+  passed only while frontmost *and* playing or catching up — the owner's choice: opening the Reader
+  to look at a chapter does not fill. `play()` and `pause()` replan, so the fill starts and stops
+  with listening; the utterance in flight finishes. `isFilling` is read-only for the app, and
+  `replan` writes one `render.fill` os_log notice at each edge.
+- **The app** (not compiled here — the worktree agent builds the root package only;
+  `scripts/build-app.sh` is the check). `KokoroComposition.foregroundFillSeconds`: CPU path
+  600…1200 s (10–20 min to start, the owner's choice; 2–11 min of A13 CPU per fill, 6–11 MB),
+  GPU path 1200…3600 s, nil in the everyday build. The developer default
+  `render.foregroundFillMaxSeconds` (0 disables, `v` caps) is rollback one, `foregroundFillSeconds:
+  nil` two, a revert three. `AppEnvironment.live()` passes it to the configuration; `RootPager`
+  sets `coordinator.isForeground` on the gate's line and logs `isFilling`'s edges into
+  `kokoro-timing.log` through `KokoroComposition.noteFill` (the environment keeps the composition
+  for it). Low Power Mode: no fill (the owner's choice).
+- **Docs.** This entry; spec §3.4.1's tier 2b row and rev 20; crashreport.md Finding 2b's pointer.
+- **The metadata's lag (Step 7).** `PlayerModel.tick()` writes the changed chapters every 30 s
+  (`persistInterval`; `init` takes a `TimeSource`, a manual clock in the test) when there is
+  something to write — a fill's refs used to reach the store only on pause, lock, or the next
+  load, so a jetsam in front, and the Storage page's count, lagged it by up to ten minutes.
+
+**Verified:** `swift test` 496/87 (478 before; the 18 new: the arbiter's order, `allCases` sorted,
+the chapter starts, eight policy tables, six coordinator tests on two chapters of five sentences
+with `windowSeconds: 1` and a 5…10 s fill, the player model's 30 s write). The app target by
+reading and `swiftc -parse` only. Not on a phone.
+
+**Owed — the phone protocol (plan §4.1):** a novel with 15–25-minute chapters; play three minutes
+in front (`kokoro utterance` lines at ~1/s, the scrubber's frontier well past the playhead, and
+`render-ahead fill on` in the timing log); lock ten minutes at 1x and ten at 1.5x — no gap, and no
+renders in the log during the lock (or a few near the fill's end); Console.app, subsystem
+`com.t2s.reader`: `render.fill` at play/lock/unlock, `render.pacing` at most once after the lock;
+the thermal state after a full fill (the `.serious` guard shows as the fill stopping early). Then
+the plan's Step 8 (`.fair` halves the bound) if the phone says so, and the CPU bound to 30 min if
+it does not.
+
+## Resume here (2026-09-11, small hours) — the 11 Pro test of Harsh's branch, the merge, seven fixes, the phone, and the research
 
 The owner asked whether Harsh's `phone-warmup-download-cloud` could be tried on the 11 Pro without
 disturbing the working app. It was: a worktree, a second bundle id (`com.t2s.reader.harsh`, its own
@@ -127,9 +185,9 @@ scripted — the live-session test starts from a part left by hand.
     whether serializing the GPU plan builds is worth its ~2× load time there.
 - From the research, not started: read Hugging Face's `ratelimit` headers on a 429; one
   `URLSession` per install and a `Range` resume; a mirror (R2 or Background Assets) so the model
-  does not depend on anonymous-IP policy; render by chapter while frontmost so the background
-  loop is only a top-up; `MLComputePlan` on the 15 s generator to see why the A19's CPU compiler
-  never finishes it.
+  does not depend on anonymous-IP policy; `MLComputePlan` on the 15 s generator to see why the
+  A19's CPU compiler never finishes it. (Render by chapter while frontmost: done — Plan 18, the
+  entry above; its phone protocol is what is owed now.)
 
 ## Resume here (2026-09-10, night) — the kind title pops with the menu it opens
 

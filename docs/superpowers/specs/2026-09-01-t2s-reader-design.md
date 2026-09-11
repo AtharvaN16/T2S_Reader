@@ -467,6 +467,7 @@ charger.
 |---|---|---|---|
 | 1 **Play-ahead** | The playing document, a window ahead of the playhead sized per §3.6 | Whenever playing | Always first |
 | 2 **Prime** | The first ~30 s of audio from a document's resume position: a new import from its start, the continue-document from where the reader left it (rev 14) | On import; at launch | After play-ahead |
+| 2b **Foreground fill** | The rest of the playing document's current chapter, clamped to 10–20 min (CPU path, to start) / 20–60 min (GPU path) of audio at 1x — a short remainder is topped up into the next chapter, a long article cut at the maximum; never rate-scaled (rev 20) | While frontmost and listening; not on a hot, low-power, or full device | After prime, before prepare |
 | 3 **Prepare** | Continue-document, then queue order, each from its resume position, until the budget is spent | Only while charging | After prime |
 | 4 **Manual** | "Render whole document" | User-initiated, any power state, with a battery note | A prepare job whose budget is the whole document |
 
@@ -935,6 +936,16 @@ against a pipeline that is already proven.
 ---
 
 ## 11. Changelog
+
+**rev 20 (2026-09-11)** — Plan 18: render ahead by chapter while in front
+- **§3.4.1** tier 2b, the foreground fill: while the app is frontmost and the listener is
+  listening, the rest of the current chapter renders behind the window — clamped to 10–20 min on
+  the CPU path (to start), 20–60 on the GPU path, in audio seconds at 1x, never rate-scaled — not
+  on a hot, low-power, or full device. After prime (an import during playback must not wait ten
+  minutes), before prepare. The background loop's plan is then the window alone, which it finds
+  rendered: the `CPUBudget` sustains ~0.9 audio-seconds per wall-second at 1x on the A13
+  (crashreport.md, Finding 2b) — it can hold a buffer, not grow one. `RenderArbiter` hands the
+  lease on in `RenderTier.allCases` order; `RenderSnapshot` carries the chapter starts.
 
 **rev 19 (2026-09-10)** — the tail click on every voice; the Reader's voice chip
 - Core ML engine: the click at the tail of every call is removed by *place*, not shape. Measured

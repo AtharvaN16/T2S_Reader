@@ -1,8 +1,21 @@
 import Foundation
 
-/// Spec §3.4.1 tiers, in priority order.
-public enum RenderTier: Int, Hashable, Comparable, Sendable {
-    case playAhead = 0, prime, prepare, manual
+/// Spec §3.4.1 tiers, in priority order. `allCases` *is* that order: `RenderArbiter.release()`
+/// walks it to hand the lease on, so a tier added here is arbitrated without a second list to
+/// keep in step — a tier the arbiter did not know about waited forever.
+public enum RenderTier: Int, Hashable, Comparable, CaseIterable, Sendable {
+    /// The playing document's window ahead of the playhead — always wins the next boundary.
+    case playAhead = 0
+    /// A new import's first 30 s, or the continue-document's at launch.
+    case prime
+    /// The rest of the playing document's chapter, clamped, while frontmost and listening (Plan
+    /// 18). After `prime` — an import during playback must not wait ten minutes behind a fill —
+    /// and before `prepare`, which on a charger plans the same utterances at the budget's pace.
+    case chapterAhead
+    /// The continue-document, then the queue, while charging.
+    case prepare
+    /// "Render whole document".
+    case manual
     public static func < (a: RenderTier, b: RenderTier) -> Bool { a.rawValue < b.rawValue }
 }
 
@@ -25,20 +38,37 @@ public struct RenderSnapshot: Hashable, Sendable {
     /// Whether the store already holds each utterance's audio.
     public var rendered: [Bool]
     public var resumeIndex: Int
+    /// The flat utterance index each chapter starts at, in chapter order; an empty chapter repeats
+    /// the next one's start. The fill tier rounds its bound to the chapter with it (Plan 18); the
+    /// other tiers never look.
+    public var chapterStarts: [Int]
 
-    public init(documentID: UUID, seconds: [TimeInterval], rendered: [Bool], resumeIndex: Int) {
+    public init(documentID: UUID, seconds: [TimeInterval], rendered: [Bool], resumeIndex: Int, chapterStarts: [Int] = [0]) {
         precondition(seconds.count == rendered.count)
         self.documentID = documentID
         self.seconds = seconds
         self.rendered = rendered
         self.resumeIndex = resumeIndex
+        self.chapterStarts = chapterStarts
     }
 
     public init(documentID: UUID, timeline: Timeline, rendered: [Bool], resumeIndex: Int) {
         var secs: [TimeInterval] = []
+        var starts: [Int] = []
         secs.reserveCapacity(timeline.utteranceCount)
-        for ch in timeline.chapters { for u in ch.utterances { secs.append(u.duration.seconds) } }
-        self.init(documentID: documentID, seconds: secs, rendered: rendered, resumeIndex: resumeIndex)
+        starts.reserveCapacity(timeline.chapters.count)
+        for ch in timeline.chapters {
+            starts.append(secs.count)
+            for u in ch.utterances { secs.append(u.duration.seconds) }
+        }
+        self.init(documentID: documentID, seconds: secs, rendered: rendered, resumeIndex: resumeIndex, chapterStarts: starts)
+    }
+
+    /// One past the last utterance of the chapter holding `i`: the next chapter's start, or the
+    /// document's end for the last chapter. Duplicate starts (empty chapters) are skipped by the
+    /// `> i` test, and an `i` past every start ends at the document.
+    public func chapterEnd(containing i: Int) -> Int {
+        chapterStarts.first { $0 > i } ?? seconds.count
     }
 }
 
@@ -82,6 +112,10 @@ public struct PolicyInput: Sendable {
     public var primeSeconds: TimeInterval = 30
     /// Spec §3.4.1 default: 3 hours of listening ready.
     public var prepareBudgetSeconds: TimeInterval = 3 * 3600
+    /// The foreground fill's bound, in audio seconds at 1x from the playhead: the rest of the
+    /// playing document's chapter, clamped to this range (Plan 18). Nil — the default, and every
+    /// state but frontmost-and-listening — renders only the window.
+    public var foregroundFill: ClosedRange<TimeInterval>? = nil
 
     public init(documents: [UUID: RenderSnapshot], playing: PlayingState? = nil, lastPlayed: UUID? = nil,
                 queue: [UUID] = [], primes: [UUID] = [], manual: [UUID] = [], device: DeviceState = .unplugged) {
@@ -127,8 +161,21 @@ public enum RenderPolicy {
         for id in input.primes {
             if let doc = input.documents[id] { walk(doc, from: doc.resumeIndex, budget: input.primeSeconds, tier: .prime) }
         }
-        // Tier 3: prepare while charging — continue-document first, then queue order, one shared budget.
         let d = input.device
+        // Tier 2b: the foreground fill — the rest of the playing document's chapter, clamped to the
+        // range, in any power state but not on a hot, low-power, or full device (Plan 18). The bound
+        // is 1x audio seconds, not scaled by the rate: the window is a time-to-dry, the fill a CPU
+        // and disk spend. What the window planned is in `seen`, so the chapter's jobs follow it in
+        // index order; a remainder shorter than the minimum runs on into the next chapter, which is
+        // simply the walk continuing.
+        if let fill = input.foregroundFill, let p = input.playing, let doc = input.documents[p.documentID],
+           !d.thermalSerious, !d.lowPowerMode, !d.storeFull {
+            let start = max(0, p.playhead.utteranceIndex)
+            let end = min(doc.chapterEnd(containing: start), doc.seconds.count)
+            let toChapterEnd = start < end ? doc.seconds[start..<end].reduce(0, +) : 0
+            walk(doc, from: start, budget: min(max(toChapterEnd, fill.lowerBound), fill.upperBound), tier: .chapterAhead)
+        }
+        // Tier 3: prepare while charging — continue-document first, then queue order, one shared budget.
         if d.charging && !d.thermalSerious && !d.lowPowerMode && !d.storeFull {
             var order: [UUID] = []
             for id in [input.lastPlayed].compactMap({ $0 }) + input.queue where !order.contains(id) { order.append(id) }

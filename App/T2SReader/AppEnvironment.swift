@@ -46,6 +46,9 @@ final class AppEnvironment {
     let deviceMonitor: DeviceMonitor
     /// What Preferences tells the reader about the on-device engine on this device.
     let kokoroStatus: KokoroStatusModel
+    /// The on-device engine's composition, kept for what only its build can do — the timing log's
+    /// line at the fill's edges (`noteFill`); its parts are the properties above.
+    let kokoro: KokoroComposition
     /// Whether the scene is active, for work iOS only allows in the foreground: the Kokoro
     /// warm-up's compute-plan builds and the model install's compiles wait on it, and `CPUBudget`
     /// paces background renders by it. `RootPager` sets it from `scenePhase`.
@@ -70,6 +73,7 @@ final class AppEnvironment {
         self.library = library
         self.coordinator = coordinator
         self.renderArbiter = renderArbiter
+        self.kokoro = kokoro
         libraryModel = LibraryModel(library: library)
         player = PlayerModel(coordinator: coordinator, library: library)
         preferences = ReaderPreferences()
@@ -151,8 +155,11 @@ final class AppEnvironment {
         let renderArbiter = RenderArbiter()
         // The Kokoro route's own play-ahead — ten minutes on a GPU phone, three on the CPU path — in
         // every state; the window has no foreground/background split (`KokoroComposition.playAheadWindowSeconds`).
+        // The fill past it — the rest of the chapter — runs only while frontmost and listening
+        // (`foregroundFillSeconds`, Plan 18); nil in the everyday build leaves the coordinator as it was.
         var configuration = CoordinatorConfiguration(prepareBudgetSeconds: prepareBudget)
         if let window = kokoro.playAheadWindowSeconds { configuration.windowSeconds = window }
+        configuration.foregroundFill = kokoro.foregroundFillSeconds
         let coordinator = PlaybackCoordinator(engine: cloudRouter, store: shared.audioStore, player: try AudioPlayer(),
                                               playheadStore: shared.store, timeSource: SystemTimeSource(),
                                               configuration: configuration,

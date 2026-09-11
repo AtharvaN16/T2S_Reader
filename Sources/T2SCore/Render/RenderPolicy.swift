@@ -38,20 +38,37 @@ public struct RenderSnapshot: Hashable, Sendable {
     /// Whether the store already holds each utterance's audio.
     public var rendered: [Bool]
     public var resumeIndex: Int
+    /// The flat utterance index each chapter starts at, in chapter order; an empty chapter repeats
+    /// the next one's start. The fill tier rounds its bound to the chapter with it (Plan 18); the
+    /// other tiers never look.
+    public var chapterStarts: [Int]
 
-    public init(documentID: UUID, seconds: [TimeInterval], rendered: [Bool], resumeIndex: Int) {
+    public init(documentID: UUID, seconds: [TimeInterval], rendered: [Bool], resumeIndex: Int, chapterStarts: [Int] = [0]) {
         precondition(seconds.count == rendered.count)
         self.documentID = documentID
         self.seconds = seconds
         self.rendered = rendered
         self.resumeIndex = resumeIndex
+        self.chapterStarts = chapterStarts
     }
 
     public init(documentID: UUID, timeline: Timeline, rendered: [Bool], resumeIndex: Int) {
         var secs: [TimeInterval] = []
+        var starts: [Int] = []
         secs.reserveCapacity(timeline.utteranceCount)
-        for ch in timeline.chapters { for u in ch.utterances { secs.append(u.duration.seconds) } }
-        self.init(documentID: documentID, seconds: secs, rendered: rendered, resumeIndex: resumeIndex)
+        starts.reserveCapacity(timeline.chapters.count)
+        for ch in timeline.chapters {
+            starts.append(secs.count)
+            for u in ch.utterances { secs.append(u.duration.seconds) }
+        }
+        self.init(documentID: documentID, seconds: secs, rendered: rendered, resumeIndex: resumeIndex, chapterStarts: starts)
+    }
+
+    /// One past the last utterance of the chapter holding `i`: the next chapter's start, or the
+    /// document's end for the last chapter. Duplicate starts (empty chapters) are skipped by the
+    /// `> i` test, and an `i` past every start ends at the document.
+    public func chapterEnd(containing i: Int) -> Int {
+        chapterStarts.first { $0 > i } ?? seconds.count
     }
 }
 

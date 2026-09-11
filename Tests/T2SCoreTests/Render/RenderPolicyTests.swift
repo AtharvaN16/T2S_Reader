@@ -90,6 +90,23 @@ import Testing
         #expect(RenderPolicy.plan(input(primes: [b], manual: [c], docs: [])).isEmpty)
     }
 
+    /// The snapshot carries where each chapter starts, so the fill tier can round its bound to the
+    /// chapter (Plan 18). An empty chapter repeats the next start; `chapterEnd` skips it.
+    @Test func snapshotCarriesChapterStartsAndEnds() {
+        let timeline = makeTimeline([3, 4, 0, 2].map { n in (0..<n).map { makeUtterance("u\($0)", seconds: 10) } })
+        let snapshot = RenderSnapshot(documentID: a, timeline: timeline, rendered: Array(repeating: false, count: 9), resumeIndex: 0)
+        #expect(snapshot.chapterStarts == [0, 3, 7, 7])
+        #expect(snapshot.seconds.count == 9)
+        #expect(snapshot.chapterEnd(containing: 0) == 3)
+        #expect(snapshot.chapterEnd(containing: 2) == 3)
+        #expect(snapshot.chapterEnd(containing: 4) == 7)
+        #expect(snapshot.chapterEnd(containing: 7) == 9)
+        #expect(snapshot.chapterEnd(containing: 8) == 9)
+        #expect(snapshot.chapterEnd(containing: 40) == 9)                                          // past the end: the document's end
+        #expect(snap(a).chapterStarts == [0])                                                     // the array init: one chapter
+        #expect(snap(a).chapterEnd(containing: 50) == 100)
+    }
+
     /// The arbiter hands the lease on in `allCases` order, so declaration order must be priority order.
     @Test func tierDeclarationOrderIsPriorityOrder() {
         #expect(RenderTier.allCases == RenderTier.allCases.sorted())

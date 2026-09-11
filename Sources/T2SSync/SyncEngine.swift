@@ -41,12 +41,11 @@ public actor SyncEngine {
     }
 
     private func pull() async throws -> SyncChanges {
-        var token = await tokens.load()
+        let token = await tokens.load()
         let changes: SyncChanges
         do {
             changes = try await provider.changes(since: token)
         } catch SyncError.tokenExpired {
-            token = nil
             changes = try await provider.changes(since: nil)
         }
         try await apply(changes.records)
@@ -61,11 +60,15 @@ public actor SyncEngine {
     }
 
     private func apply(_ remote: SyncedDocument) async throws {
+        let local = try await store.syncedDocument(contentKey: remote.contentKey)
         if remote.deletedAt != nil {
+            // A deletion beats anything older than it (sync spec §4); a local edit newer than the
+            // marker outlives it, and stays dirty so its own push overwrites the marker.
+            if let local, remote.updatedAt < local.updatedAt { return }
             try await store.removeDocument(contentKey: remote.contentKey)
             return
         }
-        guard let local = try await store.syncedDocument(contentKey: remote.contentKey) else {
+        guard let local else {
             try await store.write(remote, offering: nil)
             return
         }
@@ -87,24 +90,38 @@ public actor SyncEngine {
         try await store.write(remote)
     }
 
-    /// Pushes, and on a conflict merges the server's copy in and pushes once more; a second conflict
-    /// leaves the row dirty for the next cycle.
+    /// Pushes, and on a conflict merges the server's copy in (sync spec §4) and re-reads the store:
+    /// if the merged local row still carries something the server lacks — a newer position, for
+    /// instance — it is still dirty, and it gets pushed once more. What that second push saves joins
+    /// `accepted`; a second conflict leaves the row dirty for the next cycle.
     private func push(_ records: [SyncRecord]) async throws -> Int {
         guard !records.isEmpty else { return 0 }
         var accepted: [SyncRecord] = []
-        var retry: [SyncRecord] = []
+        var conflictedKeys: Set<String> = []
         for result in try await provider.push(records) {
             switch result.outcome {
             case .saved: accepted.append(result.record)
             case .conflict(let server):
                 try await apply([server])
-                if result.record.updatedAt > server.updatedAt { retry.append(result.record) } else { accepted.append(result.record) }
+                conflictedKeys.insert(Self.key(of: result.record))
             }
         }
-        if !retry.isEmpty {
-            for result in try await provider.push(retry) where result.outcome == .saved { accepted.append(result.record) }
+        if !conflictedKeys.isEmpty {
+            let retry = try await store.dirtyRecords().filter { conflictedKeys.contains(Self.key(of: $0)) }
+            if !retry.isEmpty {
+                for result in try await provider.push(retry) where result.outcome == .saved { accepted.append(result.record) }
+            }
         }
         try await store.markClean(accepted)
         return accepted.count
+    }
+
+    /// The content key or bookmark id a record identifies itself by, for matching a conflict back to
+    /// what the store still has dirty after the server's copy is merged in.
+    private static func key(of record: SyncRecord) -> String {
+        switch record {
+        case .document(let d): return "doc:" + d.contentKey
+        case .bookmark(let b): return "bm:" + b.id.uuidString
+        }
     }
 }

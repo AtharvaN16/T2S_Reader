@@ -103,7 +103,7 @@ write synced fields, mark dirty, list dirty.
 
 **One rule for records:** the newer `updatedAt` wins, field by field is not attempted; a `deletedAt`
 beats any record older than it. Timestamps are device clocks; a skewed clock can make one device's
-edits lose for as long as the skew — accepted for v1, noted in Settings' fine print as nothing.
+edits lose for as long as the skew — accepted for v1 and not surfaced anywhere in the UI.
 
 **Positions are offered, not applied.** When the pulled document's `resume.savedAt` is newer than
 the local position's save time *and* the position differs, the engine stores it on the row as

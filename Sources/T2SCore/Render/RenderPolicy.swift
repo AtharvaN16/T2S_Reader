@@ -112,6 +112,10 @@ public struct PolicyInput: Sendable {
     public var primeSeconds: TimeInterval = 30
     /// Spec §3.4.1 default: 3 hours of listening ready.
     public var prepareBudgetSeconds: TimeInterval = 3 * 3600
+    /// The foreground fill's bound, in audio seconds at 1x from the playhead: the rest of the
+    /// playing document's chapter, clamped to this range (Plan 18). Nil — the default, and every
+    /// state but frontmost-and-listening — renders only the window.
+    public var foregroundFill: ClosedRange<TimeInterval>? = nil
 
     public init(documents: [UUID: RenderSnapshot], playing: PlayingState? = nil, lastPlayed: UUID? = nil,
                 queue: [UUID] = [], primes: [UUID] = [], manual: [UUID] = [], device: DeviceState = .unplugged) {
@@ -157,8 +161,21 @@ public enum RenderPolicy {
         for id in input.primes {
             if let doc = input.documents[id] { walk(doc, from: doc.resumeIndex, budget: input.primeSeconds, tier: .prime) }
         }
-        // Tier 3: prepare while charging — continue-document first, then queue order, one shared budget.
         let d = input.device
+        // Tier 2b: the foreground fill — the rest of the playing document's chapter, clamped to the
+        // range, in any power state but not on a hot, low-power, or full device (Plan 18). The bound
+        // is 1x audio seconds, not scaled by the rate: the window is a time-to-dry, the fill a CPU
+        // and disk spend. What the window planned is in `seen`, so the chapter's jobs follow it in
+        // index order; a remainder shorter than the minimum runs on into the next chapter, which is
+        // simply the walk continuing.
+        if let fill = input.foregroundFill, let p = input.playing, let doc = input.documents[p.documentID],
+           !d.thermalSerious, !d.lowPowerMode, !d.storeFull {
+            let start = max(0, p.playhead.utteranceIndex)
+            let end = min(doc.chapterEnd(containing: start), doc.seconds.count)
+            let toChapterEnd = start < end ? doc.seconds[start..<end].reduce(0, +) : 0
+            walk(doc, from: start, budget: min(max(toChapterEnd, fill.lowerBound), fill.upperBound), tier: .chapterAhead)
+        }
+        // Tier 3: prepare while charging — continue-document first, then queue order, one shared budget.
         if d.charging && !d.thermalSerious && !d.lowPowerMode && !d.storeFull {
             var order: [UUID] = []
             for id in [input.lastPlayed].compactMap({ $0 }) + input.queue where !order.contains(id) { order.append(id) }

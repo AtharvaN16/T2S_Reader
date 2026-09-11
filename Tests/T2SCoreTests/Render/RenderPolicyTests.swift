@@ -5,20 +5,92 @@ import Testing
 @Suite struct RenderPolicyTests {
     let a = UUID(), b = UUID(), c = UUID()
 
-    /// 100 utterances of 10 s each = 1,000 s per document.
-    func snap(_ id: UUID, rendered: Set<Int> = [], resume: Int = 0) -> RenderSnapshot {
+    /// 100 utterances of 10 s each = 1,000 s per document; one chapter unless `chapterStarts` says otherwise.
+    func snap(_ id: UUID, rendered: Set<Int> = [], resume: Int = 0, chapterStarts: [Int] = [0]) -> RenderSnapshot {
         RenderSnapshot(documentID: id, seconds: Array(repeating: 10, count: 100),
-                       rendered: (0..<100).map { rendered.contains($0) }, resumeIndex: resume)
+                       rendered: (0..<100).map { rendered.contains($0) }, resumeIndex: resume, chapterStarts: chapterStarts)
     }
     func input(playing: PlayingState? = nil, lastPlayed: UUID? = nil, queue: [UUID] = [], primes: [UUID] = [],
                manual: [UUID] = [], device: DeviceState = .init(charging: false, thermalSerious: false, lowPowerMode: false, storeFull: false),
-               docs: [RenderSnapshot]) -> PolicyInput {
+               fill: ClosedRange<TimeInterval>? = nil, docs: [RenderSnapshot]) -> PolicyInput {
         var i = PolicyInput(documents: Dictionary(uniqueKeysWithValues: docs.map { ($0.documentID, $0) }),
                             playing: playing, lastPlayed: lastPlayed, queue: queue, primes: primes, manual: manual, device: device)
         i.windowSeconds = 60
         i.primeSeconds = 30
         i.prepareBudgetSeconds = 300
+        i.foregroundFill = fill
         return i
+    }
+    func playing(_ id: UUID, at index: Int, rate: Double = 1) -> PlayingState {
+        PlayingState(documentID: id, playhead: Playhead(utteranceIndex: index, offset: 3), rate: rate)
+    }
+
+    // MARK: Plan 18 — the foreground fill
+
+    /// Behind the 60 s window, the rest of the chapter (index 40 starts the next), in index order.
+    @Test func fillRendersToTheEndOfTheChapterBehindTheWindow() {
+        let jobs = RenderPolicy.plan(input(playing: playing(a, at: 5), fill: 300...1000, docs: [snap(a, chapterStarts: [0, 40, 80])]))
+        #expect(jobs.map(\.utteranceIndex) == Array(5..<40))
+        #expect(indices(jobs, a, .playAhead) == [5, 6, 7, 8, 9, 10])
+        #expect(indices(jobs, a, .chapterAhead) == Array(11..<40))
+    }
+
+    /// Twenty seconds left in the chapter: the fill is topped up to the minimum, into the next chapter.
+    @Test func aShortChapterRemainderIsToppedUpToTheMinimum() {
+        let jobs = RenderPolicy.plan(input(playing: playing(a, at: 38), fill: 300...1000, docs: [snap(a, chapterStarts: [0, 40, 80])]))
+        #expect(indices(jobs, a, .playAhead) == Array(38..<44))
+        #expect(indices(jobs, a, .chapterAhead) == Array(44..<68))                            // 300 s from 38 = 30 utterances
+    }
+
+    /// A 1,000 s chapter — an article, a PDF — is cut at the maximum.
+    @Test func aLongChapterIsCutAtTheMaximum() {
+        let jobs = RenderPolicy.plan(input(playing: playing(a, at: 0), fill: 300...500, docs: [snap(a)]))
+        #expect(indices(jobs, a, .playAhead) == [0, 1, 2, 3, 4, 5])
+        #expect(indices(jobs, a, .chapterAhead) == Array(6..<50))
+    }
+
+    /// The fill is not rate-scaled: a CPU and disk spend, not a time-to-dry.
+    @Test func theFillDoesNotScaleWithTheRate() {
+        let jobs = RenderPolicy.plan(input(playing: playing(a, at: 0, rate: 2), fill: 300...500, docs: [snap(a)]))
+        #expect(indices(jobs, a, .playAhead) == Array(0..<12))                                // 120 s at 2x
+        #expect(indices(jobs, a, .chapterAhead) == Array(12..<50))                            // still 500 s at 1x
+    }
+
+    @Test func renderedUtterancesCountTowardTheFillButAreNotJobs() {
+        let jobs = RenderPolicy.plan(input(playing: playing(a, at: 5), fill: 300...1000,
+                                           docs: [snap(a, rendered: [11, 12, 39], chapterStarts: [0, 40])]))
+        #expect(indices(jobs, a, .chapterAhead) == Array(13..<39))
+    }
+
+    /// A hot, low-power, or full device drops the fill and keeps the window (the Prepare guards
+    /// minus charging; the window has no guards at all).
+    @Test func noFillOnAHotLowPowerOrFullDevice() {
+        for bad in [DeviceState(charging: false, thermalSerious: true, lowPowerMode: false, storeFull: false),
+                    DeviceState(charging: false, thermalSerious: false, lowPowerMode: true, storeFull: false),
+                    DeviceState(charging: false, thermalSerious: false, lowPowerMode: false, storeFull: true)] {
+            let jobs = RenderPolicy.plan(input(playing: playing(a, at: 5), device: bad, fill: 300...1000, docs: [snap(a, chapterStarts: [0, 40])]))
+            #expect(indices(jobs, a, .playAhead) == [5, 6, 7, 8, 9, 10])
+            #expect(indices(jobs, a, .chapterAhead).isEmpty)
+        }
+    }
+
+    /// On a charger the fill still comes first; Prepare takes what is left and nothing repeats.
+    @Test func fillPrecedesPrepareAndNothingRepeats() {
+        let charging = DeviceState(charging: true, thermalSerious: false, lowPowerMode: false, storeFull: false)
+        var i = input(playing: playing(a, at: 5), lastPlayed: a, device: charging, fill: 300...1000,
+                      docs: [snap(a, resume: 5, chapterStarts: [0, 40])])
+        i.prepareBudgetSeconds = 500
+        let jobs = RenderPolicy.plan(i)
+        #expect(jobs.map(\.tier) == jobs.map(\.tier).sorted())
+        #expect(Set(jobs.map(\.utteranceIndex)).count == jobs.count)
+        #expect(indices(jobs, a, .chapterAhead) == Array(11..<40))
+        #expect(indices(jobs, a, .prepare) == Array(40..<55))                                 // 500 s from 5, minus what is ahead
+    }
+
+    @Test func noFillWithoutAPlayingDocument() {
+        let jobs = RenderPolicy.plan(input(primes: [b], fill: 300...1000, docs: [snap(b, chapterStarts: [0, 40])]))
+        #expect(indices(jobs, b, .prime) == [0, 1, 2])
+        #expect(jobs.allSatisfy { $0.tier == .prime })
     }
     func indices(_ jobs: [RenderJob], _ id: UUID, _ tier: RenderTier) -> [Int] {
         jobs.filter { $0.documentID == id && $0.tier == tier }.map(\.utteranceIndex)

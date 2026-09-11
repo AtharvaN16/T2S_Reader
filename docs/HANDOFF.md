@@ -33,6 +33,43 @@ ready. Not verified on any phone: Plan 18, the 180 s window locked for four minu
 
 ### What's next, in this order
 
+0. **iCloud sync, branch `icloud-sync`** (spec `docs/superpowers/specs/2026-09-11-icloud-sync-design.md`,
+   plan `docs/superpowers/plans/2026-09-11-icloud-sync.md`; built overnight 2026-09-11 by ten reviewed
+   tasks and a whole-branch review): positions, bookmarks and the library list (not files) through the
+   private CloudKit database; the position is *offered* ("Continue from iPhone · Chapter 7, 12:40" with
+   Jump), never applied; a book the other device has is a placeholder filled by import or by its URL, the
+   wrong file refused by hash; "Delete everywhere" writes a marker; one sync cycle at most a minute
+   apart while listening, two seconds after the last write otherwise. Verified here: 517 package tests
+   (the engine's seven scenarios over a fake backend, the CloudKit mapping through real `CKRecord`s,
+   the store's primitives and a real V2→V3 on-disk migration, the library's keys and placeholders), the
+   simulator app, the signed device build on the owner's free team (entitlements: app group only, the
+   container key empty). **Not run against iCloud** — the owner's team cannot carry the entitlement, so
+   the rest is yours, in this order:
+   1. `App/Local.xcconfig`: `T2S_ICLOUD_CONTAINER = iCloud.<your bundle id>` and
+      `T2S_ENTITLEMENTS = T2SReader/T2SReader.iCloud.entitlements`; `xcodegen generate`; in Signing &
+      Capabilities the iCloud → CloudKit capability with that container under your team (Xcode registers
+      it). The switch is proven with `-showBuildSettings` in the plan's Task 9 report.
+   2. One run on a device signed into iCloud: the first save creates zone `t2s` and record types
+      `Document` and `Bookmark` in CloudKit's **development** environment. Check the fields in CloudKit
+      Dashboard. If the toggle stays disabled, its subtitle says why; `os_log` category `sync` has one
+      line per cycle and one per error (`.badContainer`/`.missingEntitlement` show as "Sync didn't
+      finish" — read the log).
+   3. Two devices (a phone and a simulator on the same account will do): import on one, the placeholder
+      on the other and fill it; read on one and take the offer on the other; a bookmark each way; delete
+      everywhere; airplane mode through a few edits and back. The Files-picker path for an EPUB/PDF
+      placeholder (security-scoped URL) is the one flow with no test at all — try it with a file in
+      iCloud Drive.
+   4. Before any TestFlight: **Deploy Schema to Production** in CloudKit Dashboard.
+   Known and accepted for v1 (from the whole-branch review): `UIDevice.current.name` is "iPhone" on iOS
+   16+ without Apple's user-assigned-device-name entitlement, so two iPhones both read "Continue from
+   iPhone"; record-level newer-wins means the other device's next position save can overwrite a
+   "finished" or title edit made seconds earlier; a book deleted "from this device" only returns as a
+   placeholder when its record next changes; an article placeholder whose fetch fails shows nothing —
+   the Import page shows the failure later; the 60 s floor and the transient-outage handling in
+   `SyncModel` have no test (wall-clock behaviour). Merge to `dev` was done by the owner's session only
+   after the reviews; if your two-device run fails, the spec's §4 and §7 are the rules to check the
+   code against.
+
 1. **Plan 18 on a phone** (either phone; the protocol is §4.1 of
    `docs/superpowers/plans/2026-09-11-render-ahead-by-chapter.md`): play three minutes in front,
    lock ten minutes at 1x, ten at 1.5x. In `kokoro-timing.log`: `render-ahead fill on/off`, `kokoro

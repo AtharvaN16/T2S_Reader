@@ -3,7 +3,7 @@
 _Last updated 2026-09-11 morning, handed to Harsh. The top section is the state, the crash fixes and
 what is next; the Plan 18 entry under it is the first task's detail; the reference sections at the end are
 older and dated as marked. The dated per-session entries that used to stack here (2026-09-04 to
-2026-09-11) were removed on 2026-09-11 evening: git has them (`git show 2b0b672:docs/HANDOFF-log.md`
+2026-09-11) were removed on 2026-09-11 evening: git has them (`git show 77894f2:docs/HANDOFF-log.md`
 for the lot, `git log` for the rest), and what mattered from them lives in `crashreport.md`,
 `docs/research/` and the specs._
 
@@ -151,7 +151,7 @@ old plans and rebuilds — 57 s to ready on the A13, t256 four minutes later.
 
 - The night of 2026-09-10/11 (the 11 Pro test of your branch, the merge, the seven fixes, the phone's
   second pass, the fresh install, readiness without t256, the installer follow-ups, the probe and the
-  review) and the sessions before it: in git history — `git show 2b0b672:docs/HANDOFF-log.md` — and in
+  review) and the sessions before it: in git history — `git show 77894f2:docs/HANDOFF-log.md` — and in
   `crashreport.md` for the crashes; the commit messages carry the rest.
 - The research: `docs/research/2026-09-10-on-device-models-on-old-and-new-phones.md`; the review:
   `docs/research/2026-09-11-gpu-path-locked-playback-review.md`; the plan:

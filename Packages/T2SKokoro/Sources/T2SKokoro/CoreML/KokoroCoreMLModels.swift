@@ -64,8 +64,31 @@ public enum KokoroComputeUnits: String, Sendable, Hashable, CaseIterable {
         return major >= 18 ? .cpuAndGPU : .cpu
     }
 
-    /// ``defaultPolicy(machine:)`` for the device this runs on.
-    public static var forThisDevice: KokoroComputeUnits { defaultPolicy(machine: hardwareModel()) }
+    /// The chip's policy, held to the memory floor: a phone under it keeps the CPU.
+    public static func defaultPolicy(machine: String, physicalMemory: UInt64) -> KokoroComputeUnits {
+        permitted(defaultPolicy(machine: machine), physicalMemory: physicalMemory)
+    }
+
+    /// What a phone with `physicalMemory` bytes may run. The GPU path compiles its plans through
+    /// MPSGraph, which holds each stage's whole program while it lowers it, and on a 4 GB phone
+    /// that ran the process out of memory (`std::bad_alloc`, the 11 Pro, 2026-09-10); the 6 GB
+    /// phones are unmeasured but have half again the room, and the A19 generation has 8 GB or
+    /// more. So anything that includes the GPU needs ``gpuMemoryFloor``, whether the chip policy or
+    /// the `kokoro.computeUnits` override asked for it; the CPU is always allowed.
+    public static func permitted(_ requested: KokoroComputeUnits, physicalMemory: UInt64) -> KokoroComputeUnits {
+        switch requested {
+        case .cpu: .cpu
+        case .cpuAndGPU, .cpuAndNeuralEngine, .all: physicalMemory >= gpuMemoryFloor ? requested : .cpu
+        }
+    }
+
+    /// Between a 4 GB phone's ~3.9 GB and a 6 GB phone's ~5.7 GB, as `physicalMemory` reports them.
+    public static let gpuMemoryFloor: UInt64 = 5_000_000_000
+
+    /// ``defaultPolicy(machine:physicalMemory:)`` for the device this runs on.
+    public static var forThisDevice: KokoroComputeUnits {
+        defaultPolicy(machine: hardwareModel(), physicalMemory: ProcessInfo.processInfo.physicalMemory)
+    }
 
     /// `hw.machine`: "iPhone18,1" on an iPhone 17 Pro, "arm64" on the simulator and on a Mac.
     static func hardwareModel() -> String {

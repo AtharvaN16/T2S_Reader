@@ -227,7 +227,13 @@ struct KokoroComposition {
         // By chip (`KokoroComputeUnits.defaultPolicy`): the A19 generation's CPU plan compiler never
         // finishes the big stages, so it gets the GPU; the A13 keeps the measured CPU path.
         let policy = KokoroComputeUnits.forThisDevice
-        let computeUnits = defaults.string(forKey: computeUnitsKey).flatMap(KokoroComputeUnits.init(rawValue:)) ?? policy
+        let requested = defaults.string(forKey: computeUnitsKey).flatMap(KokoroComputeUnits.init(rawValue:)) ?? policy
+        // The override is held to the same memory floor as the policy: a 4 GB phone asked for the
+        // GPU aborts in the plan compiler before the veil can say why.
+        let computeUnits = KokoroComputeUnits.permitted(requested, physicalMemory: ProcessInfo.processInfo.physicalMemory)
+        if computeUnits != requested {
+            log.notice("Kokoro compute units \(requested.runtimeName, privacy: .public) refused on \(ProcessInfo.processInfo.physicalMemory / 1_000_000, privacy: .public) MB of memory; using \(computeUnits.runtimeName, privacy: .public)")
+        }
         if computeUnits != policy {
             log.notice("Kokoro compute units overridden for this session: \(computeUnits.runtimeName, privacy: .public) (this phone's default is \(policy.runtimeName, privacy: .public))")
         }

@@ -19,6 +19,25 @@ import Testing
         #expect(KokoroComputeUnits.defaultPolicy(machine: machine) == expected)
     }
 
+    /// The GPU path compiles its plans through MPSGraph, which ran a 4 GB phone out of memory
+    /// (`std::bad_alloc`, the 11 Pro on 2026-09-10): a phone under the floor keeps the CPU whatever
+    /// was asked — the chip policy and the `kokoro.computeUnits` override alike.
+    @Test(arguments: [
+        (KokoroComputeUnits.cpuAndGPU, UInt64(3_900_000_000), KokoroComputeUnits.cpu),    // 4 GB phone: no
+        (KokoroComputeUnits.all, UInt64(3_900_000_000), KokoroComputeUnits.cpu),
+        (KokoroComputeUnits.cpuAndGPU, UInt64(5_700_000_000), KokoroComputeUnits.cpuAndGPU),   // 6 GB phone: yes
+        (KokoroComputeUnits.cpuAndGPU, UInt64(11_800_000_000), KokoroComputeUnits.cpuAndGPU),  // 12 GB: yes
+        (KokoroComputeUnits.cpu, UInt64(3_900_000_000), KokoroComputeUnits.cpu),
+    ])
+    func theGPUNeedsMemory(requested: KokoroComputeUnits, physicalMemory: UInt64, expected: KokoroComputeUnits) {
+        #expect(KokoroComputeUnits.permitted(requested, physicalMemory: physicalMemory) == expected)
+    }
+
+    @Test func theChipPolicyRespectsTheMemoryFloor() {
+        #expect(KokoroComputeUnits.defaultPolicy(machine: "iPhone18,1", physicalMemory: 3_900_000_000) == .cpu)
+        #expect(KokoroComputeUnits.defaultPolicy(machine: "iPhone18,1", physicalMemory: 11_800_000_000) == .cpuAndGPU)
+    }
+
     @Test func thisMachineReportsAModelName() {
         #expect(!KokoroComputeUnits.hardwareModel().isEmpty)
     }

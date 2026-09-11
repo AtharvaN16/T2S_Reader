@@ -15,8 +15,10 @@ Produces, under --out:
     README.md           the model card, with the front matter the Hub reads
     config.json         empty, so the Hub counts downloads for a `library_name: coreml` repo
     manifest.json       every file with its sha256 and byte count, for anyone pinning the way we do
-    KokoroCoreMLManifest.files.swift
-                        the generated `File(...)` rows to paste into the app's manifest
+
+and, beside --out rather than inside it, `<out>.files.swift`: the generated `File(...)` rows to paste
+into the app's manifest. It sits outside because everything under --out is uploaded verbatim, and an
+app-specific Swift snippet has no business in a public model repository.
 
 WHY THE LAYOUT MATCHES THE UPSTREAM REPO
 
@@ -215,7 +217,8 @@ def main() -> int:
     (args.out / "README.md").write_text(CARD.format(
         label=args.label, before_mb=before / 1e6, after_mb=after / 1e6
     ))
-    (args.out / "KokoroCoreMLManifest.files.swift").write_text(swift_rows(entries))
+    swift_path = args.out.parent / f"{args.out.name}.files.swift"
+    swift_path.write_text(swift_rows(entries))
 
     total = sum(entry["byteCount"] for entry in entries)
     print(f"Staged {len(entries)} files ({total / 1e6:.1f} MB) into {args.out}")
@@ -225,7 +228,7 @@ def main() -> int:
     print("  hf auth login                         # once")
     print(f"  hf repos create <namespace>/kokoro-coreml-{args.label}")
     print(f"  hf upload <namespace>/kokoro-coreml-{args.label} {args.out} .")
-    print("\nThen pin the commit it lands on and paste KokoroCoreMLManifest.files.swift into")
+    print(f"\nThen pin the commit it lands on and paste {swift_path} into")
     print("Packages/T2SKokoro/Sources/T2SKokoro/CoreML/KokoroCoreMLManifest.swift.")
     return 0
 

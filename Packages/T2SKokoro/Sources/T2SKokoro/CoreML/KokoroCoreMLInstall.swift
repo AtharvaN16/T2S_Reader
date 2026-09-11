@@ -22,20 +22,36 @@ public actor KokoroCoreMLInstall {
         /// Waiting for a network the download is allowed on (Wi-Fi).
         case waitingForNetwork(totalBytes: Int)
         case downloading(bytes: Int, totalBytes: Int)
+        /// A file's download was refused or dropped and will be tried again after `after` seconds
+        /// (`attempt` is the one about to be made).
+        case retrying(path: String, attempt: Int, after: TimeInterval)
         case compiling(stage: Int, totalStages: Int)
     }
 
     public enum Failure: Error, Hashable, Sendable, LocalizedError {
-        case download(String)
+        /// `status` is the HTTP status the server answered with, when it answered at all.
+        case download(String, status: Int?)
         case checksumMismatch(String)
         case compile(String)
 
         public var errorDescription: String? {
             switch self {
-            case .download(let path): "The voice could not be downloaded (\(path))."
+            case .download(let path, let status):
+                status.map { "The voice could not be downloaded (\(path), HTTP \($0))." }
+                    ?? "The voice could not be downloaded (\(path))."
             case .checksumMismatch(let path): "A downloaded voice file was damaged (\(path))."
             case .compile(let stage): "The voice could not be prepared (\(stage))."
             }
+        }
+    }
+
+    /// A response outside 200–299, with the server's `Retry-After` when it sent one in seconds.
+    public struct HTTPStatusError: Error, Hashable, Sendable {
+        public let status: Int
+        public let retryAfter: TimeInterval?
+        public init(status: Int, retryAfter: TimeInterval? = nil) {
+            self.status = status
+            self.retryAfter = retryAfter
         }
     }
 
@@ -46,12 +62,19 @@ public actor KokoroCoreMLInstall {
                                             _ onWaiting: @escaping @Sendable () -> Void) async throws -> Void
     /// Compiles a `.mlpackage` and returns the `.mlmodelc` it produced (somewhere temporary).
     public typealias Compiler = @Sendable (_ package: URL) async throws -> URL
+    /// Waits between download attempts; tests inject one that only records.
+    public typealias Sleeper = @Sendable (_ seconds: TimeInterval) async -> Void
 
     private let root: URL
     private let manifest: [KokoroCoreMLManifest.File]
     private let downloader: Downloader
     private let compiler: Compiler
+    private let sleeper: Sleeper
     private let admission: (@Sendable () async -> Void)?
+    /// A file is asked for this many times before the install gives up on it.
+    public static let maximumAttempts = 5
+    /// The wait before attempt n+1 when the server named none: 2, 4, 8, 16 s.
+    static func backoff(afterAttempt attempt: Int) -> TimeInterval { min(60, pow(2, Double(attempt))) }
     private static let log = Logger(subsystem: "com.t2s.reader", category: "kokoro.install")
 
     /// `root` is the revision directory, e.g. `…/KokoroCoreML/2e878c6a`. `admission` is awaited
@@ -60,11 +83,13 @@ public actor KokoroCoreMLInstall {
                 manifest: [KokoroCoreMLManifest.File] = KokoroCoreMLManifest.files,
                 downloader: @escaping Downloader = KokoroCoreMLInstall.wifiDownloader,
                 compiler: @escaping Compiler = { try await MLModel.compileModel(at: $0) },
+                sleeper: @escaping Sleeper = { seconds in try? await Task.sleep(for: .seconds(seconds)) },
                 admission: (@Sendable () async -> Void)? = nil) {
         self.root = root
         self.manifest = manifest
         self.downloader = downloader
         self.compiler = compiler
+        self.sleeper = sleeper
         self.admission = admission
     }
 
@@ -125,22 +150,39 @@ public actor KokoroCoreMLInstall {
             try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? FileManager.default.removeItem(at: part)
             let base = done
-            let counter = OSAllocatedUnfairLock(initialState: 0)
             Self.log.notice("downloading \(file.path, privacy: .public) (\(file.byteCount, privacy: .public) bytes)")
-            do {
-                try await downloader(file.url, part, { bytes in
-                    let sum = counter.withLock { $0 += bytes; return $0 }
-                    progress(.downloading(bytes: base + min(sum, file.byteCount), totalBytes: total))
-                }, {
-                    progress(.waitingForNetwork(totalBytes: total))
-                })
-            } catch is CancellationError {
+            // A refusal the server may lift (429, a 5xx, a dropped connection) is tried again after
+            // a wait — the server's own `Retry-After`, else doubling from two seconds — up to
+            // `maximumAttempts`; anything else (a 404, a checksum) fails the install at once. The
+            // `.part` is removed before every attempt: the download has no `Range`, so it restarts.
+            var attempt = 0
+            while true {
+                attempt += 1
                 try? FileManager.default.removeItem(at: part)
-                throw CancellationError()
-            } catch {
-                try? FileManager.default.removeItem(at: part)
-                Self.log.error("download failed for \(file.path, privacy: .public): \(String(describing: error), privacy: .public)")
-                throw Failure.download(file.path)
+                let counter = OSAllocatedUnfairLock(initialState: 0)
+                do {
+                    try await downloader(file.url, part, { bytes in
+                        let sum = counter.withLock { $0 += bytes; return $0 }
+                        progress(.downloading(bytes: base + min(sum, file.byteCount), totalBytes: total))
+                    }, {
+                        progress(.waitingForNetwork(totalBytes: total))
+                    })
+                    break
+                } catch is CancellationError {
+                    try? FileManager.default.removeItem(at: part)
+                    throw CancellationError()
+                } catch {
+                    try? FileManager.default.removeItem(at: part)
+                    let status = (error as? HTTPStatusError)?.status
+                    Self.log.error("download failed for \(file.path, privacy: .public) (attempt \(attempt, privacy: .public)): \(String(describing: error), privacy: .public)")
+                    guard Self.isRetryable(error), attempt < Self.maximumAttempts else {
+                        throw Failure.download(file.path, status: status)
+                    }
+                    let delay = (error as? HTTPStatusError)?.retryAfter ?? Self.backoff(afterAttempt: attempt)
+                    progress(.retrying(path: file.path, attempt: attempt + 1, after: delay))
+                    await sleeper(delay)
+                    try Task.checkCancellation()
+                }
             }
             guard try Self.matches(part, file) else {
                 try? FileManager.default.removeItem(at: part)
@@ -152,6 +194,19 @@ public actor KokoroCoreMLInstall {
             done += file.byteCount
             progress(.downloading(bytes: done, totalBytes: total))
         }
+    }
+
+    /// Whether a download failure is the passing kind: the server asking for a pause (429), a
+    /// request it timed out (408), a server-side error (5xx), or a connection that timed out or
+    /// dropped. A 404 or 403 is not — the file is not going to appear.
+    static func isRetryable(_ error: Error) -> Bool {
+        if let http = error as? HTTPStatusError {
+            return http.status == 429 || http.status == 408 || (500 ... 599).contains(http.status)
+        }
+        if let urlError = error as? URLError {
+            return [.timedOut, .networkConnectionLost, .cannotConnectToHost].contains(urlError.code)
+        }
+        return false
     }
 
     /// Whether `url` is a regular file of the manifest's size whose SHA-256 matches.
@@ -252,8 +307,10 @@ public actor KokoroCoreMLInstall {
         let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
         let (bytes, response) = try await session.bytes(from: url)
-        guard let http = response as? HTTPURLResponse, (200 ... 299).contains(http.statusCode) else {
-            throw URLError(.badServerResponse)
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        guard (200 ... 299).contains(http.statusCode) else {
+            throw HTTPStatusError(status: http.statusCode,
+                                  retryAfter: http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init))
         }
         FileManager.default.createFile(atPath: destination.path(percentEncoded: false), contents: nil)
         let handle = try FileHandle(forWritingTo: destination)

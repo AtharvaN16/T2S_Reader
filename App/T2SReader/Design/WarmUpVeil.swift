@@ -292,6 +292,8 @@ struct WarmUpLine: View {
             return "Waiting for Wi-Fi to download the voice · \(megabytes(total)) MB, once"
         case .downloading(let bytes, let total):
             return "Downloading the voice · \(megabytes(bytes)) of \(megabytes(total)) MB"
+        case .retrying(let attempt, let of, let after, _):
+            return "Download interrupted · trying again in \(Int(after.rounded())) s (\(attempt) of \(of))"
         case .compiling(let stage, let total):
             return "Preparing the voice · \(stage) of \(total)"
         }

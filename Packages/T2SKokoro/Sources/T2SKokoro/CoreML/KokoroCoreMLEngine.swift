@@ -152,6 +152,26 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// The background set (`Options.backgroundComputeUnits`), once loaded, and its load.
     private var backgroundLoaded: Loaded?
     private var backgroundLoadTask: Task<Void, Never>?
+    /// When the background set's load last failed, so a retry can wait out
+    /// ``backgroundSetLoadRetryInterval`` instead of trying again at once; `nil` before any failure
+    /// and after a successful load. Not set on cancellation — a cancelled load is not a failure and
+    /// may be retried immediately (the review of 2026-09-11, §3 R6).
+    private var backgroundSetLoadFailedAt: ContinuousClock.Instant?
+    /// How long after a failed background-set load ``renderSet(main:)`` and ``awaitBackgroundSet()``
+    /// wait before trying again — 30 s in the app; a `var` rather than a `let` only so a test can
+    /// shorten it and not pay the real 30 s (the review of 2026-09-11, §3 R6, §5 item 4).
+    private var backgroundSetLoadRetryInterval: Duration = .seconds(30)
+    /// The compiled stage URLs from the load that first called ``startBackgroundSetLoad(compiled:)``,
+    /// kept so a retry has them to call it again with — `load()` only passes them once, at readiness.
+    private var compiledStageURLs: [String: URL]?
+    /// `KokoroCoreMLModels.loadStages(_:names:computeUnits:window:admission:onStageLoaded:)`, as
+    /// ``startBackgroundSetLoad(compiled:)`` calls it: the real function by default. Settable by a
+    /// test so a background-set load can be made to fail once and then succeed, to prove the retry
+    /// (the review of 2026-09-11, §3 R6) without a real, transient Core ML failure to wait for.
+    private var stageLoader: @Sendable (
+        _ compiled: [String: URL], _ names: [String], _ computeUnits: KokoroComputeUnits, _ window: Int,
+        _ admission: (@Sendable () async -> Void)?, _ onStageLoaded: (@Sendable (_ name: String, _ seconds: Double) -> Void)?
+    ) async throws -> KokoroCoreMLModels.LoadedStages = KokoroCoreMLModels.loadStages
     /// The set the last piece rendered through, for the tests: "main" or "background".
     private(set) var lastRenderSet = "main"
     /// How many pipeline calls have run to completion — one per `kokoro call:` timing line, whether
@@ -331,14 +351,38 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
 
     /// Waits for the background set, if the options ask for one and its load has begun, and says
     /// whether the engine can now render in the background: the set is there, or none was asked for.
+    /// A failed load is not final for the session (the review of 2026-09-11, §3 R6): once the wait
+    /// for it finds no set and nothing in flight, a retry is kicked (``retryBackgroundSetLoadIfDue()``)
+    /// and awaited too, so a caller that lands here after the retry window sees the second attempt.
     @discardableResult
     public func awaitBackgroundSet() async -> Bool {
+        await backgroundLoadTask?.value
+        if backgroundLoaded == nil { retryBackgroundSetLoadIfDue() }
         await backgroundLoadTask?.value
         return options.backgroundComputeUnits == nil || backgroundLoaded != nil
     }
 
     /// Whether the background set is loaded.
     public var hasBackgroundSet: Bool { backgroundLoaded != nil }
+
+    /// Installs the function ``startBackgroundSetLoad(compiled:)`` calls in place of
+    /// `KokoroCoreMLModels.loadStages`. Internal, for the test that proves a failed background-set
+    /// load retries (the review of 2026-09-11, §3 R6): a fake that throws once and then defers to
+    /// the real loader stands in for a real, transient Core ML failure.
+    func setStageLoader(_ loader: @escaping @Sendable (
+        _ compiled: [String: URL], _ names: [String], _ computeUnits: KokoroComputeUnits, _ window: Int,
+        _ admission: (@Sendable () async -> Void)?, _ onStageLoaded: (@Sendable (_ name: String, _ seconds: Double) -> Void)?
+    ) async throws -> KokoroCoreMLModels.LoadedStages) {
+        stageLoader = loader
+    }
+
+    /// Installs how long a failed background-set load is held before ``renderSet(main:)`` or
+    /// ``awaitBackgroundSet()`` retries it; see ``backgroundSetLoadRetryInterval``. Internal, for
+    /// the same test as ``setStageLoader(_:)`` — it shortens the wait so the suite does not pay the
+    /// real 30 s.
+    func setBackgroundSetLoadRetryInterval(_ interval: Duration) {
+        backgroundSetLoadRetryInterval = interval
+    }
 
     /// Waits for the buckets after the ready set, if their load has begun. `preload()` returns at
     /// readiness; a probe that wants to render in every bucket calls this after it.
@@ -564,24 +608,28 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// only while the phone is not thermally serious — on the iPhone 17 Pro these are CPU plans the
     /// compiler takes minutes over, and they are built for a listener who is reading in front while
     /// the GPU renders. Every stage lands in Core ML's plan cache, so a launch that is backgrounded
-    /// or killed mid-way resumes where it stopped. A failure is logged and the set stays absent: a
-    /// background render then waits for the foreground rather than fail.
+    /// or killed mid-way resumes where it stopped. A failure is logged and the set stays absent for
+    /// now — ``failedToLoadBackgroundSet(_:)`` clears the task and starts the retry clock, so a
+    /// background render waits for the foreground rather than fail, and the session gets another
+    /// attempt rather than none (the review of 2026-09-11, §3 R6).
     private func startBackgroundSetLoad(compiled: [String: URL]) {
         guard let units = options.backgroundComputeUnits, backgroundLoadTask == nil, backgroundLoaded == nil else { return }
+        compiledStageURLs = compiled
         let admission = loadAdmission
+        let stageLoader = stageLoader
         let names = KokoroCoreMLResources.stageNames(buckets: KokoroCoreMLResources.backgroundBuckets,
                                                      durationTokenLengths: KokoroCoreMLResources.backgroundDurationTokenLengths)
         let tally = OSAllocatedUnfairLock(initialState: KokoroLoadTally(label: "background set on \(units.runtimeName)", total: names.count))
         backgroundLoadTask = Task(priority: .utility) { [weak self] in
             await self?.awaitPredictorWarmUp()
             do {
-                let stages = try await KokoroCoreMLModels.loadStages(
-                    compiled, names: names, computeUnits: units, window: 1,
-                    admission: {
+                let stages = try await stageLoader(
+                    compiled, names, units, 1,
+                    {
                         await admission?()
                         await Self.waitWhileThermallySerious()
                     },
-                    onStageLoaded: { name, seconds in
+                    { name, seconds in
                         let (loaded, total, summary) = tally.withLock { tally in
                             let summary = tally.record(name, seconds: seconds)
                             return (tally.loaded, tally.total, summary)
@@ -593,11 +641,40 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                 guard let self else { return }
                 try await self.installBackgroundSet(stages)
             } catch is CancellationError {
-                return
+                await self?.cancelledBackgroundSetLoad()
             } catch {
-                Self.timing("kokoro background set failed to load: \(String(describing: error))")
+                await self?.failedToLoadBackgroundSet(error)
             }
         }
+    }
+
+    /// Clears the background load task after a cancellation, so the next call that wants the
+    /// background set may start a fresh load at once: a cancellation is not a failure, so no retry
+    /// delay applies (the review of 2026-09-11, §3 R6).
+    private func cancelledBackgroundSetLoad() {
+        backgroundLoadTask = nil
+    }
+
+    /// Clears the background load task and records when it failed, so ``retryBackgroundSetLoadIfDue()``
+    /// starts a fresh load once ``backgroundSetLoadRetryInterval`` has passed instead of the set
+    /// staying absent, and every later background piece parking on the gate, for the rest of the
+    /// session (the review of 2026-09-11, §3 R6).
+    private func failedToLoadBackgroundSet(_ error: Error) {
+        backgroundLoadTask = nil
+        backgroundSetLoadFailedAt = ContinuousClock().now
+        Self.timing("kokoro background set failed to load: \(String(describing: error))")
+    }
+
+    /// Starts the background set's load again when the last attempt failed more than
+    /// ``backgroundSetLoadRetryInterval`` ago and nothing is loading or loaded now. Without this,
+    /// ``startBackgroundSetLoad(compiled:)``'s own guard — which only stops it running twice at
+    /// once — leaves a failed load final for the session (the review of 2026-09-11, §3 R6). A no-op
+    /// before the first load ever reaches `startBackgroundSetLoad` (``compiledStageURLs`` still nil).
+    private func retryBackgroundSetLoadIfDue() {
+        guard options.backgroundComputeUnits != nil, backgroundLoaded == nil, backgroundLoadTask == nil,
+              let compiledStageURLs else { return }
+        if let failedAt = backgroundSetLoadFailedAt, ContinuousClock().now - failedAt < backgroundSetLoadRetryInterval { return }
+        startBackgroundSetLoad(compiled: compiledStageURLs)
     }
 
     private func installBackgroundSet(_ stages: KokoroCoreMLModels.LoadedStages) throws {
@@ -629,10 +706,12 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     }
 
     /// The set the next piece renders through. In front, the main set. In the background, the
-    /// background set when there is one; until there is, the load admission — the app's foreground
-    /// gate — is awaited, and the main set is used once the app is back in front. The wait is
-    /// logged once as it begins and once as it ends, with the set it ended in: on the phone the
-    /// timing log is what says whether a silence was this wait, the CPU budget, or a failed call.
+    /// background set when there is one; until there is, ``retryBackgroundSetLoadIfDue()`` gets a
+    /// fresh load started if the last one failed and enough time has passed, and the load admission
+    /// — the app's foreground gate — is awaited, and the main set is used once the app is back in
+    /// front. The wait is logged once as it begins and once as it ends, with the set it ended in: on
+    /// the phone the timing log is what says whether a silence was this wait, the CPU budget, or a
+    /// failed call.
     private func renderSet(main: Loaded) async throws -> Loaded {
         guard options.backgroundComputeUnits != nil, let placement = renderPlacement else { return main }
         var waitStarted: ContinuousClock.Instant?
@@ -647,6 +726,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                 }
                 return backgroundLoaded
             }
+            retryBackgroundSetLoadIfDue()
             guard let admission = loadAdmission else { return main }
             if waitStarted == nil {
                 waitStarted = ContinuousClock().now

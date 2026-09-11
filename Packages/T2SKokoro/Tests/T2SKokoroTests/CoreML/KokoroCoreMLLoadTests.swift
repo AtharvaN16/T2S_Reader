@@ -128,6 +128,44 @@ extension KokoroCoreMLLoadTests {
         _ = try await engine.synthesize(.init(spoken: "The quick brown fox jumps over the lazy dog.", voiceID: Self.voiceID("af_heart")))
         #expect(await engine.lastRenderSet == "main")
     }
+
+    /// A failed background-set load is not final for the session (the review of 2026-09-11, §3 R6):
+    /// once the retry window has passed, the next `awaitBackgroundSet()` starts a fresh load, and
+    /// it can land the set. `setStageLoader` fakes the first attempt's failure — a real, transient
+    /// Core ML failure is not something a test can arrange — and defers to the real loader after
+    /// that, so the successful second attempt still proves a real background set works;
+    /// `setBackgroundSetLoadRetryInterval` shortens the wait so the suite does not pay the real 30 s.
+    @Test(.enabled(if: KokoroTestSupport.haveCoreMLFiles))
+    func aFailedBackgroundSetLoadRetriesAfterTheWindow() async throws {
+        KokoroTestSupport.locatePackageResourceBundles()
+        var options = KokoroCoreMLEngine.Options.default
+        options.backgroundComputeUnits = .cpu
+        let engine = KokoroCoreMLEngine(resources: try await KokoroTestSupport.compiledCoreMLResources(), options: options)
+        await engine.setBackgroundSetLoadRetryInterval(.milliseconds(50))
+        let attempts = OSAllocatedUnfairLockBox(0)
+        await engine.setStageLoader { compiled, names, computeUnits, window, admission, onStageLoaded in
+            attempts.value += 1
+            guard attempts.value > 1 else { throw KokoroCoreMLError.stageFailed("fake first attempt") }
+            return try await KokoroCoreMLModels.loadStages(
+                compiled, names: names, computeUnits: computeUnits, window: window,
+                admission: admission, onStageLoaded: onStageLoaded
+            )
+        }
+
+        try await engine.preload()
+        // The first attempt has already run and failed by the time `preload()` returns
+        // (`startBackgroundSetLoad` is kicked off, not awaited, but `awaitBackgroundSet` joins it).
+        let beforeWindow = await engine.awaitBackgroundSet()
+        #expect(beforeWindow == false)
+        #expect(await engine.hasBackgroundSet == false)
+        #expect(attempts.value == 1)
+
+        try await Task.sleep(for: .milliseconds(80))                // past the shortened retry window
+        let afterWindow = await engine.awaitBackgroundSet()
+        #expect(afterWindow)
+        #expect(await engine.hasBackgroundSet)
+        #expect(attempts.value == 2)
+    }
 }
 
 /// A value the test can read from any task.

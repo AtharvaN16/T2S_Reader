@@ -176,14 +176,17 @@ public actor RenderScheduler {
                 ? try await streamed(request)
                 : try await engine.synthesize(SynthesisRequest(spoken: request.spoken, voiceID: request.voiceID))
             let synthSeconds = timeSource.now() - t0
-            if result.audio.duration > 0 { record(rtf: synthSeconds / result.audio.duration) }
+            let rtf: Double? = result.audio.duration > 0 ? synthSeconds / result.audio.duration : nil
+            if let rtf { record(rtf: rtf) }
             if let cpu0 { lastRenderCPUSeconds = max(0, CPUBudget.processCPUSeconds() - cpu0) }
             budget?.record()                                        // keeps the window's floor current
             // The budget's report sink is the timing log's only view of what a render actually cost
             // and how long it waited to start — `CPUBudget`'s own pacing decisions live in `os_log`,
-            // which the phone does not hand over either.
-            if let budget, result.audio.duration > 0 {
-                let rtf = synthSeconds / result.audio.duration
+            // which the phone does not hand over either. Only worth a line once a wait was even
+            // possible: in the foreground `waited` is always 0 (the loop it comes from only runs
+            // while backgrounded), so gate on the budget's state as the render finishes — a render
+            // that started in front and finished after a lock still reports.
+            if let budget, let rtf, !budget.isForeground {
                 budget.report?("render cpu \(String(format: "%.1f", lastRenderCPUSeconds ?? 0)) s for \(String(format: "%.1f", result.audio.duration)) s of audio (rtf \(String(format: "%.2f", rtf))), waited \(String(format: "%.1f", waited)) s")
             }
         } catch {

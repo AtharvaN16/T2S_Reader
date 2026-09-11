@@ -271,6 +271,8 @@ import Testing
         let budget = CPUBudget(gate: gate, windowSeconds: 60, budgetSeconds: 36,
                                clock: { clock.now() }, cpuTime: { cpu.value },
                                sleeper: { seconds in sleeps.value.append(seconds); clock.advance(by: seconds) })
+        let reported = OSAllocatedUnfairLockBox<[String]>([])
+        budget.report = { reported.value.append($0) }
         let engine = FakeEngine()
         let scheduler = RenderScheduler(engine: engine, store: store, timeSource: clock, budget: budget)
         // A heavy foreground stretch — a warm-up's worth of CPU — then a render in front at wall 10.
@@ -278,6 +280,9 @@ import Testing
         cpu.value = 40
         await scheduler.setPlan([request(0)])
         for await event in scheduler.events { if event == .idle { break } }
+
+        // In front, a budget that never had to wait has nothing worth reporting.
+        #expect(reported.value.isEmpty)
 
         // Ninety quiet seconds later the phone locks: nothing was spent inside the trailing window.
         clock.set(100)

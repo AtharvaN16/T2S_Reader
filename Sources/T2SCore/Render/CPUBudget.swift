@@ -44,6 +44,9 @@ public final class CPUBudget: Sendable {
         reportBox = OSAllocatedUnfairLock(initialState: nil)
     }
 
+    /// Whether the app is frontmost right now, per the gate this budget reads.
+    public var isForeground: Bool { gate.isForeground }
+
     /// A sink for the pacing notice's text (and the "resumed" line that follows it) — for whoever
     /// cannot see `os_log`, which is where that notice otherwise lives alone. Nil (the default)
     /// reports nothing; the composition sets it once, after construction, since the sink itself

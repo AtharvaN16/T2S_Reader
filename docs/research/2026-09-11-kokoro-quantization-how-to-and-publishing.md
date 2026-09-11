@@ -295,8 +295,25 @@ hearing it in the third as "more loud and livelier" (its peak is genuinely highe
 The 42% high-frequency increase on held vowels was not audible as grain. Verdict: ship it.
 
 Noted in passing and **not** caused by quantization: the click after "Humbug!" is present in both the
-fp16 and int8 renders, so it is a pre-existing artefact of the shipped pipeline, unrelated to this
-work and worth its own look.
+fp16 and int8 renders, so it is a pre-existing artefact of the shipped pipeline. Measured from
+`spikes/findings/quantization-probe/06-quotes-*.wav` while chasing it down:
+
+- In the fp16 render it is a sample-to-sample jump of 0.041 at **t = 2.962 s**, 12x the local
+  envelope, and the int8 render has the same thing 24 ms earlier — the shift the duration drift
+  predicts, not a second artefact.
+- It sits exactly on the **onset of the speech segment that begins 40 ms after "Humbug!" ends**
+  (segments run …2.380-2.920, gap, 2.960-3.120…). So it is not a tail, and not a join: at 5.075 s
+  this passage renders in the 7 s bucket as a single pipeline call, so there is no piece seam for it
+  to sit on. It is an onset transient the model emits when speech resumes after a short internal
+  pause.
+- That is the same symptom `KokoroQualityProbe` was written for on 2026-09-08 ("a tick or a clap
+  mid-sentence before the sentence resumes"). `KokoroCoreMLTailClick` zeroes the burst at the *tail*
+  of a call, and its unit test passes; this one is mid-call, which is why that mechanism does not
+  catch it.
+
+Not fixed here, deliberately: it is unrelated to quantization, and a fix means deciding what to do
+about an onset transient inside a single render, which wants its own investigation rather than being
+bolted onto this one.
 
 ## What this corrects in the earlier research doc
 

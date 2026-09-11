@@ -152,6 +152,25 @@ ready. Not verified on any phone: Plan 18, the 180 s window locked for four minu
    and the §7.3 MLX spike only if MLX for A14+ is ever revisited.
 7. **Two open questions from the crash report** are still yours: did the 17 Pro's 15:23 download go
    through in one launch, and which tier did the playback test plan under with the phone on USB?
+8. **The model is int8 now and comes from our own repository** (2026-09-11 evening): the download is
+   ~132 MB instead of ~227 MB and the compiled model on the phone ~326 MB instead of 578 MB, from
+   `anayak16/kokoro-coreml-int8` @ `3ffe1347` — ours because the quantized weights have no revision
+   in `mattmireles/kokoro-coreml`. `scripts/quantize-kokoro-coreml.py` builds it, the generator's
+   final conv and its two upsamplers and the prosody LSTM stay float, the bucket weight-sharing (so
+   the hard links) survives, and the owner did not pick it out in a blind A/B. The whole account is
+   `docs/research/2026-09-11-kokoro-quantization-how-to-and-publishing.md`. **Left:** nothing has run
+   on a phone. Core ML expands the weights at load so speech should not change, but the A13's
+   compute-plan builds (60 s and 235 s) and its ~1 GB plan cache are unmeasured under int8, and there
+   is prior art of an int8 model failing to build a plan on an A16 where fp16 loaded — treat a
+   plan-build failure on the 11 Pro as a veto. `scripts/quantization-probe.sh` renders both model sets
+   for listening; `scripts/fetch-kokoro-coreml.sh --app` still stages the float16 files, which the
+   probe compares against, so keep both.
+9. **A click mid-sentence that is not quantization** (2026-09-11): in the Scrooge passage it is an
+   onset transient at the start of the speech that resumes 40 ms after "Humbug!" — t = 2.962 s in
+   `spikes/findings/quantization-probe/06-quotes-fp16.wav`, a 0.041 jump at 12x the local envelope,
+   present in the float16 render too. At 5.075 s the passage is a single call in the 7 s bucket, so
+   it is neither a call tail nor a piece seam, which is why `KokoroCoreMLTailClick` does not catch it.
+   Same symptom `KokoroQualityProbe` was written for on 2026-09-08.
 
 ### Reading a phone from a Mac
 

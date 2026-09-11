@@ -103,9 +103,28 @@ to 120 s, quoted in the timing line (`asked 217 s (ratelimit: …)`) so the next
 blocklist. Nineteen installer tests. One lesson for the tests: a scripted `URLProtocol` that fails
 after its response makes `URLSession.bytes(for:)` throw as a whole, so a mid-body drop cannot be
 scripted — the live-session test starts from a part left by hand.
-- Harsh, on the 17 Pro: playback locked on the GPU path with the CPU set behind it; whether
-  serializing the GPU plan builds (the research's WhisperKit pattern) is worth its ~2× load time
-  there; the §7.3 MLX spike if MLX for A14+ is ever revisited.
+- Harsh, on the 17 Pro — everything short of pressing run is done (`68a3854`, 02:40):
+  - **The `MLComputePlan` probe** (`KokoroComputePlanProbe`, `scripts/compute-plan-probe.sh`): per
+    operation of a stage's MIL program, its estimated cost and the devices that support it, under
+    `cpuAndGPU`, `cpu` and `all`; a summary table in `spikes/findings/compute-plan-probe/report.md`.
+    On the Mac the 15 s generator's CPU plan loads in 1.1 s (1041 ops, every one CPU-supported,
+    `conv` ×51 = 57 % of the cost; under cpu+gpu every op prefers the GPU) — so the A19's never-ending
+    CPU build is not an unsupported op; the phone's per-op costs are what the probe is for. On the
+    phone: from `Packages/T2SKokoro`, `xcodebuild test -scheme T2SKokoro -destination
+    'platform=iOS,id=<UDID>' -only-testing:T2SKokoroTests/KokoroComputePlanProbe
+    -allowProvisioningUpdates DEVELOPMENT_TEAM=<team> CODE_SIGN_STYLE=Automatic
+    TEST_RUNNER_KOKORO_COMPUTE_PLAN_PROBE=1 2>&1 | grep 'kokoro compute plan'` (the probe downloads
+    the stage's three files over Wi-Fi and caches them; the recipe is untried from this Mac).
+  - **The review**, `docs/research/2026-09-11-gpu-path-locked-playback-review.md`: the lock flow on
+    the GPU path step by step, eight races (R1–R8) and six improvements ordered by value. Landed with
+    it: five timing lines (scene/gate changes in `RootPager`, a background-placed piece's wait and the
+    set it ended in, the thermal hold, `; set main|background` on every `kokoro call`, a later bucket's
+    failure) and the R5 fix (`37f79df`: a render cancelled while locked no longer spins on the gate).
+  - Still open from the review, each small: the CPU budget's pacing and per-render CPU seconds in the
+    timing log (improvement 1); cut a piece for the 3 s background set *before* rendering instead of
+    discarding a third of the calls after (2); place by `.background`, not by the gate — Control
+    Center or a banner must not park a streamed head (3); retry a failed background-set load (R6);
+    whether serializing the GPU plan builds is worth its ~2× load time there.
 - From the research, not started: read Hugging Face's `ratelimit` headers on a 429; one
   `URLSession` per install and a `Range` resume; a mirror (R2 or Background Assets) so the model
   does not depend on anonymous-IP policy; render by chapter while frontmost so the background

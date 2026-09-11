@@ -53,3 +53,7 @@ App/Local.xcconfig
 # Claude Code: per-session agent worktrees and local settings
 .claude/worktrees/
 .claude/settings.local.json
+
+# The compute-plan probe's per-run dumps (scripts/compute-plan-probe.sh); report.md is committed
+spikes/findings/compute-plan-probe/ops-*.txt
+spikes/findings/compute-plan-probe/probe.env

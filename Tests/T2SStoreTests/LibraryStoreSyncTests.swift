@@ -95,6 +95,52 @@ import T2SCore
         #expect(try await s.documentID(contentKey: "sha256:bbb") == nil)
     }
 
+    /// A bookmark's deletion marker carries its uuid and an empty content key — the tombstone row
+    /// keeps nothing else — so the store that pulls it must delete by id rather than look for the
+    /// document first, or the bookmark comes back on the next pull (sync spec §4). Two stores, the
+    /// same book, the real records between them.
+    @Test func aPulledBookmarkDeletionRemovesItOnTheOtherStore() async throws {
+        let a = try store(), b = try store()
+        let key = "sha256:ccc"
+        let onA = document(key)
+        try await a.insert(onA, timeline: timeline())
+        let bookmark = Bookmark(documentID: onA.id, position: Position(resourceHref: "c1.xhtml", progression: 0.2), note: "here")
+        try await a.add(bookmark)
+        try await a.markClean(try await a.dirtyRecords(deviceName: "iPhone"))
+        try await a.deleteBookmark(id: bookmark.id)
+        let dirty = try await a.dirtyRecords(deviceName: "iPhone")
+        #expect(dirty.count == 1)
+        guard case .bookmark(let marker) = dirty[0] else { Issue.record("expected a bookmark marker \(dirty)"); return }
+        #expect(marker.id == bookmark.id && marker.deletedAt != nil && marker.contentKey.isEmpty)
+
+        let onB = document(key)
+        try await b.insert(onB, timeline: timeline())
+        try await b.writeSynced(SyncedBookmark(id: bookmark.id, contentKey: key, position: bookmark.position,
+                                               note: "here", createdAt: bookmark.createdAt, updatedAt: bookmark.createdAt))
+        #expect(try await b.bookmarks(for: onB.id).count == 1)
+        try await b.writeSynced(marker)
+        #expect(try await b.bookmarks(for: onB.id).isEmpty)
+    }
+
+    /// A position saved while the push was in flight is not lost by the push that comes back: the
+    /// row is newer than the record the server accepted, so it keeps its dirty flag for the next
+    /// cycle (sync spec §6).
+    @Test func markCleanKeepsARowThatChangedWhileThePushWasInFlight() async throws {
+        let s = try store()
+        let doc = document("sha256:ddd")
+        try await s.insert(doc, timeline: timeline())
+        try await s.savePosition(Position(resourceHref: "c1.xhtml", progression: 0.2), for: doc.id)
+        let inFlight = try await s.dirtyRecords(deviceName: "iPhone")
+        #expect(inFlight.count == 1)
+
+        try await s.savePosition(Position(resourceHref: "c1.xhtml", progression: 0.6), for: doc.id)
+        try await s.markClean(inFlight)                                    // the earlier records come back saved
+        let after = try await s.dirtyRecords(deviceName: "iPhone")
+        #expect(after.count == 1)
+        guard case .document(let d) = after[0] else { Issue.record("expected the document \(after)"); return }
+        #expect(d.resume?.position.progression == 0.6)
+    }
+
     /// The riskiest line of the change: a store written by the app as it ships today (schema V2)
     /// opens under V3 with the new columns nil or false and nothing lost.
     @Test func aV2StoreOpensUnderV3() async throws {

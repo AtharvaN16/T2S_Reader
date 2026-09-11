@@ -22,7 +22,16 @@ extension LibraryStore {
     public func dirtyRecords(deviceName: String) throws -> [SyncRecord] {
         var records: [SyncRecord] = []
         let documents = try modelContext.fetch(FetchDescriptor<StoredDocument>(predicate: #Predicate { $0.isDirty }))
-        for row in documents where row.contentKey != nil { records.append(.document(Self.synced(row, deviceName: deviceName))) }
+        // One record per content key, the newer row winning: two local rows can only share a key
+        // through a duplicate import made before that was refused (`ImportError.alreadyInLibrary`),
+        // and pushing both would have them overwrite each other, cycle after cycle.
+        var byContentKey: [String: SyncedDocument] = [:]
+        for row in documents where row.contentKey != nil {
+            let d = Self.synced(row, deviceName: deviceName)
+            if let held = byContentKey[d.contentKey], held.updatedAt >= d.updatedAt { continue }
+            byContentKey[d.contentKey] = d
+        }
+        records.append(contentsOf: byContentKey.values.sorted { $0.contentKey < $1.contentKey }.map(SyncRecord.document))
         let bookmarks = try modelContext.fetch(FetchDescriptor<StoredBookmark>(predicate: #Predicate { $0.isDirty }))
         for row in bookmarks {
             if let key = try self.row(row.documentID)?.contentKey { records.append(.bookmark(Self.synced(row, contentKey: key))) }
@@ -82,14 +91,22 @@ extension LibraryStore {
         try commit()
     }
 
-    /// Upserts a pulled bookmark, or removes it when `deletedAt` is set; ignored when no local
-    /// document has its key. Never touches `isDirty`: only `markClean` after a successful push
+    /// Upserts a pulled bookmark, or removes it when `deletedAt` is set; an upsert is ignored when no
+    /// local document has its key. Never touches `isDirty`: only `markClean` after a successful push
     /// clears it.
+    ///
+    /// The deletion comes first, before the document is looked up at all: a marker is built from the
+    /// tombstone row, which keeps only the bookmark's uuid, so its `contentKey` is empty by
+    /// construction (`dirtyRecords` above) and no document could ever match it. Guarding the marker
+    /// on a document row dropped every pulled deletion, and the bookmark came back on the next pull.
     public func writeSynced(_ bookmark: SyncedBookmark) throws {
-        guard let document = try rowWithContentKey(bookmark.contentKey) else { return }
         if bookmark.deletedAt != nil {
             if let row = try bookmarkRow(bookmark.id) { modelContext.delete(row) }
-        } else if let row = try bookmarkRow(bookmark.id) {
+            try commit()
+            return
+        }
+        guard let document = try rowWithContentKey(bookmark.contentKey) else { return }
+        if let row = try bookmarkRow(bookmark.id) {
             row.href = bookmark.position.resourceHref; row.progression = bookmark.position.progression
             row.charOffset = bookmark.position.charOffset; row.cssSelector = bookmark.position.cssSelector
             row.note = bookmark.note; row.updatedAt = bookmark.updatedAt
@@ -105,13 +122,18 @@ extension LibraryStore {
     /// through the library (files and audio included). nil when nothing has the key.
     public func documentID(contentKey: String) throws -> UUID? { try rowWithContentKey(contentKey)?.id }
 
+    /// Clears the dirty flags of what the server accepted. A row only loses its flag when it still
+    /// says what the pushed record said: a position saved while the push was in flight leaves the row
+    /// newer than the record, and it stays dirty so the next cycle carries it (sync spec §6).
     public func markClean(_ records: [SyncRecord]) throws {
         for record in records {
             switch record {
             case .document(let d) where d.deletedAt != nil: try removeTombstone(kind: Self.documentTombstone, key: d.contentKey)
-            case .document(let d): try rowWithContentKey(d.contentKey)?.isDirty = false
+            case .document(let d):
+                if let row = try rowWithContentKey(d.contentKey), row.updatedAt <= d.updatedAt { row.isDirty = false }
             case .bookmark(let b) where b.deletedAt != nil: try removeTombstone(kind: Self.bookmarkTombstone, key: b.id.uuidString)
-            case .bookmark(let b): try bookmarkRow(b.id)?.isDirty = false
+            case .bookmark(let b):
+                if let row = try bookmarkRow(b.id), (row.updatedAt ?? row.createdAt) <= b.updatedAt { row.isDirty = false }
             }
         }
         try commit()
@@ -141,8 +163,11 @@ extension LibraryStore {
         row.updatedAt = Date()
         row.isDirty = true
         try replaceChapters(of: row, with: timeline)
-        if row.queueOrder == nil { row.queueOrder = (try queueRows().last?.queueOrder ?? -1) + 1 }
+        if row.queueOrder == nil { try enqueue(row) }
         try commit()
+        // The row stopped being a placeholder and carries the real book's title and chapters: the
+        // other devices are told, like every other write a reader made (sync spec §7).
+        noteLocalChange()
     }
 
     public func pendingRemotePosition(for id: UUID) throws -> SyncedPosition? {

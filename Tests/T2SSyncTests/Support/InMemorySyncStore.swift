@@ -32,20 +32,30 @@ actor InMemorySyncStore: SyncStore {
             placeholders.insert(document.contentKey)
         }
     }
+    /// Like `LibraryStore.writeSynced(_ bookmark:)`: a deletion marker carries no content key, so it
+    /// is applied before the document is looked up at all — guarding it on a document would drop
+    /// every pulled deletion.
     func write(_ bookmark: SyncedBookmark) {
+        if bookmark.deletedAt != nil { bookmarks[bookmark.id] = nil; return }
         guard documents[bookmark.contentKey] != nil else { return }
-        if bookmark.deletedAt != nil { bookmarks[bookmark.id] = nil } else { bookmarks[bookmark.id] = bookmark }
+        bookmarks[bookmark.id] = bookmark
     }
     func removeDocument(contentKey: String) {
         documents[contentKey] = nil; pending[contentKey] = nil; placeholders.remove(contentKey)
         bookmarks = bookmarks.filter { $0.value.contentKey != contentKey }
         removed.append(contentKey)
     }
+    /// Like `LibraryStore.markClean`: a row edited while the push was in flight is newer than the
+    /// record that was accepted, and keeps its flag for the next cycle.
     func markClean(_ records: [SyncRecord]) {
         for record in records {
             switch record {
-            case .document(let d): dirty.remove("doc:\(d.contentKey)"); tombstones.removeAll { $0 == record }
-            case .bookmark(let b): dirty.remove("bm:\(b.id)"); tombstones.removeAll { $0 == record }
+            case .document(let d):
+                if let local = documents[d.contentKey], local.updatedAt <= d.updatedAt { dirty.remove("doc:\(d.contentKey)") }
+                tombstones.removeAll { $0 == record }
+            case .bookmark(let b):
+                if let local = bookmarks[b.id], local.updatedAt <= b.updatedAt { dirty.remove("bm:\(b.id)") }
+                tombstones.removeAll { $0 == record }
             }
         }
     }
@@ -78,7 +88,9 @@ actor InMemorySyncStore: SyncStore {
     }
     func deleteBookmark(_ id: UUID, at time: Date) {
         guard let b = bookmarks.removeValue(forKey: id) else { return }
-        tombstones.append(.bookmark(SyncedBookmark(id: id, contentKey: b.contentKey, position: b.position, createdAt: b.createdAt, updatedAt: time, deletedAt: time)))
+        // `contentKey: ""`, exactly as `LibraryStore.dirtyRecords` builds it: the tombstone row keeps
+        // only the uuid, and the scenarios must exercise the contract the real store keeps.
+        tombstones.append(.bookmark(SyncedBookmark(id: id, contentKey: "", position: b.position, createdAt: b.createdAt, updatedAt: time, deletedAt: time)))
     }
     func deleteEverywhere(_ key: String, at time: Date) {
         documents[key] = nil

@@ -113,7 +113,7 @@ public actor LibraryStore {
         row.isDirty = true
         modelContext.insert(row)
         try replaceChapters(of: row, with: timeline)
-        if queued { row.queueOrder = (try queueRows().last?.queueOrder ?? -1) + 1 }
+        if queued { try enqueue(row) }
         try commit()
         noteLocalChange()
     }
@@ -148,17 +148,27 @@ public actor LibraryStore {
 
     /// Updates title, author, voice, cover, and source URL. The resume position and the queue
     /// state have their own calls and are ignored here.
+    ///
+    /// Only title, author and source URL are synced fields (sync spec §3); a voice or a cover is
+    /// this device's choice. So the record clock — `updatedAt`, which the merge compares — moves
+    /// only when one of the three actually changed, and a voice change no longer makes this row
+    /// look newer than the other device's real edit.
     public func update(_ document: Document) throws {
         let row = try existing(document.id)
+        let syncedFieldsChanged = row.title != document.title
+            || row.author != document.author
+            || row.sourceURL != document.sourceURL?.absoluteString
         row.title = document.title
         row.author = document.author
         row.voiceID = document.voiceID
         row.coverImagePath = document.coverImagePath
         row.sourceURL = document.sourceURL?.absoluteString
-        row.updatedAt = Date()
-        row.isDirty = true
+        if syncedFieldsChanged {
+            row.updatedAt = Date()
+            row.isDirty = true
+        }
         try commit()
-        noteLocalChange()
+        if syncedFieldsChanged { noteLocalChange() }
     }
 
     /// `recordingDeletion`: the reader chose "everywhere" (sync spec §4) — a marker stays behind
@@ -175,17 +185,17 @@ public actor LibraryStore {
     // MARK: Queue
 
     /// Appends to the end of the Queue, or removes (archive). No-op when already in that state.
+    /// The Queue is not a synced field: the row's `updatedAt` — the record clock — stays put.
     public func setQueued(_ id: UUID, _ queued: Bool) throws {
         let row = try existing(id)
         if queued {
             guard row.queueOrder == nil else { return }
-            row.queueOrder = (try queueRows().last?.queueOrder ?? -1) + 1
+            try enqueue(row)
             try renumberQueue()
         } else {
             row.queueOrder = nil
             try renumberQueue()
         }
-        row.updatedAt = Date()
         try commit()
     }
 
@@ -202,7 +212,6 @@ public actor LibraryStore {
             for r in rows[(from + 1)...target] { r.queueOrder = (r.queueOrder ?? 0) - 1 }
             moving.queueOrder = target
         }
-        moving.updatedAt = Date()
         try renumberQueue()
         try commit()
     }
@@ -224,7 +233,7 @@ public actor LibraryStore {
         if finished {
             row.queueOrder = nil
         } else if row.queueOrder == nil {
-            row.queueOrder = (try queueRows().last?.queueOrder ?? -1) + 1
+            try enqueue(row)
         }
         try renumberQueue()
         row.updatedAt = Date()
@@ -279,7 +288,7 @@ public actor LibraryStore {
             throw LibraryStoreError.chapterOutOfRange(index)
         }
         try Self.fill(c, with: chapter, segmenterVersion: row.segmenterVersion, normalizerVersion: row.normalizerVersion)
-        row.updatedAt = Date()
+        // Rendered audio is this device's: nothing here reaches a record, so the record clock stays.
         try commit()
     }
 
@@ -288,7 +297,7 @@ public actor LibraryStore {
     public func replaceTimeline(_ timeline: Timeline, for id: UUID) throws {
         let row = try existing(id)
         try replaceChapters(of: row, with: timeline)
-        row.updatedAt = Date()
+        // A re-derivation changes nothing the other devices can see: the record clock stays.
         try commit()
     }
 
@@ -337,6 +346,14 @@ public actor LibraryStore {
         try modelContext.fetch(FetchDescriptor<StoredDocument>(
             predicate: #Predicate { $0.queueOrder != nil },
             sortBy: [SortDescriptor(\.queueOrder)]))
+    }
+
+    /// Appends `row` to the end of the Queue — the only place a row is given a slot. A placeholder
+    /// never gets one: it has no file to play, so the Queue would offer a row that cannot start
+    /// (sync spec §5). `fill(placeholder:with:timeline:)` queues it the moment the file lands.
+    func enqueue(_ row: StoredDocument) throws {
+        guard !row.isPlaceholder else { return }
+        row.queueOrder = (try queueRows().last?.queueOrder ?? -1) + 1
     }
 
     /// Compacts the Queue's ranks to a dense 0…n-1, preserving relative order. Called after every

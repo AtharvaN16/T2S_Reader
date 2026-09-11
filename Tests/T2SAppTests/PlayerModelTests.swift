@@ -245,7 +245,7 @@ import T2SStore
         let bookmarks = try await f.store.bookmarks(for: id)
         #expect(bookmarks.count == 1)
         #expect(bookmarks[0].position.resourceHref == "OEBPS/ch2.xhtml")
-        #expect(bookmarks[0].note == "Sentence number 2 here.")             // the block of text it lands on
+        #expect(bookmarks[0].passageText == "Sentence number 2 here.")      // the block of text it lands on
         #expect(player.isBookmarkedAtPlayhead)
     }
 

@@ -314,7 +314,7 @@ public final class PlayerModel {
         let position = PositionResolver.position(for: playhead, in: timeline)
         let block = timeline[utterance: playhead.utteranceIndex].source
         do {
-            try await library.store.add(Bookmark(documentID: current.id, position: position, note: block))
+            try await library.store.add(Bookmark(documentID: current.id, position: position, passageText: block))
             bookmarkedUtterances.insert(playhead.utteranceIndex)
             return true
         } catch {

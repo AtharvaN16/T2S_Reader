@@ -23,32 +23,36 @@ public final class SyncModel {
     private let engine: SyncEngine?
     private let library: Library
     private let tokens: UserDefaultsSyncTokenStore
-    private let defaults: UserDefaults
+    // `UserDefaults.standard` by name, at the point of use: `UserDefaults` is not `Sendable` to
+    // Swift 6, so it is never stored as a parameter or captured value — every isolation domain
+    // that needs it (this model, `UserDefaultsSyncTokenStore`) names `.standard` itself
+    // (KokoroComposition.swift ~332).
+    private var defaults: UserDefaults { .standard }
     private var debounce: Task<Void, Never>?
     private var observing: Task<Void, Never>?
     private let log = Logger(subsystem: "com.t2s.reader", category: "sync")
 
-    public init(provider: (any SyncProvider)?, library: Library, deviceName: String, defaults: UserDefaults = .standard) {
+    public init(provider: (any SyncProvider)?, library: Library, deviceName: String) {
         self.provider = provider
         self.library = library
-        // `tokens` built from `defaults` before `self.defaults` is set: constructing the actor
-        // hands `defaults` to a different isolation domain, and Swift 6's sendability check wants
-        // that to be the parameter's first use, not a second alias once `self` (main-actor) already
-        // holds it.
-        let tokenStore = UserDefaultsSyncTokenStore(defaults: defaults)
-        self.defaults = defaults
         // `tokens` is read here through a local binding, not `self.tokens`: an implicit `self.`
         // property read inside the `.map` closure below counts as capturing `self`, which the
         // initializer cannot do before every stored property — `engine` itself, on this very line —
         // has a value.
+        let tokenStore = UserDefaultsSyncTokenStore()
         tokens = tokenStore
-        isEnabled = defaults.bool(forKey: Self.enabledKey)
+        isEnabled = UserDefaults.standard.bool(forKey: Self.enabledKey)
         engine = provider.map { SyncEngine(provider: $0, store: LibrarySyncStore(library: library, deviceName: deviceName), tokens: tokenStore, deviceName: deviceName) }
         observing = Task { [weak self] in
             for await _ in NotificationCenter.default.notifications(named: LibraryStore.localChangeNotification) {
-                await self?.noteLocalChange()
+                self?.noteLocalChange()
             }
         }
+    }
+
+    isolated deinit {
+        observing?.cancel()
+        debounce?.cancel()
     }
 
     public var canEnable: Bool { availability == .available }
@@ -64,13 +68,19 @@ public final class SyncModel {
     }
 
     public func refreshAvailability() async {
-        guard let provider else { availability = .noContainer; return }
-        switch await provider.accountStatus() {
-        case .available: availability = .available
-        case .noAccount: availability = .noAccount
-        case .restricted: availability = .restricted
-        case .unavailable(let why): availability = .unavailable(why)
+        if let provider {
+            switch await provider.accountStatus() {
+            case .available: availability = .available
+            case .noAccount: availability = .noAccount
+            case .restricted: availability = .restricted
+            case .unavailable(let why): availability = .unavailable(why)
+            }
+        } else {
+            availability = .noContainer
         }
+        // Every branch above — including the no-container case — falls through to this check: a
+        // toggle persisted ON from a build that had a container must not stay stuck ON once
+        // `canEnable` is false, container or no container.
         if isEnabled, !canEnable { isEnabled = false; defaults.set(false, forKey: Self.enabledKey); statusText = unavailableReason ?? "" }
     }
 

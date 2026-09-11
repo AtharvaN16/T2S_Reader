@@ -45,14 +45,18 @@ public actor Library {
     /// stores it, and queues it. On any failure the document directory is removed.
     public func importFile(at url: URL, sourceType: SourceType) async throws -> ImportResult {
         let reader = try reader(for: sourceType)
-        let id = UUID()
+        // The content key first (sync spec §2): the same bytes on another device are the same book,
+        // and a placeholder for them is filled rather than doubled (sync spec §5).
+        let key = try ContentKey.file(at: url)
+        let placeholder = try await store.placeholder(contentKey: key)
+        let id = placeholder ?? UUID()
         let directory = paths.documentDirectory(id)
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try FileManager.default.copyItem(at: url, to: paths.sourceURL(id, type: sourceType))
-            return try await ingest(id: id, sourceType: sourceType, sourceURL: nil, reader: reader)
+            return try await ingest(id: id, sourceType: sourceType, sourceURL: nil, contentKey: key, fillingPlaceholder: placeholder != nil, reader: reader)
         } catch {
-            try? FileManager.default.removeItem(at: directory)
+            if placeholder == nil { try? FileManager.default.removeItem(at: directory) } else { try? FileManager.default.removeItem(at: paths.sourceURL(id, type: sourceType)) }
             throw error
         }
     }
@@ -60,15 +64,19 @@ public actor Library {
     /// Writes the retained HTML and the generated EPUB (spec §2.1), then imports the EPUB as an article.
     public func importArticle(_ article: ArticleContent, originalHTML: String) async throws -> ImportResult {
         let reader = try reader(for: .article)
-        let id = UUID()
+        // An article's key is its URL; pasted text has none and stays on this device.
+        let key = article.sourceURL.map(ContentKey.article)
+        let placeholder: UUID?
+        if let key { placeholder = try await store.placeholder(contentKey: key) } else { placeholder = nil }
+        let id = placeholder ?? UUID()
         let directory = paths.documentDirectory(id)
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try Data(originalHTML.utf8).write(to: paths.originalHTMLURL(id), options: .atomic)
             try ArticleEPUBWriter.write(article, to: paths.sourceURL(id, type: .article), identifier: id)
-            return try await ingest(id: id, sourceType: .article, sourceURL: article.sourceURL, reader: reader)
+            return try await ingest(id: id, sourceType: .article, sourceURL: article.sourceURL, contentKey: key, fillingPlaceholder: placeholder != nil, reader: reader)
         } catch {
-            try? FileManager.default.removeItem(at: directory)
+            if placeholder == nil { try? FileManager.default.removeItem(at: directory) }
             throw error
         }
     }
@@ -78,9 +86,10 @@ public actor Library {
     /// Removes the document's cached audio, its rows, and its directory. An undecodable chapter blob
     /// must never make a document undeletable: the timeline fetch is tolerant, so a corrupt blob at
     /// worst leaks its audio keys rather than blocking the one recovery action the user has.
-    public func delete(_ id: UUID) async throws {
+    /// `everywhere`: the reader chose so with sync on (sync spec §4); a marker stays for the push.
+    public func delete(_ id: UUID, everywhere: Bool = false) async throws {
         if let stored = try? await store.timeline(for: id) { await removeAudio(of: stored.timeline) }
-        try await store.delete(id: id)
+        try await store.delete(id: id, recordingDeletion: everywhere)
         try? FileManager.default.removeItem(at: paths.documentDirectory(id))
     }
 
@@ -174,6 +183,32 @@ public actor Library {
         return RenderSnapshot(documentID: document.id, timeline: timeline, rendered: rendered, resumeIndex: resume)
     }
 
+    /// Keys for the rows that predate sync (sync spec §2): the file hashed, the URL canonicalised;
+    /// a row with neither is left alone. Returns how many were keyed.
+    public func backfillContentKeys() async throws -> Int {
+        var keyed = 0
+        for document in try await store.documentsMissingContentKey() where !document.isPlaceholder {
+            let key: String?
+            switch document.sourceType {
+            case .epub, .pdf:
+                let source = paths.sourceURL(document.id, type: document.sourceType)
+                key = FileManager.default.fileExists(atPath: source.path) ? try ContentKey.file(at: source) : nil
+            case .article:
+                key = document.sourceURL.map(ContentKey.article)
+            }
+            if let key { try await store.setContentKey(document.id, key); keyed += 1 }
+        }
+        return keyed
+    }
+
+    /// The Files picker's answer for an EPUB or PDF placeholder: accepted only when its bytes are the
+    /// other device's (sync spec §5), then imported through the ordinary path, which fills the row.
+    public func fillPlaceholder(_ id: UUID, from url: URL, sourceType: SourceType) async throws -> ImportResult {
+        guard let expected = try await store.document(id: id)?.contentKey else { throw ImportError.unreadable("no placeholder") }
+        guard try ContentKey.file(at: url) == expected else { throw ImportError.differentFile }
+        return try await importFile(at: url, sourceType: sourceType)
+    }
+
     // MARK: Internals
 
     private func reader(for type: SourceType) throws -> any DocumentReader {
@@ -183,7 +218,7 @@ public actor Library {
         return reader
     }
 
-    private func ingest(id: UUID, sourceType: SourceType, sourceURL: URL?, reader: any DocumentReader) async throws -> ImportResult {
+    private func ingest(id: UUID, sourceType: SourceType, sourceURL: URL?, contentKey: String?, fillingPlaceholder: Bool, reader: any DocumentReader) async throws -> ImportResult {
         let read = try await reader.read(fileURL: paths.sourceURL(id, type: sourceType), sourceType: sourceType)
         let timeline = try await build(read.chapters)
         // Best effort: without the retained file a re-derivation reads the source once more.
@@ -195,8 +230,12 @@ public actor Library {
             coverPath = paths.relativePath(of: url)
         }
         let document = Document(id: id, title: read.title, author: read.author, sourceType: sourceType,
-                                sourceURL: sourceURL, coverImagePath: coverPath, addedAt: Date())
-        try await store.insert(document, timeline: timeline, queued: true)
+                                sourceURL: sourceURL, coverImagePath: coverPath, addedAt: Date(), contentKey: contentKey)
+        if fillingPlaceholder {
+            try await store.fill(placeholder: id, with: document, timeline: timeline)
+        } else {
+            try await store.insert(document, timeline: timeline, queued: true)
+        }
         return ImportResult(document: document, utteranceCount: timeline.utteranceCount, skippedResources: read.skippedResources)
     }
 

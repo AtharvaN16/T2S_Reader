@@ -27,6 +27,7 @@ public final class CPUBudget: Sendable {
     private let cpuTime: Clock
     private let sleeper: Sleeper
     private let samples: OSAllocatedUnfairLock<[Sample]>
+    private let reportBox: OSAllocatedUnfairLock<(@Sendable (String) -> Void)?>
     private static let log = Logger(subsystem: "com.t2s.reader", category: "render.pacing")
 
     public init(gate: ForegroundGate, windowSeconds: TimeInterval = 60, budgetSeconds: TimeInterval = 36,
@@ -40,6 +41,16 @@ public final class CPUBudget: Sendable {
         self.cpuTime = cpuTime
         self.sleeper = sleeper
         samples = OSAllocatedUnfairLock(initialState: [Sample(wall: clock(), cpu: cpuTime())])
+        reportBox = OSAllocatedUnfairLock(initialState: nil)
+    }
+
+    /// A sink for the pacing notice's text (and the "resumed" line that follows it) — for whoever
+    /// cannot see `os_log`, which is where that notice otherwise lives alone. Nil (the default)
+    /// reports nothing; the composition sets it once, after construction, since the sink itself
+    /// (the phone's timing log) is only known there.
+    public var report: (@Sendable (String) -> Void)? {
+        get { reportBox.withLock { $0 } }
+        set { reportBox.withLock { $0 = newValue } }
     }
 
     /// The process's user + system CPU time, in seconds, since it launched.
@@ -85,13 +96,19 @@ public final class CPUBudget: Sendable {
             if excess <= 0 { break }
             if !announced {
                 announced = true
-                Self.log.notice("render paced in the background: \(used, format: .fixed(precision: 1), privacy: .public) s of CPU in the last \(Int(self.windowSeconds), privacy: .public) s, budget \(Int(self.budgetSeconds), privacy: .public) s")
+                // Built once so `os_log` and `report` — the phone's timing log — say the same thing.
+                let text = "render paced in the background: \(String(format: "%.1f", used)) s of CPU in the last \(Int(windowSeconds)) s, budget \(Int(budgetSeconds)) s"
+                Self.log.notice("\(text, privacy: .public)")
+                report?(text)
             }
             // Old CPU ages out of the window at one second per second; sleep for the excess, in
             // slices, so a return to the foreground is noticed within a few seconds.
             let slice = min(5, max(1, excess))
             await sleeper(slice)
             waited += slice
+        }
+        if announced {
+            report?("render paced in the background resumed after \(String(format: "%.1f", waited)) s")
         }
         return waited
     }

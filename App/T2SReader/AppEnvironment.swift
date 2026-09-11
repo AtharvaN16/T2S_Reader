@@ -8,6 +8,9 @@ import T2SLibrary
 import T2SStore
 import T2SSync
 import UIKit
+#if KOKORO_ENGINE
+import T2SKokoro
+#endif
 
 /// Builds the object graph once (spec §3): store → library → coordinator → models. Rendered audio
 /// is cache, so its directory is excluded from backup (spec §3.7.3).
@@ -157,6 +160,11 @@ final class AppEnvironment {
         // never opens it, so nothing that needs the foreground ever starts there.
         let foregroundGate = ForegroundGate(isForeground: false)
         let cpuBudget = CPUBudget(gate: foregroundGate)
+        // The budget's pacing decisions otherwise live only in `os_log`, which the phone does not
+        // hand over; the timing log is what a crash report can actually be read against.
+        #if KOKORO_ENGINE
+        cpuBudget.report = { KokoroCoreMLEngine.timing("kokoro budget: " + $0) }
+        #endif
         let kokoro = KokoroComposition.make(gate: foregroundGate)
         let cloudRouter = RoutedEngine(
             system: systemEngine,

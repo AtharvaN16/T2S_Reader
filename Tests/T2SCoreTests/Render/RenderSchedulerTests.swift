@@ -237,6 +237,8 @@ import Testing
         // Forty seconds of CPU burnt since the budget was made, all inside the window.
         clock.set(50)
         cpu.value = 40
+        let reported = OSAllocatedUnfairLockBox<[String]>([])
+        budget.report = { reported.value.append($0) }
         let engine = FakeEngine(secondsPerCharacter: 0.1)
         let scheduler = RenderScheduler(engine: engine, store: store, timeSource: clock, budget: budget)
         await scheduler.setPlan([request(0)])
@@ -247,6 +249,7 @@ import Testing
         #expect(events.contains { if case .rendered = $0 { return true } else { return false } })
         let requests = await engine.requests
         #expect(requests.count == 1)                                // and then rendered, once
+        #expect(reported.value.contains { $0.contains("waited") })  // the scheduler's own report line
 
         // The foreground: the same budget, no wait at all.
         gate.set(foreground: true)

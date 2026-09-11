@@ -68,6 +68,28 @@ import Testing
         #expect(h.budget.usedInWindow() == 2)
     }
 
+    /// The pacing notice's text (and the "resumed" line that follows it) reaches `report`, not just
+    /// `os_log` — the phone's timing log cannot see the latter. In the foreground the same budget
+    /// never paces, so `report` collects nothing.
+    @Test func reportsPacingThroughTheClosure() async {
+        let h = Harness(foreground: false)
+        h.clock.set(50)
+        h.cpu.value = 40                                            // same burst as aBackgroundBurstWaitsForTheWindowToClear
+        let reported = OSAllocatedUnfairLockBox<[String]>([])
+        h.budget.report = { reported.value.append($0) }
+        let waited = await h.budget.waitForHeadroom(estimatedSeconds: 5)
+        #expect(waited > 0)
+        #expect(reported.value.count == 2)
+        #expect(reported.value.first?.contains("paced") == true)
+        #expect(reported.value.last?.contains("resumed") == true)
+
+        reported.value = []
+        h.gate.set(foreground: true)
+        let waitedInFront = await h.budget.waitForHeadroom(estimatedSeconds: 5)
+        #expect(waitedInFront == 0)
+        #expect(reported.value.isEmpty)
+    }
+
     @Test func returningToTheForegroundEndsTheWait() async {
         let h = Harness(foreground: false)
         h.clock.set(50)

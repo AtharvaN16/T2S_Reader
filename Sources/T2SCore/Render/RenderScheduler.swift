@@ -164,8 +164,9 @@ public actor RenderScheduler {
         var events: [RenderEvent] = []
         // In the background, only when the trailing window has room for what a render costs: the
         // lease is held meanwhile, so the other tier waits behind this one rather than pile on.
+        var waited: TimeInterval = 0
         if let budget {
-            await budget.waitForHeadroom(estimatedSeconds: lastRenderCPUSeconds ?? Self.firstRenderCPUEstimate)
+            waited = await budget.waitForHeadroom(estimatedSeconds: lastRenderCPUSeconds ?? Self.firstRenderCPUEstimate)
         }
         let t0 = timeSource.now()
         let cpu0 = budget.map { _ in CPUBudget.processCPUSeconds() }
@@ -178,6 +179,13 @@ public actor RenderScheduler {
             if result.audio.duration > 0 { record(rtf: synthSeconds / result.audio.duration) }
             if let cpu0 { lastRenderCPUSeconds = max(0, CPUBudget.processCPUSeconds() - cpu0) }
             budget?.record()                                        // keeps the window's floor current
+            // The budget's report sink is the timing log's only view of what a render actually cost
+            // and how long it waited to start — `CPUBudget`'s own pacing decisions live in `os_log`,
+            // which the phone does not hand over either.
+            if let budget, result.audio.duration > 0 {
+                let rtf = synthSeconds / result.audio.duration
+                budget.report?("render cpu \(String(format: "%.1f", lastRenderCPUSeconds ?? 0)) s for \(String(format: "%.1f", result.audio.duration)) s of audio (rtf \(String(format: "%.2f", rtf))), waited \(String(format: "%.1f", waited)) s")
+            }
         } catch {
             events.append(.failed(documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, message: "\(error)"))
             result = SynthesisResult(audio: .silence(seconds: Self.failureSilenceSeconds), wordTimings: [])

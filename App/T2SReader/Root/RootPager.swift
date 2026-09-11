@@ -5,6 +5,9 @@ import T2SCore
 import T2SApp
 import T2SStore
 import UIKit
+#if KOKORO_ENGINE
+import T2SKokoro
+#endif
 
 enum RootPage: Hashable, CaseIterable {
     case collection, queue, preferences
@@ -207,6 +210,11 @@ struct RootPager: View {
         // unpaced render — waits on it (`AppEnvironment.foregroundGate`).
         .onChange(of: scenePhase, initial: true) { _, phase in
             env.foregroundGate.set(foreground: phase == .active)
+            #if KOKORO_ENGINE
+            // Into the phone's timing log too, so a lock can be read against the render lines
+            // around it rather than against a time noted by hand.
+            KokoroCoreMLEngine.timing("kokoro scene \(phase == .active ? "active" : phase == .background ? "background" : "inactive"); foreground gate \(phase == .active ? "open" : "closed")")
+            #endif
         }
         // The screen stays awake while the one-time setup runs: the download, the compile and the
         // warm-up's plan builds all wait on that gate, so an auto-lock part-way through would stop

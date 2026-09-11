@@ -1,0 +1,317 @@
+{"app_name":"T2SReaderKokoro","timestamp":"2026-09-10 22:44:15.00 -0400","app_version":"1.0","slice_uuid":"75CD5047-F11E-30E4-8A21-370E005167ED","build_version":"1","bundleID":"com.t2s.reader.harsh","duration_ms":"92249","share_with_app_devs":0,"is_first_party":0,"bug_type":"202","os_version":"iPhone OS 26.6.1 (23G83)","roots_installed":0,"name":"T2SReaderKokoro","incident_id":"DBE181AE-A0C9-40F8-B2C7-789D59391004"}
+Date/Time:        2026-09-10 22:42:39.343 -0400
+End time:         2026-09-10 22:44:11.592 -0400
+OS Version:       iPhone OS 26.6.1 (Build 23G83)
+Architecture:     arm64e
+Report Version:   72
+Incident Identifier: DBE181AE-A0C9-40F8-B2C7-789D59391004
+
+Data Source:      Microstackshots
+Shared Cache:     3991E421-9291-3812-ACDB-65BD728577C2 slid base address 0x18aabc000, slide 0xaabc000
+
+Command:          T2SReaderKokoro
+Path:             /private/var/containers/Bundle/Application/4D0B1852-B105-475B-961D-26A418CB3B6B/T2SReaderKokoro.app/T2SReaderKokoro
+Identifier:       com.t2s.reader.harsh
+Version:          1.0 (1)
+Is First Party:   No
+Beta Identifier:  B60A3283-21D1-408F-90B0-5DC4A32506F8
+Resource Coalition: "com.t2s.reader.harsh"(10324)
+Architecture:     arm64
+Parent:           UNKNOWN [1]
+PID:              50958
+
+Event:            cpu usage
+Action taken:     none
+CPU:              90 seconds cpu time over 92 seconds (98% cpu average), exceeding limit of 50% cpu over 180 seconds
+CPU limit:        90s
+Limit duration:   180s
+CPU used:         90s
+CPU duration:     92s
+Duration:         92.25s
+Duration Sampled: 88.84s (event starts 3.28s before samples)
+Steps:            40 (10 gigacycles/step, 4 samples lost)
+
+Hardware model:   iPhone12,3
+Active cpus:      6
+Memory size:      3.68 GB
+HW page size:     16384
+VM page size:     16384
+Shared cache residency: 5.37% (320.42 MB / 5964.27 MB)
+
+Time Since Boot:  603468s
+Time Awake Since Boot: 475694s
+Time Since Wake:  6559s
+
+Total CPU Time:   168.518s
+Advisory levels:  Battery -> 3, User -> 3, ThermalPressure -> 20, Combined -> 2
+Free disk space:  4360.61 MB/238.31 GB, low space threshold 150 MB
+Vnodes Available: 62.03% (12407/20000, 10000 allocated, 10000 soft limit)
+Models:           none
+
+Preferred User Language: en-US
+Country Code:     US
+Keyboards:        com.google.keyboard.KeyboardExtension, en_US QWERTY
+OS Cryptex File Extents: 10634
+
+Heaviest stack for the target process:
+  40  ??? (libsystem_pthread.dylib + 2240) [0x1ed94e8c0]
+  40  ??? (libsystem_pthread.dylib + 4980) [0x1ed94f374]
+  40  ??? (libdispatch.dylib + 82072) [0x1c8add098]
+  40  ??? (libdispatch.dylib + 80128) [0x1c8adc900]
+  40  ??? (libdispatch.dylib + 24032) [0x1c8acede0]
+  40  ??? (libdispatch.dylib + 227940) [0x1c8b00a64]
+  40  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+  40  ??? (libdispatch.dylib + 6568) [0x1c8aca9a8]
+  40  ??? (CoreML + 5027704) [0x1a05ab778]
+  40  ??? (CoreML + 9528) [0x1a00e2538]
+  40  ??? (CoreML + 16904) [0x1a00e4208]
+  40  ??? (CoreML + 17536) [0x1a00e4480]
+  40  ??? (CoreML + 18128) [0x1a00e46d0]
+  40  ??? (libdispatch.dylib + 70368) [0x1c8ada2e0]
+  40  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+  40  ??? (CoreML + 18432) [0x1a00e4800]
+  40  ??? (CoreML + 18688) [0x1a00e4900]
+  40  ??? (CoreML + 18944) [0x1a00e4a00]
+  40  ??? (CoreML + 19464) [0x1a00e4c08]
+  40  ??? (CoreML + 34892) [0x1a00e884c]
+  40  ??? (CoreML + 43248) [0x1a00ea8f0]
+  40  ??? (CoreML + 46312) [0x1a00eb4e8]
+  28  ??? (CoreML + 48448) [0x1a00ebd40]
+  28  ??? (CoreML + 127356) [0x1a00ff17c]
+  28  ??? (CoreML + 128656) [0x1a00ff690]
+  28  ??? (CoreML + 5015280) [0x1a05a86f0]
+  28  ??? (CoreML + 3979832) [0x1a04aba38]
+  28  ??? (libdispatch.dylib + 70368) [0x1c8ada2e0]
+  28  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+  28  ??? (CoreML + 3980152) [0x1a04abb78]
+  28  ??? (CoreML + 5427328) [0x1a060d080]
+  28  ??? (CoreML + 5419488) [0x1a060b1e0]
+  28  ??? (CoreML + 5537528) [0x1a0627ef8]
+  28  ??? (libdispatch.dylib + 70368) [0x1c8ada2e0]
+  28  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+  28  ??? (CoreML + 5539364) [0x1a0628624]
+  28  ??? (Espresso + 1586384) [0x19f4174d0]
+  28  ??? (Espresso + 866104) [0x19f367738]
+  28  ??? (Espresso + 1101216) [0x19f3a0da0]
+  28  ??? (Espresso + 798984) [0x19f357108]
+  28  ??? (Espresso + 476668) [0x19f3085fc]
+  28  ??? (Espresso + 456796) [0x19f30385c]
+  28  ??? (Espresso + 756444) [0x19f34cadc]
+  28  ??? (Espresso + 560204) [0x19f31cc4c]
+  28  ??? (libdispatch.dylib + 88640) [0x1c8adea40]
+  28  ??? (libdispatch.dylib + 88252) [0x1c8ade8bc]
+  28  ??? (libdispatch.dylib + 92092) [0x1c8adf7bc]
+  28  ??? (libdispatch.dylib + 17840) [0x1c8acd5b0]
+  28  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+  28  ??? (libdispatch.dylib + 90396) [0x1c8adf11c]
+  28  ??? (libdispatch.dylib + 111100) [0x1c8ae41fc]
+  28  ??? (Espresso + 562396) [0x19f31d4dc]
+  28  ??? (Espresso + 516196) [0x19f312064]
+  27  ??? (Espresso + 509652) [0x19f3106d4]
+  27  ??? (Espresso + 18664) [0x19f2988e8]
+  27  ??? (Espresso + 28080) [0x19f29adb0]
+  27  ??? (Espresso + 23916) [0x19f299d6c]
+  27  ??? (Espresso + 21356) [0x19f29936c]
+  27  ??? (Espresso + 44172) [0x19f29ec8c]
+  27  ??? (Espresso + 46252) [0x19f29f4ac]
+  27  ??? (Espresso + 67736) [0x19f2a4898]
+  27  ??? (Espresso + 78648) [0x19f2a7338]
+  27  ??? (Espresso + 7027060) [0x19f947974]
+  10  ??? (Espresso + 6012704) [0x19f84ff20]
+  9   ??? (Espresso + 5952188) [0x19f8412bc]
+  6   ??? (Espresso + 5820536) [0x19f821078]
+
+
+Powerstats for:   T2SReaderKokoro [50958]
+UUID:             75CD5047-F11E-30E4-8A21-370E005167ED
+Path:             /private/var/containers/Bundle/Application/4D0B1852-B105-475B-961D-26A418CB3B6B/T2SReaderKokoro.app/T2SReaderKokoro
+Identifier:       com.t2s.reader.harsh
+Version:          1.0 (1)
+Is First Party:   No
+Beta Identifier:  B60A3283-21D1-408F-90B0-5DC4A32506F8
+Resource Coalition: 40 samples "com.t2s.reader.harsh"(10324)
+Architecture:     arm64
+Parent:           UNKNOWN [1]
+UID:              501
+Footprint:        628.36 MB -> 890.47 MB (+262.11 MB)
+Pageins:          95 pages
+Start time:       2026-09-10 22:42:42.620 -0400
+End time:         2026-09-10 22:44:11.464 -0400
+Num samples:      40 (100%)
+Energy:           75.42 mWh
+Num threads:      2
+Primary state:    40 samples Frontmost App, Non-Suppressed, User mode, Effective Thread QoS User Initiated, Requested Thread QoS User Initiated, Override Thread QoS Unspecified, p-core
+User Activity:    0 samples Idle, 40 samples Active
+Power Source:     0 samples on Battery, 40 samples on AC
+  40  ??? (libsystem_pthread.dylib + 2240) [0x1ed94e8c0]
+    40  ??? (libsystem_pthread.dylib + 4980) [0x1ed94f374]
+      40  ??? (libdispatch.dylib + 82072) [0x1c8add098]
+        40  ??? (libdispatch.dylib + 80128) [0x1c8adc900]
+          40  ??? (libdispatch.dylib + 24032) [0x1c8acede0]
+            40  ??? (libdispatch.dylib + 227940) [0x1c8b00a64]
+              40  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+                40  ??? (libdispatch.dylib + 6568) [0x1c8aca9a8]
+                  40  ??? (CoreML + 5027704) [0x1a05ab778]
+                    40  ??? (CoreML + 9528) [0x1a00e2538]
+                      40  ??? (CoreML + 16904) [0x1a00e4208]
+                        40  ??? (CoreML + 17536) [0x1a00e4480]
+                          40  ??? (CoreML + 18128) [0x1a00e46d0]
+                            40  ??? (libdispatch.dylib + 70368) [0x1c8ada2e0]
+                              40  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+                                40  ??? (CoreML + 18432) [0x1a00e4800]
+                                  40  ??? (CoreML + 18688) [0x1a00e4900]
+                                    40  ??? (CoreML + 18944) [0x1a00e4a00]
+                                      40  ??? (CoreML + 19464) [0x1a00e4c08]
+                                        40  ??? (CoreML + 34892) [0x1a00e884c]
+                                          40  ??? (CoreML + 43248) [0x1a00ea8f0]
+                                            40  ??? (CoreML + 46312) [0x1a00eb4e8]
+                                              28  ??? (CoreML + 48448) [0x1a00ebd40]
+                                                28  ??? (CoreML + 127356) [0x1a00ff17c]
+                                                  28  ??? (CoreML + 128656) [0x1a00ff690]
+                                                    28  ??? (CoreML + 5015280) [0x1a05a86f0]
+                                                      28  ??? (CoreML + 3979832) [0x1a04aba38]
+                                                        28  ??? (libdispatch.dylib + 70368) [0x1c8ada2e0]
+                                                          28  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+                                                            28  ??? (CoreML + 3980152) [0x1a04abb78]
+                                                              28  ??? (CoreML + 5427328) [0x1a060d080]
+                                                                28  ??? (CoreML + 5419488) [0x1a060b1e0]
+                                                                  28  ??? (CoreML + 5537528) [0x1a0627ef8]
+                                                                    28  ??? (libdispatch.dylib + 70368) [0x1c8ada2e0]
+                                                                      28  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+                                                                        28  ??? (CoreML + 5539364) [0x1a0628624]
+                                                                          28  ??? (Espresso + 1586384) [0x19f4174d0]
+                                                                            28  ??? (Espresso + 866104) [0x19f367738]
+                                                                              28  ??? (Espresso + 1101216) [0x19f3a0da0]
+                                                                                28  ??? (Espresso + 798984) [0x19f357108]
+                                                                                  28  ??? (Espresso + 476668) [0x19f3085fc]
+                                                                                    28  ??? (Espresso + 456796) [0x19f30385c]
+                                                                                      28  ??? (Espresso + 756444) [0x19f34cadc]
+                                                                                        28  ??? (Espresso + 560204) [0x19f31cc4c]
+                                                                                          28  ??? (libdispatch.dylib + 88640) [0x1c8adea40]
+                                                                                            28  ??? (libdispatch.dylib + 88252) [0x1c8ade8bc]
+                                                                                              28  ??? (libdispatch.dylib + 92092) [0x1c8adf7bc]
+                                                                                                28  ??? (libdispatch.dylib + 17840) [0x1c8acd5b0]
+                                                                                                  28  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+                                                                                                    28  ??? (libdispatch.dylib + 90396) [0x1c8adf11c]
+                                                                                                      28  ??? (libdispatch.dylib + 111100) [0x1c8ae41fc]
+                                                                                                        28  ??? (Espresso + 562396) [0x19f31d4dc]
+                                                                                                          28  ??? (Espresso + 516196) [0x19f312064]
+                                                                                                            27  ??? (Espresso + 509652) [0x19f3106d4]
+                                                                                                              27  ??? (Espresso + 18664) [0x19f2988e8]
+                                                                                                                27  ??? (Espresso + 28080) [0x19f29adb0]
+                                                                                                                  27  ??? (Espresso + 23916) [0x19f299d6c]
+                                                                                                                    27  ??? (Espresso + 21356) [0x19f29936c]
+                                                                                                                      27  ??? (Espresso + 44172) [0x19f29ec8c]
+                                                                                                                        27  ??? (Espresso + 46252) [0x19f29f4ac]
+                                                                                                                          27  ??? (Espresso + 67736) [0x19f2a4898]
+                                                                                                                            27  ??? (Espresso + 78648) [0x19f2a7338]
+                                                                                                                              27  ??? (Espresso + 7027060) [0x19f947974]
+                                                                                                                                10  ??? (Espresso + 6012704) [0x19f84ff20]
+                                                                                                                                  9   ??? (Espresso + 5952188) [0x19f8412bc]
+                                                                                                                                    6   ??? (Espresso + 5820536) [0x19f821078]
+                                                                                                                                    2   ??? (Espresso + 5819868) [0x19f820ddc]
+                                                                                                                                      1   ??? (Espresso + 5499976) [0x19f7d2c48]
+                                                                                                                                      1   ??? (Espresso + 5499204) [0x19f7d2944]
+                                                                                                                                    1   ??? (Espresso + 5820664) [0x19f8210f8]
+                                                                                                                                  1   ??? (Espresso + 5952164) [0x19f8412a4]
+                                                                                                                                    1   ??? (libc++.1.dylib + 10972) [0x19d713adc]
+                                                                                                                                9   ??? (Espresso + 6015968) [0x19f850be0]
+                                                                                                                                  6   ??? (Espresso + 5952328) [0x19f841348]
+                                                                                                                                    2   ??? (Espresso + 5820664) [0x19f8210f8]
+                                                                                                                                    1   ??? (Espresso + 5820776) [0x19f821168]
+                                                                                                                                    1   ??? (Espresso + 5820536) [0x19f821078]
+                                                                                                                                    1   ??? (Espresso + 5820308) [0x19f820f94]
+                                                                                                                                    1   ??? (Espresso + 5820248) [0x19f820f58]
+                                                                                                                                  2   ??? (Espresso + 5952248) [0x19f8412f8]
+                                                                                                                                    2   ??? (libc++abi.dylib + 4808) [0x18ac802c8]
+                                                                                                                                      1   ??? (libsystem_malloc.dylib + 4448) [0x199730160]
+                                                                                                                                      1   ??? (libsystem_malloc.dylib + 3256) [0x19972fcb8]
+                                                                                                                                  1   ??? (libsystem_platform.dylib + 2812) [0x2aeec6afc]
+                                                                                                                                5   ??? (Espresso + 6016212) [0x19f850cd4]
+                                                                                                                                  2   ??? (libsystem_platform.dylib + 2812) [0x2aeec6afc]
+                                                                                                                                  2   ??? (Espresso + 5952328) [0x19f841348]
+                                                                                                                                    1   ??? (Espresso + 5820308) [0x19f820f94]
+                                                                                                                                    1   ??? (Espresso + 5820248) [0x19f820f58]
+                                                                                                                                  1   ??? (Espresso + 5952312) [0x19f841338]
+                                                                                                                                    1   ??? (Espresso + 5499968) [0x19f7d2c40]
+                                                                                                                                3   ??? (Espresso + 6013292) [0x19f85016c]
+                                                                                                                                  3   ??? (Espresso + 5816356) [0x19f820024]
+                                                                                                                                    2   ??? (Espresso + 5655024) [0x19f7f89f0]
+                                                                                                                                      1   ??? (libsystem_malloc.dylib + 5636) [0x199730604]
+                                                                                                                                      1   ??? (libsystem_malloc.dylib + 5248) [0x199730480]
+                                                                                                                                    1   ??? (Espresso + 5655016) [0x19f7f89e8]
+                                                                                                                                      1   <e-core>
+                                                                                                            1   ??? (Espresso + 509436) [0x19f3105fc]
+                                                                                                              1   ??? (Espresso + 558124) [0x19f31c42c]
+                                                                                                                1   ??? (Foundation + 989400) [0x18b3258d8]
+                                                                                                                  1   ??? (Foundation + 990296) [0x18b325c58]
+                                                                                                                    1   ??? (Foundation + 985804) [0x18b324acc]
+                                                                                                                      1   ??? (Foundation + 990884) [0x18b325ea4]
+                                                                                                                        1   ??? (Foundation + 990296) [0x18b325c58]
+                                                                                                                          1   ??? (Foundation + 986636) [0x18b324e0c]
+                                                                                                                            1   ??? (CoreFoundation + 138172) [0x18dfc4bbc]
+                                                                                                                              1   ??? (CoreFoundation + 148192) [0x18dfc72e0]
+                                              12  ??? (CoreML + 48304) [0x1a00ebcb0]
+                                                12  ??? (CoreML + 5017604) [0x1a05a9004]
+                                                  12  ??? (CoreML + 5015552) [0x1a05a8800]
+                                                    12  ??? (CoreML + 5541136) [0x1a0628d10]
+                                                      12  ??? (libdispatch.dylib + 70368) [0x1c8ada2e0]
+                                                        12  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+                                                          12  ??? (CoreML + 5541344) [0x1a0628de0]
+                                                            12  ??? (CoreML + 5541508) [0x1a0628e84]
+                                                              12  ??? (CoreML + 3965872) [0x1a04a83b0]
+                                                                12  ??? (Espresso + 1602988) [0x19f41b5ac]
+                                                                  12  ??? (Espresso + 866104) [0x19f367738]
+                                                                    12  ??? (Espresso + 1118736) [0x19f3a5210]
+                                                                      12  ??? (Espresso + 1692996) [0x19f431544]
+                                                                        12  ??? (Espresso + 529616) [0x19f3154d0]
+                                                                          12  ??? (Espresso + 1996064) [0x19f47b520]
+                                                                            12  ??? (Espresso + 3606780) [0x19f6048fc]
+                                                                              12  ??? (Espresso + 3879444) [0x19f647214]
+                                                                                11  ??? (Espresso + 2688696) [0x19f5246b8]
+                                                                                  10  ??? (Espresso + 3722708) [0x19f620dd4]
+                                                                                    10  ??? (Espresso + 3725840) [0x19f621a10]
+                                                                                      10  ??? (Espresso + 3727260) [0x19f621f9c]
+                                                                                        4   ??? (Espresso + 3986032) [0x19f661270]
+                                                                                        4   ??? (Espresso + 3985980) [0x19f66123c]
+                                                                                        1   ??? (Espresso + 3986076) [0x19f66129c]
+                                                                                        1   ??? (Espresso + 3986064) [0x19f661290]
+                                                                                  1   ??? (Espresso + 3724572) [0x19f62151c]
+                                                                                    1   ??? (Espresso + 2766896) [0x19f537830]
+                                                                                      1   ??? (Espresso + 2768336) [0x19f537dd0]
+                                                                                        1   ??? (Espresso + 2794264) [0x19f53e318]
+                                                                                          1   ??? (Espresso + 2800384) [0x19f53fb00]
+                                                                                            1   ??? (MIL + 1772128) [0x22782da60]
+                                                                                              1   ??? (MIL + 1816836) [0x227838904]
+                                                                                                1   ??? (MIL + 1817700) [0x227838c64]
+                                                                                                  1   ??? (MIL + 1215004) [0x2277a5a1c]
+                                                                                                    1   ??? (MIL + 1147964) [0x22779543c]
+                                                                                                      1   ??? (MIL + 1148288) [0x227795580]
+                                                                                                        1   ??? (MIL + 520856) [0x2276fc298]
+                                                                                                          1   ??? (MIL + 696056) [0x227726ef8]
+                                                                                1   ??? (Espresso + 2687500) [0x19f52420c]
+                                                                                  1   ??? (Espresso + 2679632) [0x19f522350]
+                                                                                    1   ??? (MIL + 1775144) [0x22782e628]
+                                                                                      1   ??? (MIL + 1276752) [0x2277b4b50]
+                                                                                        1   ??? (MIL + 591012) [0x22770d4a4]
+                                                                                          1   ??? (MIL + 551536) [0x227703a70]
+                                                                                            1   ??? (MIL + 524472) [0x2276fd0b8]
+                                                                                              1   ??? (MIL + 553776) [0x227704330]
+                                                                                                1   ??? (MIL + 554676) [0x2277046b4]
+                                                                                                  1   ??? (MIL + 526400) [0x2276fd840]
+                                                                                                    1   ??? (libc++abi.dylib + 4808) [0x18ac802c8]
+                                                                                                      1   ??? (libsystem_malloc.dylib + 3488) [0x19972fda0]
+
+  Binary Images:
+           0x104c4c000 -                ???  com.t2s.reader.harsh 1.0 (1) <75CD5047-F11E-30E4-8A21-370E005167ED>  /private/var/containers/Bundle/Application/4D0B1852-B105-475B-961D-26A418CB3B6B/T2SReaderKokoro.app/T2SReaderKokoro
+           0x18ac7f000 -        0x18ac9959f  libc++abi.dylib              <4E297677-D014-3F99-9183-690B92B47FC3>  /usr/lib/libc++abi.dylib
+           0x18b234000 -        0x18c0bdcbf  Foundation                   <73841AA3-BFDD-322D-8DC2-E5185A14DEE1>  /System/Library/Frameworks/Foundation.framework/Foundation
+           0x18dfa3000 -        0x18e53fa3f  CoreFoundation               <101EB2F1-1915-34A0-8BC9-631D03753B84>  /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation
+           0x19972f000 -        0x199777d0f  libsystem_malloc.dylib       <8DD65565-6066-300E-AD0A-73118179EDB5>  /usr/lib/system/libsystem_malloc.dylib
+           0x19d711000 -        0x19d7a1a7b  libc++.1.dylib               <BE42C221-2EB0-3636-AEF5-9CEDC8B1F656>  /usr/lib/libc++.1.dylib
+           0x19f294000 -        0x1a00dfc1f  Espresso                     <66D285C4-5344-3A33-B591-C5EFD2373F34>  /System/Library/PrivateFrameworks/Espresso.framework/Espresso
+           0x1a00e0000 -        0x1a0902bdf  CoreML                       <981DCC5B-CC1D-3AEC-A8D1-508938A4FE39>  /System/Library/Frameworks/CoreML.framework/CoreML
+           0x1c8ac9000 -        0x1c8b0f5ff  libdispatch.dylib            <49C0CD3E-A696-3B11-BA92-5755F0C3C6E3>  /usr/lib/system/libdispatch.dylib
+           0x1ed94e000 -        0x1ed95a4ef  libsystem_pthread.dylib      <34B44744-BC64-386E-AB90-EEE86B23AC46>  /usr/lib/system/libsystem_pthread.dylib
+           0x22767d000 -        0x227d4892f  MIL                          <CFEE0B06-0343-3CAB-A93C-1F43A69D7260>  /System/Library/PrivateFrameworks/MIL.framework/MIL
+           0x2aeec6000 -        0x2aeece433  libsystem_platform.dylib     <3EDB2C1D-BF74-39F3-A9F6-B8C78BD66DD5>  /usr/lib/system/libsystem_platform.dylib

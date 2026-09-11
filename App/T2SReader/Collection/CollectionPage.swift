@@ -153,7 +153,13 @@ struct CollectionPage: View {
         .fileImporter(isPresented: Binding(get: { pendingFill != nil }, set: { if !$0 { pendingFill = nil } }),
                       allowedContentTypes: [.epub, .pdf]) { result in
             guard let summary = pendingFill, case .success(let url) = result else { return }
-            Task { fillMessage = await env.libraryModel.fillPlaceholder(summary.id, from: url, sourceType: summary.document.sourceType) }
+            // Started here, synchronously, in the completion handler itself — not one hop later
+            // inside the task, by which time the picker's grant of access may already have lapsed.
+            let accessing = url.startAccessingSecurityScopedResource()
+            Task {
+                defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+                fillMessage = await env.libraryModel.fillPlaceholder(summary.id, from: url, sourceType: summary.document.sourceType)
+            }
         }
         .alert("Couldn't add this book", isPresented: Binding(get: { fillMessage != nil }, set: { if !$0 { fillMessage = nil } })) {
             Button("OK") { fillMessage = nil }
@@ -243,7 +249,9 @@ struct CollectionPage: View {
     private func grid(_ books: [DocumentSummary]) -> some View {
         LazyVGrid(columns: columns, spacing: Spacing.row) {
             ForEach(books) { book in
-                CollectionTile(summary: book) { selected = book }
+                CollectionTile(summary: book) {
+                    if book.document.isPlaceholder { addHere(book) } else { selected = book }
+                }
                     .contextMenu {
                         menuItems(for: book)
                     } preview: {
@@ -290,26 +298,34 @@ struct CollectionPage: View {
     /// items where they apply here, plus Play and Delete. Nothing about a queue (owner's rule,
     /// 2026-09-09): playing a book is what puts it on Home. Play resumes a paused current book before
     /// opening the Reader, as the Home row and the book sheet do; for any other book the Reader
-    /// loads and plays it itself.
+    /// loads and plays it itself. A placeholder has no file on this device (sync spec §5), so Play
+    /// and Render whole document — both of which need one — give way to a single "Add here", which
+    /// does what the tile's and row's own tap do; the rest of the menu is unchanged.
     @ViewBuilder private func menuItems(for book: DocumentSummary) -> some View {
         let isCurrent = env.player.current?.id == book.id
-        Button {
-            Task {
-                if isCurrent, !env.player.isPlaying { await env.player.togglePlay() }
-                readerRoute.open(book)
-            }
-        } label: { Label("Play", systemImage: "play.fill") }
+        if book.document.isPlaceholder {
+            Button { addHere(book) } label: { Label("Add here", systemImage: "arrow.down.circle") }
+        } else {
+            Button {
+                Task {
+                    if isCurrent, !env.player.isPlaying { await env.player.togglePlay() }
+                    readerRoute.open(book)
+                }
+            } label: { Label("Play", systemImage: "play.fill") }
+        }
         Button { Task { await env.libraryModel.markFinished(book.id, !book.isFinished) } } label: {
             Label(book.isFinished ? "Mark as unfinished" : "Mark as finished", systemImage: "checkmark.circle")
         }
         Button { details = book } label: { Label("Details", systemImage: "info.circle") }
         Button { voiceChange = book } label: { Label("Change voice", systemImage: "person.wave.2") }
-        Button {
-            Task {
-                if !isCurrent { await env.player.load(book, play: false) }
-                env.player.renderWholeDocument()
-            }
-        } label: { Label("Render whole document", systemImage: "waveform") }
+        if !book.document.isPlaceholder {
+            Button {
+                Task {
+                    if !isCurrent { await env.player.load(book, play: false) }
+                    env.player.renderWholeDocument()
+                }
+            } label: { Label("Render whole document", systemImage: "waveform") }
+        }
         Button(role: .destructive) { pendingDelete = book } label: { Label("Delete", systemImage: "trash") }
     }
 }
@@ -333,6 +349,9 @@ private struct CollectionTile: View {
                     Text(summary.document.title).typeRole(.pill).foregroundStyle(Tokens.ink).lineLimit(2)
                     if let author = summary.document.author {
                         Text(author).typeRole(.caption).foregroundStyle(Tokens.ink2).lineLimit(1)
+                    }
+                    if summary.document.isPlaceholder {
+                        Text("On \(summary.remoteDeviceName ?? "another device") · tap to add here").typeRole(.meta).foregroundStyle(Tokens.ink3)
                     }
                 }
                 .multilineTextAlignment(.leading)

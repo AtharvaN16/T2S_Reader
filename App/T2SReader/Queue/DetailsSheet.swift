@@ -39,7 +39,7 @@ struct DetailsSheet: View {
             Text("Re-reads the file with the current pronunciation dictionary. Rendered audio is discarded.")
                 .typeRole(.meta)
                 .foregroundStyle(Tokens.ink2)
-            Pill(label: "Delete from library", glyph: "trash", style: .destructiveSoft) { confirmDelete = true }
+            Pill(label: "Delete…", glyph: "trash", style: .destructiveSoft) { confirmDelete = true }
         }
         .padding(Spacing.margin)
         .padding(.top, Spacing.grid)

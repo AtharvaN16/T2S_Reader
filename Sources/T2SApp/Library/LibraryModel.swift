@@ -229,10 +229,9 @@ public final class LibraryModel {
     public func delete(_ id: UUID, everywhere: Bool = false) async { await perform { try await self.library.delete(id, everywhere: everywhere) } }
 
     /// The Files picker's answer for a placeholder (sync spec §5): nil on success, else what to tell
-    /// the reader.
+    /// the reader. The security-scoped access is the caller's: the `.fileImporter` completion
+    /// starts it synchronously, before this is ever awaited, and stops it when the task ends.
     public func fillPlaceholder(_ id: UUID, from url: URL, sourceType: SourceType) async -> String? {
-        let accessing = url.startAccessingSecurityScopedResource()
-        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
         do {
             _ = try await library.fillPlaceholder(id, from: url, sourceType: sourceType)
             await refresh()

@@ -90,11 +90,23 @@ ready. Not verified on any phone: Plan 18, the 180 s window locked for four minu
 3. **Locked playback on the GPU path, on the 17 Pro**, with the new timing lines: the review
    `docs/research/2026-09-11-gpu-path-locked-playback-review.md` traces the flow, names eight races
    (R1–R8) and ends with a reading guide for exactly this run.
-4. **The review's improvements 1–3 and R6**, each small with its test named there: the CPU budget's
-   pacing in the timing log; cut a piece for the 3 s background set *before* rendering (a third of the
-   background calls are thrown away after a full pipeline run today); place by `.background`, not by
-   the gate (Control Center or a banner must not park a streamed head); retry a failed background-set
-   load instead of a session without one.
+4. **The review's improvements 1–3 and R6 landed on `dev` (2026-09-11 afternoon, `407e970`):** the
+   CPU budget's pacing and each background render's CPU seconds go to the timing log (`kokoro budget: …`,
+   off-foreground only); a piece placed in the 3 s background set is cut *before* rendering
+   (`backgroundPieceTokenCount` = 36 ids, sub-piece phoneme counts from the parent's own tokens, so the
+   voice-style row is right); placement follows the scene phase (`ScenePlacement`, `.inactive` stays in
+   front, a process with no scene starts in the background); a failed background-set load retries after
+   30 s (`stageLoader` seam for the test); and a pre-existing bug found on the way: `awaitFullLoad()`
+   returned at once on a cold engine. Verified: the pure engine suite, the model-backed
+   `aBackgroundPlacementRendersThroughTheBackgroundSet` alone, the simulator and device builds.
+   **Open, for a product decision:** `streamsALongPassageInPiecesThatFoldToTheSameTimings` fails
+   deterministically once the engine truly waits for its full load — the streamed render (a 48-id head,
+   then pieces) and the whole render (one piece) disagree by a constant ~0.18 s at the head's seam (the
+   clause seam's 320 ms budget and separate-call framing), identically on `dev` before this batch. Spec
+   §7.4 asks for ±100 ms. Either give `synthesize` the same `firstPieceCap` (one more pipeline call per
+   play-ahead render) or accept the seam and widen the tolerance; nobody changed shipped audio for it
+   overnight. Still owed from the review: improvement 5 (the refusal retry as a decision) and 6 (the
+   "keep the phone unlocked" line on the veil).
 5. **Four minutes locked during playback on the CPU path** with the 180 s window (the owner skipped it
    — the change is a constant and a bookkeeping fix, both unit-tested — and the control on the MLX
    class needs a text that exercises the G2P fallback).
@@ -120,7 +132,11 @@ xcrun devicectl device info files --device <UDID> --domain-type appDataContainer
 ```
 
 The log is written in every build (256 KB, then rotated to `.1`; no reader text in it); the console
-mirror only under the flag. A build from the Mac is a new install identity: the next launch wipes the
+mirror only under the flag. Running the Kokoro model-backed tests on a Mac: `App/Resources/KokoroCoreML`
+is git-ignored, so a worktree without it skips every model-backed test silently (symlink the main
+checkout's); select one test as `'-only-testing:T2SKokoroTests/<Suite>/<test>()'` — with the
+parentheses; and the whole `KokoroCoreMLLoadTests` suite needs about 9 GB of real free disk for the plan
+compiler's scratch (APFS counts purgeable space as free, so `df` overstates it). A build from the Mac is a new install identity: the next launch wipes the
 old plans and rebuilds — 57 s to ready on the A13, t256 four minutes later.
 
 ### Where the details are

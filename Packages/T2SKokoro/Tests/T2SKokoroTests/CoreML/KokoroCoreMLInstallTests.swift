@@ -111,6 +111,79 @@ import Testing
         #expect(progress.value.last == .compiling(stage: stageCount, totalStages: stageCount))
     }
 
+    /// A downloader that fails a given path with an HTTP status a set number of times, then serves it.
+    func flakyDownloader(_ fixture: Fixture, failing path: String, status: Int, times: Int, retryAfter: TimeInterval? = nil,
+                         served: OSAllocatedUnfairLockBox<[String]>) -> KokoroCoreMLInstall.Downloader {
+        let inner = fixture.downloader(served: served)
+        let failures = OSAllocatedUnfairLockBox(times)
+        return { url, destination, onBytes, onWaiting in
+            let requested = url.path().components(separatedBy: "/resolve/").last!.split(separator: "/").dropFirst().joined(separator: "/")
+            if requested == path, failures.value > 0 {
+                failures.value -= 1
+                served.value.append(requested)
+                throw KokoroCoreMLInstall.HTTPStatusError(status: status, retryAfter: retryAfter)
+            }
+            try await inner(url, destination, onBytes, onWaiting)
+        }
+    }
+
+    /// A 429 on one file is retried after the server's `Retry-After`, and the install completes.
+    @Test func retriesAThrottledFileAndCompletes() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let served = OSAllocatedUnfairLockBox<[String]>([])
+        let sleeps = OSAllocatedUnfairLockBox<[TimeInterval]>([])
+        let progress = OSAllocatedUnfairLockBox<[KokoroCoreMLInstall.Progress]>([])
+        let installer = KokoroCoreMLInstall(
+            root: fixture.root, manifest: fixture.manifest,
+            downloader: flakyDownloader(fixture, failing: "voices/af_heart.bin", status: 429, times: 1, retryAfter: 7, served: served),
+            compiler: Fixture.compiler, sleeper: { seconds in sleeps.value.append(seconds) })
+
+        _ = try await installer.install { progress.value.append($0) }
+
+        #expect(served.value.filter { $0 == "voices/af_heart.bin" }.count == 2)   // once refused, once served
+        #expect(sleeps.value == [7])                                               // the server's own delay
+        #expect(progress.value.contains(.retrying(path: "voices/af_heart.bin", attempt: 2, after: 7)))
+        #expect(FileManager.default.fileExists(atPath: fixture.root.appending(path: "staging/voices/af_heart.bin").path()))
+    }
+
+    /// Without a `Retry-After`, the waits double from two seconds; a file that keeps failing is
+    /// given up after five attempts, and the failure names the status.
+    @Test func backsOffAndGivesUpAfterFiveAttempts() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let served = OSAllocatedUnfairLockBox<[String]>([])
+        let sleeps = OSAllocatedUnfairLockBox<[TimeInterval]>([])
+        let installer = KokoroCoreMLInstall(
+            root: fixture.root, manifest: fixture.manifest,
+            downloader: flakyDownloader(fixture, failing: "runtime/kokoro-vocab.json", status: 503, times: 99, served: served),
+            compiler: Fixture.compiler, sleeper: { seconds in sleeps.value.append(seconds) })
+
+        await #expect(throws: KokoroCoreMLInstall.Failure.download("runtime/kokoro-vocab.json", status: 503)) {
+            _ = try await installer.install { _ in }
+        }
+        #expect(served.value.filter { $0 == "runtime/kokoro-vocab.json" }.count == 5)
+        #expect(sleeps.value == [2, 4, 8, 16])
+    }
+
+    /// A 404 is not a passing condition: no retry, no sleep, the failure names it.
+    @Test func doesNotRetryAMissingFile() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let served = OSAllocatedUnfairLockBox<[String]>([])
+        let sleeps = OSAllocatedUnfairLockBox<[TimeInterval]>([])
+        let installer = KokoroCoreMLInstall(
+            root: fixture.root, manifest: fixture.manifest,
+            downloader: flakyDownloader(fixture, failing: "voices/af_heart.bin", status: 404, times: 99, served: served),
+            compiler: Fixture.compiler, sleeper: { seconds in sleeps.value.append(seconds) })
+
+        await #expect(throws: KokoroCoreMLInstall.Failure.download("voices/af_heart.bin", status: 404)) {
+            _ = try await installer.install { _ in }
+        }
+        #expect(served.value.filter { $0 == "voices/af_heart.bin" }.count == 1)
+        #expect(sleeps.value.isEmpty)
+    }
+
     /// A second run over an installed root downloads nothing and compiles nothing.
     @Test func aSecondInstallIsFree() async throws {
         let fixture = try Fixture()

@@ -177,6 +177,7 @@ public actor RenderScheduler {
             let synthSeconds = timeSource.now() - t0
             if result.audio.duration > 0 { record(rtf: synthSeconds / result.audio.duration) }
             if let cpu0 { lastRenderCPUSeconds = max(0, CPUBudget.processCPUSeconds() - cpu0) }
+            budget?.record()                                        // keeps the window's floor current
         } catch {
             events.append(.failed(documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, message: "\(error)"))
             result = SynthesisResult(audio: .silence(seconds: Self.failureSilenceSeconds), wordTimings: [])

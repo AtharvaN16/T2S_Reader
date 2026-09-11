@@ -63,6 +63,15 @@ public final class CPUBudget: Sendable {
         }
     }
 
+    /// Records a sample without asking for anything: the scheduler calls it after every render, in
+    /// the foreground too, so the window has a recent floor when the app leaves the foreground.
+    /// Without it the first background wait is charged with every second of CPU since the last
+    /// background wait — a whole window's sleep after any foreground stretch, however quiet the
+    /// last minute was.
+    public func record() {
+        _ = usedInWindow()
+    }
+
     /// Waits, while the app is not frontmost, until `estimatedSeconds` more CPU fits in the window.
     /// Returns the seconds waited, for the caller's log line. Returns immediately in the foreground
     /// and when the caller is cancelled.

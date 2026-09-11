@@ -43,6 +43,9 @@ enum KokoroInstallProgress: Hashable, Sendable {
     /// Waiting for a network the download is allowed on (Wi-Fi).
     case waitingForNetwork(totalBytes: Int)
     case downloading(bytes: Int, totalBytes: Int)
+    /// A refused or dropped file, tried again after `after` seconds; `fraction` holds the bar
+    /// where the download was, so a retry does not read as the download starting over.
+    case retrying(attempt: Int, of: Int, after: TimeInterval, fraction: Double)
     case compiling(stage: Int, totalStages: Int)
 
     /// 0…1 for the veil's bar.
@@ -50,6 +53,7 @@ enum KokoroInstallProgress: Hashable, Sendable {
         switch self {
         case .waitingForNetwork: 0
         case .downloading(let bytes, let total): total > 0 ? Double(bytes) / Double(total) : 0
+        case .retrying(_, _, _, let fraction): fraction
         case .compiling(let stage, let total): total > 0 ? Double(stage) / Double(total) : 0
         }
     }
@@ -127,7 +131,12 @@ final class KokoroStatusModel {
     }
 
     func updateInstall(_ progress: KokoroInstallProgress) {
-        installProgress = progress
+        // A retry keeps the bar where the last byte left it; the installer does not know the bar.
+        if case .retrying(let attempt, let of, let after, _) = progress {
+            installProgress = .retrying(attempt: attempt, of: of, after: after, fraction: installProgress?.fraction ?? 0)
+        } else {
+            installProgress = progress
+        }
     }
 
     func updateBackgroundSet(building: Bool) {
@@ -389,6 +398,8 @@ struct KokoroComposition {
                 switch progress {
                 case .waitingForNetwork(let total): mapped = .waitingForNetwork(totalBytes: total)
                 case .downloading(let bytes, let total): mapped = .downloading(bytes: bytes, totalBytes: total)
+                case .retrying(_, let attempt, let after):
+                    mapped = .retrying(attempt: attempt, of: KokoroCoreMLInstall.maximumAttempts, after: after, fraction: 0)
                 case .compiling(let stage, let total): mapped = .compiling(stage: stage, totalStages: total)
                 }
                 Task { @MainActor in status.updateInstall(mapped) }

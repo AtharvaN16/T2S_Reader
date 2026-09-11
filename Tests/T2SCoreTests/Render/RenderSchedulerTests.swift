@@ -256,6 +256,37 @@ import Testing
         #expect(sleeps.value.isEmpty)
     }
 
+    /// Renders in the foreground keep the budget's window current, so the first background render
+    /// after them is charged only for the trailing window — not for everything since the last
+    /// background wait (the first play-ahead after a lock used to wait a whole window every time).
+    @Test func foregroundRendersKeepTheWindowCurrent() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let gate = ForegroundGate(isForeground: true)
+        let clock = ManualTimeSource(0)
+        let cpu = OSAllocatedUnfairLockBox<TimeInterval>(0)
+        let sleeps = OSAllocatedUnfairLockBox<[TimeInterval]>([])
+        let budget = CPUBudget(gate: gate, windowSeconds: 60, budgetSeconds: 36,
+                               clock: { clock.now() }, cpuTime: { cpu.value },
+                               sleeper: { seconds in sleeps.value.append(seconds); clock.advance(by: seconds) })
+        let engine = FakeEngine()
+        let scheduler = RenderScheduler(engine: engine, store: store, timeSource: clock, budget: budget)
+        // A heavy foreground stretch — a warm-up's worth of CPU — then a render in front at wall 10.
+        clock.set(10)
+        cpu.value = 40
+        await scheduler.setPlan([request(0)])
+        for await event in scheduler.events { if event == .idle { break } }
+
+        // Ninety quiet seconds later the phone locks: nothing was spent inside the trailing window.
+        clock.set(100)
+        gate.set(foreground: false)
+        await scheduler.setPlan([request(1)])
+        for await event in scheduler.events { if event == .idle { break } }
+
+        #expect(sleeps.value.isEmpty)                               // no wait: the window is clear
+        let requests = await engine.requests
+        #expect(requests.count == 2)                                // both rendered
+    }
+
     @Test func aCacheHitNeverWaits() async throws {
         let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
         let gate = ForegroundGate(isForeground: false)

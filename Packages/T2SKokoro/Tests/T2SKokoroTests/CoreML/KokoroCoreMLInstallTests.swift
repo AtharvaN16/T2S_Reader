@@ -52,6 +52,11 @@ import Testing
             }
         }
 
+        /// The fixture's downloader as the installer's session, with nothing to close.
+        func session(served: OSAllocatedUnfairLockBox<[String]>, corrupting: Set<String> = []) -> KokoroCoreMLInstall.Session {
+            .init(download: downloader(served: served, corrupting: corrupting))
+        }
+
         /// A compiler that turns a package directory into a directory with a marker file.
         static let compiler: KokoroCoreMLInstall.Compiler = { package in
             let produced = FileManager.default.temporaryDirectory
@@ -95,7 +100,7 @@ import Testing
         let served = OSAllocatedUnfairLockBox<[String]>([])
         let progress = OSAllocatedUnfairLockBox<[KokoroCoreMLInstall.Progress]>([])
         let installer = KokoroCoreMLInstall(root: fixture.root, manifest: fixture.manifest,
-                                            downloader: fixture.downloader(served: served), compiler: Fixture.compiler)
+                                            session: fixture.session(served: served), compiler: Fixture.compiler)
 
         _ = try await installer.install { progress.value.append($0) }
 
@@ -140,7 +145,7 @@ import Testing
         let progress = OSAllocatedUnfairLockBox<[KokoroCoreMLInstall.Progress]>([])
         let installer = KokoroCoreMLInstall(
             root: fixture.root, manifest: fixture.manifest,
-            downloader: flakyDownloader(fixture, failing: "voices/af_heart.bin", status: 429, times: 1, retryAfter: 7, served: served),
+            session: .init(download: flakyDownloader(fixture, failing: "voices/af_heart.bin", status: 429, times: 1, retryAfter: 7, served: served)),
             compiler: Fixture.compiler, sleeper: { seconds in sleeps.value.append(seconds) })
 
         _ = try await installer.install { progress.value.append($0) }
@@ -160,7 +165,7 @@ import Testing
         let sleeps = OSAllocatedUnfairLockBox<[TimeInterval]>([])
         let installer = KokoroCoreMLInstall(
             root: fixture.root, manifest: fixture.manifest,
-            downloader: flakyDownloader(fixture, failing: "runtime/kokoro-vocab.json", status: 503, times: 99, served: served),
+            session: .init(download: flakyDownloader(fixture, failing: "runtime/kokoro-vocab.json", status: 503, times: 99, served: served)),
             compiler: Fixture.compiler, sleeper: { seconds in sleeps.value.append(seconds) })
 
         await #expect(throws: KokoroCoreMLInstall.Failure.download("runtime/kokoro-vocab.json", status: 503)) {
@@ -178,7 +183,7 @@ import Testing
         let sleeps = OSAllocatedUnfairLockBox<[TimeInterval]>([])
         let installer = KokoroCoreMLInstall(
             root: fixture.root, manifest: fixture.manifest,
-            downloader: flakyDownloader(fixture, failing: "voices/af_heart.bin", status: 404, times: 99, served: served),
+            session: .init(download: flakyDownloader(fixture, failing: "voices/af_heart.bin", status: 404, times: 99, served: served)),
             compiler: Fixture.compiler, sleeper: { seconds in sleeps.value.append(seconds) })
 
         await #expect(throws: KokoroCoreMLInstall.Failure.download("voices/af_heart.bin", status: 404)) {
@@ -186,6 +191,214 @@ import Testing
         }
         #expect(served.value.filter { $0 == "voices/af_heart.bin" }.count == 1)
         #expect(sleeps.value.isEmpty)
+    }
+
+    /// A downloader that, for `path`, drops the connection after `keeping` bytes on the first
+    /// request (never, when nil), answers the requests after that with `statuses` in turn, and then
+    /// serves the rest of the file from wherever the `.part` stopped — as the live session does with
+    /// a `Range` — recording the size of the part it found on each request.
+    func resumingDownloader(_ fixture: Fixture, for path: String, droppingAfter keeping: Int?, then statuses: [Int] = [],
+                            retryAfter: TimeInterval? = nil,
+                            served: OSAllocatedUnfairLockBox<[String]>, partSizes: OSAllocatedUnfairLockBox<[Int]>) -> KokoroCoreMLInstall.Downloader {
+        let inner = fixture.downloader(served: served)
+        let bytes = fixture.bytes
+        let refusals = OSAllocatedUnfairLockBox(statuses)
+        let dropped = OSAllocatedUnfairLockBox(keeping == nil)
+        return { url, destination, onBytes, onWaiting in
+            let requested = url.path().components(separatedBy: "/resolve/").last!.split(separator: "/").dropFirst().joined(separator: "/")
+            guard requested == path else { return try await inner(url, destination, onBytes, onWaiting) }
+            let have = (try? Data(contentsOf: destination))?.count ?? 0
+            partSizes.value.append(have)
+            served.value.append(requested)
+            let data = bytes[path]!
+            if !dropped.value, let keeping {
+                dropped.value = true
+                try data.prefix(keeping).write(to: destination)
+                throw URLError(.networkConnectionLost)
+            }
+            if !refusals.value.isEmpty {
+                throw KokoroCoreMLInstall.HTTPStatusError(status: refusals.value.removeFirst(), retryAfter: retryAfter)
+            }
+            let handle = try FileHandle(forWritingTo: destination)
+            defer { try? handle.close() }
+            try handle.seekToEnd()
+            try handle.write(contentsOf: data.dropFirst(have))
+            onBytes(data.count)
+        }
+    }
+
+    /// A connection dropped mid-file leaves the `.part`; a 429 in between keeps it too; the attempt
+    /// after that is asked for the rest and appends it.
+    @Test func resumesAFileFromWhereTheConnectionDropped() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let served = OSAllocatedUnfairLockBox<[String]>([])
+        let partSizes = OSAllocatedUnfairLockBox<[Int]>([])
+        let sleeps = OSAllocatedUnfairLockBox<[TimeInterval]>([])
+        let progress = OSAllocatedUnfairLockBox<[KokoroCoreMLInstall.Progress]>([])
+        let installer = KokoroCoreMLInstall(
+            root: fixture.root, manifest: fixture.manifest,
+            session: .init(download: resumingDownloader(fixture, for: "voices/af_heart.bin", droppingAfter: 2, then: [429], retryAfter: 3,
+                                                        served: served, partSizes: partSizes)),
+            compiler: Fixture.compiler, sleeper: { seconds in sleeps.value.append(seconds) })
+
+        _ = try await installer.install { progress.value.append($0) }
+
+        // Dropped with two bytes down, refused with the two still there, then continued from them.
+        #expect(partSizes.value == [0, 2, 2])
+        #expect(sleeps.value == [2, 3])
+        #expect(progress.value.contains(.retrying(path: "voices/af_heart.bin", attempt: 2, after: 2)))
+        #expect(progress.value.contains(.retrying(path: "voices/af_heart.bin", attempt: 3, after: 3)))
+        let voice = fixture.root.appending(path: "staging/voices/af_heart.bin")
+        #expect(try Data(contentsOf: voice) == fixture.bytes["voices/af_heart.bin"])
+        #expect(!FileManager.default.fileExists(atPath: voice.appendingPathExtension("part").path()))
+    }
+
+    /// A `.part` an earlier launch left is continued, not fetched from the start.
+    @Test func continuesAPartLeftByAnEarlierLaunch() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let voices = fixture.root.appending(path: "staging/voices", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: voices, withIntermediateDirectories: true)
+        try fixture.bytes["voices/af_heart.bin"]!.prefix(3).write(to: voices.appending(path: "af_heart.bin.part"))
+        let served = OSAllocatedUnfairLockBox<[String]>([])
+        let partSizes = OSAllocatedUnfairLockBox<[Int]>([])
+        let installer = KokoroCoreMLInstall(
+            root: fixture.root, manifest: fixture.manifest,
+            session: .init(download: resumingDownloader(fixture, for: "voices/af_heart.bin", droppingAfter: nil, served: served, partSizes: partSizes)),
+            compiler: Fixture.compiler)
+
+        _ = try await installer.install { _ in }
+
+        #expect(partSizes.value == [3])
+        #expect(try Data(contentsOf: voices.appending(path: "af_heart.bin")) == fixture.bytes["voices/af_heart.bin"])
+    }
+
+    /// A server's wait is honoured up to two minutes: Hugging Face's window is five, and a wait
+    /// that long reads as a hang on the veil; a shorter one costs one more refused request at most.
+    @Test func aServersWaitIsHeldToTwoMinutes() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let served = OSAllocatedUnfairLockBox<[String]>([])
+        let sleeps = OSAllocatedUnfairLockBox<[TimeInterval]>([])
+        let progress = OSAllocatedUnfairLockBox<[KokoroCoreMLInstall.Progress]>([])
+        let installer = KokoroCoreMLInstall(
+            root: fixture.root, manifest: fixture.manifest,
+            session: .init(download: flakyDownloader(fixture, failing: "voices/af_heart.bin", status: 429, times: 1, retryAfter: 217, served: served)),
+            compiler: Fixture.compiler, sleeper: { seconds in sleeps.value.append(seconds) })
+
+        _ = try await installer.install { progress.value.append($0) }
+
+        #expect(sleeps.value == [KokoroCoreMLInstall.maximumServerWait])
+        #expect(progress.value.contains(.retrying(path: "voices/af_heart.bin", attempt: 2, after: 120)))
+    }
+
+    /// The wait a 429 names: `Retry-After` in seconds or as a date, the reset headers as seconds or
+    /// an epoch, Hugging Face's `RateLimit` `t=` — the most specific first, a date already passed
+    /// ignored — and the headers themselves kept for the timing line.
+    @Test func theWaitComesFromTheMostSpecificRateLimitHeader() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)                  // Fri, 15 Jan 2027 08:00:00 GMT
+        let url = URL(string: "https://huggingface.co/mattmireles/kokoro-coreml/resolve/x/voices/af_heart.bin")!
+        func refused(_ headers: [String: String]) -> KokoroCoreMLInstall.HTTPStatusError {
+            .init(HTTPURLResponse(url: url, statusCode: 429, httpVersion: "HTTP/1.1", headerFields: headers)!, now: now)
+        }
+        #expect(refused(["Retry-After": "30"]).retryAfter == 30)
+        #expect(refused(["Retry-After": "Fri, 15 Jan 2027 08:00:45 GMT"]).retryAfter == 45)
+        #expect(refused(["RateLimit-Reset": "50"]).retryAfter == 50)
+        #expect(refused(["X-RateLimit-Reset": "1800000217"]).retryAfter == 217)      // an epoch
+        #expect(refused(["RateLimit": "\"resolvers\";r=0;t=217"]).retryAfter == 217)  // Hugging Face's
+        #expect(refused(["Retry-After": "30", "RateLimit": "\"resolvers\";r=0;t=217"]).retryAfter == 30)
+        #expect(refused(["Retry-After": "Fri, 15 Jan 2027 07:59:00 GMT", "RateLimit": "\"resolvers\";r=0;t=217"]).retryAfter == 217)
+        #expect(refused(["Retry-After": "soon"]).retryAfter == nil)
+        #expect(refused([:]).retryAfter == nil)
+        #expect(refused([:]).rateLimit == nil)
+
+        let huggingFace = refused(["RateLimit": "\"resolvers\";r=0;t=217", "RateLimit-Policy": "\"resolvers\";q=3000;w=300"])
+        #expect(huggingFace.status == 429)
+        #expect(huggingFace.rateLimit == "ratelimit: \"resolvers\";r=0;t=217, ratelimit-policy: \"resolvers\";q=3000;w=300")
+        #expect(KokoroCoreMLInstall.describe(huggingFace)
+                == "HTTP 429, asked 217 s (ratelimit: \"resolvers\";r=0;t=217, ratelimit-policy: \"resolvers\";q=3000;w=300)")
+        #expect(KokoroCoreMLInstall.describe(nil) == "a dropped connection")
+        #expect(KokoroCoreMLInstall.wait(afterAttempt: 1, serverAsked: 217) == 120)
+        #expect(KokoroCoreMLInstall.wait(afterAttempt: 1, serverAsked: 7) == 7)
+        #expect(KokoroCoreMLInstall.wait(afterAttempt: 3, serverAsked: nil) == 8)
+    }
+
+    /// A resumed request asks for the rest of the file, and the server's answer decides what
+    /// happens to the part: a 206 is appended, a 200 replaces it, a 416 asks again from the start,
+    /// anything else is the status.
+    @Test func aResumedRequestAsksForTheRestAndTakesWhatTheServerAnswers() throws {
+        typealias Session = KokoroCoreMLInstall.Session
+        let url = URL(string: "https://huggingface.co/mattmireles/kokoro-coreml/resolve/x/voices/af_heart.bin")!
+        #expect(Session.request(for: url, resumingFrom: 0).value(forHTTPHeaderField: "Range") == nil)
+        #expect(Session.request(for: url, resumingFrom: 1234).value(forHTTPHeaderField: "Range") == "bytes=1234-")
+        func answer(_ status: Int, from offset: Int) throws -> Session.Reception {
+            try Session.reception(of: HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil)!,
+                                  resumingFrom: offset)
+        }
+        #expect(try answer(206, from: 1234) == .append)
+        #expect(try answer(200, from: 1234) == .replace)
+        #expect(try answer(416, from: 1234) == .restart)
+        #expect(try answer(200, from: 0) == .replace)
+        #expect(throws: KokoroCoreMLInstall.HTTPStatusError(status: 416)) { try answer(416, from: 0) }
+        #expect(throws: KokoroCoreMLInstall.HTTPStatusError(status: 503)) { try answer(503, from: 1234) }
+    }
+
+    /// The live session against a scripted server, every request through the one `URLSession`: a
+    /// drop mid-file leaves what arrived in the part, the next request asks to continue it, a 206
+    /// is appended, a 200 replaces, a 416 is asked again from the start, and a 429 comes back as its
+    /// status and wait with the part untouched.
+    @Test func theLiveSessionResumesWithARangeOverOneURLSession() async throws {
+        let part = FileManager.default.temporaryDirectory.appending(path: "T2SKokoroResume-\(UUID().uuidString).part")
+        defer { try? FileManager.default.removeItem(at: part) }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ScriptedServer.self]
+        let session = KokoroCoreMLInstall.Session(urlSession: URLSession(configuration: configuration))
+        defer { session.close() }
+        let url = URL(string: "https://huggingface.co/mattmireles/kokoro-coreml/resolve/x/voices/af_heart.bin")!
+        let body = Data("0123456789".utf8)
+        let reported = OSAllocatedUnfairLockBox<[Int]>([])
+        let onBytes: @Sendable (Int) -> Void = { reported.value.append($0) }
+        func rangeAsked() -> String? { ScriptedServer.requests.value.last?.value(forHTTPHeaderField: "Range") }
+        ScriptedServer.requests.value = []
+
+        // A drop after four bytes: they stay in the part, and the failure is the passing kind.
+        ScriptedServer.answers.value = [.init(body: body, dropsAfter: 4)]
+        do {
+            try await session.download(url, part, onBytes, {})
+            Issue.record("the drop was not reported")
+        } catch {
+            #expect(KokoroCoreMLInstall.isRetryable(error), "\(error)")
+        }
+        #expect(rangeAsked() == nil)
+        #expect(try Data(contentsOf: part) == body.prefix(4))
+
+        // The next request asks for the rest; a 206 is appended.
+        ScriptedServer.answers.value = [.init(status: 206, headers: ["Content-Range": "bytes 4-9/10"], body: body.dropFirst(4))]
+        try await session.download(url, part, onBytes, {})
+        #expect(rangeAsked() == "bytes=4-")
+        #expect(try Data(contentsOf: part) == body)
+        #expect(reported.value.last == 10)
+
+        // A server without `Range` answers the whole file with a 200: the part is replaced, not extended.
+        ScriptedServer.answers.value = [.init(status: 200, body: body)]
+        try await session.download(url, part, onBytes, {})
+        #expect(rangeAsked() == "bytes=10-")
+        #expect(try Data(contentsOf: part) == body)
+
+        // A 416 — the part is no head of the file — is asked again from the start, and that answer kept.
+        ScriptedServer.answers.value = [.init(status: 416), .init(status: 200, body: body.prefix(7))]
+        try await session.download(url, part, onBytes, {})
+        #expect(ScriptedServer.requests.value.suffix(2).map { $0.value(forHTTPHeaderField: "Range") } == ["bytes=10-", nil])
+        #expect(try Data(contentsOf: part) == body.prefix(7))
+
+        // A 429 is its status and the wait its headers name; the part is untouched.
+        ScriptedServer.answers.value = [.init(status: 429, headers: ["RateLimit": "\"resolvers\";r=0;t=217"])]
+        await #expect(throws: KokoroCoreMLInstall.HTTPStatusError(status: 429, retryAfter: 217, rateLimit: "ratelimit: \"resolvers\";r=0;t=217")) {
+            try await session.download(url, part, onBytes, {})
+        }
+        #expect(try Data(contentsOf: part) == body.prefix(7))
+        #expect(ScriptedServer.requests.value.count == 6)
     }
 
     /// Two manifest files with the same content are one download: the second is copied from the
@@ -198,7 +411,7 @@ import Testing
         let served = OSAllocatedUnfairLockBox<[String]>([])
         // The fixture's downloader has no bytes for the twin: asking for it over the network fails.
         let installer = KokoroCoreMLInstall(root: fixture.root, manifest: fixture.manifest + [twin],
-                                            downloader: fixture.downloader(served: served), compiler: Fixture.compiler)
+                                            session: fixture.session(served: served), compiler: Fixture.compiler)
 
         _ = try await installer.install { _ in }
 
@@ -214,12 +427,12 @@ import Testing
         defer { fixture.remove() }
         let first = OSAllocatedUnfairLockBox<[String]>([])
         _ = try await KokoroCoreMLInstall(root: fixture.root, manifest: fixture.manifest,
-                                          downloader: fixture.downloader(served: first), compiler: Fixture.compiler).install { _ in }
+                                          session: fixture.session(served: first), compiler: Fixture.compiler).install { _ in }
         let second = OSAllocatedUnfairLockBox<[String]>([])
         let compiles = OSAllocatedUnfairLockBox(0)
         let compiler: KokoroCoreMLInstall.Compiler = { package in compiles.value += 1; return try await Fixture.compiler(package) }
         _ = try await KokoroCoreMLInstall(root: fixture.root, manifest: fixture.manifest,
-                                          downloader: fixture.downloader(served: second), compiler: compiler).install { _ in }
+                                          session: fixture.session(served: second), compiler: compiler).install { _ in }
         #expect(second.value.isEmpty)
         #expect(compiles.value == 0)
     }
@@ -235,7 +448,7 @@ import Testing
         try Data("stale".utf8).write(to: staging.appending(path: "runtime/kokoro-vocab.json"))
         let served = OSAllocatedUnfairLockBox<[String]>([])
         _ = try await KokoroCoreMLInstall(root: fixture.root, manifest: fixture.manifest,
-                                          downloader: fixture.downloader(served: served), compiler: Fixture.compiler).install { _ in }
+                                          session: fixture.session(served: served), compiler: Fixture.compiler).install { _ in }
         #expect(!served.value.contains("voices/af_heart.bin"))
         #expect(served.value.contains("runtime/kokoro-vocab.json"))
         #expect(try String(contentsOf: staging.appending(path: "runtime/kokoro-vocab.json"), encoding: .utf8) == "{\"vocab\":{}}")
@@ -247,7 +460,7 @@ import Testing
         defer { fixture.remove() }
         let served = OSAllocatedUnfairLockBox<[String]>([])
         let installer = KokoroCoreMLInstall(root: fixture.root, manifest: fixture.manifest,
-                                            downloader: fixture.downloader(served: served, corrupting: ["voices/af_heart.bin"]),
+                                            session: fixture.session(served: served, corrupting: ["voices/af_heart.bin"]),
                                             compiler: Fixture.compiler)
         await #expect(throws: KokoroCoreMLInstall.Failure.checksumMismatch("voices/af_heart.bin")) {
             _ = try await installer.install { _ in }
@@ -263,7 +476,7 @@ import Testing
         defer { fixture.remove() }
         let admissions = OSAllocatedUnfairLockBox(0)
         let installer = KokoroCoreMLInstall(root: fixture.root, manifest: fixture.manifest,
-                                            downloader: fixture.downloader(served: OSAllocatedUnfairLockBox([])),
+                                            session: fixture.session(served: OSAllocatedUnfairLockBox([])),
                                             compiler: Fixture.compiler, admission: { admissions.value += 1 })
         _ = try await installer.install { _ in }
         #expect(admissions.value == KokoroCoreMLResources.stageNames().count)
@@ -278,4 +491,39 @@ import Testing
     }
 
     private final class Marker {}
+}
+
+/// A server the live session talks to: each request is answered from a script — a status, its
+/// headers, a body, or a connection that drops after so many bytes of it — and recorded. The
+/// suite is serialized, so the script is one at a time.
+private final class ScriptedServer: URLProtocol {
+    struct Answer: Sendable {
+        var status = 200
+        var headers: [String: String] = [:]
+        var body = Data()
+        var dropsAfter: Int? = nil
+    }
+    static let answers = OSAllocatedUnfairLockBox<[Answer]>([])
+    static let requests = OSAllocatedUnfairLockBox<[URLRequest]>([])
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        Self.requests.value.append(request)
+        var answers = Self.answers.value
+        let answer = answers.isEmpty ? Answer(status: 500) : answers.removeFirst()
+        Self.answers.value = answers
+        let response = HTTPURLResponse(url: request.url!, statusCode: answer.status, httpVersion: "HTTP/1.1", headerFields: answer.headers)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        if let dropsAfter = answer.dropsAfter {
+            client?.urlProtocol(self, didLoad: answer.body.prefix(dropsAfter))
+            client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
+        } else {
+            client?.urlProtocol(self, didLoad: answer.body)
+            client?.urlProtocolDidFinishLoading(self)
+        }
+    }
+
+    override func stopLoading() {}
 }

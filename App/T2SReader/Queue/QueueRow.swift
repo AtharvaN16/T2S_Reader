@@ -44,10 +44,10 @@ struct QueueRow: View {
             Button(action: onOpenBook) {
                 if isArticle {
                     // A web page or pasted text is not a book: a sheet of paper, on the same slot.
-                    SheetCover(title: summary.document.title, sourceURL: summary.document.sourceURL, height: BookCover.shelfHeight)
+                    SheetCover(title: summary.document.title, sourceURL: summary.document.sourceURL, height: BookCover.rowHeight)
                         .shelved
                 } else {
-                    BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: BookCover.shelfHeight,
+                    BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: BookCover.rowHeight,
                               title: summary.document.title, author: summary.document.displayAuthor,
                               isPDF: summary.document.sourceType == .pdf)
                         .shelved
@@ -56,22 +56,31 @@ struct QueueRow: View {
             .buttonStyle(.plain)
             .accessibilityHidden(true)                                          // decorative beside the text button's own label
 
-            VStack(alignment: .leading, spacing: 8) {
+            // 18 between the words and the pill: the gap that says the reading stopped and a
+            // tap target started. Inside the words, 0 — each pair sets its own, so the three
+            // lines group instead of standing an identical 8 apart (owner, 2026-09-11).
+            VStack(alignment: .leading, spacing: 18) {
                 Button(action: onOpenBook) {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 0) {
                         // "Chapter 7 · ◔ 41%  ✓": the chapter, how far through it, and ready-offline.
                         HStack(spacing: 6) {
                             if let chapterText { Text(chapterText) }
                             if let fraction {
-                                if chapterText != nil { Text("·").accessibilityHidden(true) }
+                                if chapterText != nil {
+                                    // A size up from the text it divides, or it reads as punctuation inside one fact.
+                                    Text("·")
+                                        .font(.custom("Inter-SemiBold", size: 15, relativeTo: .footnote))
+                                        .accessibilityHidden(true)
+                                }
                                 CircularProgress(fraction: fraction, lineWidth: 2, size: 12)
                                 Text("\(Int((fraction * 100).rounded()))%")
                             }
                             if summary.isFullyRendered { PositiveCheck() }
                         }
                         .typeRole(.meta)
-                        .font(.custom("Inter-Medium", size: 13, relativeTo: .footnote))   // a step bolder than plain meta (owner, 2026-09-11)
+                        .font(.custom("Inter-SemiBold", size: 12, relativeTo: .footnote))  // smaller and denser than the excerpt, not the same size a shade heavier
                         .foregroundStyle(Tokens.ink2)
+                        .padding(.bottom, 4)                                              // it labels the title under it, so it sits with it
 
                         Text(summary.document.title)
                             .typeRole(.rowTitle)                                   // the Settings rows' face, by the owner's eye
@@ -82,12 +91,18 @@ struct QueueRow: View {
                         if let excerpt = glimpse?.excerpt, !excerpt.isEmpty {
                             Text(excerpt)
                                 .typeRole(.meta)
+                                // The real face, not `.italic()`: that asks for a trait the system
+                                // fonts carry, and a `Font.custom` face without one is left upright
+                                // — which is exactly what it rendered as (owner, 2026-09-11).
+                                .font(.custom("Inter-Italic", size: 13, relativeTo: .footnote))
                                 .lineLimit(2)
                                 .truncationMode(.tail)
                                 .foregroundStyle(Tokens.ink2)
                                 .multilineTextAlignment(.leading)
                                 .fixedSize(horizontal: false, vertical: true)      // wraps to its 2 lines instead of hugging 1
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.leading, 10)                             // stepped in: the book talking, not the app
+                                .padding(.top, 7)                                  // its own top, so a row without one keeps the 18 below
                         }
                     }
                 }
@@ -116,6 +131,7 @@ struct QueueRow: View {
                     }
                     .disabled(isStarting)
                     .accessibilityHint(isPlayingHere ? "Pauses" : "Plays and opens the reader")
+                    Spacer()                                                       // ⋯ rides the margin: it stops crowding Play, and the row spans like the text above it
                     Menu {
                         contextItems
                     } label: {

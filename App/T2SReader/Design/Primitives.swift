@@ -261,6 +261,14 @@ struct BookCover: View {
     /// same book looked a different size on the two pages — the grid's height came from its column
     /// width, Home's was 112). One constant, not a derived one, so it matches across pages and phones.
     static let shelfHeight: CGFloat = 120
+    /// Home's own height (owner, 2026-09-11: the cover ended above the Continue pill, so neither
+    /// column finished on a line). The two columns start on one y, so they end on one only when
+    /// their heights match, and the text column's height is not a setting — it is the sum of its
+    /// parts, measured at 130.3 on a two-line row once the gaps breathe. Hence this number, and
+    /// hence re-measure it if the row's type or spacing changes.
+    /// Home alone, not `shelfHeight`: a `shelved` slot is `height × widestRatio`, so the Collection's
+    /// three-up cells (~104 wide on a 402 pt phone) have no room to grow with it.
+    static let rowHeight: CGFloat = 130
 
     /// The book on a shelf: a slot `widestRatio` wide and `height` tall with the book at its
     /// bottom-leading corner. Covers keep their own proportions — a wide cover cropped loses its

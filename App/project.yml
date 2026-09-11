@@ -93,6 +93,7 @@ targetTemplates:
         BGTaskSchedulerPermittedIdentifiers: [com.t2s.reader.prepare]
         UIAppFonts:
           - Inter-Regular.ttf
+          - Inter-Italic.ttf
           - Inter-Medium.ttf
           - Inter-SemiBold.ttf
           - Inter-Bold.ttf

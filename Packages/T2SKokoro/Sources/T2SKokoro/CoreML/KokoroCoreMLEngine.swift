@@ -450,7 +450,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch {
-                    Self.timingLog.error("kokoro bucket \(bucket, privacy: .public) s failed to load: \(String(describing: error), privacy: .public)")
+                    Self.timing("kokoro bucket \(bucket) s failed to load: \(String(describing: error))")
                 }
             }
             // The t256 duration model last: the buckets cost seconds on the A13, this plan minutes,
@@ -596,23 +596,48 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         Self.timing("kokoro background set ready: buckets \(KokoroCoreMLResources.backgroundBuckets.map(String.init).joined(separator: ",")), duration t\(KokoroCoreMLResources.backgroundDurationTokenLengths.map(String.init).joined(separator: ","))")
     }
 
-    /// Returns once the phone's thermal state is below serious, polling every 30 s while it is not.
+    /// Returns once the phone's thermal state is below serious, polling every 30 s while it is not,
+    /// and logs the hold once as it begins and once as it ends: a hot phone can keep the background
+    /// set from loading for many minutes, and the timing log should say so.
     static func waitWhileThermallySerious() async {
+        var waitStarted: ContinuousClock.Instant?
         while [.serious, .critical].contains(ProcessInfo.processInfo.thermalState) {
             if Task.isCancelled { return }
+            if waitStarted == nil {
+                waitStarted = ContinuousClock().now
+                Self.timing("kokoro background set load held: the phone is thermally serious")
+            }
             try? await Task.sleep(for: .seconds(30))
+        }
+        if let waitStarted {
+            Self.timing("kokoro background set load resumed after \(Self.fixed(Self.seconds(ContinuousClock().now - waitStarted), 0)) s thermally serious")
         }
     }
 
     /// The set the next piece renders through. In front, the main set. In the background, the
     /// background set when there is one; until there is, the load admission — the app's foreground
-    /// gate — is awaited, and the main set is used once the app is back in front.
+    /// gate — is awaited, and the main set is used once the app is back in front. The wait is
+    /// logged once as it begins and once as it ends, with the set it ended in: on the phone the
+    /// timing log is what says whether a silence was this wait, the CPU budget, or a failed call.
     private func renderSet(main: Loaded) async -> Loaded {
         guard options.backgroundComputeUnits != nil, let placement = renderPlacement else { return main }
+        var waitStarted: ContinuousClock.Instant?
         while placement() == .background {
-            if let backgroundLoaded { return backgroundLoaded }
+            if let backgroundLoaded {
+                if let waitStarted {
+                    Self.timing("kokoro piece placed in the background set after waiting \(Self.fixed(Self.seconds(ContinuousClock().now - waitStarted), 1)) s")
+                }
+                return backgroundLoaded
+            }
             guard let admission = loadAdmission else { return main }
+            if waitStarted == nil {
+                waitStarted = ContinuousClock().now
+                Self.timing("kokoro piece placed in the background before the background set exists; waiting for the foreground")
+            }
             await admission()
+        }
+        if let waitStarted {
+            Self.timing("kokoro piece placed in the main set after waiting \(Self.fixed(Self.seconds(ContinuousClock().now - waitStarted), 1)) s for the foreground")
         }
         return main
     }
@@ -946,7 +971,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         }
         let t = result.timings
         let rtf = result.audioDurationSeconds > 0 ? result.wallTimeSeconds / result.audioDurationSeconds : 0
-        Self.timing("kokoro call: bucket \(result.bucketSeconds) s, audio \(Self.fixed(result.audioDurationSeconds, 2)) s, wall \(Self.fixed(result.wallTimeSeconds, 3)) s, RTF \(Self.fixed(rtf, 3)); duration \(Self.fixed(t.durationCoreML, 3)), f0 \(Self.fixed(t.f0ntrainCoreML, 3)), pre \(Self.fixed(t.decoderPre, 3)), hnsf \(Self.fixed(t.hnsfSwift, 3)) (overlap \(Self.fixed(t.decoderPreHnsfOverlap, 3))), gen \(Self.fixed(t.generatorCoreML, 3)), trim \(Self.fixed(t.trim, 3))")
+        Self.timing("kokoro call: bucket \(result.bucketSeconds) s, audio \(Self.fixed(result.audioDurationSeconds, 2)) s, wall \(Self.fixed(result.wallTimeSeconds, 3)) s, RTF \(Self.fixed(rtf, 3)); duration \(Self.fixed(t.durationCoreML, 3)), f0 \(Self.fixed(t.f0ntrainCoreML, 3)), pre \(Self.fixed(t.decoderPre, 3)), hnsf \(Self.fixed(t.hnsfSwift, 3)) (overlap \(Self.fixed(t.decoderPreHnsfOverlap, 3))), gen \(Self.fixed(t.generatorCoreML, 3)), trim \(Self.fixed(t.trim, 3)); set \(lastRenderSet)")
 
         // `selectBucket` falls back to the largest bucket rather than failing, and stage 9 then trims
         // to `min(waveform.count, targetLen)` — so a piece that predicts more speech than its bucket

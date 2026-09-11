@@ -176,6 +176,12 @@ stage loads and unlocked it. From the app's own `Library/Caches/kokoro-timing.lo
 > **Partly fixed on `dev` in `abb3875`**: the sample floor — `CPUBudget.record()` after every render, foreground
 > included, so the first background wait reflects the real trailing minute. The play-ahead value
 > (`KokoroComposition.swift:299`) and the burst-vs-pace question are still Harsh's.
+>
+> **And on `render-ahead-by-chapter` (2026-09-11)**: the foreground renders the rest of the
+> current chapter — 10–20 min on the CPU path, while frontmost and listening — so a locked loop's
+> window is already rendered and it only tops up; the budget below can hold a buffer but never grow
+> one (~0.9 audio-seconds per wall-second at 1x, from this table).
+> `docs/superpowers/plans/2026-09-11-render-ahead-by-chapter.md`; its §4.1 phone protocol is owed.
 
 The owner imported "The Gift of the Magi" (Gutenberg #7256) into `t2s H`, played it, locked the
 phone at about 22:20 and unlocked at about 22:24. Their report: *"a couple of times the audio

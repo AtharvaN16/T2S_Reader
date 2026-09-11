@@ -49,6 +49,10 @@ public actor FakeEngine: SynthesisEngine {
         waiting.forEach { $0.resume() }
     }
 
+    /// How many requests are parked in `hold()` — lets a test confirm a job has reached the engine
+    /// (in flight, past the arbiter) before it changes the plan behind it.
+    public var parkedCount: Int { parked.count }
+
     public func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
         while held { await withCheckedContinuation { parked.append($0) } }
         requests.append(request)

@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 import T2SCore
 
 public enum PlaybackState: Hashable, Sendable {
@@ -12,13 +13,20 @@ public struct CoordinatorConfiguration: Sendable {
     public var prepareBudgetSeconds: TimeInterval
     /// Segments kept queued in the player for gapless playback.
     public var queuedSegments: Int
+    /// How far past the window the foreground fill renders while the app is frontmost and the
+    /// listener is listening: the rest of the current chapter, clamped to this range of audio
+    /// seconds at 1x (Plan 18). Nil — the default, the everyday build, every test that does not
+    /// ask — renders only the window.
+    public var foregroundFill: ClosedRange<TimeInterval>?
 
     public init(windowSeconds: TimeInterval = 60, primeSeconds: TimeInterval = 30,
-                prepareBudgetSeconds: TimeInterval = 3 * 3600, queuedSegments: Int = 2) {
+                prepareBudgetSeconds: TimeInterval = 3 * 3600, queuedSegments: Int = 2,
+                foregroundFill: ClosedRange<TimeInterval>? = nil) {
         self.windowSeconds = windowSeconds
         self.primeSeconds = primeSeconds
         self.prepareBudgetSeconds = prepareBudgetSeconds
         self.queuedSegments = max(1, queuedSegments)
+        self.foregroundFill = foregroundFill
     }
 }
 
@@ -52,8 +60,23 @@ public final class PlaybackCoordinator {
     public private(set) var timeIndex = TimeIndex(Timeline(chapters: []))
     /// Set by the app from battery, thermal, and Low Power Mode notifications.
     public var device = DeviceState.unplugged { didSet { replan() } }
+    /// Set by the app from the scene phase, on the line that sets the foreground gate. Frontmost
+    /// and listening is when `configuration.foregroundFill` runs (Plan 18); the flip either way
+    /// replans, so a lock drops the fill's pending jobs and the window's plan then finds the
+    /// chapter already rendered and does almost nothing.
+    public var isForeground = false { didSet { replan() } }
+    /// Whether the plan carries the foreground fill: frontmost, listening, and configured for one.
+    /// The app logs its edges beside the engine's timing lines.
+    public var isFilling: Bool { isForeground && isListening && configuration.foregroundFill != nil }
     /// Queue order for the prepare tier.
     public var queue: [UUID] = [] { didSet { replan() } }
+
+    /// Playing or catching up — the states in which the fill is worth its CPU. Merely loaded is
+    /// not: opening the Reader to look at the chapters must not cost ten minutes of rendering.
+    private var isListening: Bool { state == .playing || state == .catchingUp }
+    /// What the last plan carried, so `replan` logs the fill's edges and not every plan.
+    private var fillLogged = false
+    private static let log = Logger(subsystem: "com.t2s.reader", category: "render.fill")
 
     private let engine: any SynthesisEngine
     private let store: any AudioStore
@@ -228,12 +251,14 @@ public final class PlaybackCoordinator {
         }
         player.play()
         state = .playing
+        replan()                                                  // the fill starts with listening (Plan 18)…
     }
 
     public func pause() {
         guard state == .playing || state == .catchingUp else { return }
         player.pause()
         state = .paused
+        replan()                                                  // …and stops with it; the utterance in flight finishes
         tick()
         save()
     }
@@ -429,6 +454,19 @@ public final class PlaybackCoordinator {
         input.windowSeconds = configuration.windowSeconds
         input.primeSeconds = configuration.primeSeconds
         input.prepareBudgetSeconds = configuration.prepareBudgetSeconds
+        // The fill, only while frontmost and listening (Plan 18); the policy applies the device
+        // guards. Its edges are logged — Console.app over USB shows them beside `render.pacing`;
+        // the `devicectl` console does not carry os_log.
+        let fill = isFilling ? configuration.foregroundFill : nil
+        input.foregroundFill = fill
+        if (fill != nil) != fillLogged {
+            fillLogged = fill != nil
+            if let fill {
+                Self.log.notice("render-ahead fill on: \(Int(fill.lowerBound), privacy: .public)–\(Int(fill.upperBound), privacy: .public) s at 1x from utterance \(self.playhead.utteranceIndex, privacy: .public)")
+            } else {
+                Self.log.notice("render-ahead fill off (\(self.isForeground ? "not listening" : "in the background", privacy: .public)) at utterance \(self.playhead.utteranceIndex, privacy: .public)")
+            }
+        }
         // Nothing queued: the next `fill()` will wait on the head, so the head renders in pieces and
         // the first sound needs one short piece, not the whole utterance (audit #2, Plan 14).
         let streamIndex = queuedCount == 0 && streaming == nil ? headIndex : nil

@@ -576,6 +576,131 @@ import T2SCore
         player.advance(seconds: 0.4); c.tick()                                                   // "one." (0.6…1.0)
         #expect(changed.fired)
     }
+
+    // MARK: Plan 18 — the foreground fill
+
+    /// Two chapters of five one-sentence utterances, 19–22 characters each: 1.27–1.47 s estimated,
+    /// and rendered at 1/15 s per character the actual is the same number, so the window's
+    /// arithmetic does not creep as renders land. `windowSeconds: 1` is the head alone; a chapter
+    /// is 6.73 s, inside `foregroundFill: 5...10`, so the fill reaches its end and stops there.
+    func chapteredFixture() -> (PlaybackCoordinator, FakePlayer, FakeEngine, InMemoryAudioStore, Document, Timeline) {
+        let chapters = (0..<2).map { c -> ChapterInput in
+            let text = ["alpha", "bravo", "charlie", "delta", "echo"].map { "Sentence \($0) here." }.joined(separator: " ")
+            let block = SourceBlock(text: text, position: Position(resourceHref: "c\(c).xhtml", progression: 0, charOffset: 0))
+            return ChapterInput(title: "C\(c)", position: block.position, blocks: [block])
+        }
+        let timeline = TimelineBuilder.build(chapters: chapters, segmenter: Segmenter(normalizer: TextNormalizer()))
+        let engine = FakeEngine(secondsPerCharacter: 1 / DurationEstimator.charsPerSecond)
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let player = FakePlayer()
+        let c = PlaybackCoordinator(engine: engine, store: store, player: player, playheadStore: MemoryPlayheadStore(), timeSource: ManualTimeSource(),
+                                    configuration: CoordinatorConfiguration(windowSeconds: 1, primeSeconds: 30, prepareBudgetSeconds: 300,
+                                                                            queuedSegments: 2, foregroundFill: 5...10))
+        return (c, player, engine, store, Document(title: "T", sourceType: .article), timeline)
+    }
+
+    /// The indices whose duration is an actual — what has been rendered.
+    func actuals(_ c: PlaybackCoordinator) -> [Int] {
+        (0 ..< (c.timeline?.utteranceCount ?? 0)).filter { c.timeline?[utterance: $0].duration.isActual == true }
+    }
+
+    /// Waits until `count` requests are parked in a held engine — in flight, past the arbiter — or fails after a second.
+    func waitForParked(_ engine: FakeEngine, _ count: Int) async {
+        var tries = 0
+        while await engine.parkedCount < count, tries < 200 { tries += 1; try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(await engine.parkedCount == count)
+    }
+
+    /// Frontmost and playing: the chapter renders to its end behind the window; the next chapter
+    /// is untouched (its start is past the bound, and the plan's order is index order).
+    @Test func inFrontAndPlayingTheChapterRendersToItsEnd() async throws {
+        let (c, _, engine, _, doc, timeline) = chapteredFixture()
+        c.isForeground = true
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        #expect(actuals(c) == [0])                                   // paused: the window's head only
+        #expect(!c.isFilling)
+        await c.play()
+        #expect(c.state == .playing && c.isFilling)
+        await c.waitForRenderIdle()
+        #expect(actuals(c) == Array(0..<5))
+        #expect(await engine.requests.count == 5)
+    }
+
+    /// Frontmost but paused — the Reader open on a chapter — costs only the window.
+    @Test func inFrontButPausedOnlyTheWindowRenders() async throws {
+        let (c, _, _, _, doc, timeline) = chapteredFixture()
+        c.isForeground = true
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        #expect(actuals(c) == [0])
+        #expect(!c.isFilling)
+    }
+
+    /// Playing in the background — locked — is today's plan exactly: the window, paced by the budget.
+    @Test func inTheBackgroundOnlyTheWindowRenders() async throws {
+        let (c, _, _, _, doc, timeline) = chapteredFixture()
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        await c.play()
+        await c.waitForRenderIdle()
+        #expect(c.state == .playing)
+        #expect(actuals(c) == [0])
+        #expect(!c.isFilling)
+    }
+
+    /// A lock mid-fill drops the fill's pending jobs; the one past the arbiter finishes (§2.5).
+    @Test func leavingTheForegroundDropsTheFillAndTheJobInFlightFinishes() async throws {
+        let (c, _, engine, _, doc, timeline) = chapteredFixture()
+        c.isForeground = true
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()                                  // the window's head is in the store
+        await engine.hold()
+        await c.play()                                               // the fill's first job, utterance 1, reaches the engine
+        await waitForParked(engine, 1)
+        c.isForeground = false
+        #expect(!c.isFilling)
+        await c.settle()                                             // the empty plan has reached the scheduler
+        await engine.release()
+        await c.waitForRenderIdle()
+        #expect(await engine.requests.count == 2)                    // the window's head, and the job that was in flight
+        #expect(actuals(c) == [0, 1])
+    }
+
+    /// A seek into the next chapter while playing refills from that chapter's start.
+    @Test func aSeekIntoTheNextChapterRefillsFromItsStart() async throws {
+        let (c, _, _, _, doc, timeline) = chapteredFixture()
+        c.isForeground = true
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        await c.play()
+        await c.waitForRenderIdle()
+        #expect(actuals(c) == Array(0..<5))
+        await c.seek(to: Playhead(utteranceIndex: 5, offset: 0))
+        #expect(c.isFilling)
+        await c.waitForRenderIdle()
+        #expect(c.state == .playing)
+        #expect(actuals(c) == Array(0..<10))
+    }
+
+    /// A pause mid-fill drops the rest, as the lock does; the utterance in flight finishes.
+    @Test func pausingMidFillDropsTheRest() async throws {
+        let (c, _, engine, _, doc, timeline) = chapteredFixture()
+        c.isForeground = true
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        await engine.hold()
+        await c.play()
+        await waitForParked(engine, 1)
+        #expect(c.isFilling)
+        c.pause()
+        #expect(!c.isFilling)
+        await c.settle()                                             // the empty plan has reached the scheduler
+        await engine.release()
+        await c.waitForRenderIdle()
+        #expect(await engine.requests.count == 2)
+        #expect(actuals(c) == [0, 1])
+    }
 }
 
 private struct KeyRejectedEngine: SynthesisEngine {

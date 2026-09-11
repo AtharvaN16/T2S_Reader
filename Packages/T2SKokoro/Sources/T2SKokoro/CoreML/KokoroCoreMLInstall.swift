@@ -12,10 +12,12 @@ import os
 /// `Application Support/KokoroCoreML/<revision prefix>/`, excluded from backup.
 ///
 /// Every step is idempotent and resumable: a file already there at its hash is skipped, a `.part`
-/// is what a download writes until it is verified, a stage already compiled is skipped and its
-/// source removed. Cancellation between files leaves nothing half-written. Downloads go over
-/// Wi-Fi only (`allowsExpensiveNetworkAccess` off) and wait for it; compiles wait on `admission`
-/// — the app's foreground gate — because `coremlc` on a phone is CPU the background is not allowed.
+/// is what a download writes until it is verified — and what the next attempt, or the next
+/// launch, asks the server to continue (`Range`) — a stage already compiled is skipped and its
+/// source removed. Cancellation leaves at most a `.part` the next install resumes. Downloads go
+/// over Wi-Fi only (`allowsExpensiveNetworkAccess` off), through one `URLSession` per install,
+/// and wait for it; compiles wait on `admission` — the app's foreground gate — because `coremlc`
+/// on a phone is CPU the background is not allowed.
 public actor KokoroCoreMLInstall {
     /// What the installer is doing, for the veil.
     public enum Progress: Hashable, Sendable {
@@ -23,7 +25,8 @@ public actor KokoroCoreMLInstall {
         case waitingForNetwork(totalBytes: Int)
         case downloading(bytes: Int, totalBytes: Int)
         /// A file's download was refused or dropped and will be tried again after `after` seconds
-        /// (`attempt` is the one about to be made).
+        /// — what the server asked for, held to `maximumServerWait`, else the backoff (`attempt`
+        /// is the one about to be made).
         case retrying(path: String, attempt: Int, after: TimeInterval)
         case compiling(stage: Int, totalStages: Int)
     }
@@ -45,21 +48,102 @@ public actor KokoroCoreMLInstall {
         }
     }
 
-    /// A response outside 200–299, with the server's `Retry-After` when it sent one in seconds.
+    /// A response outside 200–299, with how long the server asked the client to wait, when it said.
     public struct HTTPStatusError: Error, Hashable, Sendable {
         public let status: Int
+        /// Seconds to wait before asking again, from the most specific header that names one:
+        /// `Retry-After` (seconds or an HTTP-date), then `RateLimit-Reset` / `X-RateLimit-Reset`
+        /// (seconds until the window resets, or the epoch second it resets at), then the `t=` of the
+        /// IETF-draft `RateLimit` field Hugging Face puts on every 429 — `ratelimit:
+        /// "resolvers";r=2998;t=217` against the model's repository on 2026-09-10.
         public let retryAfter: TimeInterval?
-        public init(status: Int, retryAfter: TimeInterval? = nil) {
+        /// The rate-limit headers as the server sent them, for the timing log: a spent quota
+        /// (`r=0`) reads differently from an IP blocklist, and the phone's 429s have not said which.
+        public let rateLimit: String?
+
+        public init(status: Int, retryAfter: TimeInterval? = nil, rateLimit: String? = nil) {
             self.status = status
             self.retryAfter = retryAfter
+            self.rateLimit = rateLimit
+        }
+
+        /// The error for `response`, its wait read from the headers.
+        init(_ response: HTTPURLResponse, now: Date = .now) {
+            self.init(status: response.statusCode,
+                      retryAfter: Self.wait(in: response, now: now),
+                      rateLimit: Self.rateLimitHeaders(of: response))
+        }
+
+        static let rateLimitHeaderNames = ["Retry-After", "RateLimit", "RateLimit-Policy", "RateLimit-Reset", "X-RateLimit-Reset"]
+
+        /// The first header, most specific first, that names a wait still ahead; a date already
+        /// passed says nothing.
+        static func wait(in response: HTTPURLResponse, now: Date) -> TimeInterval? {
+            func header(_ name: String) -> String? {
+                response.value(forHTTPHeaderField: name)?.trimmingCharacters(in: .whitespaces)
+            }
+            let waits: [TimeInterval?] = [
+                header("Retry-After").flatMap { text in TimeInterval(text) ?? httpDate(text).map { $0.timeIntervalSince(now) } },
+                header("RateLimit-Reset").flatMap(TimeInterval.init).map { untilReset($0, now: now) },
+                header("X-RateLimit-Reset").flatMap(TimeInterval.init).map { untilReset($0, now: now) },
+                header("RateLimit").flatMap(resetParameter(of:)).map { untilReset($0, now: now) },
+            ]
+            return waits.compactMap { $0 }.first { $0 > 0 }
+        }
+
+        /// A reset a year or more away is not a wait but a clock: the epoch second the window resets at.
+        static func untilReset(_ value: TimeInterval, now: Date) -> TimeInterval {
+            value > 365 * 86_400 ? value - now.timeIntervalSince1970 : value
+        }
+
+        /// The `t=<seconds>` of a `RateLimit` field (`"resolvers";r=2998;t=217`), the first policy's.
+        static func resetParameter(of field: String) -> TimeInterval? {
+            for parameter in field.split(whereSeparator: { $0 == ";" || $0 == "," }) {
+                let trimmed = parameter.trimmingCharacters(in: .whitespaces)
+                if trimmed.hasPrefix("t=") { return TimeInterval(trimmed.dropFirst(2)) }
+            }
+            return nil
+        }
+
+        /// RFC 9110's IMF-fixdate, the form a `Retry-After` date takes: `Sun, 06 Nov 1994 08:49:37 GMT`.
+        static func httpDate(_ text: String) -> Date? {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(secondsFromGMT: 0)
+            formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+            return formatter.date(from: text)
+        }
+
+        /// `name: value` for each rate-limit header present, or nil when there is none.
+        static func rateLimitHeaders(of response: HTTPURLResponse) -> String? {
+            let present = rateLimitHeaderNames.compactMap { name in
+                response.value(forHTTPHeaderField: name).map { "\(name.lowercased()): \($0)" }
+            }
+            return present.isEmpty ? nil : present.joined(separator: ", ")
         }
     }
 
-    /// Fetches `url` into `destination` (creating or replacing it), reporting bytes as they land.
-    /// The default is a Wi-Fi-only `URLSession`; tests inject a fake.
+    /// Fetches `url` into `destination`, reporting how many bytes the file holds as they land. When
+    /// `destination` already holds the head of the file — an earlier attempt's, or an earlier
+    /// launch's — the fetch asks for the rest and appends it, or replaces the file when the server
+    /// answers with the whole of it. Tests inject a fake.
     public typealias Downloader = @Sendable (_ url: URL, _ destination: URL,
                                             _ onBytes: @escaping @Sendable (_ bytes: Int) -> Void,
                                             _ onWaiting: @escaping @Sendable () -> Void) async throws -> Void
+
+    /// The network of one install: `download` fetches each file, and `close` is called once when
+    /// the downloads are done, however they end. `wifi()` is the live one; tests inject a fake with
+    /// nothing to close.
+    public struct Session: Sendable {
+        public let download: Downloader
+        public let close: @Sendable () -> Void
+
+        public init(download: @escaping Downloader, close: @escaping @Sendable () -> Void = {}) {
+            self.download = download
+            self.close = close
+        }
+    }
+
     /// Compiles a `.mlpackage` and returns the `.mlmodelc` it produced (somewhere temporary).
     public typealias Compiler = @Sendable (_ package: URL) async throws -> URL
     /// Waits between download attempts; tests inject one that only records.
@@ -67,7 +151,7 @@ public actor KokoroCoreMLInstall {
 
     private let root: URL
     private let manifest: [KokoroCoreMLManifest.File]
-    private let downloader: Downloader
+    private let session: Session
     private let compiler: Compiler
     private let sleeper: Sleeper
     private let admission: (@Sendable () async -> Void)?
@@ -75,19 +159,29 @@ public actor KokoroCoreMLInstall {
     public static let maximumAttempts = 5
     /// The wait before attempt n+1 when the server named none: 2, 4, 8, 16 s.
     static func backoff(afterAttempt attempt: Int) -> TimeInterval { min(60, pow(2, Double(attempt))) }
+    /// The longest wait a server is granted. Hugging Face's window is five minutes, and a wait
+    /// that long reads as a hang on the veil; a shorter one costs at most one more refused request,
+    /// answered with the time still left.
+    public static let maximumServerWait: TimeInterval = 120
+    /// The wait before attempt `attempt + 1`: what the server asked for, held to
+    /// `maximumServerWait`, else the backoff.
+    static func wait(afterAttempt attempt: Int, serverAsked: TimeInterval?) -> TimeInterval {
+        guard let serverAsked, serverAsked > 0 else { return backoff(afterAttempt: attempt) }
+        return min(serverAsked, maximumServerWait)
+    }
     private static let log = Logger(subsystem: "com.t2s.reader", category: "kokoro.install")
 
     /// `root` is the revision directory, e.g. `…/KokoroCoreML/2e878c6a`. `admission` is awaited
     /// before each compile.
     public init(root: URL,
                 manifest: [KokoroCoreMLManifest.File] = KokoroCoreMLManifest.files,
-                downloader: @escaping Downloader = KokoroCoreMLInstall.wifiDownloader,
+                session: Session = .wifi(),
                 compiler: @escaping Compiler = { try await MLModel.compileModel(at: $0) },
                 sleeper: @escaping Sleeper = { seconds in try? await Task.sleep(for: .seconds(seconds)) },
                 admission: (@Sendable () async -> Void)? = nil) {
         self.root = root
         self.manifest = manifest
-        self.downloader = downloader
+        self.session = session
         self.compiler = compiler
         self.sleeper = sleeper
         self.admission = admission
@@ -114,7 +208,12 @@ public actor KokoroCoreMLInstall {
         // What this install cost, for the timing log (`KokoroInstallTally`): a phone's fresh install
         // is watched from a Mac through that log, since the system log does not reach one.
         let tally = OSAllocatedUnfairLock(initialState: KokoroInstallTally())
-        try await downloadMissingFiles(progress: progress, tally: tally)
+        do {
+            // The session is closed as soon as the downloads are done, whichever way: the compiles
+            // that follow take minutes and have no use for its connections.
+            defer { session.close() }
+            try await downloadMissingFiles(progress: progress, tally: tally)
+        }
         try await compileMissingStages(progress: progress, tally: tally)
         try removeCompiledSources()
         KokoroCoreMLEngine.timing(tally.withLock { $0.summary() })
@@ -153,7 +252,6 @@ public actor KokoroCoreMLInstall {
             let destination = stagingDirectory.appending(path: file.path)
             let part = destination.appendingPathExtension("part")
             try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? FileManager.default.removeItem(at: part)
             let base = done
             // A stage's bucket variants share their weights — the manifest lists 619 MB of which
             // 238 MB is unique — so a file whose bytes are already staged under another path is
@@ -161,42 +259,41 @@ public actor KokoroCoreMLInstall {
             if let twin = stagedTwin(of: file) {
                 Self.log.notice("copying \(file.path, privacy: .public) from \(twin.lastPathComponent, privacy: .public)")
                 KokoroCoreMLEngine.timing("kokoro install copying \(file.path) from \(twin.lastPathComponent)")
+                try? FileManager.default.removeItem(at: part)
                 try FileManager.default.copyItem(at: twin, to: part)
                 tally.withLock { $0.copied(bytes: file.byteCount) }
             } else {
                 Self.log.notice("downloading \(file.path, privacy: .public) (\(file.byteCount, privacy: .public) bytes)")
                 KokoroCoreMLEngine.timing("kokoro install downloading \(file.path) (\(file.byteCount) bytes)")
                 // A refusal the server may lift (429, a 5xx, a dropped connection) is tried again after
-                // a wait — the server's own `Retry-After`, else doubling from two seconds — up to
-                // `maximumAttempts`; anything else (a 404, a checksum) fails the install at once. The
-                // `.part` is removed before every attempt: the download has no `Range`, so it restarts.
+                // a wait — the server's own, else doubling from two seconds — up to `maximumAttempts`;
+                // anything else (a 404, a checksum) fails the install at once. The `.part` stays
+                // between attempts, a 429's too (nothing was wrong with its bytes): the next attempt
+                // asks for the rest of it, so a drop three-quarters through the 15 s generator's
+                // 67 MB does not cost those bytes again. The SHA-256 below is the safety net.
                 var attempt = 0
                 while true {
                     attempt += 1
-                    try? FileManager.default.removeItem(at: part)
-                    let counter = OSAllocatedUnfairLock(initialState: 0)
                     do {
-                        try await downloader(file.url, part, { bytes in
-                            let sum = counter.withLock { $0 += bytes; return $0 }
-                            progress(.downloading(bytes: base + min(sum, file.byteCount), totalBytes: total))
+                        try await session.download(file.url, part, { bytes in
+                            progress(.downloading(bytes: base + min(bytes, file.byteCount), totalBytes: total))
                         }, {
                             progress(.waitingForNetwork(totalBytes: total))
                         })
                         tally.withLock { $0.downloaded(bytes: file.byteCount) }
                         break
                     } catch is CancellationError {
-                        try? FileManager.default.removeItem(at: part)
                         throw CancellationError()
                     } catch {
-                        try? FileManager.default.removeItem(at: part)
-                        let status = (error as? HTTPStatusError)?.status
+                        let refusal = error as? HTTPStatusError
+                        let status = refusal?.status
                         Self.log.error("download failed for \(file.path, privacy: .public) (attempt \(attempt, privacy: .public)): \(String(describing: error), privacy: .public)")
                         guard Self.isRetryable(error), attempt < Self.maximumAttempts else {
                             KokoroCoreMLEngine.timing("kokoro install failed: \(file.path) after \(attempt) attempt(s), \(status.map { "HTTP \($0)" } ?? String(describing: error))")
                             throw Failure.download(file.path, status: status)
                         }
-                        let delay = (error as? HTTPStatusError)?.retryAfter ?? Self.backoff(afterAttempt: attempt)
-                        KokoroCoreMLEngine.timing("kokoro install retry \(attempt + 1) for \(file.path) in \(KokoroCoreMLEngine.fixed(delay, 0)) s after \(status.map { "HTTP \($0)" } ?? "a dropped connection")")
+                        let delay = Self.wait(afterAttempt: attempt, serverAsked: refusal?.retryAfter)
+                        KokoroCoreMLEngine.timing("kokoro install retry \(attempt + 1) for \(file.path) in \(KokoroCoreMLEngine.fixed(delay, 0)) s after \(Self.describe(refusal))")
                         tally.withLock { $0.retried() }
                         progress(.retrying(path: file.path, attempt: attempt + 1, after: delay))
                         await sleeper(delay)
@@ -226,6 +323,17 @@ public actor KokoroCoreMLInstall {
             if (try? Self.matches(url, candidate)) == true { return url }
         }
         return nil
+    }
+
+    /// The timing log's account of a refusal: the status, what the server asked to wait, and its
+    /// rate-limit headers as sent — enough to tell a spent quota (`r=0`) from a blocklist, the open
+    /// question of the 11 Pro's 429s on 2026-09-10.
+    static func describe(_ refusal: HTTPStatusError?) -> String {
+        guard let refusal else { return "a dropped connection" }
+        var text = "HTTP \(refusal.status)"
+        if let asked = refusal.retryAfter { text += ", asked \(KokoroCoreMLEngine.fixed(asked, 0)) s" }
+        if let headers = refusal.rateLimit { text += " (\(headers))" }
+        return text
     }
 
     /// Whether a download failure is the passing kind: the server asking for a pause (429), a
@@ -331,46 +439,108 @@ public actor KokoroCoreMLInstall {
 
     // MARK: The network
 
-    /// A `URLSession` that only downloads over Wi-Fi (no expensive or constrained paths) and waits
-    /// for one rather than fail, streaming each file to disk as it arrives.
-    public static let wifiDownloader: Downloader = { url, destination, onBytes, onWaiting in
+    /// Per task, so `taskIsWaitingForConnectivity` reaches the file being fetched over the shared session.
+    fileprivate final class ConnectivityDelegate: NSObject, URLSessionTaskDelegate {
+        private let onWaiting: @Sendable () -> Void
+        init(onWaiting: @escaping @Sendable () -> Void) { self.onWaiting = onWaiting }
+        func urlSession(_ session: URLSession, taskIsWaitingForConnectivity task: URLSessionTask) { onWaiting() }
+    }
+}
+
+extension KokoroCoreMLInstall.Session {
+    /// One `URLSession` for every file of the install — the session per file of 2026-09-10 was
+    /// 72 TLS handshakes and 72 redirect chains through huggingface.co to its CDN per install —
+    /// that only downloads over Wi-Fi (no expensive or constrained paths) and waits for one rather
+    /// than fail, streaming each file to disk as it arrives. Invalidated by `close`.
+    public static func wifi() -> Self {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.allowsExpensiveNetworkAccess = false
         configuration.allowsConstrainedNetworkAccess = false
         configuration.waitsForConnectivity = true
         configuration.timeoutIntervalForRequest = 60
         configuration.timeoutIntervalForResource = 6 * 3600
-        let delegate = ConnectivityDelegate(onWaiting: onWaiting)
-        let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
-        defer { session.finishTasksAndInvalidate() }
-        let (bytes, response) = try await session.bytes(from: url)
-        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
-        guard (200 ... 299).contains(http.statusCode) else {
-            throw HTTPStatusError(status: http.statusCode,
-                                  retryAfter: http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init))
-        }
-        FileManager.default.createFile(atPath: destination.path(percentEncoded: false), contents: nil)
-        let handle = try FileHandle(forWritingTo: destination)
-        defer { try? handle.close() }
-        var buffer = Data()
-        buffer.reserveCapacity(1 << 20)
-        for try await byte in bytes {
-            buffer.append(byte)
-            if buffer.count >= 1 << 20 {
-                try handle.write(contentsOf: buffer)
-                onBytes(buffer.count)
-                buffer.removeAll(keepingCapacity: true)
-            }
-        }
-        if !buffer.isEmpty {
-            try handle.write(contentsOf: buffer)
-            onBytes(buffer.count)
+        return Self(urlSession: URLSession(configuration: configuration))
+    }
+
+    /// Over `urlSession`: `wifi()`'s, or a test's with a scripted `URLProtocol`.
+    init(urlSession: URLSession) {
+        self.init(download: { url, destination, onBytes, onWaiting in
+            try await Self.fetch(url, into: destination, with: urlSession, onBytes: onBytes, onWaiting: onWaiting)
+        }, close: { urlSession.finishTasksAndInvalidate() })
+    }
+
+    /// What to do with the answer to a request for the bytes of a file from `offset` on.
+    enum Reception: Equatable {
+        /// A 206: the body is the rest of the file, and goes after what is there.
+        case append
+        /// A 200 — the server has no `Range` — or any success to a request from the start: the body
+        /// is the whole file.
+        case replace
+        /// A 416: what is there is no head of the file (longer than it, or the file changed under
+        /// it); ask again from the start.
+        case restart
+    }
+
+    static func reception(of response: HTTPURLResponse, resumingFrom offset: Int) throws -> Reception {
+        switch response.statusCode {
+        case 206 where offset > 0: return .append
+        case 200 ... 299: return .replace
+        case 416 where offset > 0: return .restart
+        default: throw KokoroCoreMLInstall.HTTPStatusError(response)
         }
     }
 
-    private final class ConnectivityDelegate: NSObject, URLSessionTaskDelegate {
-        private let onWaiting: @Sendable () -> Void
-        init(onWaiting: @escaping @Sendable () -> Void) { self.onWaiting = onWaiting }
-        func urlSession(_ session: URLSession, taskIsWaitingForConnectivity task: URLSessionTask) { onWaiting() }
+    /// The request for `url`: the whole file, or the bytes from `offset` on. Always to the
+    /// `huggingface.co` URL: its CDN redirect is a signed URL that expires within the hour, so
+    /// `URLSession`'s own resume data, which embeds it, would not do.
+    static func request(for url: URL, resumingFrom offset: Int) -> URLRequest {
+        var request = URLRequest(url: url)
+        if offset > 0 { request.setValue("bytes=\(offset)-", forHTTPHeaderField: "Range") }
+        return request
+    }
+
+    private static func fetch(_ url: URL, into destination: URL, with session: URLSession,
+                              onBytes: @escaping @Sendable (Int) -> Void,
+                              onWaiting: @escaping @Sendable () -> Void) async throws {
+        let path = destination.path(percentEncoded: false)
+        // The head an earlier attempt left, asked to be continued.
+        var offset = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int ?? 0
+        while true {
+            let (bytes, response) = try await session.bytes(for: Self.request(for: url, resumingFrom: offset),
+                                                            delegate: KokoroCoreMLInstall.ConnectivityDelegate(onWaiting: onWaiting))
+            guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+            switch try Self.reception(of: http, resumingFrom: offset) {
+            case .append: break
+            case .replace: offset = 0
+            case .restart: offset = 0; continue
+            }
+            if !FileManager.default.fileExists(atPath: path) {
+                FileManager.default.createFile(atPath: path, contents: nil)
+            }
+            let handle = try FileHandle(forWritingTo: destination)
+            defer { try? handle.close() }
+            try handle.truncate(atOffset: UInt64(offset))
+            var written = offset
+            var buffer = Data()
+            buffer.reserveCapacity(1 << 20)
+            func flush() throws {
+                guard !buffer.isEmpty else { return }
+                try handle.write(contentsOf: buffer)
+                written += buffer.count
+                buffer.removeAll(keepingCapacity: true)
+                onBytes(written)
+            }
+            do {
+                for try await byte in bytes {
+                    buffer.append(byte)
+                    if buffer.count >= 1 << 20 { try flush() }
+                }
+            } catch {
+                try? flush()                                          // what arrived is what the next attempt resumes from
+                throw error
+            }
+            try flush()
+            return
+        }
     }
 }

@@ -24,9 +24,9 @@ import T2SStore
         let summary = try #require(try await f.store.summary(id: id))
         let (player, _) = try await makePlayer(f)
         await player.load(summary, play: false)
-        #expect(await player.addBookmark())                 // chapter 1, "First sentence."
+        #expect(await player.saveBookmark() != .failed)     // chapter 1, "First sentence."
         await player.seek(toChapter: 1)
-        #expect(await player.addBookmark())                 // chapter 2, "Sentence number 2 here."
+        #expect(await player.saveBookmark() != .failed)     // chapter 2, "Sentence number 2 here."
 
         let model = BookmarkListModel(library: f.library, player: player)
         await model.load(summary)
@@ -64,19 +64,19 @@ import T2SStore
         #expect(model.entries[1].snippet == "sentence.")                     // from the word, as before
     }
 
-    /// Deleting from the list keeps the player's bookmark button honest for the loaded book.
-    @Test func deleteRefreshesThePlayersBookmarkedUtterances() async throws {
+    /// Deleting from the list keeps the player's own `bookmarks` list honest for the loaded book.
+    @Test func deleteRefreshesThePlayersBookmarks() async throws {
         let f = try AppFixtures()
         let id = try await f.importFake()
         let summary = try #require(try await f.store.summary(id: id))
         let (player, _) = try await makePlayer(f)
         await player.load(summary, play: false)
-        #expect(await player.addBookmark())
-        #expect(player.isBookmarkedAtPlayhead)
+        #expect(await player.saveBookmark() != .failed)
+        #expect(player.bookmarks.count == 1)
         let model = BookmarkListModel(library: f.library, player: player)
         await model.load(summary)
         await model.delete(try #require(model.entries.first))
-        #expect(!player.isBookmarkedAtPlayhead)
+        #expect(player.bookmarks.isEmpty)
     }
 
     /// A stale document is re-derived when it is opened, never by the bookmark list (Plan 17, audit
@@ -102,7 +102,7 @@ import T2SStore
         let summary = try #require(try await f.store.summary(id: id))
         let (player, _) = try await makePlayer(f)
         await player.load(summary, play: false)
-        #expect(await player.addBookmark())
+        #expect(await player.saveBookmark() != .failed)
         let model = BookmarkListModel(library: f.library, player: player)
         await model.load(summary)
         let entry = try #require(model.entries.first)
@@ -118,7 +118,7 @@ import T2SStore
         let (player, _) = try await makePlayer(f)
         await player.load(summary, play: false)
         await player.seek(toChapter: 1)
-        #expect(await player.addBookmark())
+        #expect(await player.saveBookmark() != .failed)
         let model = BookmarkListModel(library: f.library, player: player)
         await model.load(summary)
         let entry = try #require(model.entries.first)

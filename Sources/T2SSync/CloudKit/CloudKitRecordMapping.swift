@@ -31,6 +31,7 @@ enum CloudKitRecordMapping {
         record["contentKey"] = b.contentKey as NSString
         record["position"] = json(b.position).map { $0 as NSString }
         record["note"] = b.note.map { $0 as NSString }
+        record["userNote"] = b.userNote.map { $0 as NSString }
         record["createdAt"] = b.createdAt as NSDate
         record["updatedAt"] = b.updatedAt as NSDate
         record["deletedAt"] = b.deletedAt.map { $0 as NSDate }
@@ -52,6 +53,7 @@ enum CloudKitRecordMapping {
                   let position = (r["position"] as? String).flatMap({ decode(Position.self, $0) }),
                   let createdAt = r["createdAt"] as? Date, let updatedAt = r["updatedAt"] as? Date else { return nil }
             return .bookmark(SyncedBookmark(id: id, contentKey: key, position: position, note: r["note"] as? String,
+                                            userNote: r["userNote"] as? String,
                                             createdAt: createdAt, updatedAt: updatedAt, deletedAt: r["deletedAt"] as? Date))
         default: return nil
         }

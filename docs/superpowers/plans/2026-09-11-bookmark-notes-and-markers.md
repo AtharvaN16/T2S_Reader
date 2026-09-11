@@ -56,7 +56,7 @@
 
 **Files:**
 - Create: `Sources/T2SStore/LibrarySchemaV3.swift`
-- Modify: `Sources/T2SStore/Models.swift`, `Sources/T2SStore/LibrarySchema.swift`
+- Modify: `Sources/T2SStore/Models.swift`, `Sources/T2SStore/LibrarySchema.swift`, `Sources/T2SStore/LibraryStore.swift:73`
 - Test: `Tests/T2SStoreTests/LibraryStoreTests.swift:205`
 
 **Interfaces:**
@@ -154,6 +154,16 @@ enum LibraryMigrationPlan: SchemaMigrationPlan {
 }
 ```
 
+- [ ] **Step 5b: Point the container's registered schema at V4**
+
+`Sources/T2SStore/LibraryStore.swift:73` names the version explicitly. Left at V3, the
+`ModelContainer` registers V3's model classes while every typealias in the module resolves to V4's,
+so `userNote` is not in the registered schema at all:
+
+```swift
+    static let schema = Schema(versionedSchema: LibrarySchemaV4.self)
+```
+
 - [ ] **Step 6: Run the store tests**
 
 Run: `swift test --filter T2SStoreTests`
@@ -162,7 +172,7 @@ Expected: PASS. If the compiler reports `LibrarySchemaV3` declared twice, `Model
 - [ ] **Step 7: Commit**
 
 ```bash
-git add Sources/T2SStore/LibrarySchemaV3.swift Sources/T2SStore/Models.swift Sources/T2SStore/LibrarySchema.swift Tests/T2SStoreTests/LibraryStoreTests.swift
+git add Sources/T2SStore/LibrarySchemaV3.swift Sources/T2SStore/Models.swift Sources/T2SStore/LibrarySchema.swift Sources/T2SStore/LibraryStore.swift Tests/T2SStoreTests/LibraryStoreTests.swift
 git commit -m "Schema V4 adds the reader's own note beside the passage, and freezes V3"
 ```
 
@@ -489,23 +499,88 @@ import Foundation
 import Testing
 @testable import T2SCore
 
-/// `PositionResolver` is the only route between a runtime `Playhead` and a persisted `Position`
-/// (spec §3.2), and bookmarks, resume positions and the sync offer all cross it. If the two
-/// directions disagree the app silently lands somewhere other than where it saved.
+/// `PositionResolver` is the only route between a runtime `Playhead` (an utterance index) and a
+/// persisted `Position` (an href plus offsets), and bookmarks, resume positions and the sync offer
+/// all cross it. If the two directions disagree the app silently lands somewhere other than where
+/// it saved.
 @Suite struct PositionRoundTripTests {
-    @Test func everyUtteranceSurvivesPositionThenResolve() throws {
-        let timeline = makeTimeline([
-            [makeUtterance("First sentence."), makeUtterance("Second one is longer than the first.")],
-            [makeUtterance("Chapter two opens here.", href: "ch2.xhtml"),
-             makeUtterance("And closes here.", href: "ch2.xhtml")],
-            [makeUtterance("A third chapter with one line.", href: "ch3.xhtml")],
+    /// Utterances laid out the way `Segmenter` lays them out: each one's `charOffset` is its own
+    /// UTF-16 offset within its resource (`Segmenter.swift:43`), so no two in a resource share a
+    /// start. The fixture helper defaults `charOffset` to 0 for every utterance, which no real
+    /// document does — a timeline built that way cannot round-trip and would test nothing.
+    private func realisticTimeline() -> Timeline {
+        func chapter(_ texts: [String], href: String) -> [Utterance] {
+            var offset = 0
+            return texts.map { text in
+                let utterance = makeUtterance(text, href: href, charOffset: offset)
+                offset += text.utf16.count + 1                  // the whitespace the segmenter trims
+                return utterance
+            }
+        }
+        return makeTimeline([
+            chapter(["First sentence.", "Second one is longer than the first."], href: "ch1.xhtml"),
+            chapter(["Chapter two opens here.", "And closes here."], href: "ch2.xhtml"),
+            chapter(["A third chapter with one line."], href: "ch3.xhtml"),
         ])
+    }
+
+    @Test func everyUtteranceSurvivesPositionThenResolve() throws {
+        let timeline = realisticTimeline()
         for index in 0..<timeline.utteranceCount {
             let playhead = Playhead(utteranceIndex: index)
             let position = PositionResolver.position(for: playhead, in: timeline)
             let back = PositionResolver.resolve(position, in: timeline)
             #expect(back.utteranceIndex == index, "utterance \(index) round-tripped to \(back.utteranceIndex)")
         }
+    }
+
+    /// The round-trip's documented limit. Two utterances claiming the same `charOffset` in one
+    /// resource are indistinguishable by `Position` alone, and `resolve` returns the earlier —
+    /// the fallback of spec §1.4, "never fails". The segmenter never produces this, so it is
+    /// pinned here as a decision on record rather than left to be rediscovered as a bug.
+    @Test func utterancesSharingACharOffsetCollapseToTheFirst() throws {
+        let timeline = makeTimeline([[makeUtterance("First."), makeUtterance("Second.")]])
+        let position = PositionResolver.position(for: Playhead(utteranceIndex: 1), in: timeline)
+        #expect(PositionResolver.resolve(position, in: timeline).utteranceIndex == 0)
+    }
+
+    /// The `offset` half of the round trip. Every assertion above leaves `Playhead.offset` at its
+    /// default of 0, where `time(atSourceOffset: 0)` and `sourceOffset(atTime: 0)` both return 0
+    /// whatever the seconds-to-character maths does — so a bug in the conversion that lands a
+    /// resume on the wrong word would pass unnoticed.
+    ///
+    /// The round trip is deliberately **not** asserted as the identity on `offset`. A `Position`
+    /// stores a character, so a time is quantised to a character boundary on the way out and comes
+    /// back as that character's time. The invariant that matters is idempotence: a saved position
+    /// re-resolves to the same character and re-saves to the same `Position`, which is what makes a
+    /// resume re-highlight the word it was saved on (`PositionResolver.swift:20-22`).
+    @Test func offsetsWithinAnUtteranceSurviveTheRoundTripAsCharacters() throws {
+        let timeline = realisticTimeline()
+        let index = 1                                  // "Second one is longer than the first."
+        let seconds = timeline[utterance: index].duration.seconds
+        for fraction in [0.25, 0.5, 0.75] {
+            let playhead = Playhead(utteranceIndex: index, offset: seconds * fraction)
+            let position = PositionResolver.position(for: playhead, in: timeline)
+            let back = PositionResolver.resolve(position, in: timeline)
+            #expect(back.utteranceIndex == index, "offset at \(fraction) left the utterance")
+            #expect(PositionResolver.position(for: back, in: timeline) == position,
+                    "offset at \(fraction) did not re-save to the same position")
+        }
+    }
+
+    /// Proof the offset is not simply discarded: three different times inside one utterance must
+    /// store three different characters. Without this, the idempotence above would hold just as
+    /// well for a `position(for:)` that threw the offset away entirely.
+    @Test func differentOffsetsInOneUtteranceStoreDifferentCharacters() throws {
+        let timeline = realisticTimeline()
+        let index = 1
+        let seconds = timeline[utterance: index].duration.seconds
+        let stored = [0.0, 0.5, 0.9].map { fraction in
+            PositionResolver.position(for: Playhead(utteranceIndex: index, offset: seconds * fraction),
+                                      in: timeline).charOffset
+        }
+        #expect(Set(stored).count == stored.count,
+                "the playhead's offset is not reaching the stored position: \(stored)")
     }
 }
 ```
@@ -518,7 +593,7 @@ Run: `swift test --filter PositionRoundTripTests`
 
 **If it passes:** the resolver is clear, and the old button fault was purely the playhead-derived toggle described in the spec's §5. Nothing to fix. Go to Step 4.
 
-**If it fails:** stop. Do not continue to Task 5. Report which utterance index round-tripped wrong, and the `Position` it produced. A lossy round-trip is a bug in resume positions and in the sync offer, not only in bookmarks, and it needs its own fix and its own review before this feature is built on top of it.
+**If it fails:** stop. Do not continue to Task 5, and do not adjust the test to make it pass. Report which utterance index round-tripped wrong, what it came back as, and the `Position` that was produced. With realistic offsets in the fixture a failure here is a genuine bug in `PositionResolver` — which carries resume positions and the sync offer, not only bookmarks — and it needs its own fix and its own review before this feature is built on top of it.
 
 - [ ] **Step 4: Commit**
 
@@ -678,7 +753,7 @@ git commit -m "One resolved list of bookmarks replaces the playhead-derived togg
 ### Task 6: Time ranges, the headline fallback, and editing a note
 
 **Files:**
-- Modify: `Sources/T2SApp/Bookmarks/BookmarkEntry.swift`, `Sources/T2SApp/Bookmarks/BookmarkListModel.swift`
+- Modify: `Sources/T2SApp/Bookmarks/BookmarkEntry.swift`, `Sources/T2SApp/Bookmarks/BookmarkListModel.swift`, `App/T2SReader/Bookmarks/BookmarkRow.swift:17,31`
 - Test: `Tests/T2SAppTests/BookmarkListModelTests.swift`
 
 **Interfaces:**
@@ -851,15 +926,32 @@ and as the first line of `load(_ summary:)`:
         error = nil
 ```
 
-- [ ] **Step 5: Run the tests**
+- [ ] **Step 5: Keep the two `snippet` readers compiling**
+
+Removing `snippet` breaks six assertions and the App target. In
+`Tests/T2SAppTests/BookmarkListModelTests.swift`, change `entry.snippet` / `.snippet` to `.passage`
+at lines 36, 39, 63, 64, 153 and 154 — the expected values do not change.
+
+In `App/T2SReader/Bookmarks/BookmarkRow.swift`, change the two reads so the App target still builds
+(Task 10 rewrites this file properly; this is the minimum to keep Task 8's build green):
+
+```swift
+                    Text(entry.passage).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
+```
+
+```swift
+        .accessibilityLabel("\(entry.passage), \(entry.chapterTitle), at \(entry.timeText)")
+```
+
+- [ ] **Step 6: Run the tests**
 
 Run: `swift test`
-Expected: PASS. `BookmarkSnippetTests` is untouched — it tests `BookmarkSnippet`, not `BookmarkEntry`. If another test references `entry.snippet`, change it to `entry.passage`.
+Expected: PASS. `BookmarkSnippetTests` is untouched — it tests `BookmarkSnippet`, not `BookmarkEntry`.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add Sources/T2SApp/Bookmarks/BookmarkEntry.swift Sources/T2SApp/Bookmarks/BookmarkListModel.swift Tests/T2SAppTests/BookmarkListModelTests.swift
+git add Sources/T2SApp/Bookmarks/BookmarkEntry.swift Sources/T2SApp/Bookmarks/BookmarkListModel.swift Tests/T2SAppTests/BookmarkListModelTests.swift App/T2SReader/Bookmarks/BookmarkRow.swift
 git commit -m "A bookmark row leads with the reader's words, and says how long the passage runs"
 ```
 
@@ -974,7 +1066,9 @@ public enum BookmarkGrouping {
 This calls a shared entry builder. In `Sources/T2SApp/Bookmarks/BookmarkListModel.swift`, change the existing `private static func entry(...)` to be reachable by renaming it and widening its access:
 
 ```swift
-    static func displayEntry(for bookmark: Bookmark, timeline: Timeline, index: TimeIndex) -> BookmarkEntry {
+    /// Public, not internal: the Reader's toast resolves the bookmark it just saved through this,
+    /// and the App target cannot see T2SApp's internal symbols.
+    public static func displayEntry(for bookmark: Bookmark, timeline: Timeline, index: TimeIndex) -> BookmarkEntry {
 ```
 
 and update its one caller inside `load(_:)` from `Self.entry(for:...)` to `Self.displayEntry(for:...)`.

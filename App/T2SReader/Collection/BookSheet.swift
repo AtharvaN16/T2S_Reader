@@ -30,6 +30,7 @@ struct BookSheet: View {
     /// The resume chapter's one flash, right after the sheet scrolls to it (owner, 2026-09-11:
     /// opening the sheet from Home should land the eye on where the book picks up).
     @State private var pulsingChapter: Int?
+    @State private var editingBookmark: BookmarkEntry?
 
     private static let heroHeight: CGFloat = 200
 
@@ -71,7 +72,9 @@ struct BookSheet: View {
                     .frame(maxWidth: .infinity)
                     playPill
                         .frame(maxWidth: .infinity)
-                    ChapterListView(chapters: chapters, current: resumeIndex, heading: .sectionHeader, pulsing: pulsingChapter) { chapter in
+                    ChapterListView(chapters: chapters, current: resumeIndex, heading: .sectionHeader,
+                                    pulsing: pulsingChapter,
+                                    bookmarks: isCurrent ? env.player.bookmarksByChapter : [:]) { chapter in
                         Task {
                             if !isCurrent { await env.player.load(live, play: false) }
                             await env.player.seek(toChapter: chapter.index)
@@ -91,7 +94,8 @@ struct BookSheet: View {
                                         dismiss()
                                         readerRoute.open(live)
                                     }
-                                }, onDelete: { Task { await bookmarks.delete(entry) } })
+                                }, onEditNote: { editingBookmark = entry },
+                                   onDelete: { Task { await bookmarks.delete(entry) } })
                             }
                         }
                     }
@@ -108,6 +112,10 @@ struct BookSheet: View {
         .presentationCornerRadius(Spacing.sheetCorner)
         .onChange(of: shouldTilt, initial: true) { _, on in motion.setEnabled(on) }
         .onDisappear { motion.setEnabled(false) }
+        .sheet(item: $editingBookmark) { entry in
+            BookmarkNoteSheet(summary: live, entry: entry,
+                              onSaved: { Task { await bookmarks?.load(live) } })
+        }
     }
 
     /// Lands the eye on where the book picks up (owner, 2026-09-11): centres the resume chapter —

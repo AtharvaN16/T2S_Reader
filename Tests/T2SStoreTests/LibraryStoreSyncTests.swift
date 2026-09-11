@@ -26,7 +26,7 @@ import T2SCore
         #expect(try await s.dirtyRecords(deviceName: "iPhone").isEmpty)
 
         try await s.savePosition(Position(resourceHref: "c1.xhtml", progression: 0.5), for: doc.id)
-        let bookmark = Bookmark(documentID: doc.id, position: Position(resourceHref: "c1.xhtml", progression: 0.2), note: "here")
+        let bookmark = Bookmark(documentID: doc.id, position: Position(resourceHref: "c1.xhtml", progression: 0.2), passageText: "here")
         try await s.add(bookmark)
         let dirty = try await s.dirtyRecords(deviceName: "iPhone")
         #expect(dirty.count == 2)
@@ -104,7 +104,7 @@ import T2SCore
         let key = "sha256:ccc"
         let onA = document(key)
         try await a.insert(onA, timeline: timeline())
-        let bookmark = Bookmark(documentID: onA.id, position: Position(resourceHref: "c1.xhtml", progression: 0.2), note: "here")
+        let bookmark = Bookmark(documentID: onA.id, position: Position(resourceHref: "c1.xhtml", progression: 0.2), passageText: "here")
         try await a.add(bookmark)
         try await a.markClean(try await a.dirtyRecords(deviceName: "iPhone"))
         try await a.deleteBookmark(id: bookmark.id)
@@ -159,5 +159,26 @@ import T2SCore
         #expect(document.title == "Old" && document.contentKey == nil && !document.isPlaceholder)
         #expect(try await s.dirtyRecords(deviceName: "iPhone").isEmpty)
         #expect(try await s.documentsMissingContentKey().map(\.id) == [id])
+    }
+
+    /// Editing just the note re-dirties the row like any other bookmark edit, and the push carries
+    /// the new `userNote` alongside the unchanged passage.
+    @Test func editingANoteMarksTheBookmarkDirtyAndPushesIt() async throws {
+        let s = try store()
+        let doc = document("sha256:eee")
+        try await s.insert(doc, timeline: timeline())
+        var bookmark = Bookmark(documentID: doc.id, position: Position(resourceHref: "c1.xhtml", progression: 0.2), passageText: "the passage")
+        try await s.add(bookmark)
+        try await s.markClean(try await s.dirtyRecords(deviceName: "Mac"))
+
+        bookmark.userNote = "written later"
+        try await s.add(bookmark)
+
+        let records = try await s.dirtyRecords(deviceName: "Mac")
+        let notes = records.compactMap { record -> String?? in
+            if case .bookmark(let b) = record, b.id == bookmark.id { return b.userNote }
+            return nil
+        }
+        #expect(notes == ["written later"])
     }
 }

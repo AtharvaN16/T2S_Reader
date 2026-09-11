@@ -91,23 +91,36 @@ public actor SyncEngine {
     }
 
     /// Pushes, and on a conflict merges the server's copy in (sync spec §4) and re-reads the store:
-    /// if the merged local row still carries something the server lacks — a newer position, for
-    /// instance — it is still dirty, and it gets pushed once more. What that second push saves joins
+    /// a row that comes back strictly newer than the server's `updatedAt` still carries something
+    /// the server lacks, and gets pushed once more. Every other conflicted row has lost for good —
+    /// most often a deletion marker that can never outlive the edit it targets — and is marked
+    /// clean right away instead of retrying forever. What the second push saves also joins
     /// `accepted`; a second conflict leaves the row dirty for the next cycle.
     private func push(_ records: [SyncRecord]) async throws -> Int {
         guard !records.isEmpty else { return 0 }
         var accepted: [SyncRecord] = []
         var conflictedKeys: Set<String> = []
+        var serverUpdatedAt: [String: Date] = [:]
         for result in try await provider.push(records) {
             switch result.outcome {
             case .saved: accepted.append(result.record)
             case .conflict(let server):
                 try await apply([server])
-                conflictedKeys.insert(Self.key(of: result.record))
+                let key = Self.key(of: result.record)
+                conflictedKeys.insert(key)
+                serverUpdatedAt[key] = server.updatedAt
             }
         }
         if !conflictedKeys.isEmpty {
-            let retry = try await store.dirtyRecords().filter { conflictedKeys.contains(Self.key(of: $0)) }
+            let reread = try await store.dirtyRecords().filter { conflictedKeys.contains(Self.key(of: $0)) }
+            var retry: [SyncRecord] = []
+            for record in reread {
+                if let serverTime = serverUpdatedAt[Self.key(of: record)], record.updatedAt > serverTime {
+                    retry.append(record)
+                } else {
+                    accepted.append(record)
+                }
+            }
             if !retry.isEmpty {
                 for result in try await provider.push(retry) where result.outcome == .saved { accepted.append(result.record) }
             }

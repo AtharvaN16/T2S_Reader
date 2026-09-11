@@ -139,5 +139,11 @@ import T2SCore
             _ = await d.engineB.sync()
         }
         #expect(await d.a.documents["k"] != nil)
+
+        // B's deletion marker can never outlive A's edit; it must stop retrying, not haunt every
+        // future cycle.
+        #expect(await d.b.dirtyRecords().isEmpty)
+        #expect(await d.b.tombstones.isEmpty)
+        #expect(await d.a.documents["k"] != nil)
     }
 }

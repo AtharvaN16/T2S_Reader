@@ -14,3 +14,9 @@
 // in App/project.yml.
 // T2S_BUNDLE_ID = com.t2s.reader
 // T2S_APP_GROUP = group.com.t2s.reader
+//
+// iCloud sync needs a paid team (sync spec §8, §9). On such a Mac, the container under that team
+// and the entitlements file that asks for it; the owner's Mac leaves both alone and the toggle
+// says "Needs an iCloud-enabled build".
+// T2S_ICLOUD_CONTAINER = iCloud.com.antarlabs.t2sreader
+// T2S_ENTITLEMENTS = T2SReader/T2SReader.iCloud.entitlements

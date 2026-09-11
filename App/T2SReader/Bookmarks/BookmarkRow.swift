@@ -14,7 +14,7 @@ struct BookmarkRow: View {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(entry.chapterTitle).typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(1)
-                    Text(entry.snippet).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
+                    Text(entry.passage).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
                         .lineLimit(2).multilineTextAlignment(.leading)
                 }
                 Spacer(minLength: 8)
@@ -28,7 +28,7 @@ struct BookmarkRow: View {
             Button(role: .destructive, action: onDelete) { Label("Delete bookmark", systemImage: "trash") }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(entry.snippet), \(entry.chapterTitle), at \(entry.timeText)")
+        .accessibilityLabel("\(entry.passage), \(entry.chapterTitle), at \(entry.timeText)")
         .accessibilityHint("Plays from this bookmark")
         .accessibilityAction(named: "Delete bookmark", onDelete)
     }

@@ -17,6 +17,10 @@ public final class BookmarkListModel {
 
     private let library: Library
     private let player: PlayerModel
+    /// The summary this list was last loaded with, so an edit can reload without the caller
+    /// passing it again.
+    private var loadedSummary: DocumentSummary?
+    private var currentDocumentID: UUID? { loadedSummary?.id }
 
     public init(library: Library, player: PlayerModel) {
         self.library = library
@@ -24,6 +28,7 @@ public final class BookmarkListModel {
     }
 
     public func load(_ summary: DocumentSummary) async {
+        loadedSummary = summary
         error = nil
         do {
             let bookmarks = try await library.store.bookmarks(for: summary.id)
@@ -74,8 +79,8 @@ public final class BookmarkListModel {
     /// document with zero utterances.
     private static func entry(for bookmark: Bookmark, timeline: Timeline, index: TimeIndex) -> BookmarkEntry {
         guard timeline.utteranceCount > 0 else {
-            return BookmarkEntry(id: bookmark.id, position: bookmark.position, chapterTitle: "",
-                                 snippet: "", timeSeconds: 0, createdAt: bookmark.createdAt)
+            return BookmarkEntry(id: bookmark.id, position: bookmark.position, chapterTitle: "", passage: "",
+                                 userNote: bookmark.userNote, timeSeconds: 0, endSeconds: 0, createdAt: bookmark.createdAt)
         }
         let playhead = PositionResolver.resolve(bookmark.position, in: timeline)
         let utterance = timeline[utterance: playhead.utteranceIndex]
@@ -83,17 +88,37 @@ public final class BookmarkListModel {
         let raw = (bookmark.position.charOffset ?? 0) - (utterance.position.charOffset ?? 0)
         // A fallback resolution (PositionResolver.resolve, spec §1.4 "never fails") can return an
         // utterance that does not contain the bookmark's offset; show it from its start rather
-        // than let a negative or out-of-range offset produce an empty snippet.
+        // than let a negative or out-of-range offset produce an empty passage.
         let offset = (0..<utterance.source.utf16.count).contains(raw) ? raw : 0
         // A bookmark saved with its block of text (`PlayerModel.saveBookmark`) shows that block from
         // its start; an older one, the timeline's text from the bookmark's own word.
-        let snippet = bookmark.passageText.map { BookmarkSnippet.make(from: $0, offset: 0) }
+        let passage = bookmark.passageText.map { BookmarkSnippet.make(from: $0, offset: 0) }
             ?? BookmarkSnippet.make(from: utterance.source, offset: offset)
+        let start = index.time(at: playhead)
         return BookmarkEntry(id: bookmark.id,
                              position: bookmark.position,
                              chapterTitle: chapter,
-                             snippet: snippet,
-                             timeSeconds: index.time(at: playhead),
+                             passage: passage,
+                             userNote: bookmark.userNote,
+                             timeSeconds: start,
+                             endSeconds: start + utterance.duration.seconds,
                              createdAt: bookmark.createdAt)
+    }
+
+    /// Writes the reader's note, or clears it when the text is blank. Reloads so the row's headline
+    /// and quote follow the rule in `BookmarkEntry`, and refreshes the player's copy so the Reader's
+    /// surfaces agree with this list.
+    public func setNote(_ note: String?, on entry: BookmarkEntry) async {
+        do {
+            let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let all = try await library.store.bookmarks(for: currentDocumentID ?? UUID())
+            guard var bookmark = all.first(where: { $0.id == entry.id }) else { return }
+            bookmark.userNote = (trimmed?.isEmpty ?? true) ? nil : trimmed
+            try await library.store.add(bookmark)
+            await player.refreshBookmarks()
+            if let summary = loadedSummary { await load(summary) }
+        } catch {
+            self.error = "\(error)"
+        }
     }
 }

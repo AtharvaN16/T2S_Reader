@@ -131,6 +131,12 @@ struct ReaderPage: View {
         .sheet(isPresented: $showDetails) {
             if let current = env.player.current { DetailsSheet(summary: current) }
         }
+        .sheet(item: $noteTarget) { entry in
+            if let current = env.player.current {
+                BookmarkNoteSheet(summary: current, entry: entry,
+                                  onSaved: { Task { await env.player.refreshBookmarks() } })
+            }
+        }
     }
 
     /// The first numbered chapter, while the playhead is before it.
@@ -216,7 +222,8 @@ struct ReaderPage: View {
             chapterRow
                 .padding(.bottom, 2)
             VStack(spacing: 2) {
-                ThinScrubber(model: player.scrubber, segments: chapterSegments) { fraction in
+                ThinScrubber(model: player.scrubber, segments: chapterSegments,
+                             bookmarkFractions: player.bookmarkFractions) { fraction in
                     Task { await player.seek(fraction: fraction) }
                 }
                 // Elapsed on the left, time left on the right (Apple Music's "-1:02:33"), in the
@@ -313,8 +320,12 @@ struct ReaderPage: View {
         withAnimation(.easeOut(duration: 0.2)) { toast = nil }
     }
 
-    /// Task 9 opens the note editor on `toastBookmark`; the toast's action is wired to it already.
-    private func openNoteEditor() { }
+    /// The toast's action: resolve the bookmark just saved into a display entry, then edit it.
+    private func openNoteEditor() {
+        guard let bookmark = toastBookmark, let timeline = env.player.coordinator.timeline else { return }
+        noteTarget = BookmarkListModel.displayEntry(for: bookmark, timeline: timeline,
+                                                    index: env.player.coordinator.timeIndex)
+    }
 
     /// The chapters as spans of the whole, for the scrubber's segments; empty for a document whose
     /// duration is not known yet, which draws one bar.

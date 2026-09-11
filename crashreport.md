@@ -48,6 +48,11 @@ The `.ips` files cited are kept in `crashreport-ips/`._
 
 ## Finding 1 — the download aborts on the first non-2xx response, and never retries
 
+> **Fixed on `dev` in `5d40ac8`** (2026-09-10 late): `HTTPStatusError(status:retryAfter:)`, an attempt loop with
+> `Retry-After` or 2/4/8/16 s backoff up to five attempts for 429/408/5xx and dropped connections, a 404 failing at
+> once, `Failure.download(path, status:)`, and a `.retrying` progress the veil shows over a held bar. Not done:
+> `Range` resume, one session per install, a background `URLSessionDownloadTask`.
+
 **Applies to `dev` as well.** `KokoroCoreMLInstall.swift` and `KokoroCoreMLManifest.swift` are
 byte-identical between `dev` (`68c8b5a`) and this branch tip (`git diff dev HEAD -- <paths>` is
 empty; no commit in `dev..HEAD` touches them). The working `t2s` is unaffected only because its
@@ -167,6 +172,10 @@ stage loads and unlocked it. From the app's own `Library/Caches/kokoro-timing.lo
   warm-up.
 
 ## Finding 2b — 4 minutes locked during playback (CPU path): no crash, no kill, audio starves once a minute
+
+> **Partly fixed on `dev` in `abb3875`**: the sample floor — `CPUBudget.record()` after every render, foreground
+> included, so the first background wait reflects the real trailing minute. The play-ahead value
+> (`KokoroComposition.swift:299`) and the burst-vs-pace question are still Harsh's.
 
 The owner imported "The Gift of the Magi" (Gutenberg #7256) into `t2s H`, played it, locked the
 phone at about 22:20 and unlocked at about 22:24. Their report: *"a couple of times the audio
@@ -338,6 +347,8 @@ backgrounded, which depends on the text — so the A/B on class (c) is inconclus
 21:54 reports remain its evidence.
 
 ## Still owed
+
+- Harsh: the CPU-path play-ahead (150–180 s), the memory gate on the GPU override, the stale MLX comment; the two `dev` fixes above are merged into this branch.
 
 - A > 90 s manual lock during the *first* warm-up on this branch (Finding 2's residual exposure).
 - The `t2s` control on class (c) specifically: a text that exercises the G2P fallback, locked long enough.

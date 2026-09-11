@@ -678,7 +678,7 @@ git commit -m "One resolved list of bookmarks replaces the playhead-derived togg
 ### Task 6: Time ranges, the headline fallback, and editing a note
 
 **Files:**
-- Modify: `Sources/T2SApp/Bookmarks/BookmarkEntry.swift`, `Sources/T2SApp/Bookmarks/BookmarkListModel.swift`
+- Modify: `Sources/T2SApp/Bookmarks/BookmarkEntry.swift`, `Sources/T2SApp/Bookmarks/BookmarkListModel.swift`, `App/T2SReader/Bookmarks/BookmarkRow.swift:17,31`
 - Test: `Tests/T2SAppTests/BookmarkListModelTests.swift`
 
 **Interfaces:**
@@ -851,15 +851,32 @@ and as the first line of `load(_ summary:)`:
         error = nil
 ```
 
-- [ ] **Step 5: Run the tests**
+- [ ] **Step 5: Keep the two `snippet` readers compiling**
+
+Removing `snippet` breaks six assertions and the App target. In
+`Tests/T2SAppTests/BookmarkListModelTests.swift`, change `entry.snippet` / `.snippet` to `.passage`
+at lines 36, 39, 63, 64, 153 and 154 — the expected values do not change.
+
+In `App/T2SReader/Bookmarks/BookmarkRow.swift`, change the two reads so the App target still builds
+(Task 10 rewrites this file properly; this is the minimum to keep Task 8's build green):
+
+```swift
+                    Text(entry.passage).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
+```
+
+```swift
+        .accessibilityLabel("\(entry.passage), \(entry.chapterTitle), at \(entry.timeText)")
+```
+
+- [ ] **Step 6: Run the tests**
 
 Run: `swift test`
-Expected: PASS. `BookmarkSnippetTests` is untouched — it tests `BookmarkSnippet`, not `BookmarkEntry`. If another test references `entry.snippet`, change it to `entry.passage`.
+Expected: PASS. `BookmarkSnippetTests` is untouched — it tests `BookmarkSnippet`, not `BookmarkEntry`.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add Sources/T2SApp/Bookmarks/BookmarkEntry.swift Sources/T2SApp/Bookmarks/BookmarkListModel.swift Tests/T2SAppTests/BookmarkListModelTests.swift
+git add Sources/T2SApp/Bookmarks/BookmarkEntry.swift Sources/T2SApp/Bookmarks/BookmarkListModel.swift Tests/T2SAppTests/BookmarkListModelTests.swift App/T2SReader/Bookmarks/BookmarkRow.swift
 git commit -m "A bookmark row leads with the reader's words, and says how long the passage runs"
 ```
 
@@ -974,7 +991,9 @@ public enum BookmarkGrouping {
 This calls a shared entry builder. In `Sources/T2SApp/Bookmarks/BookmarkListModel.swift`, change the existing `private static func entry(...)` to be reachable by renaming it and widening its access:
 
 ```swift
-    static func displayEntry(for bookmark: Bookmark, timeline: Timeline, index: TimeIndex) -> BookmarkEntry {
+    /// Public, not internal: the Reader's toast resolves the bookmark it just saved through this,
+    /// and the App target cannot see T2SApp's internal symbols.
+    public static func displayEntry(for bookmark: Bookmark, timeline: Timeline, index: TimeIndex) -> BookmarkEntry {
 ```
 
 and update its one caller inside `load(_:)` from `Self.entry(for:...)` to `Self.displayEntry(for:...)`.

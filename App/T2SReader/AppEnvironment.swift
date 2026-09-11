@@ -149,8 +149,8 @@ final class AppEnvironment {
             key: { try cloudVoiceSecrets.load() }
         )
         let renderArbiter = RenderArbiter()
-        // A phone whose renders run on the GPU renders further ahead while it is in front, because it
-        // cannot render while locked until its CPU set has compiled (`KokoroComposition.playAheadWindowSeconds`).
+        // The Kokoro route's own play-ahead — ten minutes on a GPU phone, three on the CPU path — in
+        // every state; the window has no foreground/background split (`KokoroComposition.playAheadWindowSeconds`).
         var configuration = CoordinatorConfiguration(prepareBudgetSeconds: prepareBudget)
         if let window = kokoro.playAheadWindowSeconds { configuration.windowSeconds = window }
         let coordinator = PlaybackCoordinator(engine: cloudRouter, store: shared.audioStore, player: try AudioPlayer(),

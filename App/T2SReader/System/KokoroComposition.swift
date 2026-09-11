@@ -185,9 +185,14 @@ struct KokoroComposition {
     /// How `PlayerModel` and `PrepareRunner` decide a document's effective voice.
     let voiceRouting: any VoiceRouteResolving
     let status: KokoroStatusModel
-    /// How far ahead the live player renders, or nil for the spec's 60 s: ten minutes on a phone
-    /// whose main set is on the GPU (30 s of GPU at RTF 0.05), because it cannot render while locked
+    /// How far ahead the live player renders, in every state (the window is one value; the
+    /// coordinator does not know the foreground from the background). Ten minutes on a phone whose
+    /// main set is on the GPU (30 s of GPU at RTF 0.05), because it cannot render while locked
     /// until its CPU set has compiled — a first foreground session's work — and that set is slower.
+    /// Three minutes on the CPU path: locked, the budget renders ~70 s of audio and then sleeps
+    /// most of a minute (crashreport.md, Finding 2b), so a buffer the size of one cycle ran dry at
+    /// every cycle's end; two cycles' worth (31 s of A13 rendering at RTF 0.17 to fill) rides
+    /// through them.
     let playAheadWindowSeconds: TimeInterval?
     /// The runtimes whose voices the picker lists, with the qualifier each row carries — asked every
     /// time the list is drawn, because the MLX probe answers seconds after the composition root has
@@ -336,7 +341,7 @@ struct KokoroComposition {
                 defaultVoice: KokoroVoiceID(engineID: KokoroCoreMLEngine.identity, voice: "af_heart").rawValue
             ),
             status: status,
-            playAheadWindowSeconds: computeUnits == .cpu ? nil : 600,
+            playAheadWindowSeconds: computeUnits == .cpu ? 180 : 600,
             catalogEngines: catalogEngines(mlxListed: mlxListed)
         )
         #else

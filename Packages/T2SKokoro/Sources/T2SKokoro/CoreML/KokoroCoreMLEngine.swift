@@ -48,6 +48,15 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// The pieces after it are cut at ``maxPieceTokenCount`` as usual.
     static let streamingFirstPieceTokenCount = 48
 
+    /// The most ids a piece rendered through the background set (``Options/backgroundComputeUnits``)
+    /// may carry: ``streamingFirstPieceTokenCount`` (48 ids ≈ 3 s for a streamed head) with margin
+    /// held back for slow speech, so the piece does not overflow the 3 s bucket
+    /// (``KokoroCoreMLResources/backgroundBuckets`` = `[3]`) it renders in. Without this, a piece cut
+    /// for the main set's 15 s bucket is rendered whole against the 3 s bucket first, overflows,
+    /// and is halved and rendered again — a full pipeline run thrown away for nothing — before the
+    /// audio comes back right (the review of 2026-09-11, §2.3(b), §3 R2).
+    static let backgroundPieceTokenCount = 36
+
     /// Misaki's marker for a word it could not transcribe. Passed to `EnglishG2P` explicitly so
     /// ``phonemeWalk(_:)`` provably reproduces the string `phonemize` returns.
     static let unknownPhoneme = "❓"
@@ -143,8 +152,33 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// The background set (`Options.backgroundComputeUnits`), once loaded, and its load.
     private var backgroundLoaded: Loaded?
     private var backgroundLoadTask: Task<Void, Never>?
+    /// When the background set's load last failed, so a retry can wait out
+    /// ``backgroundSetLoadRetryInterval`` instead of trying again at once; `nil` before any failure
+    /// and after a successful load. Not set on cancellation — a cancelled load is not a failure and
+    /// may be retried immediately (the review of 2026-09-11, §3 R6).
+    private var backgroundSetLoadFailedAt: ContinuousClock.Instant?
+    /// How long after a failed background-set load ``renderSet(main:)`` and ``awaitBackgroundSet()``
+    /// wait before trying again — 30 s in the app; a `var` rather than a `let` only so a test can
+    /// shorten it and not pay the real 30 s (the review of 2026-09-11, §3 R6, §5 item 4).
+    private var backgroundSetLoadRetryInterval: Duration = .seconds(30)
+    /// The compiled stage URLs from the load that first called ``startBackgroundSetLoad(compiled:)``,
+    /// kept so a retry has them to call it again with — `load()` only passes them once, at readiness.
+    private var compiledStageURLs: [String: URL]?
+    /// `KokoroCoreMLModels.loadStages(_:names:computeUnits:window:admission:onStageLoaded:)`, as
+    /// ``startBackgroundSetLoad(compiled:)`` calls it: the real function by default. Settable by a
+    /// test so a background-set load can be made to fail once and then succeed, to prove the retry
+    /// (the review of 2026-09-11, §3 R6) without a real, transient Core ML failure to wait for.
+    private var stageLoader: @Sendable (
+        _ compiled: [String: URL], _ names: [String], _ computeUnits: KokoroComputeUnits, _ window: Int,
+        _ admission: (@Sendable () async -> Void)?, _ onStageLoaded: (@Sendable (_ name: String, _ seconds: Double) -> Void)?
+    ) async throws -> KokoroCoreMLModels.LoadedStages = KokoroCoreMLModels.loadStages
     /// The set the last piece rendered through, for the tests: "main" or "background".
     private(set) var lastRenderSet = "main"
+    /// How many pipeline calls have run to completion — one per `kokoro call:` timing line, whether
+    /// its audio was kept or thrown away by a `tooManyTokens`/`audioTruncated` retry. Internal, for
+    /// the test that proves ``backgroundPieceTokenCount`` leaves no call to discard (the review of
+    /// 2026-09-11, §5 item 2): a discarded call makes this exceed the utterance trace's piece count.
+    private(set) var renderCallCount = 0
     /// The first-prediction warm-up started at readiness, and one per later bucket as it lands.
     private var predictorWarmUp: Task<Void, Never>?
     private var laterPredictorWarmUps: [Task<Void, Never>] = []
@@ -317,14 +351,38 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
 
     /// Waits for the background set, if the options ask for one and its load has begun, and says
     /// whether the engine can now render in the background: the set is there, or none was asked for.
+    /// A failed load is not final for the session (the review of 2026-09-11, §3 R6): once the wait
+    /// for it finds no set and nothing in flight, a retry is kicked (``retryBackgroundSetLoadIfDue()``)
+    /// and awaited too, so a caller that lands here after the retry window sees the second attempt.
     @discardableResult
     public func awaitBackgroundSet() async -> Bool {
+        await backgroundLoadTask?.value
+        if backgroundLoaded == nil { retryBackgroundSetLoadIfDue() }
         await backgroundLoadTask?.value
         return options.backgroundComputeUnits == nil || backgroundLoaded != nil
     }
 
     /// Whether the background set is loaded.
     public var hasBackgroundSet: Bool { backgroundLoaded != nil }
+
+    /// Installs the function ``startBackgroundSetLoad(compiled:)`` calls in place of
+    /// `KokoroCoreMLModels.loadStages`. Internal, for the test that proves a failed background-set
+    /// load retries (the review of 2026-09-11, §3 R6): a fake that throws once and then defers to
+    /// the real loader stands in for a real, transient Core ML failure.
+    func setStageLoader(_ loader: @escaping @Sendable (
+        _ compiled: [String: URL], _ names: [String], _ computeUnits: KokoroComputeUnits, _ window: Int,
+        _ admission: (@Sendable () async -> Void)?, _ onStageLoaded: (@Sendable (_ name: String, _ seconds: Double) -> Void)?
+    ) async throws -> KokoroCoreMLModels.LoadedStages) {
+        stageLoader = loader
+    }
+
+    /// Installs how long a failed background-set load is held before ``renderSet(main:)`` or
+    /// ``awaitBackgroundSet()`` retries it; see ``backgroundSetLoadRetryInterval``. Internal, for
+    /// the same test as ``setStageLoader(_:)`` — it shortens the wait so the suite does not pay the
+    /// real 30 s.
+    func setBackgroundSetLoadRetryInterval(_ interval: Duration) {
+        backgroundSetLoadRetryInterval = interval
+    }
 
     /// Waits for the buckets after the ready set, if their load has begun. `preload()` returns at
     /// readiness; a probe that wants to render in every bucket calls this after it.
@@ -550,24 +608,28 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// only while the phone is not thermally serious — on the iPhone 17 Pro these are CPU plans the
     /// compiler takes minutes over, and they are built for a listener who is reading in front while
     /// the GPU renders. Every stage lands in Core ML's plan cache, so a launch that is backgrounded
-    /// or killed mid-way resumes where it stopped. A failure is logged and the set stays absent: a
-    /// background render then waits for the foreground rather than fail.
+    /// or killed mid-way resumes where it stopped. A failure is logged and the set stays absent for
+    /// now — ``failedToLoadBackgroundSet(_:)`` clears the task and starts the retry clock, so a
+    /// background render waits for the foreground rather than fail, and the session gets another
+    /// attempt rather than none (the review of 2026-09-11, §3 R6).
     private func startBackgroundSetLoad(compiled: [String: URL]) {
         guard let units = options.backgroundComputeUnits, backgroundLoadTask == nil, backgroundLoaded == nil else { return }
+        compiledStageURLs = compiled
         let admission = loadAdmission
+        let stageLoader = stageLoader
         let names = KokoroCoreMLResources.stageNames(buckets: KokoroCoreMLResources.backgroundBuckets,
                                                      durationTokenLengths: KokoroCoreMLResources.backgroundDurationTokenLengths)
         let tally = OSAllocatedUnfairLock(initialState: KokoroLoadTally(label: "background set on \(units.runtimeName)", total: names.count))
         backgroundLoadTask = Task(priority: .utility) { [weak self] in
             await self?.awaitPredictorWarmUp()
             do {
-                let stages = try await KokoroCoreMLModels.loadStages(
-                    compiled, names: names, computeUnits: units, window: 1,
-                    admission: {
+                let stages = try await stageLoader(
+                    compiled, names, units, 1,
+                    {
                         await admission?()
                         await Self.waitWhileThermallySerious()
                     },
-                    onStageLoaded: { name, seconds in
+                    { name, seconds in
                         let (loaded, total, summary) = tally.withLock { tally in
                             let summary = tally.record(name, seconds: seconds)
                             return (tally.loaded, tally.total, summary)
@@ -579,11 +641,40 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                 guard let self else { return }
                 try await self.installBackgroundSet(stages)
             } catch is CancellationError {
-                return
+                await self?.cancelledBackgroundSetLoad()
             } catch {
-                Self.timing("kokoro background set failed to load: \(String(describing: error))")
+                await self?.failedToLoadBackgroundSet(error)
             }
         }
+    }
+
+    /// Clears the background load task after a cancellation, so the next call that wants the
+    /// background set may start a fresh load at once: a cancellation is not a failure, so no retry
+    /// delay applies (the review of 2026-09-11, §3 R6).
+    private func cancelledBackgroundSetLoad() {
+        backgroundLoadTask = nil
+    }
+
+    /// Clears the background load task and records when it failed, so ``retryBackgroundSetLoadIfDue()``
+    /// starts a fresh load once ``backgroundSetLoadRetryInterval`` has passed instead of the set
+    /// staying absent, and every later background piece parking on the gate, for the rest of the
+    /// session (the review of 2026-09-11, §3 R6).
+    private func failedToLoadBackgroundSet(_ error: Error) {
+        backgroundLoadTask = nil
+        backgroundSetLoadFailedAt = ContinuousClock().now
+        Self.timing("kokoro background set failed to load: \(String(describing: error))")
+    }
+
+    /// Starts the background set's load again when the last attempt failed more than
+    /// ``backgroundSetLoadRetryInterval`` ago and nothing is loading or loaded now. Without this,
+    /// ``startBackgroundSetLoad(compiled:)``'s own guard — which only stops it running twice at
+    /// once — leaves a failed load final for the session (the review of 2026-09-11, §3 R6). A no-op
+    /// before the first load ever reaches `startBackgroundSetLoad` (``compiledStageURLs`` still nil).
+    private func retryBackgroundSetLoadIfDue() {
+        guard options.backgroundComputeUnits != nil, backgroundLoaded == nil, backgroundLoadTask == nil,
+              let compiledStageURLs else { return }
+        if let failedAt = backgroundSetLoadFailedAt, ContinuousClock().now - failedAt < backgroundSetLoadRetryInterval { return }
+        startBackgroundSetLoad(compiled: compiledStageURLs)
     }
 
     private func installBackgroundSet(_ stages: KokoroCoreMLModels.LoadedStages) throws {
@@ -615,10 +706,12 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     }
 
     /// The set the next piece renders through. In front, the main set. In the background, the
-    /// background set when there is one; until there is, the load admission — the app's foreground
-    /// gate — is awaited, and the main set is used once the app is back in front. The wait is
-    /// logged once as it begins and once as it ends, with the set it ended in: on the phone the
-    /// timing log is what says whether a silence was this wait, the CPU budget, or a failed call.
+    /// background set when there is one; until there is, ``retryBackgroundSetLoadIfDue()`` gets a
+    /// fresh load started if the last one failed and enough time has passed, and the load admission
+    /// — the app's foreground gate — is awaited, and the main set is used once the app is back in
+    /// front. The wait is logged once as it begins and once as it ends, with the set it ended in: on
+    /// the phone the timing log is what says whether a silence was this wait, the CPU budget, or a
+    /// failed call.
     private func renderSet(main: Loaded) async throws -> Loaded {
         guard options.backgroundComputeUnits != nil, let placement = renderPlacement else { return main }
         var waitStarted: ContinuousClock.Instant?
@@ -633,6 +726,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                 }
                 return backgroundLoaded
             }
+            retryBackgroundSetLoadIfDue()
             guard let admission = loadAdmission else { return main }
             if waitStarted == nil {
                 waitStarted = ContinuousClock().now
@@ -647,13 +741,32 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     }
 
     /// `renderedPieces` through the set the placement chooses, rendering again where iOS allows it
-    /// when the GPU refused a call that began as the app left the foreground.
+    /// when the GPU refused a call that began as the app left the foreground. When the background
+    /// set is what `renderSet` returns, `piece` — cut for the main set's bucket — is re-cut at
+    /// ``backgroundPieceTokenCount`` first, so the 3 s bucket sees pieces sized for it instead of
+    /// a full-size call that overflows, is halved and thrown away (the review of 2026-09-11, §2.3(b),
+    /// §3 R2, §5 item 2). The re-cut's first sub-piece inherits `piece`'s own `cut` — the seam before
+    /// it — the same rule ``splitPiece(groups:at:isFinal:words:inheriting:)`` uses for an
+    /// overflow split; the sub-pieces after it already carry the right cut, computed the same way by
+    /// ``pieces(ids:owners:words:cap:firstPieceCap:)`` itself.
     private func placedPieces(_ piece: Piece, isFinal: Bool, words: [MToken], tokenizer: KokoroTokenizer, main: Loaded, spread: Float)
         async throws -> [(piece: Piece, result: KokoroPipelineResult, audio: [Float])] {
         let set = try await renderSet(main: main)
         lastRenderSet = set.models === main.models ? "main" : "background"
         do {
-            return try renderedPieces(piece, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: set, spread: spread)
+            guard set.models !== main.models else {
+                return try renderedPieces(piece, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: set, spread: spread)
+            }
+            var subPieces = try Self.pieces(ids: piece.ids, owners: piece.owners, words: words, cap: Self.backgroundPieceTokenCount)
+            if !subPieces.isEmpty { subPieces[0].cut = piece.cut }
+            var rendered: [(piece: Piece, result: KokoroPipelineResult, audio: [Float])] = []
+            for (index, subPiece) in subPieces.enumerated() {
+                rendered += try renderedPieces(
+                    subPiece, isFinal: isFinal && index == subPieces.count - 1, words: words, tokenizer: tokenizer,
+                    loaded: set, spread: spread
+                )
+            }
+            return rendered
         } catch KokoroCoreMLError.stageFailed(let reason) where set.models === main.models && renderPlacement?() == .background {
             Self.timing("kokoro call refused in the background; rendering again where it is allowed: \(reason.prefix(80))")
             let again = try await renderSet(main: main)
@@ -975,6 +1088,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         }
         let t = result.timings
         let rtf = result.audioDurationSeconds > 0 ? result.wallTimeSeconds / result.audioDurationSeconds : 0
+        renderCallCount += 1
         Self.timing("kokoro call: bucket \(result.bucketSeconds) s, audio \(Self.fixed(result.audioDurationSeconds, 2)) s, wall \(Self.fixed(result.wallTimeSeconds, 3)) s, RTF \(Self.fixed(rtf, 3)); duration \(Self.fixed(t.durationCoreML, 3)), f0 \(Self.fixed(t.f0ntrainCoreML, 3)), pre \(Self.fixed(t.decoderPre, 3)), hnsf \(Self.fixed(t.hnsfSwift, 3)) (overlap \(Self.fixed(t.decoderPreHnsfOverlap, 3))), gen \(Self.fixed(t.generatorCoreML, 3)), trim \(Self.fixed(t.trim, 3)); set \(lastRenderSet)")
 
         // `selectBucket` falls back to the largest bucket rather than failing, and stage 9 then trims

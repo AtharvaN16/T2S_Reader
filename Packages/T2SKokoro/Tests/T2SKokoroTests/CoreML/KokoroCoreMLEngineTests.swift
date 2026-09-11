@@ -606,6 +606,24 @@ import T2SCore
         #expect(streamed.flatMap(\.ids) == ids)
     }
 
+    /// `backgroundPieceTokenCount` is what `placedPieces` re-cuts a piece to before rendering it
+    /// through the background set (the review of 2026-09-11, §5 item 2): the same sixty-word input
+    /// cut at that cap must still tile the ids, with every piece small enough for the 3 s bucket.
+    @Test func theBackgroundCapCutsPiecesThatFitTheThreeSecondBucket() throws {
+        let words = (0 ..< 60).map { Self.word("w\($0)", phonemes: "abcd") }
+        var ids: [Int32] = []
+        var owners: [Int] = []
+        for index in 0 ..< 60 {
+            ids += [1, 2, 3, 4, 0]
+            owners += Array(repeating: index, count: 4) + [KokoroCoreMLTimingFold.noOwner]
+        }
+        let pieces = try KokoroCoreMLEngine.pieces(ids: ids, owners: owners, words: words,
+                                                    cap: KokoroCoreMLEngine.backgroundPieceTokenCount)
+        #expect(!pieces.isEmpty)
+        #expect(pieces.allSatisfy { $0.ids.count <= KokoroCoreMLEngine.backgroundPieceTokenCount })
+        #expect(pieces.flatMap(\.ids) == ids)
+    }
+
     /// Readiness is t128 and the 3 s and 15 s buckets; t256 lands last, behind the other buckets.
     /// A passage cut for t256 renders before it lands — in pieces t128 can time — and again after,
     /// with the same words timed either way.

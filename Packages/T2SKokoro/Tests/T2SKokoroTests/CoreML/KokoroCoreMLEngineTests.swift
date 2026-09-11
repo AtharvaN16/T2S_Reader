@@ -515,9 +515,17 @@ import T2SCore
         #expect(await engine.isG2PLoaded)
     }
 
-    /// The streamed render and the whole render of one long passage agree where it matters: the
-    /// same words timed within ±100 ms (spec §7.4), the pieces adding up to the whole, and a first
-    /// piece short enough to be the first sound (Plan 14).
+    /// The streamed render and the whole render of one long passage are two *performances* of the
+    /// same words, not one performance cut twice: the streamed one is a short head (Plan 14) and a
+    /// piece in the 10 s bucket, the whole one a single 15 s call, and the model times words
+    /// differently in a different-length call — measured 2026-09-11: the head's words agree exactly,
+    /// then the offsets wander up to 0.33 s and back to 0.18 s (identical on every commit since Plan
+    /// 14; it only showed once `awaitFullLoad()` truly waited). A listener never hears both, since an
+    /// utterance is cached under one key, and each render's own timings match its own audio (the
+    /// tests around this one). So this asserts the fold and the pieces, not equality: one timing per
+    /// word in both, every word within half a second of the other performance, the streamed total
+    /// within a second of the whole (the owner's decision of 2026-09-11 evening: keep the audio and
+    /// the single call per play-ahead render).
     @Test(.enabled(if: KokoroTestSupport.haveCoreMLFiles))
     func streamsALongPassageInPiecesThatFoldToTheSameTimings() async throws {
         let engine = try await Self.engineWithRealResources()
@@ -540,9 +548,11 @@ import T2SCore
         #expect(pieces[0].duration < 5)                              // the first sound, not the whole passage
         let whole = try await engine.synthesize(request)
         #expect(timings.count == whole.wordTimings.count)
-        for (a, b) in zip(timings, whole.wordTimings) { #expect(abs(a.start - b.start) < 0.1) }
+        let offsets = zip(timings, whole.wordTimings).map { $0.start - $1.start }
+        #expect(offsets.allSatisfy { abs($0) < 0.5 }, "offsets \(offsets.map { (($0 * 1000).rounded()) / 1000 })")
+        #expect(timings.map(\.start) == timings.map(\.start).sorted())
         let total = pieces.reduce(0) { $0 + $1.duration }
-        #expect(abs(total - whole.audio.duration) < 0.5)
+        #expect(abs(total - whole.audio.duration) < 1.0)
     }
 
     /// The app's segmenter allows 300 characters of source, which is more speech than the pipeline's

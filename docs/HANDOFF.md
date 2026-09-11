@@ -102,15 +102,16 @@ ready. Not verified on any phone: Plan 18, the 180 s window locked for four minu
    returned at once on a cold engine. Verified: the pure engine suite, the model-backed
    `aBackgroundPlacementRendersThroughTheBackgroundSet` alone, the simulator and device builds.
    **Decided (2026-09-11 evening, the owner asking for a recommendation):** the streamed render (a 48-id
-   head, then pieces) and the whole render (one piece) of the same passage differ by a constant ~0.18 s
-   of pause at the head's seam — a separate pipeline call frames its own start and end — identically on
-   every commit since Plan 14; it only showed once `awaitFullLoad()` truly waited. A listener never hears
-   both (one render key per utterance), and cutting every play-ahead render the streamed way would cost a
-   pipeline call more per utterance on the A13. So the audio stays and
-   `streamsALongPassageInPiecesThatFoldToTheSameTimings` now asserts what holds: timings equal within
-   ±100 ms before the seam, within ±100 ms of one shared offset after it, that offset under 300 ms. If the two renders ever need to match byte for byte, the cheap route is to
-   trim the silence at the streamed head's seam down to the pause a single call produces (audio editing,
-   needs listening on a phone), not the extra pipeline call. Still
+   head, then a piece in the 10 s bucket) and the whole render (one 15 s call) of the same passage are two
+   *performances*: the head's words agree exactly, then the model times the rest differently in a
+   different-length call — offsets up to 0.33 s that wander back to 0.18 s, identical on every commit since
+   Plan 14; the old ±100 ms test only passed under the load race that `awaitFullLoad()` now closes. A
+   listener never hears both (one render key per utterance), each render's timings match its own audio,
+   and cutting every play-ahead render the streamed way would cost a pipeline call more per utterance on
+   the A13. So the audio stays and `streamsALongPassageInPiecesThatFoldToTheSameTimings` asserts what
+   holds: one timing per word in both, every word within half a second of the other performance, the
+   streamed total within a second of the whole. (Trimming silence at a join would not make them agree —
+   the difference is prosody, not a pause.) Still
    owed from the review: improvement 5 (the refusal retry as a decision) and 6 (the "keep the phone
    unlocked" line on the veil). The mirror: Cloudflare R2 (free egress, cents a month, a plain URL as a
    second source) when the paid developer account is set up — not before; Hugging Face with the retries

@@ -452,8 +452,9 @@ struct KokoroComposition {
     /// whole length instead of failing utterance by utterance. Cancellation is not a failure — the
     /// engine's own load is shared and retryable — so it is never retried and never closes anything.
     ///
-    /// "Finished" is readiness: the duration models and the 3 s and 15 s buckets loaded, which is
-    /// enough to render anything. The 7 s and 10 s buckets follow on the engine's own task.
+    /// "Finished" is readiness: the t128 duration model and the 3 s and 15 s buckets loaded, which
+    /// is enough to render anything in pieces of up to 126 ids. The 7 s and 10 s buckets and then
+    /// t256 — the plan that is a first launch on the A13 — follow on the engine's own task.
     private static func warmUp(
         _ engine: GatedKokoroCoreMLEngine,
         routeOpen: OSAllocatedUnfairLock<Bool>,

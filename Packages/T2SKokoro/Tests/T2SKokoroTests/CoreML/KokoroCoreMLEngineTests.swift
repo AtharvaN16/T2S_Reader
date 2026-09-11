@@ -521,6 +521,11 @@ import T2SCore
     @Test(.enabled(if: KokoroTestSupport.haveCoreMLFiles))
     func streamsALongPassageInPiecesThatFoldToTheSameTimings() async throws {
         let engine = try await Self.engineWithRealResources()
+        // Both renders must cut the passage the same way, so both wait for t256: at readiness only
+        // t128 is loaded and pieces are cut at 126 ids, and the whole render below would otherwise
+        // run after t256 landed, cut at 176, with its seams — and its pauses — elsewhere (the words
+        // drifted 0.10–0.22 s between the two on 2026-09-11).
+        try await engine.awaitFullLoad()
         let spoken = "It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness, it was the epoch of belief, it was the epoch of incredulity."
         let request = SynthesisRequest(spoken: spoken, voiceID: Self.voiceID("af_heart"))
         var pieces: [PCMAudio] = []
@@ -580,6 +585,47 @@ import T2SCore
 
     /// About seventy words, no numbers and no contractions, so every whitespace-separated chunk is
     /// one Misaki word token and the timing count can be asserted against a plain split.
+    /// Before t256 lands only t128 can time a piece, so the cut moves down to what it holds: the
+    /// same sixty words that make two pieces at 176 make more at a lower cap, still tiling the ids
+    /// and still never over it. A streamed head's own cap never exceeds it either.
+    @Test func aLowerCapCutsMorePiecesThatStillTileTheIds() throws {
+        let words = (0 ..< 60).map { Self.word("w\($0)", phonemes: "abcd") }
+        var ids: [Int32] = []
+        var owners: [Int] = []
+        for index in 0 ..< 60 {
+            ids += [1, 2, 3, 4, 0]
+            owners += Array(repeating: index, count: 4) + [KokoroCoreMLTimingFold.noOwner]
+        }
+        let pieces = try KokoroCoreMLEngine.pieces(ids: ids, owners: owners, words: words, cap: 60)
+        #expect(pieces.count >= 5)
+        #expect(pieces.flatMap(\.ids) == ids)
+        #expect(pieces.allSatisfy { $0.ids.count <= 60 })
+
+        let streamed = try KokoroCoreMLEngine.pieces(ids: ids, owners: owners, words: words, cap: 60, firstPieceCap: 100)
+        #expect(streamed[0].ids.count <= 60)
+        #expect(streamed.flatMap(\.ids) == ids)
+    }
+
+    /// Readiness is t128 and the 3 s and 15 s buckets; t256 lands last, behind the other buckets.
+    /// A passage cut for t256 renders before it lands — in pieces t128 can time — and again after,
+    /// with the same words timed either way.
+    @Test(.enabled(if: KokoroTestSupport.haveCoreMLFiles))
+    func rendersALongPassageBeforeAndAfterT256Lands() async throws {
+        let engine = try await Self.engineWithRealResources()
+        try await engine.preload()
+        #expect(await engine.loadedDurationTokenLengths == [128])
+        let request = SynthesisRequest(spoken: Self.longSentence, voiceID: Self.voiceID("af_heart"))
+        let early = try await engine.synthesize(request)
+        #expect(early.wordTimings.count == Self.longSentence.split(separator: " ").count)
+        #expect(early.audio.duration > 15)
+
+        try await engine.awaitFullLoad()
+        #expect(await engine.loadedDurationTokenLengths == [128, 256])
+        let late = try await engine.synthesize(request)
+        #expect(late.wordTimings.count == early.wordTimings.count)
+        #expect(abs(late.audio.duration - early.audio.duration) < 3)
+    }
+
     static let longSentence = """
         The old librarian walked slowly between the tall wooden shelves, humming a quiet tune to \
         herself while she gathered the books that the students had left scattered across the reading \

@@ -18,8 +18,8 @@ public enum KokoroCoreMLResources: Sendable {
     /// byte-identical across buckets; only the compute plan differs.
     public static let buckets = [3, 7, 10, 15]
     /// The buckets the engine is ready with: the smallest and the largest, so a cold launch's first
-    /// sound waits for eight compute plans (both duration models and these two buckets' three stages
-    /// each) rather than fourteen. The streamed first piece of an utterance is about three seconds
+    /// sound waits for seven compute plans (the t128 duration model and these two buckets' three
+    /// stages each) rather than fourteen. The streamed first piece of an utterance is about three seconds
     /// and renders in the 3 s bucket; every other piece fits the 15 s one, so nothing rendered
     /// before the 7 s and 10 s buckets land is split or seamed any differently — those two only
     /// save time (`KokoroCoreMLEngine` swaps them in as they arrive).
@@ -28,6 +28,15 @@ public enum KokoroCoreMLResources: Sendable {
     public static var laterBuckets: [Int] { buckets.filter { !readyBuckets.contains($0) }.sorted() }
     /// Padded input-token lengths staged for the duration model.
     public static let durationTokenLengths = [128, 256]
+    /// The duration model the engine is ready with. t256, which times a piece longer than 126 ids,
+    /// is the one plan whose build *is* a first launch on the A13 — 512 s on 2026-09-11 against 60 s
+    /// for each of the other three long plans — so it lands after readiness, behind the 7 s and 10 s
+    /// buckets; until it does, `KokoroCoreMLEngine` cuts its pieces at what t128 can time.
+    public static let readyDurationTokenLengths = [128]
+    /// The duration models loaded after readiness, smallest first.
+    public static var laterDurationTokenLengths: [Int] {
+        durationTokenLengths.filter { !readyDurationTokenLengths.contains($0) }.sorted()
+    }
     /// The set a phone whose renders run on the GPU keeps on the CPU for the background: iOS
     /// refuses GPU work from a backgrounded app ("Insufficient Permission (to submit GPU work from
     /// background)", the iPhone 17 Pro, 2026-09-10 16:38, every utterance rendered after the phone

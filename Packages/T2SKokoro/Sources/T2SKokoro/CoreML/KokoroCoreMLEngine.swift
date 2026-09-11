@@ -127,6 +127,9 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     private var allStages: KokoroCoreMLModels.LoadedStages?
     /// The buckets `loaded.models` vends right now, ascending.
     private(set) var loadedBuckets: [Int] = []
+    /// The duration models `loaded.models` vends right now, ascending: t128 at readiness, t256 once
+    /// its plan is built (`loadLaterBuckets`). Pieces are cut at the largest minus the two frame ids.
+    private(set) var loadedDurationTokenLengths: [Int] = []
     /// The load of the buckets after the ready set, once it has started; `awaitFullLoad()` joins it.
     private var laterBucketsTask: Task<Void, Error>?
     /// Where a render is placed, as the app sees it (`setRenderPlacement`): in front, or not.
@@ -370,12 +373,14 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             // bucket (`KokoroCoreMLResources.readyBuckets`); the rest follow on their own task
             // (`loadLaterBuckets`), each swapping in a fuller provider as it lands, so a cold
             // launch's first sound waits for eight plans, not fourteen.
-            let loaded = Loaded(models: try KokoroCoreMLModels(stages: stages, buckets: KokoroCoreMLResources.readyBuckets),
+            let loaded = Loaded(models: try KokoroCoreMLModels(stages: stages, buckets: KokoroCoreMLResources.readyBuckets,
+                                                               durationTokenLengths: KokoroCoreMLResources.readyDurationTokenLengths),
                                 linearWeights: weights.linear_weights,
                                 linearBias: weights.linear_bias)
             self.loaded = loaded
             allStages = stages
             loadedBuckets = KokoroCoreMLResources.readyBuckets.sorted()
+            loadedDurationTokenLengths = KokoroCoreMLResources.readyDurationTokenLengths.sorted()
             // The models live in `loaded` now; the task must not keep a second reference to them.
             loadingStages = nil
             // The G2P's lexicons (two 3 MB JSON files, merged) and its fallback network are the other
@@ -410,7 +415,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         loadCount += 1
         mainLoadTally.withLock { $0 = KokoroLoadTally(label: "main set", total: KokoroCoreMLResources.stageNames().count) }
         let report = stageReporter(), admission = loadAdmission, computeUnits = options.computeUnits
-        let names = KokoroCoreMLResources.stageNames(buckets: KokoroCoreMLResources.readyBuckets)
+        let names = KokoroCoreMLResources.stageNames(buckets: KokoroCoreMLResources.readyBuckets,
+                                                     durationTokenLengths: KokoroCoreMLResources.readyDurationTokenLengths)
         let task = Task {
             try await KokoroCoreMLModels.loadStages(compiled, names: names, computeUnits: computeUnits,
                                                     admission: admission, onStageLoaded: report)
@@ -447,6 +453,23 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                     Self.timingLog.error("kokoro bucket \(bucket, privacy: .public) s failed to load: \(String(describing: error), privacy: .public)")
                 }
             }
+            // The t256 duration model last: the buckets cost seconds on the A13, this plan minutes,
+            // and until it lands a long piece is cut at what t128 can time.
+            for tokens in KokoroCoreMLResources.laterDurationTokenLengths {
+                try Task.checkCancellation()
+                let names = KokoroCoreMLResources.stageNames(buckets: [], durationTokenLengths: [tokens])
+                do {
+                    let stages = try await KokoroCoreMLModels.loadStages(
+                        compiled, names: names, computeUnits: computeUnits, admission: admission, onStageLoaded: report
+                    )
+                    guard let self else { return }
+                    try await self.install(durationTokenLength: tokens, stages: stages)
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    Self.timingLog.error("kokoro duration t\(tokens, privacy: .public) failed to load: \(String(describing: error), privacy: .public)")
+                }
+            }
         }
     }
 
@@ -456,7 +479,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         guard let loaded, let known = allStages else { return }
         let merged = known.merging(stages)
         let buckets = (loadedBuckets + [bucket]).sorted()
-        self.loaded = Loaded(models: try KokoroCoreMLModels(stages: merged, buckets: buckets),
+        self.loaded = Loaded(models: try KokoroCoreMLModels(stages: merged, buckets: buckets,
+                                                            durationTokenLengths: loadedDurationTokenLengths),
                              linearWeights: loaded.linearWeights, linearBias: loaded.linearBias)
         allStages = merged
         loadedBuckets = buckets
@@ -469,16 +493,35 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         })
     }
 
+    /// Swaps in a provider with one more duration model, `tokens` long, so pieces can be cut to it
+    /// from the next utterance on, and warms its first prediction behind the swap.
+    private func install(durationTokenLength tokens: Int, stages: KokoroCoreMLModels.LoadedStages) throws {
+        guard let loaded, let known = allStages else { return }
+        let merged = known.merging(stages)
+        let lengths = (loadedDurationTokenLengths + [tokens]).sorted()
+        self.loaded = Loaded(models: try KokoroCoreMLModels(stages: merged, buckets: loadedBuckets, durationTokenLengths: lengths),
+                             linearWeights: loaded.linearWeights, linearBias: loaded.linearBias)
+        allStages = merged
+        loadedDurationTokenLengths = lengths
+        Self.timing("kokoro duration t\(tokens) ready; pieces up to \(min(Self.maxPieceTokenCount, tokens - 2)) ids")
+        guard options.computeUnits != .cpu else { return }
+        let admission = loadAdmission
+        laterPredictorWarmUps.append(Task { [weak self] in
+            await admission?()
+            await self?.warmPredictors(tokens: [tokens], buckets: [])
+        })
+    }
+
     /// Warms every ready stage's first prediction, in the order the first sentences need them: the
-    /// t128 duration model and the 3 s bucket (a streamed head's first piece), then t256 (its
-    /// second piece), then the 15 s bucket — one step per turn of the actor, so a render that
-    /// arrives between steps runs before the next. Under the foreground gate, like the loads: this
+    /// t128 duration model and the 3 s bucket (a streamed head's first piece), then the 15 s bucket
+    /// (its second) — one step per turn of the actor, so a render that arrives between steps runs
+    /// before the next. t256 is warmed when it lands (`install(durationTokenLength:stages:)`). Under the foreground gate, like the loads: this
     /// is GPU work. GPU policies only: on the CPU a plan is ready the moment it loads.
     private func startPredictorWarmUp() {
         guard options.computeUnits != .cpu, predictorWarmUp == nil else { return }
         let admission = loadAdmission
         predictorWarmUp = Task { [weak self] in
-            let steps: [(tokens: [Int], buckets: [Int])] = [([128], [3]), ([256], []), ([], [15])]
+            let steps: [(tokens: [Int], buckets: [Int])] = [([128], [3]), ([], [15])]
             for step in steps {
                 if Task.isCancelled { return }
                 await admission?()
@@ -693,7 +736,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         let phonemes = prepared.phonemes
         let tokenization = (ids: prepared.ids, owners: prepared.owners)
 
-        let pieces = try Self.pieces(ids: tokenization.ids, owners: tokenization.owners, words: words)
+        let pieces = try Self.pieces(ids: tokenization.ids, owners: tokenization.owners, words: words,
+                                     cap: Self.pieceCap(for: loaded))
         let spread = prepared.spread
         var samples: [Float] = []
         var folds: [KokoroCoreMLTimingFold.Piece] = []
@@ -792,7 +836,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         let started = ContinuousClock().now
         let prepared = try await prepare(request)
         let pieces = try Self.pieces(ids: prepared.ids, owners: prepared.owners, words: prepared.words,
-                                     firstPieceCap: Self.streamingFirstPieceTokenCount)
+                                     cap: Self.pieceCap(for: prepared.loaded), firstPieceCap: Self.streamingFirstPieceTokenCount)
         let rate = PipelineConstants.sampleRate
         var folds: [KokoroCoreMLTimingFold.Piece] = []
         var emittedSamples = 0
@@ -1240,9 +1284,17 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// Internal rather than private so the cut can be tested on synthetic ids, on a machine with no
     /// model files: end to end this rule is only visible in an utterance long enough to need two
     /// pipeline calls, which is a minute of Core ML per run.
-    /// `firstPieceCap`, when given, caps the first piece only (a streamed head, Plan 14); every later
-    /// piece is cut at ``maxPieceTokenCount``.
-    static func pieces(ids: [Int32], owners: [Int], words: [MToken], firstPieceCap: Int? = nil) throws -> [Piece] {
+    /// `cap` is where a piece is cut: ``maxPieceTokenCount`` with every duration model loaded, what
+    /// t128 can time before t256 lands (``pieceCap(for:)``). `firstPieceCap`, when given, caps the
+    /// first piece only (a streamed head, Plan 14); every later piece is cut at `cap`.
+    /// The most ids a piece may carry for what `loaded` can time: the largest duration model's
+    /// padded length minus the two frame ids, never above ``maxPieceTokenCount``.
+    private static func pieceCap(for loaded: Loaded) -> Int {
+        min(maxPieceTokenCount, loaded.models.maxDurationTokenLength - 2)
+    }
+
+    static func pieces(ids: [Int32], owners: [Int], words: [MToken], cap: Int = maxPieceTokenCount,
+                       firstPieceCap: Int? = nil) throws -> [Piece] {
         let groups = Self.groups(ids: ids, owners: owners)
 
         var packed: [[Group]] = []
@@ -1255,9 +1307,9 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             }
             // The cap for the piece being packed: the first piece's own when one was given, the usual
             // one after — re-read on every cut, since a cut is what fills `packed`.
-            func cap() -> Int { packed.isEmpty ? (firstPieceCap ?? maxPieceTokenCount) : maxPieceTokenCount }
-            while currentCount + group.ids.count > cap(), !current.isEmpty {
-                let cutIndex = Self.bestCutIndex(in: current, cap: cap())
+            func capNow() -> Int { packed.isEmpty ? min(firstPieceCap ?? cap, cap) : cap }
+            while currentCount + group.ids.count > capNow(), !current.isEmpty {
+                let cutIndex = Self.bestCutIndex(in: current, cap: capNow())
                 packed.append(Array(current[0 ... cutIndex]))
                 current = Array(current[(cutIndex + 1)...])
                 currentCount = current.reduce(0) { $0 + $1.ids.count }

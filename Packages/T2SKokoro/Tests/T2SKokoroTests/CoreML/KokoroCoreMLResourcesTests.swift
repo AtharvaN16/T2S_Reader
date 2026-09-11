@@ -13,6 +13,25 @@ import Testing
         ])
     }
 
+    /// Readiness waits for seven plans, not eight: t256 — the plan that is a first launch on the A13
+    /// — comes after the 7 s and 10 s buckets, and the three sets together are the fourteen.
+    @Test func theReadySetLeavesT256ForAfterReadiness() {
+        let ready = KokoroCoreMLResources.stageNames(buckets: KokoroCoreMLResources.readyBuckets,
+                                                     durationTokenLengths: KokoroCoreMLResources.readyDurationTokenLengths)
+        #expect(Set(ready) == [
+            "kokoro_duration_t128", "kokoro_f0ntrain_t120", "kokoro_f0ntrain_t600",
+            "kokoro_decoder_pre_3s", "kokoro_decoder_pre_15s", "kokoro_decoder_har_post_3s", "kokoro_decoder_har_post_15s",
+        ])
+        #expect(KokoroCoreMLResources.laterDurationTokenLengths == [256])
+        let later = KokoroCoreMLResources.laterBuckets.flatMap {
+            KokoroCoreMLResources.stageNames(buckets: [$0], durationTokenLengths: [])
+        } + KokoroCoreMLResources.laterDurationTokenLengths.flatMap {
+            KokoroCoreMLResources.stageNames(buckets: [], durationTokenLengths: [$0])
+        }
+        #expect(Set(ready + later) == Set(KokoroCoreMLResources.stageNames()))
+        #expect(ready.count + later.count == 14)
+    }
+
     @Test func anEmptyDirectoryIsMissingItsFirstStage() throws {
         try withTemporaryDirectory { directory in
             #expect(KokoroCoreMLResources.locate(inDirectory: directory) == .failure(.missing("kokoro_duration_t128")))

@@ -48,6 +48,15 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// The pieces after it are cut at ``maxPieceTokenCount`` as usual.
     static let streamingFirstPieceTokenCount = 48
 
+    /// The most ids a piece rendered through the background set (``Options/backgroundComputeUnits``)
+    /// may carry: ``streamingFirstPieceTokenCount`` (48 ids ≈ 3 s for a streamed head) with margin
+    /// held back for slow speech, so the piece does not overflow the 3 s bucket
+    /// (``KokoroCoreMLResources/backgroundBuckets`` = `[3]`) it renders in. Without this, a piece cut
+    /// for the main set's 15 s bucket is rendered whole against the 3 s bucket first, overflows,
+    /// and is halved and rendered again — a full pipeline run thrown away for nothing — before the
+    /// audio comes back right (the review of 2026-09-11, §2.3(b), §3 R2).
+    static let backgroundPieceTokenCount = 36
+
     /// Misaki's marker for a word it could not transcribe. Passed to `EnglishG2P` explicitly so
     /// ``phonemeWalk(_:)`` provably reproduces the string `phonemize` returns.
     static let unknownPhoneme = "❓"
@@ -145,6 +154,11 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     private var backgroundLoadTask: Task<Void, Never>?
     /// The set the last piece rendered through, for the tests: "main" or "background".
     private(set) var lastRenderSet = "main"
+    /// How many pipeline calls have run to completion — one per `kokoro call:` timing line, whether
+    /// its audio was kept or thrown away by a `tooManyTokens`/`audioTruncated` retry. Internal, for
+    /// the test that proves ``backgroundPieceTokenCount`` leaves no call to discard (the review of
+    /// 2026-09-11, §5 item 2): a discarded call makes this exceed the utterance trace's piece count.
+    private(set) var renderCallCount = 0
     /// The first-prediction warm-up started at readiness, and one per later bucket as it lands.
     private var predictorWarmUp: Task<Void, Never>?
     private var laterPredictorWarmUps: [Task<Void, Never>] = []
@@ -647,13 +661,32 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     }
 
     /// `renderedPieces` through the set the placement chooses, rendering again where iOS allows it
-    /// when the GPU refused a call that began as the app left the foreground.
+    /// when the GPU refused a call that began as the app left the foreground. When the background
+    /// set is what `renderSet` returns, `piece` — cut for the main set's bucket — is re-cut at
+    /// ``backgroundPieceTokenCount`` first, so the 3 s bucket sees pieces sized for it instead of
+    /// a full-size call that overflows, is halved and thrown away (the review of 2026-09-11, §2.3(b),
+    /// §3 R2, §5 item 2). The re-cut's first sub-piece inherits `piece`'s own `cut` — the seam before
+    /// it — the same rule ``splitPiece(groups:at:isFinal:words:inheriting:)`` uses for an
+    /// overflow split; the sub-pieces after it already carry the right cut, computed the same way by
+    /// ``pieces(ids:owners:words:cap:firstPieceCap:)`` itself.
     private func placedPieces(_ piece: Piece, isFinal: Bool, words: [MToken], tokenizer: KokoroTokenizer, main: Loaded, spread: Float)
         async throws -> [(piece: Piece, result: KokoroPipelineResult, audio: [Float])] {
         let set = try await renderSet(main: main)
         lastRenderSet = set.models === main.models ? "main" : "background"
         do {
-            return try renderedPieces(piece, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: set, spread: spread)
+            guard set.models !== main.models else {
+                return try renderedPieces(piece, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: set, spread: spread)
+            }
+            var subPieces = try Self.pieces(ids: piece.ids, owners: piece.owners, words: words, cap: Self.backgroundPieceTokenCount)
+            if !subPieces.isEmpty { subPieces[0].cut = piece.cut }
+            var rendered: [(piece: Piece, result: KokoroPipelineResult, audio: [Float])] = []
+            for (index, subPiece) in subPieces.enumerated() {
+                rendered += try renderedPieces(
+                    subPiece, isFinal: isFinal && index == subPieces.count - 1, words: words, tokenizer: tokenizer,
+                    loaded: set, spread: spread
+                )
+            }
+            return rendered
         } catch KokoroCoreMLError.stageFailed(let reason) where set.models === main.models && renderPlacement?() == .background {
             Self.timing("kokoro call refused in the background; rendering again where it is allowed: \(reason.prefix(80))")
             let again = try await renderSet(main: main)
@@ -975,6 +1008,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         }
         let t = result.timings
         let rtf = result.audioDurationSeconds > 0 ? result.wallTimeSeconds / result.audioDurationSeconds : 0
+        renderCallCount += 1
         Self.timing("kokoro call: bucket \(result.bucketSeconds) s, audio \(Self.fixed(result.audioDurationSeconds, 2)) s, wall \(Self.fixed(result.wallTimeSeconds, 3)) s, RTF \(Self.fixed(rtf, 3)); duration \(Self.fixed(t.durationCoreML, 3)), f0 \(Self.fixed(t.f0ntrainCoreML, 3)), pre \(Self.fixed(t.decoderPre, 3)), hnsf \(Self.fixed(t.hnsfSwift, 3)) (overlap \(Self.fixed(t.decoderPreHnsfOverlap, 3))), gen \(Self.fixed(t.generatorCoreML, 3)), trim \(Self.fixed(t.trim, 3)); set \(lastRenderSet)")
 
         // `selectBucket` falls back to the largest bucket rather than failing, and stage 9 then trims

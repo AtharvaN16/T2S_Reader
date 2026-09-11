@@ -113,10 +113,16 @@ extension KokoroCoreMLLoadTests {
         let buckets = OSAllocatedUnfairLockBox<[Int]>([])
         await engine.setUtteranceTrace { trace in buckets.value = trace.pieces.map(\.bucketSeconds) }
         placement.value = .background
+        let callsBefore = await engine.renderCallCount
         let behind = try await engine.synthesize(.init(spoken: KokoroCoreMLEngineTests.longSentence, voiceID: Self.voiceID("af_heart")))
+        let callsAfter = await engine.renderCallCount
         #expect(await engine.lastRenderSet == "background")
         #expect(buckets.value.allSatisfy { $0 == 3 } && buckets.value.count >= 4)
         #expect(behind.audio.duration > 15)
+        // Every piece is cut for the 3 s bucket before it renders (`backgroundPieceTokenCount`,
+        // the review of 2026-09-11, §5 item 2), so no pipeline call should overflow its bucket and
+        // be thrown away: one call per kept piece, not more.
+        #expect(callsAfter - callsBefore == buckets.value.count)
 
         placement.value = .foreground
         _ = try await engine.synthesize(.init(spoken: "The quick brown fox jumps over the lazy dog.", voiceID: Self.voiceID("af_heart")))

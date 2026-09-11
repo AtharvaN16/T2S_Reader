@@ -214,10 +214,21 @@ struct RootPager: View {
             env.foregroundGate.set(foreground: phase == .active)
             env.coordinator.isForeground = phase == .active
             if phase == .active { Task { await env.syncModel.refreshAvailability(); await env.syncModel.syncIfEnabled() } }
+            // Placement (which set a Kokoro render lands on) reads its own flag, set here from the
+            // scene phase directly rather than from the gate above: `.inactive` — Control Center, a
+            // banner, the app switcher — must close the gate (a plan build must not be caught
+            // running once the app is actually backgrounded) but must *not* place a streamed head
+            // in the background, or it parks on the gate or renders in discarded 3 s pieces for
+            // every such interruption (2026-09-11 GPU-path review §5 item 3 — R4).
+            let phaseKind: ScenePhaseKind = phase == .active ? .active : phase == .background ? .background : .inactive
+            env.kokoro.noteScene(isBackground: ScenePlacement.placesInBackground(phase: phaseKind))
             #if KOKORO_ENGINE
             // Into the phone's timing log too, so a lock can be read against the render lines
-            // around it rather than against a time noted by hand.
-            KokoroCoreMLEngine.timing("kokoro scene \(phase == .active ? "active" : phase == .background ? "background" : "inactive"); foreground gate \(phase == .active ? "open" : "closed")")
+            // around it rather than against a time noted by hand. The playhead says how far into
+            // the buffer the lock landed, to read against the window it then drains
+            // (`playAheadWindowSeconds`); no public rendered-horizon figure exists yet on
+            // `PlayerModel`/`PlaybackCoordinator` to add beside it (review §5 item 1 gives one).
+            KokoroCoreMLEngine.timing("kokoro scene \(phase == .active ? "active" : phase == .background ? "background" : "inactive"); foreground gate \(phase == .active ? "open" : "closed"); playhead \(Int(env.player.elapsed))s of \(Int(env.player.total))s")
             #endif
         }
         // The fill's edges in the phone's timing log, beside the engine's utterance lines.

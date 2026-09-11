@@ -5,6 +5,23 @@ first, moved here verbatim on 2026-09-11 so the hand-off itself stays the state 
 entry was written for whoever picked up the coding next, at that moment; later entries supersede earlier
 ones where they disagree._
 
+## Resume here (2026-09-11, afternoon) — the GPU-path review's four improvements, on `gpu-path-improvements` → `dev`
+
+After the iCloud merge the owner's standing instruction was "pick any area from the research". The
+GPU-path review's §5 items 1–3 and R6 were bounded and testable here, so: three implementer subagents in
+parallel worktrees (A: `CPUBudget`/`RenderScheduler` report the pacing and each background render's CPU
+seconds to the timing log; B: the engine cuts a piece for the 3 s background set before rendering and a
+failed background-set load retries; C: placement follows the scene phase, not the gate), a review per task,
+fix rounds (A: report off-foreground only; C: the flag had no explicit type so the memberwise init lacked it,
+and it defaulted to foreground — a background Prepare launch would have rendered on the GPU main set; B:
+sub-piece phoneme counts from the parent's own tokens, then a round that turned out to be a diagnosis: the
+streaming-timing test fails identically on `dev` once `awaitFullLoad()` really waits — that bug fixed, the
+0.18 s seam left as a product decision in HANDOFF). Two lessons that cost hours: an agent worktree has no
+model files, so the model-backed engine tests are skipped silently; and the full `KokoroCoreMLLoadTests`
+suite needs ~9 GB of *real* free disk for the plan compiler — `df` counts purgeable space. Verified on the
+tip: 519 root tests, the pure engine suite (30), `aBackgroundPlacementRendersThroughTheBackgroundSet` alone,
+`scripts/build-app.sh`, the signed device build. Fast-forwarded to `dev` and pushed.
+
 ## Resume here (2026-09-11, morning) — iCloud sync built overnight on `icloud-sync`, merged to `dev`
 
 The owner asked for the "Sync positions and bookmarks" row to become real and went to sleep. Spec

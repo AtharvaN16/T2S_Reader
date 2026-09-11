@@ -489,23 +489,49 @@ import Foundation
 import Testing
 @testable import T2SCore
 
-/// `PositionResolver` is the only route between a runtime `Playhead` and a persisted `Position`
-/// (spec §3.2), and bookmarks, resume positions and the sync offer all cross it. If the two
-/// directions disagree the app silently lands somewhere other than where it saved.
+/// `PositionResolver` is the only route between a runtime `Playhead` (an utterance index) and a
+/// persisted `Position` (an href plus offsets), and bookmarks, resume positions and the sync offer
+/// all cross it. If the two directions disagree the app silently lands somewhere other than where
+/// it saved.
 @Suite struct PositionRoundTripTests {
-    @Test func everyUtteranceSurvivesPositionThenResolve() throws {
-        let timeline = makeTimeline([
-            [makeUtterance("First sentence."), makeUtterance("Second one is longer than the first.")],
-            [makeUtterance("Chapter two opens here.", href: "ch2.xhtml"),
-             makeUtterance("And closes here.", href: "ch2.xhtml")],
-            [makeUtterance("A third chapter with one line.", href: "ch3.xhtml")],
+    /// Utterances laid out the way `Segmenter` lays them out: each one's `charOffset` is its own
+    /// UTF-16 offset within its resource (`Segmenter.swift:43`), so no two in a resource share a
+    /// start. The fixture helper defaults `charOffset` to 0 for every utterance, which no real
+    /// document does — a timeline built that way cannot round-trip and would test nothing.
+    private func realisticTimeline() -> Timeline {
+        func chapter(_ texts: [String], href: String) -> [Utterance] {
+            var offset = 0
+            return texts.map { text in
+                let utterance = makeUtterance(text, href: href, charOffset: offset)
+                offset += text.utf16.count + 1                  // the whitespace the segmenter trims
+                return utterance
+            }
+        }
+        return makeTimeline([
+            chapter(["First sentence.", "Second one is longer than the first."], href: "ch1.xhtml"),
+            chapter(["Chapter two opens here.", "And closes here."], href: "ch2.xhtml"),
+            chapter(["A third chapter with one line."], href: "ch3.xhtml"),
         ])
+    }
+
+    @Test func everyUtteranceSurvivesPositionThenResolve() throws {
+        let timeline = realisticTimeline()
         for index in 0..<timeline.utteranceCount {
             let playhead = Playhead(utteranceIndex: index)
             let position = PositionResolver.position(for: playhead, in: timeline)
             let back = PositionResolver.resolve(position, in: timeline)
             #expect(back.utteranceIndex == index, "utterance \(index) round-tripped to \(back.utteranceIndex)")
         }
+    }
+
+    /// The round-trip's documented limit. Two utterances claiming the same `charOffset` in one
+    /// resource are indistinguishable by `Position` alone, and `resolve` returns the earlier —
+    /// the fallback of spec §1.4, "never fails". The segmenter never produces this, so it is
+    /// pinned here as a decision on record rather than left to be rediscovered as a bug.
+    @Test func utterancesSharingACharOffsetCollapseToTheFirst() throws {
+        let timeline = makeTimeline([[makeUtterance("First."), makeUtterance("Second.")]])
+        let position = PositionResolver.position(for: Playhead(utteranceIndex: 1), in: timeline)
+        #expect(PositionResolver.resolve(position, in: timeline).utteranceIndex == 0)
     }
 }
 ```
@@ -518,7 +544,7 @@ Run: `swift test --filter PositionRoundTripTests`
 
 **If it passes:** the resolver is clear, and the old button fault was purely the playhead-derived toggle described in the spec's §5. Nothing to fix. Go to Step 4.
 
-**If it fails:** stop. Do not continue to Task 5. Report which utterance index round-tripped wrong, and the `Position` it produced. A lossy round-trip is a bug in resume positions and in the sync offer, not only in bookmarks, and it needs its own fix and its own review before this feature is built on top of it.
+**If it fails:** stop. Do not continue to Task 5, and do not adjust the test to make it pass. Report which utterance index round-tripped wrong, what it came back as, and the `Position` that was produced. With realistic offsets in the fixture a failure here is a genuine bug in `PositionResolver` — which carries resume positions and the sync offer, not only bookmarks — and it needs its own fix and its own review before this feature is built on top of it.
 
 - [ ] **Step 4: Commit**
 

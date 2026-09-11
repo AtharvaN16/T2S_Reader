@@ -267,6 +267,17 @@ struct KokoroComposition {
             revision: KokoroCoreMLResources.modelRevision
         )
         let status = KokoroStatusModel(.checking, warmedInstall: KokoroWarmUpRecord.isWarmed(identity: warmUpIdentity, defaults: defaults))
+        // One generation of compute plans per install: iOS keys them on the install and never
+        // removes the last install's, and the 11 Pro filled up under 4.36 GB of them (2026-09-11).
+        // Here, before anything can load a stage, a cache built for another identity — or before
+        // this record existed — goes; the warm-up below then builds this install's.
+        if let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first,
+           let bundleIdentifier = Bundle.main.bundleIdentifier,
+           let removed = KokoroPlanCache.prepare(for: warmUpIdentity, cachesDirectory: caches,
+                                                 bundleIdentifier: bundleIdentifier, defaults: defaults) {
+            log.notice("Kokoro plan cache wiped for a new install identity: \(removed / 1_048_576, privacy: .public) MB")
+            KokoroCoreMLEngine.timing("kokoro plan cache wiped for a new install identity: \(removed / 1_048_576) MB")
+        }
 
         // Whether the resolver may still route a document to Core ML. It starts as the presence
         // verdict — the files are there — and the warm-up may close it: a bundle whose stages will

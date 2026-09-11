@@ -147,9 +147,10 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     private var laterPredictorWarmUps: [Task<Void, Never>] = []
     /// What the warm-up has run so far, e.g. `duration_t128`, `bucket_3s`. Internal for the tests.
     private(set) var warmedPredictors: [String] = []
-    /// Stages loaded, counted across both phases for the warm-up's veil. A lock rather than actor
-    /// state because the loader reports from its task group, off the actor.
-    private let stagesLoaded = OSAllocatedUnfairLock(initialState: 0)
+    /// Stages loaded, tallied across both phases for the warm-up's veil and for the one line that
+    /// says what the load cost (`KokoroLoadTally`). A lock rather than actor state because the
+    /// loader reports from its task group, off the actor.
+    private let mainLoadTally = OSAllocatedUnfairLock(initialState: KokoroLoadTally(label: "main set", total: 0))
     /// `kokoro.timing`: every stage load, every pipeline call and every utterance, with its seconds —
     /// the measurement the performance audit's §8 asks for, read with
     /// `log stream --predicate 'subsystem == "com.t2s.reader" AND category == "kokoro.timing"'`.
@@ -169,15 +170,16 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     private static let consoleLost = OSAllocatedUnfairLock(initialState: false)
     static var mirrorsTimingToConsole: Bool { wantsTimingConsole && !consoleLost.withLock { $0 } }
 
-    /// The last launch's timing lines, on the phone, under the app's caches directory
-    /// (`Library/Caches/kokoro-timing.log`, truncated by each launch): what any run leaves behind
+    /// The timing lines, on the phone, under the app's caches directory
+    /// (`Library/Caches/kokoro-timing.log`; every launch appends under its own header, and a file
+    /// past `KokoroTimingLog.capBytes` is first moved aside to `.1`): what any run leaves behind
     /// for `devicectl device copy from --domain-type appDataContainer`, whoever launched it and
-    /// however it ended. -1 when it could not be opened.
+    /// however it ended — the first launch's stage loads included, after the second. -1 when it
+    /// could not be opened.
     private static let timingFileDescriptor: Int32 = {
         #if os(iOS)
         guard let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return -1 }
-        return open(caches.appending(path: "kokoro-timing.log").path(percentEncoded: false),
-                    O_WRONLY | O_CREAT | O_TRUNC | O_APPEND, 0o644)
+        return KokoroTimingLog.open(path: caches.appending(path: "kokoro-timing.log").path(percentEncoded: false))
         #else
         return -1
         #endif
@@ -327,13 +329,17 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         try await laterBucketsTask?.value
     }
 
-    /// The stage count for the veil and the log, one closure for both load phases.
+    /// The stage count for the veil and the log, one closure for both load phases; the last stage
+    /// of the set brings the summary line with it.
     private func stageReporter() -> @Sendable (String, Double) -> Void {
-        let counter = stagesLoaded, report = loadProgress
-        let total = KokoroCoreMLResources.stageNames().count
+        let tally = mainLoadTally, report = loadProgress
         return { name, seconds in
-            let loaded = counter.withLock { $0 += 1; return $0 }
+            let (loaded, total, summary) = tally.withLock { tally in
+                let summary = tally.record(name, seconds: seconds)
+                return (tally.loaded, tally.total, summary)
+            }
             Self.timing("kokoro stage \(name) loaded in \(Self.fixed(seconds, 2)) s (\(loaded)/\(total))")
+            if let summary { Self.timing(summary) }
             report?(loaded, total)
         }
     }
@@ -402,7 +408,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     private func loadedStages(_ compiled: [String: URL]) async throws -> KokoroCoreMLModels.LoadedStages {
         if let loadingStages { return try await loadingStages.value }
         loadCount += 1
-        stagesLoaded.withLock { $0 = 0 }
+        mainLoadTally.withLock { $0 = KokoroLoadTally(label: "main set", total: KokoroCoreMLResources.stageNames().count) }
         let report = stageReporter(), admission = loadAdmission, computeUnits = options.computeUnits
         let names = KokoroCoreMLResources.stageNames(buckets: KokoroCoreMLResources.readyBuckets)
         let task = Task {
@@ -508,8 +514,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         let admission = loadAdmission
         let names = KokoroCoreMLResources.stageNames(buckets: KokoroCoreMLResources.backgroundBuckets,
                                                      durationTokenLengths: KokoroCoreMLResources.backgroundDurationTokenLengths)
-        let total = names.count
-        let counter = OSAllocatedUnfairLock(initialState: 0)
+        let tally = OSAllocatedUnfairLock(initialState: KokoroLoadTally(label: "background set on \(units.runtimeName)", total: names.count))
         backgroundLoadTask = Task(priority: .utility) { [weak self] in
             await self?.awaitPredictorWarmUp()
             do {
@@ -520,8 +525,12 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                         await Self.waitWhileThermallySerious()
                     },
                     onStageLoaded: { name, seconds in
-                        let loaded = counter.withLock { $0 += 1; return $0 }
+                        let (loaded, total, summary) = tally.withLock { tally in
+                            let summary = tally.record(name, seconds: seconds)
+                            return (tally.loaded, tally.total, summary)
+                        }
                         Self.timing("kokoro background stage \(name) loaded in \(Self.fixed(seconds, 2)) s (\(loaded)/\(total)) on \(units.runtimeName)")
+                        if let summary { Self.timing(summary) }
                     }
                 )
                 guard let self else { return }

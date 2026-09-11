@@ -141,8 +141,16 @@ the rest of the branch:
   for the foreground until that set exists; a GPU call refused as the app left the foreground is
   rendered again where it is allowed; the live player renders ten minutes ahead while in front.
 
-**Still unmeasured:** the background CPU set's own compile time and RTF on the 17 Pro (its first
-build was under way as this was written), and the A14–A18 phones, on neither policy.
+- **The background CPU set, measured (16:48–16:50):** loaded after the predictor warm-up, one stage
+  at a time — the t128 duration model's CPU plan built in 134 s alone (5 min this morning under
+  four concurrent builds), f0ntrain t120 in 0.18 s, decoder-pre 3 s in 0.44 s and the 3 s
+  generator in 0.55 s, those three from the morning's plan cache; the set was ready 2¼ min after
+  readiness, the whole one-time setup on this phone about 5½ min after a fresh install. A play on
+  an unplayed chapter then filled the ten-minute window in ten seconds on the GPU (27 calls, RTF
+  0.04–0.06, every bucket, no failures).
+
+**Still unmeasured:** the background set's own RTF on the 17 Pro (a locked phone reaches it only
+once the ten-minute window drains), and the A14–A18 phones, on neither policy.
 
 **Why the 11 Pro and the 17 Pro differ:** not the silicon. The 17 Pro's launches were being killed
 mid-warm-up and restarted from a cold plan cache, then it played at whatever the last kill left; a

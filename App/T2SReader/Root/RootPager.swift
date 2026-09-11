@@ -208,6 +208,13 @@ struct RootPager: View {
         .onChange(of: scenePhase, initial: true) { _, phase in
             env.foregroundGate.set(foreground: phase == .active)
         }
+        // The screen stays awake while the one-time setup runs: the download, the compile and the
+        // warm-up's plan builds all wait on that gate, so an auto-lock part-way through would stop
+        // them until the next unlock — and a first launch is minutes of them (Harsh's 17 Pro,
+        // 2026-09-10). Off again the moment the voice is ready, or was never going to be.
+        .onChange(of: env.kokoroStatus.status.isWarming || env.kokoroStatus.isBuildingBackgroundSet, initial: true) { _, warming in
+            UIApplication.shared.isIdleTimerDisabled = warming
+        }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:

@@ -82,16 +82,24 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         /// Which compute units the stages load for. `.cpu` is the measured policy and what the app
         /// ships; the rest are a developer's switch for one session (``KokoroComputeUnits``).
         public var computeUnits: KokoroComputeUnits
+        /// The compute units of a second, smaller set — ``KokoroCoreMLResources/backgroundBuckets``
+        /// and ``KokoroCoreMLResources/backgroundDurationTokenLengths`` — that renders whatever the
+        /// app's placement (``KokoroCoreMLEngine/setRenderPlacement(_:)``) says is in the background.
+        /// Nil renders everything with `computeUnits`. The app sets `.cpu` here on a phone whose main
+        /// set is on the GPU, which iOS forbids to a backgrounded app; the set loads after the main
+        /// one, one stage at a time and only while the phone is cool.
+        public var backgroundComputeUnits: KokoroComputeUnits?
 
         public init(punctuationSuppression: PunctuationSuppression = .allPunctuation, crossfadePieces: Bool = false,
                     removeTailClick: Bool = false, trimSeams: Bool = false, f0Spread: Float = 1,
-                    computeUnits: KokoroComputeUnits = .cpu) {
+                    computeUnits: KokoroComputeUnits = .cpu, backgroundComputeUnits: KokoroComputeUnits? = nil) {
             self.punctuationSuppression = punctuationSuppression
             self.crossfadePieces = crossfadePieces
             self.removeTailClick = removeTailClick
             self.trimSeams = trimSeams
             self.f0Spread = f0Spread
             self.computeUnits = computeUnits
+            self.backgroundComputeUnits = backgroundComputeUnits
         }
 
         /// What the app ships with — not this initializer's own defaults, which are upstream's. See
@@ -121,6 +129,24 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     private(set) var loadedBuckets: [Int] = []
     /// The load of the buckets after the ready set, once it has started; `awaitFullLoad()` joins it.
     private var laterBucketsTask: Task<Void, Error>?
+    /// Where a render is placed, as the app sees it (`setRenderPlacement`): in front, or not.
+    public enum RenderPlacement: Sendable, Hashable {
+        case foreground
+        case background
+    }
+
+    /// Asked before every piece; nil places everything in the foreground.
+    private var renderPlacement: (@Sendable () -> RenderPlacement)?
+    /// The background set (`Options.backgroundComputeUnits`), once loaded, and its load.
+    private var backgroundLoaded: Loaded?
+    private var backgroundLoadTask: Task<Void, Never>?
+    /// The set the last piece rendered through, for the tests: "main" or "background".
+    private(set) var lastRenderSet = "main"
+    /// The first-prediction warm-up started at readiness, and one per later bucket as it lands.
+    private var predictorWarmUp: Task<Void, Never>?
+    private var laterPredictorWarmUps: [Task<Void, Never>] = []
+    /// What the warm-up has run so far, e.g. `duration_t128`, `bucket_3s`. Internal for the tests.
+    private(set) var warmedPredictors: [String] = []
     /// Stages loaded, counted across both phases for the warm-up's veil. A lock rather than actor
     /// state because the loader reports from its task group, off the actor.
     private let stagesLoaded = OSAllocatedUnfairLock(initialState: 0)
@@ -128,6 +154,62 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// the measurement the performance audit's §8 asks for, read with
     /// `log stream --predicate 'subsystem == "com.t2s.reader" AND category == "kokoro.timing"'`.
     static let timingLog = Logger(subsystem: "com.t2s.reader", category: "kokoro.timing")
+    /// Whether the timing lines are also written to stderr: launched with `-kokoro.timingConsole YES`
+    /// (a user default, so the argument domain sets it). `devicectl device process launch --console`
+    /// carries a phone's stderr but not its `os_log`, and the phone refuses a network syslog
+    /// connection (2026-09-10), so this is how a launch from the Mac is watched. Read once, and
+    /// SIGPIPE ignored with it: that console goes away when the phone locks, and a write to it must
+    /// end the mirror, not the process.
+    static let wantsTimingConsole: Bool = {
+        let on = UserDefaults.standard.bool(forKey: "kokoro.timingConsole")
+        if on { signal(SIGPIPE, SIG_IGN) }
+        return on
+    }()
+    /// Set by the first write that fails, after which the console is never written again.
+    private static let consoleLost = OSAllocatedUnfairLock(initialState: false)
+    static var mirrorsTimingToConsole: Bool { wantsTimingConsole && !consoleLost.withLock { $0 } }
+
+    /// The last launch's timing lines, on the phone, under the app's caches directory
+    /// (`Library/Caches/kokoro-timing.log`, truncated by each launch): what any run leaves behind
+    /// for `devicectl device copy from --domain-type appDataContainer`, whoever launched it and
+    /// however it ended. -1 when it could not be opened.
+    private static let timingFileDescriptor: Int32 = {
+        #if os(iOS)
+        guard let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return -1 }
+        return open(caches.appending(path: "kokoro-timing.log").path(percentEncoded: false),
+                    O_WRONLY | O_CREAT | O_TRUNC | O_APPEND, 0o644)
+        #else
+        return -1
+        #endif
+    }()
+
+    /// One timing line: to `kokoro.timing`, to the launch's file, and to stderr while
+    /// ``mirrorsTimingToConsole``. POSIX writes, never `FileHandle`: on 2026-09-10 the first render
+    /// after the phone locked — the console `devicectl` had attached gone with it — died in
+    /// `FileHandle.write(_:)`, which raises an Objective-C exception no Swift catch can take.
+    public static func timing(_ line: String) {
+        timingLog.notice("\(line, privacy: .public)")
+        let stamped = Array((timestamp() + " " + line + "\n").utf8)
+        stamped.withUnsafeBufferPointer { buffer in
+            if timingFileDescriptor >= 0 { _ = Darwin.write(timingFileDescriptor, buffer.baseAddress, buffer.count) }
+            if mirrorsTimingToConsole, Darwin.write(STDERR_FILENO, buffer.baseAddress, buffer.count) < 0 {
+                consoleLost.withLock { $0 = true }
+            }
+        }
+    }
+
+    /// Wall-clock "HH:mm:ss.SSS", so a pulled file reads against the phone's own crash and cache times.
+    private static func timestamp() -> String {
+        var now = timeval()
+        gettimeofday(&now, nil)
+        var seconds = time_t(now.tv_sec)
+        var parts = tm()
+        localtime_r(&seconds, &parts)
+        return String(format: "%02d:%02d:%02d.%03d", parts.tm_hour, parts.tm_min, parts.tm_sec, Int(now.tv_usec) / 1000)
+    }
+
+    /// `x` with `digits` decimals, for the timing lines.
+    public static func fixed(_ x: Double, _ digits: Int) -> String { String(format: "%.\(digits)f", x) }
     /// How many times this engine has begun loading its stages. Internal for one test: "loaded once"
     /// and "compiled and loaded twice" differ only in this number and several minutes of Core ML.
     private(set) var loadCount = 0
@@ -155,6 +237,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     public init(resources: KokoroCoreMLResources.Located, options: Options = .default) {
         self.resources = resources
         self.options = options
+        // Before any MLX array exists in the process: the default it resolves once is the CPU.
+        _ = Self.mlxPinnedToCPU
     }
 
     /// Changes the post-processing for every render from here on. Internal, for the audio probe:
@@ -218,6 +302,25 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         loadAdmission = admit
     }
 
+    /// Installs (or removes) the placement every piece asks before it renders. With a background
+    /// set (`Options.backgroundComputeUnits`) a piece placed in the background renders through it;
+    /// while that set is still loading, the piece waits on the load admission — the app's foreground
+    /// gate — rather than render where iOS will refuse the work.
+    public func setRenderPlacement(_ placement: (@Sendable () -> RenderPlacement)?) {
+        renderPlacement = placement
+    }
+
+    /// Waits for the background set, if the options ask for one and its load has begun, and says
+    /// whether the engine can now render in the background: the set is there, or none was asked for.
+    @discardableResult
+    public func awaitBackgroundSet() async -> Bool {
+        await backgroundLoadTask?.value
+        return options.backgroundComputeUnits == nil || backgroundLoaded != nil
+    }
+
+    /// Whether the background set is loaded.
+    public var hasBackgroundSet: Bool { backgroundLoaded != nil }
+
     /// Waits for the buckets after the ready set, if their load has begun. `preload()` returns at
     /// readiness; a probe that wants to render in every bucket calls this after it.
     public func awaitFullLoad() async throws {
@@ -230,7 +333,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         let total = KokoroCoreMLResources.stageNames().count
         return { name, seconds in
             let loaded = counter.withLock { $0 += 1; return $0 }
-            Self.timingLog.notice("kokoro stage \(name, privacy: .public) loaded in \(seconds, format: .fixed(precision: 2), privacy: .public) s (\(loaded, privacy: .public)/\(total, privacy: .public))")
+            Self.timing("kokoro stage \(name) loaded in \(Self.fixed(seconds, 2)) s (\(loaded)/\(total))")
             report?(loaded, total)
         }
     }
@@ -276,8 +379,10 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             let g2pClock = ContinuousClock()
             let g2pStarted = g2pClock.now
             _ = g2p(british: false)
-            Self.timingLog.notice("kokoro g2p built in \(Self.seconds(g2pClock.now - g2pStarted), format: .fixed(precision: 2), privacy: .public) s")
+            Self.timing("kokoro g2p built in \(Self.fixed(Self.seconds(g2pClock.now - g2pStarted), 2)) s")
             loadLaterBuckets(compiled: compiled)
+            startPredictorWarmUp()
+            startBackgroundSetLoad(compiled: compiled)
             return loaded
         } catch is CancellationError {
             // A render cancelled while the stages were compiling is not an engine failure. Wrapping
@@ -339,7 +444,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         }
     }
 
-    /// Swaps in a provider over every bucket loaded so far, `bucket` now among them.
+    /// Swaps in a provider over every bucket loaded so far, `bucket` now among them, and warms the
+    /// new bucket's first prediction behind the swap.
     private func install(bucket: Int, stages: KokoroCoreMLModels.LoadedStages) throws {
         guard let loaded, let known = allStages else { return }
         let merged = known.merging(stages)
@@ -348,7 +454,137 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
                              linearWeights: loaded.linearWeights, linearBias: loaded.linearBias)
         allStages = merged
         loadedBuckets = buckets
-        Self.timingLog.notice("kokoro bucket \(bucket, privacy: .public) s ready; buckets \(buckets.map(String.init).joined(separator: ","), privacy: .public)")
+        Self.timing("kokoro bucket \(bucket) s ready; buckets \(buckets.map(String.init).joined(separator: ","))")
+        guard options.computeUnits != .cpu else { return }
+        let admission = loadAdmission
+        laterPredictorWarmUps.append(Task { [weak self] in
+            await admission?()
+            await self?.warmPredictors(tokens: [], buckets: [bucket])
+        })
+    }
+
+    /// Warms every ready stage's first prediction, in the order the first sentences need them: the
+    /// t128 duration model and the 3 s bucket (a streamed head's first piece), then t256 (its
+    /// second piece), then the 15 s bucket — one step per turn of the actor, so a render that
+    /// arrives between steps runs before the next. Under the foreground gate, like the loads: this
+    /// is GPU work. GPU policies only: on the CPU a plan is ready the moment it loads.
+    private func startPredictorWarmUp() {
+        guard options.computeUnits != .cpu, predictorWarmUp == nil else { return }
+        let admission = loadAdmission
+        predictorWarmUp = Task { [weak self] in
+            let steps: [(tokens: [Int], buckets: [Int])] = [([128], [3]), ([256], []), ([], [15])]
+            for step in steps {
+                if Task.isCancelled { return }
+                await admission?()
+                guard let self else { return }
+                await self.warmPredictors(tokens: step.tokens, buckets: step.buckets)
+            }
+        }
+    }
+
+    private func warmPredictors(tokens: [Int], buckets: [Int]) {
+        guard let loaded else { return }
+        let clock = ContinuousClock(), started = clock.now
+        let what = tokens.map { "duration_t\($0)" } + buckets.map { "bucket_\($0)s" }
+        do {
+            try warmKokoroStages(modelProvider: loaded.models, tokenLengths: tokens, buckets: buckets)
+        } catch {
+            Self.timing("kokoro predictor warm-up failed (\(what.joined(separator: ", "))): \(String(describing: error))")
+            return
+        }
+        warmedPredictors += what
+        Self.timing("kokoro predictors warmed: \(what.joined(separator: ", ")) in \(Self.fixed(Self.seconds(clock.now - started), 2)) s")
+    }
+
+    /// Loads the background set (`Options.backgroundComputeUnits`) after the main set and its
+    /// predictor warm-up: one stage at a time, under the load admission, at utility priority, and
+    /// only while the phone is not thermally serious — on the iPhone 17 Pro these are CPU plans the
+    /// compiler takes minutes over, and they are built for a listener who is reading in front while
+    /// the GPU renders. Every stage lands in Core ML's plan cache, so a launch that is backgrounded
+    /// or killed mid-way resumes where it stopped. A failure is logged and the set stays absent: a
+    /// background render then waits for the foreground rather than fail.
+    private func startBackgroundSetLoad(compiled: [String: URL]) {
+        guard let units = options.backgroundComputeUnits, backgroundLoadTask == nil, backgroundLoaded == nil else { return }
+        let admission = loadAdmission
+        let names = KokoroCoreMLResources.stageNames(buckets: KokoroCoreMLResources.backgroundBuckets,
+                                                     durationTokenLengths: KokoroCoreMLResources.backgroundDurationTokenLengths)
+        let total = names.count
+        let counter = OSAllocatedUnfairLock(initialState: 0)
+        backgroundLoadTask = Task(priority: .utility) { [weak self] in
+            await self?.awaitPredictorWarmUp()
+            do {
+                let stages = try await KokoroCoreMLModels.loadStages(
+                    compiled, names: names, computeUnits: units, window: 1,
+                    admission: {
+                        await admission?()
+                        await Self.waitWhileThermallySerious()
+                    },
+                    onStageLoaded: { name, seconds in
+                        let loaded = counter.withLock { $0 += 1; return $0 }
+                        Self.timing("kokoro background stage \(name) loaded in \(Self.fixed(seconds, 2)) s (\(loaded)/\(total)) on \(units.runtimeName)")
+                    }
+                )
+                guard let self else { return }
+                try await self.installBackgroundSet(stages)
+            } catch is CancellationError {
+                return
+            } catch {
+                Self.timing("kokoro background set failed to load: \(String(describing: error))")
+            }
+        }
+    }
+
+    private func installBackgroundSet(_ stages: KokoroCoreMLModels.LoadedStages) throws {
+        guard let loaded else { return }
+        backgroundLoaded = Loaded(
+            models: try KokoroCoreMLModels(stages: stages, buckets: KokoroCoreMLResources.backgroundBuckets,
+                                           durationTokenLengths: KokoroCoreMLResources.backgroundDurationTokenLengths),
+            linearWeights: loaded.linearWeights, linearBias: loaded.linearBias
+        )
+        Self.timing("kokoro background set ready: buckets \(KokoroCoreMLResources.backgroundBuckets.map(String.init).joined(separator: ",")), duration t\(KokoroCoreMLResources.backgroundDurationTokenLengths.map(String.init).joined(separator: ","))")
+    }
+
+    /// Returns once the phone's thermal state is below serious, polling every 30 s while it is not.
+    static func waitWhileThermallySerious() async {
+        while [.serious, .critical].contains(ProcessInfo.processInfo.thermalState) {
+            if Task.isCancelled { return }
+            try? await Task.sleep(for: .seconds(30))
+        }
+    }
+
+    /// The set the next piece renders through. In front, the main set. In the background, the
+    /// background set when there is one; until there is, the load admission — the app's foreground
+    /// gate — is awaited, and the main set is used once the app is back in front.
+    private func renderSet(main: Loaded) async -> Loaded {
+        guard options.backgroundComputeUnits != nil, let placement = renderPlacement else { return main }
+        while placement() == .background {
+            if let backgroundLoaded { return backgroundLoaded }
+            guard let admission = loadAdmission else { return main }
+            await admission()
+        }
+        return main
+    }
+
+    /// `renderedPieces` through the set the placement chooses, rendering again where iOS allows it
+    /// when the GPU refused a call that began as the app left the foreground.
+    private func placedPieces(_ piece: Piece, isFinal: Bool, words: [MToken], tokenizer: KokoroTokenizer, main: Loaded, spread: Float)
+        async throws -> [(piece: Piece, result: KokoroPipelineResult, audio: [Float])] {
+        let set = await renderSet(main: main)
+        lastRenderSet = set.models === main.models ? "main" : "background"
+        do {
+            return try renderedPieces(piece, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: set, spread: spread)
+        } catch KokoroCoreMLError.stageFailed(let reason) where set.models === main.models && renderPlacement?() == .background {
+            Self.timing("kokoro call refused in the background; rendering again where it is allowed: \(reason.prefix(80))")
+            let again = await renderSet(main: main)
+            lastRenderSet = again.models === main.models ? "main" : "background"
+            return try renderedPieces(piece, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: again, spread: spread)
+        }
+    }
+
+    /// Waits for the predictor warm-up that readiness started and for every later bucket's. Tests.
+    public func awaitPredictorWarmUp() async {
+        await predictorWarmUp?.value
+        for task in laterPredictorWarmUps { await task.value }
     }
 
     static func seconds(_ duration: Duration) -> Double {
@@ -436,7 +672,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     private static func logUtterance(_ path: String, g2pSeconds: Double, pieces: Int, audioSeconds: Double, since started: ContinuousClock.Instant) {
         let total = seconds(ContinuousClock().now - started)
         let rtf = audioSeconds > 0 ? total / audioSeconds : 0
-        timingLog.notice("kokoro utterance (\(path, privacy: .public)): g2p \(g2pSeconds, format: .fixed(precision: 3), privacy: .public) s, \(pieces, privacy: .public) pieces, audio \(audioSeconds, format: .fixed(precision: 2), privacy: .public) s, total \(total, format: .fixed(precision: 3), privacy: .public) s, RTF \(rtf, format: .fixed(precision: 3), privacy: .public)")
+        Self.timing("kokoro utterance (\(path)): g2p \(Self.fixed(g2pSeconds, 3)) s, \(pieces) pieces, audio \(Self.fixed(audioSeconds, 2)) s, total \(Self.fixed(total, 3)) s, RTF \(Self.fixed(rtf, 3))")
     }
 
     public func synthesize(_ request: SynthesisRequest) async throws -> T2SCore.SynthesisResult {
@@ -459,8 +695,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             // rather than losing the sentence to 200 ms of silence (spec §6; Task 3,
             // `spikes/findings/2026-09-05-coreml-audio-quality.md`), so one piece from `pieces` may
             // become several rendered pieces here.
-            let rendered = try renderedPieces(
-                piece, isFinal: index == pieces.count - 1, words: words, tokenizer: tokenizer, loaded: loaded, spread: spread
+            let rendered = try await placedPieces(
+                piece, isFinal: index == pieces.count - 1, words: words, tokenizer: tokenizer, main: loaded, spread: spread
             )
             for (subPiece, result, cleaned) in rendered {
                 var previous = samples
@@ -585,8 +821,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
 
         for (index, piece) in pieces.enumerated() {
             try Task.checkCancellation()
-            pending += try renderedPieces(
-                piece, isFinal: index == pieces.count - 1, words: prepared.words, tokenizer: prepared.tokenizer, loaded: prepared.loaded,
+            pending += try await placedPieces(
+                piece, isFinal: index == pieces.count - 1, words: prepared.words, tokenizer: prepared.tokenizer, main: prepared.loaded,
                 spread: prepared.spread
             )
             // A sub-piece is final once the cut after it is known — as soon as the next sub-piece
@@ -627,7 +863,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// the padded ids, and the mask's zeroes tell it where the real tokens end.
     private func render(_ piece: Piece, tokenizer: KokoroTokenizer, loaded: Loaded, spread: Float) throws -> KokoroPipelineResult {
         let framed = [KokoroTokenizer.boundary] + piece.ids + [KokoroTokenizer.boundary]
-        let padding = KokoroCoreMLModels.maxDurationTokenLength - framed.count
+        let padding = loaded.models.maxDurationTokenLength - framed.count
         // ``maxPieceTokenCount`` (176 + 2 frame tokens) is chosen to fit `maxDurationTokenLength`
         // (256, the largest staged duration model). The two constants are coupled by hand, so if one
         // ever moves without the other, refuse the piece rather than build a negative-length pad.
@@ -652,11 +888,12 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             )
         } catch {
             // The pipeline's own error and never the request text: this string reaches logs.
+            Self.timing("kokoro call failed: \(String(describing: error))")
             throw KokoroCoreMLError.stageFailed(String(describing: error))
         }
         let t = result.timings
         let rtf = result.audioDurationSeconds > 0 ? result.wallTimeSeconds / result.audioDurationSeconds : 0
-        Self.timingLog.notice("kokoro call: bucket \(result.bucketSeconds, privacy: .public) s, audio \(result.audioDurationSeconds, format: .fixed(precision: 2), privacy: .public) s, wall \(result.wallTimeSeconds, format: .fixed(precision: 3), privacy: .public) s, RTF \(rtf, format: .fixed(precision: 3), privacy: .public); duration \(t.durationCoreML, format: .fixed(precision: 3), privacy: .public), f0 \(t.f0ntrainCoreML, format: .fixed(precision: 3), privacy: .public), pre \(t.decoderPre, format: .fixed(precision: 3), privacy: .public), hnsf \(t.hnsfSwift, format: .fixed(precision: 3), privacy: .public) (overlap \(t.decoderPreHnsfOverlap, format: .fixed(precision: 3), privacy: .public)), gen \(t.generatorCoreML, format: .fixed(precision: 3), privacy: .public), trim \(t.trim, format: .fixed(precision: 3), privacy: .public)")
+        Self.timing("kokoro call: bucket \(result.bucketSeconds) s, audio \(Self.fixed(result.audioDurationSeconds, 2)) s, wall \(Self.fixed(result.wallTimeSeconds, 3)) s, RTF \(Self.fixed(rtf, 3)); duration \(Self.fixed(t.durationCoreML, 3)), f0 \(Self.fixed(t.f0ntrainCoreML, 3)), pre \(Self.fixed(t.decoderPre, 3)), hnsf \(Self.fixed(t.hnsfSwift, 3)) (overlap \(Self.fixed(t.decoderPreHnsfOverlap, 3))), gen \(Self.fixed(t.generatorCoreML, 3)), trim \(Self.fixed(t.trim, 3))")
 
         // `selectBucket` falls back to the largest bucket rather than failing, and stage 9 then trims
         // to `min(waveform.count, targetLen)` — so a piece that predicts more speech than its bucket
@@ -696,9 +933,17 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         _ piece: Piece, isFinal: Bool, words: [MToken], tokenizer: KokoroTokenizer, loaded: Loaded, spread: Float
     ) throws -> [(piece: Piece, result: KokoroPipelineResult)] {
         do {
+            // A set whose largest duration model is smaller than the piece — the background set's
+            // t128 against a piece cut for t256 — splits it the way an overflowing bucket does.
+            guard piece.ids.count + 2 <= loaded.models.maxDurationTokenLength else {
+                throw KokoroCoreMLError.tooManyTokens(piece.ids.count + 2)
+            }
             return [(piece, try render(piece, tokenizer: tokenizer, loaded: loaded, spread: spread))]
         } catch let error as KokoroCoreMLError {
-            guard case .audioTruncated = error else { throw error }
+            switch error {
+            case .audioTruncated, .tooManyTokens: break
+            default: throw error
+            }
             let groups = Self.groups(ids: piece.ids, owners: piece.owners)
             guard groups.count > 1 else { throw error }
             let cutIndex = Self.middleCutIndex(in: groups)
@@ -715,18 +960,22 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// that makes the first attempt throw ``KokoroCoreMLError/audioTruncated`` and asserts the
     /// halves that follow, without a real Core ML stage or any actor-isolation ceremony.
     static func renderSplittingOnOverflow(
-        _ piece: Piece, isFinal: Bool, words: [MToken], render renderOne: RenderPiece
+        _ piece: Piece, isFinal: Bool, words: [MToken], maxTokens: Int = .max, render renderOne: RenderPiece
     ) throws -> [(piece: Piece, result: KokoroPipelineResult)] {
         do {
+            guard piece.ids.count + 2 <= maxTokens else { throw KokoroCoreMLError.tooManyTokens(piece.ids.count + 2) }
             return [(piece, try renderOne(piece))]
         } catch let error as KokoroCoreMLError {
-            guard case .audioTruncated = error else { throw error }
+            switch error {
+            case .audioTruncated, .tooManyTokens: break
+            default: throw error
+            }
             let groups = Self.groups(ids: piece.ids, owners: piece.owners)
             guard groups.count > 1 else { throw error }
             let cutIndex = Self.middleCutIndex(in: groups)
             let (first, second) = Self.splitPiece(groups: groups, at: cutIndex, isFinal: isFinal, words: words, inheriting: piece.cut)
-            return try renderSplittingOnOverflow(first, isFinal: false, words: words, render: renderOne)
-                + (try renderSplittingOnOverflow(second, isFinal: isFinal, words: words, render: renderOne))
+            return try renderSplittingOnOverflow(first, isFinal: false, words: words, maxTokens: maxTokens, render: renderOne)
+                + (try renderSplittingOnOverflow(second, isFinal: isFinal, words: words, maxTokens: maxTokens, render: renderOne))
         }
     }
 
@@ -783,6 +1032,17 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// and nothing else. Evaluated once, before the first G2P exists.
     private static let mlxCompilationDisabled: Void = MLX.compile(enable: false)
 
+    /// MLX's global default device set to the CPU, before anything of MLX runs. The task-local pin
+    /// below was not enough on the iPhone 17 Pro: on 2026-09-10 16:16, with the phone locked
+    /// mid-book, MLX's completion handler threw on `com.Metal.CompletionQueueDispatch` —
+    /// "Insufficient Permission (to submit GPU work from background)" — so the fallback network had
+    /// been running on the GPU under the pin, and iOS forbids GPU work from a backgrounded app. The
+    /// MLX Kokoro route, closed and unmeasured, loses its GPU with this; nothing that ships does.
+    private static let mlxPinnedToCPU: Void = {
+        MLX.compile(enable: false)
+        MLX.Device.setDefault(device: .cpu)
+    }()
+
     /// The G2P for a language, built once and kept.
     ///
     /// MisakiSwift's out-of-lexicon fallback is a BART network on MLX, whose GEMMs are exactly what a
@@ -792,7 +1052,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// one in the app, where pinning the process to the CPU would cripple it (RTF 15).
     private func g2p(british: Bool) -> EnglishG2P {
         if let cached = british ? britishG2P : americanG2P { return cached }
-        _ = Self.mlxCompilationDisabled
+        _ = Self.mlxPinnedToCPU
         let g2p = MLX.Device.withDefaultDevice(.cpu) { EnglishG2P(british: british, unk: Self.unknownPhoneme) }
         if british { britishG2P = g2p } else { americanG2P = g2p }
         return g2p

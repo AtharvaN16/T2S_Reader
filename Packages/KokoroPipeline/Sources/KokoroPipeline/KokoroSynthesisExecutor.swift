@@ -577,7 +577,42 @@ private func warmModels(
     modelProvider: KokoroModelProvider
 ) throws {
     _ = try durationModel.prediction(from: durationInput)
+    try warmBucketStages(probe: probe, modelProvider: modelProvider)
+}
 
+/// Runs each listed duration model and each listed bucket's three stages once, on zero inputs, so
+/// their first real prediction pays no specialization. Vendored addition (t2s_reader, 2026-09-10):
+/// on the GPU, Core ML finishes specializing a stage at its first prediction — 4–5 s for the t128
+/// duration model and 14–15 s for t256 on an iPhone 17 Pro, on every launch and whatever the
+/// load-time hint — and the app would rather spend that just after its stages load than on the
+/// first sentence a reader is waiting for. A token length or bucket the provider lacks is skipped.
+public func warmKokoroStages(modelProvider: KokoroModelProvider, tokenLengths: [Int], buckets: [Int]) throws {
+    let choices = modelProvider.durationModelChoices()
+    for tokens in tokenLengths {
+        guard let choice = choices.first(where: { $0.tokenLength == tokens }) else { continue }
+        // Real ids throughout — the boundary token — under a full mask: `buildDurationInput` copies
+        // into a buffer it does not zero, and an embedding lookup must never read what was there.
+        let input = try buildDurationInput(
+            inputIds: Array(repeating: KokoroVocabulary.bosEosTokenId, count: tokens),
+            attentionMask: Array(repeating: 1, count: tokens),
+            refS: Array(repeating: 0, count: PipelineConstants.voiceEmbeddingDim),
+            speed: 1,
+            choice: choice
+        )
+        _ = try modelProvider.durationModel(choice: choice).prediction(from: input.provider)
+    }
+    let available = modelProvider.availableBucketSeconds()
+    for bucketSec in buckets where available.contains(bucketSec) {
+        guard let tFrames = PipelineConstants.tFramesForBucket[bucketSec] else { continue }
+        let bucketSamples = bucketSec * PipelineConstants.sampleRate
+        let fullF0Len = Int(round(Double(bucketSamples) / Double(HarmonicConstants.upsampleScale)))
+        try warmBucketStages(probe: DurationProbe(bucketSec: bucketSec, tFrames: tFrames, fullF0Len: fullF0Len),
+                             modelProvider: modelProvider)
+    }
+}
+
+/// The bucket half of ``warmModels``: F0Ntrain, DecoderPre and the generator once each on zeros.
+private func warmBucketStages(probe: DurationProbe, modelProvider: KokoroModelProvider) throws {
     let f0nModel = try modelProvider.f0ntrainModel(tFrames: probe.tFrames)
     let warmEnArr = try makeZeroArray3D(
         channels: PipelineConstants.hiddenDim,

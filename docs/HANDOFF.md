@@ -293,10 +293,85 @@ ships CPU-only until the phone says otherwise. This Mac's probe (`scripts/comput
 The Neural Engine policies (`cpuAndNeuralEngine`, `all`) were stopped: every generator stage
 spends five to nine minutes failing `ANECCompile() FAILED` before Core ML falls back — the audit's
 §3.7 finding, reproduced. So `all` would lengthen the first launch by half an hour and win nothing.
-**The one measurement left:** the 17 Pro with `-kokoro.computeUnits cpuAndGPU` against the
-default; if the GPU wins there by more than noise, wire `.cpuAndGPU` for Apple GPU family 7 and
-up in `KokoroComposition.make` (the family check is `KokoroAvailability.Probe`'s) and keep the A13
-on CPU, where the GPU policy measured twice as slow.
+**The phone answered (2026-09-10, 15:23–16:03, Harsh's 17 Pro, iOS 26.6.1).** His first run on
+the branch — the download and the on-device compile done by 15:23 — then sat "stuck at half" for
+thirty minutes with the phone hot and lagging. The phone's own Core ML plan cache
+(`Library/Caches/<bundle>/com.apple.e5rt.e5bundlecache/23G83/`, listed with
+`devicectl device info files --domain-type appDataContainer`) held seven finished plans and one
+that never finished: under `.cpu` the A19 Pro's plan compiler took under a minute for both
+f0ntrain and decoder-pre stages, 2–5 min for the 3 s generator, 5 min for duration t128, 10 min
+(across a relaunch) for t256, and never finished the 15 s generator — two attempts, one per
+launch, twenty minutes and counting. Same iOS build as the owner's 11 Pro, where the A13 builds
+all eight of its plans in 206 s. Relaunched from the Mac with `-kokoro.computeUnits cpuAndGPU`:
+
+| stage | CPU policy (from the cache) | GPU policy (console) |
+|---|---|---|
+| f0ntrain t120 / t600, decoder-pre 3 s | under a minute | 0.4–0.9 s |
+| decoder-pre 15 s | under a minute | 34 s |
+| duration t128 | ~5 min | 34 s |
+| duration t256 | ~10 min | 158 s |
+| generator 3 s | 2–5 min | 157 s |
+| generator 15 s | **never** | 125 s |
+| ready (8 of 14) | never | **159 s** from a cold cache |
+| 7 s and 10 s buckets, after readiness | — | 0.2–1.3 s each (the Metal kernels are already compiled) |
+
+So `KokoroComputeUnits.defaultPolicy(machine:)` decides by chip: `iPhone18,*` (the A19
+generation) and later get `.cpuAndGPU`; the A13 keeps `.cpu`; the A14–A18 phones between them,
+measured on neither, stay on the measured CPU path (upstream's mixed-unit runs on an iPhone 12
+Pro were slower than the A13 on CPU). `kokoro.computeUnits` still overrides for a session. Two
+more things from that run: the screen now stays awake while the one-time setup runs
+(`isIdleTimerDisabled`; the gate would otherwise stop the builds at the first auto-lock), and the
+timing lines mirror to stderr under `-kokoro.timingConsole YES`, because `devicectl`'s console
+carries stderr but not `os_log` and the phone refuses a network syslog connection.
+
+**Watching the phone from the Mac** (the phone paired and on the network; `log collect --device`
+needs root, `idevicesyslog -n` is refused):
+
+```bash
+xcrun devicectl device install app --device <CoreDevice-UUID> .build/DerivedData-App/Build/Products/Release-iphoneos/T2SReaderKokoro.app
+xcrun devicectl device process launch --console --terminate-existing --device <CoreDevice-UUID> \
+  com.antarlabs.t2sreader -- -kokoro.timingConsole YES        # add -kokoro.computeUnits cpu|cpuAndGPU|all to try a policy
+```
+
+The `--` matters: without it `devicectl` reads `-kokoro…` as its own `-t` flag. The console drops
+when the phone locks; the plan cache and the timing lines survive.
+
+**Then the afternoon's runs (16:00–17:00), each from the phone's own log** — the numbers that shaped
+the rest of the branch:
+
+- **Steady state on the GPU:** RTF 0.042–0.07 across the 7, 10 and 15 s buckets (calls of 0.27 s
+  for 6 s of audio, 0.49 s for 9 s), against 0.18 on the 11 Pro's CPU.
+- **A relaunch of the same build loads all fourteen stages in 1.3 s**; a reinstall pays the cold
+  build again (the plan cache is keyed to the install), so every app update is a ~3 min first launch.
+- **The first prediction on each stage costs once per launch, cached or not:** 4–5 s for the t128
+  duration model, 14–15 s for t256, 1–2 s per generator; the load-time `fastPrediction` hint changed
+  nothing. The engine now warms every stage on zeros right after readiness, t128 and the 3 s bucket
+  first (4.9 s), t256 next (14.6 s), the buckets in under a second each — the whole set 20 s after
+  readiness, with renders interleaving between steps.
+- **iOS refuses GPU work from a backgrounded app.** Two crashes and then the real thing: at 16:07 the
+  timing mirror's `FileHandle` write raised when the console pipe died with the lock (POSIX writes
+  now, and a per-launch `Library/Caches/kokoro-timing.log`); at 16:16 MisakiSwift's fallback network
+  crashed in MLX's Metal completion handler with "Insufficient Permission (to submit GPU work from
+  background)" — the task-local CPU pin had not held, so MLX's global default device is the CPU
+  now; and at 16:38, with the phone locked, every Core ML render failed with the same permission
+  error as a plain `stageFailed` — the Reader's "utterance 233: stageFailed" banner, and 200 ms of
+  silence per utterance.
+- **So the phone renders in front on the GPU and behind on a small CPU set** (spec §2 decision 12):
+  the 3 s bucket and t128, the four CPU plans this chip's compiler does build, loaded after the main
+  set one stage at a time and only while the phone is cool; a piece placed in the background waits
+  for the foreground until that set exists; a GPU call refused as the app left the foreground is
+  rendered again where it is allowed; the live player renders ten minutes ahead while in front.
+
+- **The background CPU set, measured (16:48–16:50):** loaded after the predictor warm-up, one stage
+  at a time — the t128 duration model's CPU plan built in 134 s alone (5 min this morning under
+  four concurrent builds), f0ntrain t120 in 0.18 s, decoder-pre 3 s in 0.44 s and the 3 s
+  generator in 0.55 s, those three from the morning's plan cache; the set was ready 2¼ min after
+  readiness, the whole one-time setup on this phone about 5½ min after a fresh install. A play on
+  an unplayed chapter then filled the ten-minute window in ten seconds on the GPU (27 calls, RTF
+  0.04–0.06, every bucket, no failures).
+
+**Still unmeasured:** the background set's own RTF on the 17 Pro (a locked phone reaches it only
+once the ten-minute window drains), and the A14–A18 phones, on neither policy.
 
 **Why the 11 Pro and the 17 Pro differ:** not the silicon. The 17 Pro's launches were being killed
 mid-warm-up and restarted from a cold plan cache, then it played at whatever the last kill left; a

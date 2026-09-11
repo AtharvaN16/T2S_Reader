@@ -1,0 +1,160 @@
+{"app_name":"T2SReaderKokoro","timestamp":"2026-09-10 11:58:43.00 -0400","app_version":"1.0","slice_uuid":"3920DD54-2D8C-3A59-8B23-4716139FDED9","build_version":"1","bundleID":"com.t2s.reader","duration_ms":"48275","share_with_app_devs":0,"is_first_party":0,"bug_type":"206","os_version":"iPhone OS 26.6.1 (23G83)","roots_installed":0,"name":"T2SReaderKokoro","incident_id":"B9E3B8BA-0697-4D29-B7E2-AF1BABF197FA"}
+Date/Time:        2026-09-10 11:57:52.582 -0400
+End time:         2026-09-10 11:58:40.858 -0400
+OS Version:       iPhone OS 26.6.1 (Build 23G83)
+Architecture:     arm64e
+Report Version:   72
+Incident Identifier: B9E3B8BA-0697-4D29-B7E2-AF1BABF197FA
+
+Data Source:      Microstackshots
+Shared Cache:     3991E421-9291-3812-ACDB-65BD728577C2 slid base address 0x18aabc000, slide 0xaabc000
+
+Command:          T2SReaderKokoro
+Path:             /private/var/containers/Bundle/Application/84C81A6F-B90C-4D2C-B870-2FD7B87AEC4C/T2SReaderKokoro.app/T2SReaderKokoro
+Identifier:       com.t2s.reader
+Version:          1.0 (1)
+Is First Party:   No
+Beta Identifier:  8E99FA60-5086-480A-8C9A-CF7B7F0490A7
+Resource Coalition: 7935
+Architecture:     arm64
+PID:              45584
+
+Event:            cpu usage
+Action taken:     Process killed
+CPU:              48 seconds cpu time over 48 seconds (99% cpu average), exceeding limit of 80% cpu over 60 seconds
+CPU limit:        48s
+Limit duration:   60s
+CPU used:         48s
+CPU duration:     48s
+Duration:         48.28s
+Duration Sampled: 43.56s (event starts 2.93s before samples, event ends 1.79s after samples)
+Steps:            13 (10 gigacycles/step, 3 samples lost)
+
+Hardware model:   iPhone12,3
+Active cpus:      6
+Memory size:      3.68 GB
+HW page size:     16384
+VM page size:     16384
+
+Models:           UNKNOWN
+
+OS Cryptex File Extents: 10634
+
+Heaviest stack for the target process:
+  13  ??? (libsystem_pthread.dylib + 2240) [0x1ed94e8c0]
+  13  ??? (libsystem_pthread.dylib + 4980) [0x1ed94f374]
+  13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 99464) [0x102ae0488]
+  13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 97168) [0x102adfb90]
+  13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 251352) [0x102b055d8]
+  13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 122060) [0x102ae5ccc]
+  13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 17732) [0x102acc544]
+  13  ??? (CoreML + 5027704) [0x1a05ab778]
+  13  ??? (CoreML + 9528) [0x1a00e2538]
+  13  ??? (CoreML + 16904) [0x1a00e4208]
+  13  ??? (CoreML + 17536) [0x1a00e4480]
+  13  ??? (CoreML + 18128) [0x1a00e46d0]
+  13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 85468) [0x102adcddc]
+  13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 122060) [0x102ae5ccc]
+  13  ??? (CoreML + 18432) [0x1a00e4800]
+  13  ??? (CoreML + 18688) [0x1a00e4900]
+  13  ??? (CoreML + 18944) [0x1a00e4a00]
+  13  ??? (CoreML + 19464) [0x1a00e4c08]
+  13  ??? (CoreML + 34892) [0x1a00e884c]
+  13  ??? (CoreML + 43248) [0x1a00ea8f0]
+  13  ??? (CoreML + 46312) [0x1a00eb4e8]
+  13  ??? (CoreML + 48304) [0x1a00ebcb0]
+  13  ??? (CoreML + 5017604) [0x1a05a9004]
+  13  ??? (CoreML + 5015552) [0x1a05a8800]
+  13  ??? (CoreML + 5541136) [0x1a0628d10]
+  13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 85468) [0x102adcddc]
+  13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 122060) [0x102ae5ccc]
+  13  ??? (CoreML + 5541344) [0x1a0628de0]
+  13  ??? (CoreML + 5541508) [0x1a0628e84]
+  13  ??? (CoreML + 3965872) [0x1a04a83b0]
+  13  ??? (Espresso + 1602988) [0x19f41b5ac]
+  13  ??? (Espresso + 866104) [0x19f367738]
+  13  ??? (Espresso + 1118736) [0x19f3a5210]
+  13  ??? (Espresso + 1692996) [0x19f431544]
+  13  ??? (Espresso + 529616) [0x19f3154d0]
+  13  ??? (Espresso + 1996064) [0x19f47b520]
+  13  ??? (Espresso + 3606780) [0x19f6048fc]
+  13  ??? (Espresso + 3879444) [0x19f647214]
+  13  ??? (Espresso + 2688696) [0x19f5246b8]
+  13  ??? (Espresso + 3722708) [0x19f620dd4]
+  13  ??? (Espresso + 3725840) [0x19f621a10]
+  13  ??? (Espresso + 3727260) [0x19f621f9c]
+  5   ??? (Espresso + 3985980) [0x19f66123c]
+
+
+Powerstats for:   T2SReaderKokoro [45584]
+UUID:             3920DD54-2D8C-3A59-8B23-4716139FDED9
+Path:             /private/var/containers/Bundle/Application/84C81A6F-B90C-4D2C-B870-2FD7B87AEC4C/T2SReaderKokoro.app/T2SReaderKokoro
+Identifier:       com.t2s.reader
+Version:          1.0 (1)
+Is First Party:   No
+Beta Identifier:  8E99FA60-5086-480A-8C9A-CF7B7F0490A7
+Resource Coalition: 13 samples 7935
+Architecture:     arm64
+Footprint:        214.67 MB -> 251.97 MB (+37.30 MB)
+Pageins:          1244 pages
+Start time:       2026-09-10 11:57:55.513 -0400
+End time:         2026-09-10 11:58:39.072 -0400
+Num samples:      13 (100%)
+Energy:           36.60 mWh
+Num threads:      1
+Primary state:    13 samples Non-Frontmost App, Non-Suppressed, User mode, Effective Thread QoS Default, Requested Thread QoS User Initiated, Override Thread QoS Unspecified, p-core
+User Activity:    0 samples Idle, 13 samples Active
+Power Source:     0 samples on Battery, 13 samples on AC
+  13  ??? (libsystem_pthread.dylib + 2240) [0x1ed94e8c0]
+    13  ??? (libsystem_pthread.dylib + 4980) [0x1ed94f374]
+      13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 99464) [0x102ae0488]
+        13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 97168) [0x102adfb90]
+          13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 251352) [0x102b055d8]
+            13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 122060) [0x102ae5ccc]
+              13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 17732) [0x102acc544]
+                13  ??? (CoreML + 5027704) [0x1a05ab778]
+                  13  ??? (CoreML + 9528) [0x1a00e2538]
+                    13  ??? (CoreML + 16904) [0x1a00e4208]
+                      13  ??? (CoreML + 17536) [0x1a00e4480]
+                        13  ??? (CoreML + 18128) [0x1a00e46d0]
+                          13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 85468) [0x102adcddc]
+                            13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 122060) [0x102ae5ccc]
+                              13  ??? (CoreML + 18432) [0x1a00e4800]
+                                13  ??? (CoreML + 18688) [0x1a00e4900]
+                                  13  ??? (CoreML + 18944) [0x1a00e4a00]
+                                    13  ??? (CoreML + 19464) [0x1a00e4c08]
+                                      13  ??? (CoreML + 34892) [0x1a00e884c]
+                                        13  ??? (CoreML + 43248) [0x1a00ea8f0]
+                                          13  ??? (CoreML + 46312) [0x1a00eb4e8]
+                                            13  ??? (CoreML + 48304) [0x1a00ebcb0]
+                                              13  ??? (CoreML + 5017604) [0x1a05a9004]
+                                                13  ??? (CoreML + 5015552) [0x1a05a8800]
+                                                  13  ??? (CoreML + 5541136) [0x1a0628d10]
+                                                    13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 85468) [0x102adcddc]
+                                                      13  ??? (<051353ED-0742-3896-91C0-794653837A30> + 122060) [0x102ae5ccc]
+                                                        13  ??? (CoreML + 5541344) [0x1a0628de0]
+                                                          13  ??? (CoreML + 5541508) [0x1a0628e84]
+                                                            13  ??? (CoreML + 3965872) [0x1a04a83b0]
+                                                              13  ??? (Espresso + 1602988) [0x19f41b5ac]
+                                                                13  ??? (Espresso + 866104) [0x19f367738]
+                                                                  13  ??? (Espresso + 1118736) [0x19f3a5210]
+                                                                    13  ??? (Espresso + 1692996) [0x19f431544]
+                                                                      13  ??? (Espresso + 529616) [0x19f3154d0]
+                                                                        13  ??? (Espresso + 1996064) [0x19f47b520]
+                                                                          13  ??? (Espresso + 3606780) [0x19f6048fc]
+                                                                            13  ??? (Espresso + 3879444) [0x19f647214]
+                                                                              13  ??? (Espresso + 2688696) [0x19f5246b8]
+                                                                                13  ??? (Espresso + 3722708) [0x19f620dd4]
+                                                                                  13  ??? (Espresso + 3725840) [0x19f621a10]
+                                                                                    13  ??? (Espresso + 3727260) [0x19f621f9c]
+                                                                                      5   ??? (Espresso + 3985980) [0x19f66123c]
+                                                                                      4   ??? (Espresso + 3986076) [0x19f66129c]
+                                                                                      2   ??? (Espresso + 3986068) [0x19f661294]
+                                                                                      2   ??? (Espresso + 3986032) [0x19f661270]
+
+  Binary Images:
+           0x100730000 -                ???  com.t2s.reader 1.0 (1)  <3920DD54-2D8C-3A59-8B23-4716139FDED9>  /private/var/containers/Bundle/Application/84C81A6F-B90C-4D2C-B870-2FD7B87AEC4C/T2SReaderKokoro.app/T2SReaderKokoro
+           0x102ac8000 -                ???  ???                     <051353ED-0742-3896-91C0-794653837A30>
+           0x19f294000 -        0x1a00dfc1f  Espresso                <66D285C4-5344-3A33-B591-C5EFD2373F34>  /System/Library/PrivateFrameworks/Espresso.framework/Espresso
+           0x1a00e0000 -        0x1a0902bdf  CoreML                  <981DCC5B-CC1D-3AEC-A8D1-508938A4FE39>  /System/Library/Frameworks/CoreML.framework/CoreML
+           0x1ed94e000 -        0x1ed95a4ef  libsystem_pthread.dylib <34B44744-BC64-386E-AB90-EEE86B23AC46>  /usr/lib/system/libsystem_pthread.dylib

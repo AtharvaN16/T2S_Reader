@@ -28,6 +28,13 @@ public enum KokoroCoreMLResources: Sendable {
     public static var laterBuckets: [Int] { buckets.filter { !readyBuckets.contains($0) }.sorted() }
     /// Padded input-token lengths staged for the duration model.
     public static let durationTokenLengths = [128, 256]
+    /// The set a phone whose renders run on the GPU keeps on the CPU for the background: iOS
+    /// refuses GPU work from a backgrounded app ("Insufficient Permission (to submit GPU work from
+    /// background)", the iPhone 17 Pro, 2026-09-10 16:38, every utterance rendered after the phone
+    /// locked), and on that chip the CPU's plan compiler builds these four plans in minutes and the
+    /// 15 s generator's never. Three-second pieces for the background, then: more seams, no silence.
+    public static let backgroundBuckets = [3]
+    public static let backgroundDurationTokenLengths = [128]
 
     /// A directory (or bundle) that holds every staged model, every voice and both runtime JSON
     /// files, with existence already checked.

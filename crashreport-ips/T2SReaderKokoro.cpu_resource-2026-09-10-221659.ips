@@ -1,0 +1,180 @@
+{"app_name":"T2SReaderKokoro","timestamp":"2026-09-10 22:16:59.00 -0400","app_version":"1.0","slice_uuid":"75CD5047-F11E-30E4-8A21-370E005167ED","build_version":"1","bundleID":"com.t2s.reader.harsh","duration_ms":"90440","share_with_app_devs":0,"is_first_party":0,"bug_type":"202","os_version":"iPhone OS 26.6.1 (23G83)","roots_installed":0,"name":"T2SReaderKokoro","incident_id":"D642558A-0EFC-4AED-AC75-B1A82576FCBF"}
+Date/Time:        2026-09-10 22:15:24.284 -0400
+End time:         2026-09-10 22:16:54.723 -0400
+OS Version:       iPhone OS 26.6.1 (Build 23G83)
+Architecture:     arm64e
+Report Version:   72
+Incident Identifier: D642558A-0EFC-4AED-AC75-B1A82576FCBF
+
+Data Source:      Microstackshots
+Shared Cache:     3991E421-9291-3812-ACDB-65BD728577C2 slid base address 0x18aabc000, slide 0xaabc000
+
+Command:          T2SReaderKokoro
+Path:             /private/var/containers/Bundle/Application/4D0B1852-B105-475B-961D-26A418CB3B6B/T2SReaderKokoro.app/T2SReaderKokoro
+Identifier:       com.t2s.reader.harsh
+Version:          1.0 (1)
+Is First Party:   No
+Beta Identifier:  B60A3283-21D1-408F-90B0-5DC4A32506F8
+Resource Coalition: "com.t2s.reader.harsh"(10324)
+Architecture:     arm64
+Parent:           UNKNOWN [1]
+PID:              50560
+
+Event:            cpu usage
+Action taken:     none
+CPU:              90 seconds cpu time over 90 seconds (100% cpu average), exceeding limit of 50% cpu over 180 seconds
+CPU limit:        90s
+Limit duration:   180s
+CPU used:         90s
+CPU duration:     90s
+Duration:         90.44s
+Duration Sampled: 85.45s (event starts 2.42s before samples, event ends 2.57s after samples)
+Steps:            25 (10 gigacycles/step, 8 samples lost)
+
+Hardware model:   iPhone12,3
+Active cpus:      6
+Memory size:      3.68 GB
+HW page size:     16384
+VM page size:     16384
+Shared cache residency: 7.17% (427.39 MB / 5964.27 MB)
+
+Time Since Boot:  601832s
+Time Awake Since Boot: 474058s
+Time Since Wake:  4923s
+
+Total CPU Time:   85.403s
+Advisory levels:  Battery -> 3, User -> 3, ThermalPressure -> 10, Combined -> 1
+Free disk space:  7232.09 MB/238.31 GB, low space threshold 150 MB
+Vnodes Available: 63.18% (12636/20000, 10000 allocated, 10000 soft limit)
+Models:           none
+
+Preferred User Language: en-US
+Country Code:     US
+Keyboards:        com.google.keyboard.KeyboardExtension, en_US QWERTY
+OS Cryptex File Extents: 10634
+
+Heaviest stack for the target process:
+  25  ??? (libsystem_pthread.dylib + 2240) [0x1ed94e8c0]
+  25  ??? (libsystem_pthread.dylib + 4980) [0x1ed94f374]
+  25  ??? (libdispatch.dylib + 82072) [0x1c8add098]
+  25  ??? (libdispatch.dylib + 80128) [0x1c8adc900]
+  25  ??? (libdispatch.dylib + 24032) [0x1c8acede0]
+  25  ??? (libdispatch.dylib + 227940) [0x1c8b00a64]
+  25  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+  25  ??? (libdispatch.dylib + 6568) [0x1c8aca9a8]
+  25  ??? (CoreML + 5027704) [0x1a05ab778]
+  25  ??? (CoreML + 9528) [0x1a00e2538]
+  25  ??? (CoreML + 16904) [0x1a00e4208]
+  25  ??? (CoreML + 17536) [0x1a00e4480]
+  25  ??? (CoreML + 18128) [0x1a00e46d0]
+  25  ??? (libdispatch.dylib + 70368) [0x1c8ada2e0]
+  25  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+  25  ??? (CoreML + 18432) [0x1a00e4800]
+  25  ??? (CoreML + 18688) [0x1a00e4900]
+  25  ??? (CoreML + 18944) [0x1a00e4a00]
+  25  ??? (CoreML + 19464) [0x1a00e4c08]
+  25  ??? (CoreML + 34892) [0x1a00e884c]
+  25  ??? (CoreML + 43248) [0x1a00ea8f0]
+  25  ??? (CoreML + 46312) [0x1a00eb4e8]
+  25  ??? (CoreML + 48304) [0x1a00ebcb0]
+  25  ??? (CoreML + 5017604) [0x1a05a9004]
+  25  ??? (CoreML + 5015552) [0x1a05a8800]
+  25  ??? (CoreML + 5541136) [0x1a0628d10]
+  25  ??? (libdispatch.dylib + 70368) [0x1c8ada2e0]
+  25  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+  25  ??? (CoreML + 5541344) [0x1a0628de0]
+  25  ??? (CoreML + 5541508) [0x1a0628e84]
+  25  ??? (CoreML + 3965872) [0x1a04a83b0]
+  25  ??? (Espresso + 1602988) [0x19f41b5ac]
+  25  ??? (Espresso + 866104) [0x19f367738]
+  25  ??? (Espresso + 1118736) [0x19f3a5210]
+  25  ??? (Espresso + 1692996) [0x19f431544]
+  25  ??? (Espresso + 529616) [0x19f3154d0]
+  25  ??? (Espresso + 1996064) [0x19f47b520]
+  25  ??? (Espresso + 3606780) [0x19f6048fc]
+  25  ??? (Espresso + 3879444) [0x19f647214]
+  25  ??? (Espresso + 2688696) [0x19f5246b8]
+  25  ??? (Espresso + 3722708) [0x19f620dd4]
+  25  ??? (Espresso + 3725840) [0x19f621a10]
+  25  ??? (Espresso + 3727260) [0x19f621f9c]
+  9   ??? (Espresso + 3985980) [0x19f66123c]
+
+
+Powerstats for:   T2SReaderKokoro [50560]
+UUID:             75CD5047-F11E-30E4-8A21-370E005167ED
+Path:             /private/var/containers/Bundle/Application/4D0B1852-B105-475B-961D-26A418CB3B6B/T2SReaderKokoro.app/T2SReaderKokoro
+Identifier:       com.t2s.reader.harsh
+Version:          1.0 (1)
+Is First Party:   No
+Beta Identifier:  B60A3283-21D1-408F-90B0-5DC4A32506F8
+Resource Coalition: 25 samples "com.t2s.reader.harsh"(10324)
+Architecture:     arm64
+Parent:           UNKNOWN [1]
+UID:              501
+Footprint:        304.28 MB
+Start time:       2026-09-10 22:15:26.704 -0400
+End time:         2026-09-10 22:16:52.158 -0400
+Num samples:      25 (100%)
+Energy:           66.28 mWh
+Num threads:      1
+Primary state:    25 samples Frontmost App, Non-Suppressed, User mode, Effective Thread QoS User Initiated, Requested Thread QoS User Initiated, Override Thread QoS Unspecified, p-core
+User Activity:    0 samples Idle, 25 samples Active
+Power Source:     0 samples on Battery, 25 samples on AC
+  25  ??? (libsystem_pthread.dylib + 2240) [0x1ed94e8c0]
+    25  ??? (libsystem_pthread.dylib + 4980) [0x1ed94f374]
+      25  ??? (libdispatch.dylib + 82072) [0x1c8add098]
+        25  ??? (libdispatch.dylib + 80128) [0x1c8adc900]
+          25  ??? (libdispatch.dylib + 24032) [0x1c8acede0]
+            25  ??? (libdispatch.dylib + 227940) [0x1c8b00a64]
+              25  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+                25  ??? (libdispatch.dylib + 6568) [0x1c8aca9a8]
+                  25  ??? (CoreML + 5027704) [0x1a05ab778]
+                    25  ??? (CoreML + 9528) [0x1a00e2538]
+                      25  ??? (CoreML + 16904) [0x1a00e4208]
+                        25  ??? (CoreML + 17536) [0x1a00e4480]
+                          25  ??? (CoreML + 18128) [0x1a00e46d0]
+                            25  ??? (libdispatch.dylib + 70368) [0x1c8ada2e0]
+                              25  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+                                25  ??? (CoreML + 18432) [0x1a00e4800]
+                                  25  ??? (CoreML + 18688) [0x1a00e4900]
+                                    25  ??? (CoreML + 18944) [0x1a00e4a00]
+                                      25  ??? (CoreML + 19464) [0x1a00e4c08]
+                                        25  ??? (CoreML + 34892) [0x1a00e884c]
+                                          25  ??? (CoreML + 43248) [0x1a00ea8f0]
+                                            25  ??? (CoreML + 46312) [0x1a00eb4e8]
+                                              25  ??? (CoreML + 48304) [0x1a00ebcb0]
+                                                25  ??? (CoreML + 5017604) [0x1a05a9004]
+                                                  25  ??? (CoreML + 5015552) [0x1a05a8800]
+                                                    25  ??? (CoreML + 5541136) [0x1a0628d10]
+                                                      25  ??? (libdispatch.dylib + 70368) [0x1c8ada2e0]
+                                                        25  ??? (libdispatch.dylib + 111076) [0x1c8ae41e4]
+                                                          25  ??? (CoreML + 5541344) [0x1a0628de0]
+                                                            25  ??? (CoreML + 5541508) [0x1a0628e84]
+                                                              25  ??? (CoreML + 3965872) [0x1a04a83b0]
+                                                                25  ??? (Espresso + 1602988) [0x19f41b5ac]
+                                                                  25  ??? (Espresso + 866104) [0x19f367738]
+                                                                    25  ??? (Espresso + 1118736) [0x19f3a5210]
+                                                                      25  ??? (Espresso + 1692996) [0x19f431544]
+                                                                        25  ??? (Espresso + 529616) [0x19f3154d0]
+                                                                          25  ??? (Espresso + 1996064) [0x19f47b520]
+                                                                            25  ??? (Espresso + 3606780) [0x19f6048fc]
+                                                                              25  ??? (Espresso + 3879444) [0x19f647214]
+                                                                                25  ??? (Espresso + 2688696) [0x19f5246b8]
+                                                                                  25  ??? (Espresso + 3722708) [0x19f620dd4]
+                                                                                    25  ??? (Espresso + 3725840) [0x19f621a10]
+                                                                                      25  ??? (Espresso + 3727260) [0x19f621f9c]
+                                                                                        9   ??? (Espresso + 3985980) [0x19f66123c]
+                                                                                        3   ??? (Espresso + 3986064) [0x19f661290]
+                                                                                        3   ??? (Espresso + 3986052) [0x19f661284]
+                                                                                        3   ??? (Espresso + 3986032) [0x19f661270]
+                                                                                        3   ??? (Espresso + 3986012) [0x19f66125c]
+                                                                                        2   ??? (Espresso + 3986040) [0x19f661278]
+                                                                                        1   ??? (Espresso + 3986076) [0x19f66129c]
+                                                                                        1   ??? (Espresso + 3985996) [0x19f66124c]
+
+  Binary Images:
+           0x104900000 -                ???  com.t2s.reader.harsh 1.0 (1) <75CD5047-F11E-30E4-8A21-370E005167ED>  /private/var/containers/Bundle/Application/4D0B1852-B105-475B-961D-26A418CB3B6B/T2SReaderKokoro.app/T2SReaderKokoro
+           0x19f294000 -        0x1a00dfc1f  Espresso                     <66D285C4-5344-3A33-B591-C5EFD2373F34>  /System/Library/PrivateFrameworks/Espresso.framework/Espresso
+           0x1a00e0000 -        0x1a0902bdf  CoreML                       <981DCC5B-CC1D-3AEC-A8D1-508938A4FE39>  /System/Library/Frameworks/CoreML.framework/CoreML
+           0x1c8ac9000 -        0x1c8b0f5ff  libdispatch.dylib            <49C0CD3E-A696-3B11-BA92-5755F0C3C6E3>  /usr/lib/system/libdispatch.dylib
+           0x1ed94e000 -        0x1ed95a4ef  libsystem_pthread.dylib      <34B44744-BC64-386E-AB90-EEE86B23AC46>  /usr/lib/system/libsystem_pthread.dylib

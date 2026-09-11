@@ -14,7 +14,8 @@ public enum RenderTier: Int, Hashable, Comparable, CaseIterable, Sendable {
     case chapterAhead
     /// The continue-document, then the queue, while charging.
     case prepare
-    /// "Render whole document".
+    /// "Render chapter": the chapter the resume position is in, or the whole file for a document
+    /// with only one (a PDF, an article) — the bound collapses to the document's end.
     case manual
     public static func < (a: RenderTier, b: RenderTier) -> Bool { a.rawValue < b.rawValue }
 }
@@ -70,6 +71,13 @@ public struct RenderSnapshot: Hashable, Sendable {
     public func chapterEnd(containing i: Int) -> Int {
         chapterStarts.first { $0 > i } ?? seconds.count
     }
+
+    /// The first utterance of the chapter holding `i`: the last start at or before it, or 0 for an
+    /// `i` before every start. A document with one chapter (`chapterStarts == [0]`) always answers
+    /// 0, so a chapter-scoped render collapses to the whole document exactly when there is only one.
+    public func chapterStart(containing i: Int) -> Int {
+        chapterStarts.last { $0 <= i } ?? 0
+    }
 }
 
 public struct PlayingState: Hashable, Sendable {
@@ -104,7 +112,7 @@ public struct PolicyInput: Sendable {
     public var queue: [UUID]
     /// Newly imported documents that have not been primed yet.
     public var primes: [UUID]
-    /// "Render whole document" requests.
+    /// "Render chapter" requests.
     public var manual: [UUID]
     public var device: DeviceState
     /// Play-ahead window at 1x (spec §3.4); multiplied by the rate.
@@ -185,10 +193,18 @@ public enum RenderPolicy {
                 remaining -= walk(doc, from: doc.resumeIndex, budget: remaining, tier: .prepare)
             }
         }
-        // Tier 4: manual whole-document renders, any power state, unless the store is full.
+        // Tier 4: manual renders, any power state, unless the store is full — the chapter holding
+        // the resume position, bounded to it by a budget equal to its own length (Tier 2b's move);
+        // a document with one chapter has no bound short of its end, so the request is the whole
+        // file exactly where there is no "chapter" for the owner's menu label to mean (owner,
+        // 2026-09-11: "render whole document" cost the entire book on every request).
         if !d.storeFull {
             for id in input.manual {
-                if let doc = input.documents[id] { walk(doc, from: 0, budget: nil, tier: .manual) }
+                guard let doc = input.documents[id] else { continue }
+                let start = doc.chapterStart(containing: doc.resumeIndex)
+                let end = doc.chapterEnd(containing: doc.resumeIndex)
+                let chapterSeconds = start < end ? doc.seconds[start..<end].reduce(0, +) : 0
+                walk(doc, from: start, budget: chapterSeconds, tier: .manual)
             }
         }
         return jobs

@@ -129,7 +129,7 @@ import T2SStore
         #expect(player.chapters[0].fraction == 1 && player.chapters[1].fraction == 0)
         let estimated = player.chapters.map(\.durationSeconds)
         await engine.release()
-        player.renderWholeDocument()                                        // play-ahead alone renders nothing behind the seek
+        player.renderCurrentChapter()                                        // play-ahead alone renders nothing behind the seek
         await player.coordinator.waitForRenderIdle()
         #expect(!player.isTotalApproximate)                                 // the render moved the revision
         let timeline = try #require(player.coordinator.timeline)            // …and the axis with it: the actual durations

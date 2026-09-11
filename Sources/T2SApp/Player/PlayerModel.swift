@@ -300,7 +300,7 @@ public final class PlayerModel {
 
     public func setRate(_ rate: Double) { coordinator.setRate(rate) }
 
-    public func renderWholeDocument() { coordinator.renderWholeDocument() }
+    public func renderCurrentChapter() { coordinator.renderCurrentChapter() }
 
     /// Whether the utterance under the playhead carries a bookmark (`bookmarkedUtterances`).
     public var isBookmarkedAtPlayhead: Bool { bookmarkedUtterances.contains(coordinator.playhead.utteranceIndex) }

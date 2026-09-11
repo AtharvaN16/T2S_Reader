@@ -115,7 +115,6 @@ struct QueueRow: View {
     }
 
     @ViewBuilder private var contextItems: some View {
-        Button(role: .destructive) { Task { await env.libraryModel.archive(summary.id) } } label: { Label("Archive", systemImage: "archivebox") }
         Button { Task { await env.libraryModel.markFinished(summary.id, !summary.isFinished) } } label: {
             Label(summary.isFinished ? "Mark as unfinished" : "Mark as finished", systemImage: "checkmark.circle")
         }
@@ -125,9 +124,9 @@ struct QueueRow: View {
         Button {
             Task {
                 if !isCurrent { await env.player.load(summary, play: false) }
-                env.player.renderWholeDocument()
+                env.player.renderCurrentChapter()
             }
-        } label: { Label("Render whole document", systemImage: "waveform") }
+        } label: { Label(hasChapters ? "Render chapter" : "Render whole document", systemImage: "waveform") }
     }
 
     /// What the book calls the section being listened to — "Introduction", "Chp 7: A Precarious

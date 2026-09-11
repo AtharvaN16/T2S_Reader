@@ -312,7 +312,10 @@ public final class PlaybackCoordinator {
         replan()
     }
 
-    public func renderWholeDocument() {
+    /// "Render chapter" (owner, 2026-09-11 — was "render whole document", the entire book on every
+    /// request): the resume position's chapter, or the whole file for a document with none —
+    /// `RenderPolicy`'s manual tier finds the bound from the snapshot it is handed here.
+    public func renderCurrentChapter() {
         manualRequested = true
         replan()
     }

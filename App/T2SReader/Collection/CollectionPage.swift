@@ -299,7 +299,7 @@ struct CollectionPage: View {
     /// 2026-09-09): playing a book is what puts it on Home. Play resumes a paused current book before
     /// opening the Reader, as the Home row and the book sheet do; for any other book the Reader
     /// loads and plays it itself. A placeholder has no file on this device (sync spec §5), so Play
-    /// and Render whole document — both of which need one — give way to a single "Add here", which
+    /// and Render chapter — both of which need one — give way to a single "Add here", which
     /// does what the tile's and row's own tap do; the rest of the menu is unchanged.
     @ViewBuilder private func menuItems(for book: DocumentSummary) -> some View {
         let isCurrent = env.player.current?.id == book.id
@@ -319,12 +319,13 @@ struct CollectionPage: View {
         Button { details = book } label: { Label("Details", systemImage: "info.circle") }
         Button { voiceChange = book } label: { Label("Change voice", systemImage: "person.wave.2") }
         if !book.document.isPlaceholder {
+            let hasChapters = book.document.sourceType != .article && book.chapterCount > 1
             Button {
                 Task {
                     if !isCurrent { await env.player.load(book, play: false) }
-                    env.player.renderWholeDocument()
+                    env.player.renderCurrentChapter()
                 }
-            } label: { Label("Render whole document", systemImage: "waveform") }
+            } label: { Label(hasChapters ? "Render chapter" : "Render whole document", systemImage: "waveform") }
         }
         Button(role: .destructive) { pendingDelete = book } label: { Label("Delete", systemImage: "trash") }
     }

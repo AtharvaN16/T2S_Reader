@@ -141,9 +141,17 @@ import Testing
         #expect(indices(jobs, c, .prepare).isEmpty)
     }
 
-    @Test func manualRendersWholeDocumentRegardlessOfPower() {
+    /// A document with one chapter has nowhere the bound can fall short of the end, so "render
+    /// chapter" is the whole file — a PDF, an article — regardless of power.
+    @Test func manualRendersTheWholeFileWhenThereIsOnlyOneChapterRegardlessOfPower() {
         let jobs = RenderPolicy.plan(input(manual: [c], docs: [snap(c, rendered: [7])]))
         #expect(indices(jobs, c, .manual) == (0..<100).filter { $0 != 7 })
+    }
+
+    /// A book: only the chapter the resume position is in, never the others either side of it.
+    @Test func manualRendersOnlyTheChapterHoldingTheResumePosition() {
+        let jobs = RenderPolicy.plan(input(manual: [c], docs: [snap(c, resume: 45, chapterStarts: [0, 40, 80])]))
+        #expect(indices(jobs, c, .manual) == Array(40..<80))
     }
 
     @Test func tiersAreOrderedAndDeduplicated() {

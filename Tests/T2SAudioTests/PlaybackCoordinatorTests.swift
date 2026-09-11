@@ -152,7 +152,7 @@ import T2SCore
         #expect(c.rateLoweredTo == 1.5)
 
         await engine.setSimulatedRTF(0.1)                                // the phone cools down
-        c.renderWholeDocument()
+        c.renderCurrentChapter()
         await c.waitForRenderIdle()                                      // a window of renders at RTF 0.1
 
         #expect((c.measuredRTF ?? 1) < 0.2)
@@ -236,12 +236,12 @@ import T2SCore
         #expect(c.timeline?[utterance: 0].audioRef == expected.rawValue)
     }
 
-    @Test func renderWholeDocumentPlansManualTier() async throws {
+    @Test func renderCurrentChapterPlansManualTier() async throws {
         let (c, _, engine, _, _, doc, timeline) = fixture(window: 1)                            // play-ahead covers only utterance 0
         c.load(doc, timeline: timeline)
         await c.waitForRenderIdle()
         #expect(c.timeline?.isFullyRendered == false)
-        c.renderWholeDocument()
+        c.renderCurrentChapter()
         await c.waitForRenderIdle()
         #expect(c.timeline?.isFullyRendered == true)
         #expect(await engine.requests.count == 3)
@@ -272,7 +272,7 @@ import T2SCore
         let (c, _, _, _, _, doc, timeline) = fixture()
         c.load(doc, timeline: timeline)
         await c.waitForRenderIdle()
-        c.renderWholeDocument()                                    // already fully rendered: an empty plan
+        c.renderCurrentChapter()                                    // already fully rendered: an empty plan
         await c.waitForRenderIdle()                                // must return, not hang
         #expect(c.timeline?.isFullyRendered == true)
     }

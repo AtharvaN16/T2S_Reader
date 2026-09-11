@@ -937,6 +937,22 @@ against a pipeline that is already proven.
 
 ## 11. Changelog
 
+**rev 22 (2026-09-11)** — Home's swipe and Archive, and "render whole document" trimmed to a chapter
+- **§2.4.5** the Home row's full-swipe-to-archive and its "Archive" menu item are gone: with Home
+  down to the three most recently played (rev 18's `notePlaying`, not a queue a reader manages),
+  archiving and finishing a book did the same visible thing — drop it off the three-item list a
+  little early — and the "Finished" list `Archive` was built to protect from is not reachable from
+  any screen. Mark as finished stays: `isFinished` is a real fact about a book worth keeping even
+  with no browsing view for it yet. Old §2.3/§2.4.5 text above still describes the pre-rev-18 Queue
+  Archive owned; superseded here, not rewritten there.
+- **§2.4.5, §3.4.1** "Render whole document" is "Render chapter": the manual tier renders the
+  chapter holding the resume position, bounded by a budget equal to that chapter's own length
+  (`RenderSnapshot.chapterStart`/`chapterEnd`, the fill tier's move), not the entire book from
+  utterance 0 every time. A document with one chapter (a PDF's plain read, an article) has no bound
+  short of its own end, so the request is still the whole file exactly where "chapter" has nothing
+  to mean; the label follows the same count. `PlaybackCoordinator.renderWholeDocument` renamed
+  `renderCurrentChapter`.
+
 **rev 21 (2026-09-11)** — four corrections from the owner's eye on the phone
 - **§2.4.5** the Home row names the section the book named it (`ChapterLabel.text`, from the
   glimpse's `chapterTitle`), never "Chapter n" counted off the table of contents: the first entries

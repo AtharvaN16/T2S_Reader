@@ -158,7 +158,9 @@ struct ReaderPage: View {
                     Button { showVoiceChange = true } label: { Label("Change voice", systemImage: "person.wave.2") }
                     Button { showSleepTimer = true } label: { Label("Sleep timer", systemImage: "moon.zzz") }
                     Button { showDetails = true } label: { Label("Details", systemImage: "info.circle") }
-                    Button { env.player.renderWholeDocument() } label: { Label("Render whole document", systemImage: "waveform") }
+                    Button { env.player.renderCurrentChapter() } label: {
+                        Label(env.player.chapters.count > 1 ? "Render chapter" : "Render whole document", systemImage: "waveform")
+                    }
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 15, weight: .semibold))

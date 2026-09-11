@@ -5,6 +5,26 @@ first, moved here verbatim on 2026-09-11 so the hand-off itself stays the state 
 entry was written for whoever picked up the coding next, at that moment; later entries supersede earlier
 ones where they disagree._
 
+## Resume here (2026-09-11, morning) — iCloud sync built overnight on `icloud-sync`, merged to `dev`
+
+The owner asked for the "Sync positions and bookmarks" row to become real and went to sleep. Spec
+`docs/superpowers/specs/2026-09-11-icloud-sync-design.md` (positions offered not applied; bookmarks; the
+library list without files as placeholders; a per-Mac signing switch because the owner's free team cannot
+carry the entitlement), plan `docs/superpowers/plans/2026-09-11-icloud-sync.md` (ten tasks). Executed with
+one implementer subagent per task in its own worktree — Tasks 1+2 then 9 in parallel, 3 with 4, 5 with 6,
+7 then 8 — each followed by a task review, fix rounds where the review asked (T4 twice, T3/T5/T6/T7/T8/T9
+once), a whole-branch review (fable) that found one Critical (bookmark deletion markers dropped by the real
+store) and nine Important (a clean-flag race losing a pause position, a cycle per utterance, a dropped
+trigger, transient account states switching sync off, no list refresh after a pull, unsynced writes
+bumping the record clock, an unrecoverable missing zone, duplicate content keys, unchunked pushes), one fix
+wave (opus) and its re-review. Rulings the controller made: parallel waves for disjoint files; sonnet
+implementers, fable final review; a placeholder holds a newer remote position as a pending offer (the plan's
+patched rule was wrong); the store never clears dirty on a pulled write; a losing conflicted record is marked
+clean; no injected `UserDefaults`; the security scope starts in the picker's completion; the four re-review
+minors parked as v1 notes. Verified: 517 package tests, `scripts/build-app.sh`, the signed device build on the
+free team (app group only, container key empty). Not run against iCloud — Harsh's four steps are item 0 of
+HANDOFF's "What's next". Merged to `dev` fast-forward the same morning.
+
 ## Resume here (2026-09-11, small hours) — the 11 Pro test of Harsh's branch, the merge, seven fixes, the phone, and the research
 
 The owner asked whether Harsh's `phone-warmup-download-cloud` could be tried on the 11 Pro without

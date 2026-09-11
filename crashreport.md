@@ -348,7 +348,7 @@ backgrounded, which depends on the text — so the A/B on class (c) is inconclus
 
 ## Still owed
 
-- Harsh: the CPU-path play-ahead (150–180 s), the memory gate on the GPU override, the stale MLX comment; the two `dev` fixes above are merged into this branch.
+- ~~Harsh: the CPU-path play-ahead (150–180 s), the memory gate on the GPU override, the stale MLX comment~~ — done on `dev` (`b5b34fa`, `84e16f9`, `1c29cec`), with the owner's OK, the same night; the download is also deduplicated (`b6548e6`).
 
 - A > 90 s manual lock during the *first* warm-up on this branch (Finding 2's residual exposure).
 - The `t2s` control on class (c) specifically: a text that exercises the G2P fallback, locked long enough.

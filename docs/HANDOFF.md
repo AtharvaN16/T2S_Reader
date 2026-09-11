@@ -1,8 +1,61 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 night (the kind title pops with its menu; before that the kind menu's spring pop; before that the black buttons raised — graphite in the dark — and the dark-mode pass; before that the glow in blue and green when the voice lands, the fan re-cast on 2026 books; before that the empty shelf on Home and the Collection — three covers fanned, a raised button; before that an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-11 small hours (Harsh's branch tested on the 11 Pro and merged, six fixes on dev, the research; before that the kind title pops with its menu; before that the kind menu's spring pop; before that the black buttons raised — graphite in the dark — and the dark-mode pass; before that the glow in blue and green when the voice lands, the fan re-cast on 2026 books; before that the empty shelf on Home and the Collection — three covers fanned, a raised button; before that an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — the kind title pops with the menu it opens
+## Resume here (2026-09-11, latest) — the 11 Pro test of Harsh's branch, the merge, six fixes, and the research
+
+The owner asked whether Harsh's `phone-warmup-download-cloud` could be tried on the 11 Pro without
+disturbing the working app. It was: a worktree, a second bundle id (`com.t2s.reader.harsh`, its own
+app group, no share extension — a free team's three device slots), the model pushed over USB when
+the download would not finish. Everything found is in **`crashreport.md`** at the repo root (the
+thirteen `.ips` in `crashreport-ips/`), checked against the source by an adversarial pass; the
+web research the owner asked for is `docs/research/2026-09-10-on-device-models-on-old-and-new-phones.md`
+(seven sweeps, 78 sources; its deduplication figure was verified here).
+
+**What the phone said.** The working `t2s` had crashed eight times that day, all off-screen: six
+Prepare launches dying in the `BGTaskScheduler` handler, one `cpu_resource_fatal`, two MLX-on-Metal
+aborts. Harsh's branch, locked ~30 s during warm-up: survived (in-flight plan builds keep the CPU
+at 100 % through a lock — a > 60 s lock there is still the one `cpu_resource_fatal` shape open on
+the A13). Locked four minutes during playback: no crash, the `CPUBudget` bursting ~70 s of audio
+then sleeping ~60 s against a 60 s play-ahead, so the audio ran dry once a minute. The GPU path
+(`-kokoro.computeUnits cpuAndGPU`) aborted in Core ML's plan compiler — `std::bad_alloc` in
+MPSGraph — on the 4 GB phone. A fresh install could not download the model at all: Hugging Face
+429s to the 72-request burst, and the installer gave up on the first one.
+
+**On dev now** (his branch merged at 01f7560; the four unmerged commits were the A19 GPU policy,
+the front-GPU/back-CPU split, the screen staying awake, and his HANDOFF):
+- `abb3875` — `CPUBudget.record()` after every render, so the first background render after a lock
+  is charged for the trailing minute, not for everything since the last background wait.
+- `5d40ac8` — the download retries: `HTTPStatusError(status:retryAfter:)`, `Retry-After` or
+  2/4/8/16 s up to five attempts for 429/408/5xx and dropped connections, a 404 failing at once,
+  `Failure.download(path, status:)`, a `.retrying` progress the veil shows over a held bar.
+- `84e16f9` — `KokoroComputeUnits.permitted(_:physicalMemory:)`: the GPU needs 5 GB; the chip
+  policy and the `kokoro.computeUnits` override both hold to it (the 11 Pro's abort).
+- `b5b34fa` — the CPU path's play-ahead is 180 s (two budget cycles); the comments no longer call
+  the window a foreground setting — it applies in every state.
+- `1c29cec` — the G2P comment agrees with `mlxPinnedToCPU`.
+- `b6548e6` — the installer copies a file whose bytes are staged under another path: the manifest
+  is 619 MB, 238 MB unique (the bucket variants share weights), so a first launch fetches 238.
+
+**Verified:** `swift test` 478/87; `KokoroCoreMLInstallTests` 11 and `KokoroComputeUnitsTests` 4 (with
+the new ones); simulator and device builds of each tree before its merge. Not verified: a phone.
+The 11 Pro still has `t2s H` (his branch as of ae23248) beside `t2s` (dev at 19:40 on 2026-09-10).
+
+**Owed:**
+- A phone install of this dev: `t2s` from the Phone scheme, then a fresh-install download over
+  Wi-Fi (the retry and the dedupe have only been tested against a fake network), a > 90 s lock
+  during the first warm-up (Finding 2's residual), and four minutes locked during playback with
+  the 180 s window.
+- Harsh, on the 17 Pro: playback locked on the GPU path with the CPU set behind it; whether
+  serializing the GPU plan builds (the research's WhisperKit pattern) is worth its ~2× load time
+  there; the §7.3 MLX spike if MLX for A14+ is ever revisited.
+- From the research, not started: read Hugging Face's `ratelimit` headers on a 429; one
+  `URLSession` per install and a `Range` resume; a mirror (R2 or Background Assets) so the model
+  does not depend on anonymous-IP policy; render by chapter while frontmost so the background
+  loop is only a top-up; `MLComputePlan` on the 15 s generator to see why the A19's CPU compiler
+  never finishes it.
+
+## Resume here (2026-09-10, night) — the kind title pops with the menu it opens
 
 The owner: "I want the kind frame to also scale with a pop" — the trigger itself (the "All ⌄"
 title), not only the card it drops.

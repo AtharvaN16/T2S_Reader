@@ -203,7 +203,11 @@ public final class LibraryModel {
     /// rule, 2026-09-09: there is no queue a reader manages). Called when playback starts: the book
     /// goes to the top — back out of finished if it was — and whatever falls past the limit leaves.
     /// A no-op, with no refresh, when the book is already on top and nothing needs trimming.
+    /// A book the list has not seen yet — one imported since the last refresh and played straight
+    /// from the Import page — is read in first, so its first play puts it on Home like any other's
+    /// (owner, 2026-09-10: a fresh import showed on neither page until the app was reopened).
     public func notePlaying(_ id: UUID) async {
+        if !summaries.contains(where: { $0.id == id }) { await refresh() }
         guard let summary = summaries.first(where: { $0.id == id }) else { return }
         let rows = queue
         if rows.first?.id == id, rows.count <= Self.recentLimit { return }

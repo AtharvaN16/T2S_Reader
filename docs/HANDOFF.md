@@ -1,8 +1,229 @@
 # t2s_reader — hand-off and next steps
 
-_Last updated 2026-09-10 evening (the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
+_Last updated 2026-09-10 night (the kind title pops with its menu; before that the kind menu's spring pop; before that the black buttons raised — graphite in the dark — and the dark-mode pass; before that the glow in blue and green when the voice lands, the fan re-cast on 2026 books; before that the empty shelf on Home and the Collection — three covers fanned, a raised button; before that an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-10, latest) — the 17 Pro's two crashes, the model download, the warm-up, the cloud route
+## Resume here (2026-09-10, latest) — the kind title pops with the menu it opens
+
+The owner: "I want the kind frame to also scale with a pop" — the trigger itself (the "All ⌄"
+title), not only the card it drops.
+
+- **`TitleTriggerStyle`** (`Design/TitleMenu.swift`): the title-and-chevron button's own style now.
+  Two motions share it. A finger on it shrinks it to 0.95, sprung back on release
+  (`.snappy(0.15)`) — felt the moment it is touched, before the menu has even started to move.
+  Independent of that, while the menu it opens is up the settled scale sits at 1.035 rather than 1
+  — the title reads as pulled out, not merely labelled "open". Both are one multiplied
+  `scaleEffect`, so a press during the open state shrinks from 1.035, not from 1.
+- **One state, one transaction.** The 1.035 is driven by the same `isPickingKind` the card's
+  presence is driven by, inside the same `withAnimation(TitleMenuMotion.toggle(opening:))` block at
+  the tap site — so the title and the card move on the exact spring together: the same overshoot,
+  the same 0.34 s open and 0.22 s damped close, confirmed for the card in the previous round's
+  recording. There is nothing to add on the timing side; the trigger simply joined the transaction
+  the card was already in.
+- **Fixed a doubled scale while wiring this**: the first cut set `.scaleEffect(isPickingKind ?
+  1.035 : 1)` on the label *and* gave the button the same factor through the new style, compounding
+  to about 1.07 while open. Caught before commit; the scale lives only in `TitleTriggerStyle` now.
+
+`scripts/build-app.sh` → `** BUILD SUCCEEDED **`. **Not filmed**, and said plainly why: the
+screenshot method used for the menu (`T2S_OPEN=kinds`) sets `isPickingKind = true` at the view's
+`@State` initializer, before the view ever renders — so there is no false→true transition for
+`withAnimation` to animate, and a frame-by-frame measurement of the title's pixel width came back
+flat at 185 px from the first fully-drawn frame on. A tap that starts closed and opens live is what
+would show it, and neither `simctl` nor a UI-test harness is wired up here to script one — the
+options were an XCUITest target (not part of this app) or driving the Mac's own mouse over the
+Simulator window, which risks the mouse mid-task on a Mac the owner may be using for something
+else, so it was not attempted. The mechanism is the one already proven: the trigger's scale is
+computed inside the identical `withAnimation` call whose overshoot the previous round's recording
+already measured on the card. `swift test` not run: nothing under `Sources/` changed. Not seen on
+a phone.
+
+## Resume here (2026-09-10, night) — the kind menu's spring pop
+
+The owner: "add a nice animation when clicking filter in collection page, like spring pop, we have
+in latest iOS."
+
+- **`TitleMenuMotion`** (`Design/TitleMenu.swift`) holds the whole thing, so the card and its call
+  site cannot drift apart. Opening is a spring with real overshoot (response 0.34, damping 0.66);
+  closing is critically damped and two-thirds the length — a menu that springs shut feels
+  undecided. The transition is asymmetric: in, the card grows from 0.82 at its top-left corner and
+  drops 12 pt; out, it leaves from 0.94 without the offset, so a close reads as a dismissal rather
+  than a rewind.
+- **The rows stagger.** `TitleMenuCard` flips a `rowsIn` state on appear; each row rises 10 pt,
+  scales from 0.96 and fades, delayed 32 ms per row from the top. This is the part that reads as
+  iOS — a card that only fades in reads as a web dropdown. Reduce Motion starts `rowsIn` true and
+  passes a nil animation, so the rows are simply there with the card.
+- **Rows press.** A `MenuRowStyle` button style now owns both films — the chosen row's `ink` at
+  0.07 and a finger's at 0.07 over it (0.13 when both) — with the row giving to 0.97 under the
+  press. One surface, so the two states cross into each other instead of stacking; the label's own
+  `.background` is gone.
+- **Two haptics**, the app's first: a light knock (intensity 0.7) as the menu drops, and the
+  selection tick when a kind is taken. Nothing on a close by tapping outside — there is nothing to
+  confirm. `.sensoryFeedback` needs iOS 17; the target is 18.
+- The title's word crossfades to the new kind (`.contentTransition(.opacity)`) instead of snapping.
+- `AnyTransition` is not `Sendable`, so `TitleMenuMotion.transition` is a computed `static var`, not
+  a `let` — a stored one is a Swift 6 concurrency error.
+
+`scripts/build-app.sh` → `** BUILD SUCCEEDED **`. Measured from a screen recording of the simulator
+(`xcrun simctl io <udid> recordVideo`, frames pulled with an `AVAssetImageGenerator` tool — a burst
+of `simctl io screenshot` is far too slow to catch a 450 ms animation, about one frame per 300 ms):
+at 60 fps the card is up at 50 ms with only "All" legible, "Books" and "PDFs" arrive by 100 ms,
+"Text" by 150, "Links" by 200, and the overshoot has settled by 300. `T2S_OPEN=kinds` opens the
+menu at launch, which is how it was filmed; the press film and the close were not filmed (a script
+cannot press). `swift test` not run: nothing under `Sources/` changed. Not seen on a phone.
+
+## Resume here (2026-09-10, night) — the black buttons raised, and the dark-mode pass
+
+Two asks from the owner: "replace the black buttons with skeumorphic versions of black buttons,
+and in dark mode idk what the color should be"; "a lot of UI does not have dark mode equivalent,
+voices page for e.g, fix this". And: "start directly, skip superpowers planning".
+
+- **`RaisedButton` grew a tone and a size.** `.blue` is the reference key (the empty shelf);
+  `.ink` is the app's black button raised: the same gloss-to-shade face, bevel and two shadows over
+  `Tokens.keyInkTop` → `keyInkBottom`. Sizes: `.bar` (full width, 56 — what `BarButton` is now, a
+  one-line wrapper), `.key` (hugs, 56), `.compact` (hugs, 40 — the Reader's "Back to current" and
+  "Skip to Chapter" pills, which were `Pill(.selected)`). Disabled it is the flat `surface` slab it
+  always was, and `busyLabel` still puts a spinner before the words: a key that cannot be pressed
+  is not drawn as one.
+- **In the dark the ink key is graphite, not white.** `ink` inverts to near-white in dark mode,
+  which is what "Choose files" had become: a white bar on a black page — the thing the owner did
+  not want to decide. The answer taken: a key is an object and keeps its colour in a dark room;
+  `keyInkTop`/`keyInkBottom` are 0x3E3E3E → 0x1E1E1E there (the foot is `surface`'s own grey), and
+  since a shadow on black is nothing, the lift comes from the top rim (`keyInkRim`, gloss at 0.42
+  in dark, 0.30 in light) instead. Words in `onKeyInk`.
+- **The dark-mode audit** (26 screenshots, every page, both routes — system dark, and the in-app
+  theme set dark over a light system with `defaults write com.t2s.reader reader.theme -string
+  dark`): every page adapts, the Voice page included, in both routes. What did not hold up: the
+  ink bar (above); surfaces that a shadow lifts in the light and nothing lifted in the dark — the
+  kind menu's card and the mini-player's capsule now carry a hairline `Tokens.edge` (0.05 black in
+  light, 0.11 white in dark); and the favorite heart's three literal colours, now `heartTop`,
+  `heartBottom`, `heartShade` with a lighter red in the dark. No other literal colour is left in
+  the app's views — the grep finds only the mask gradients (`.black`/`.white` in `TopFade`, the
+  Reader's fades, the ramp's mask), which are alpha shapes, not colours.
+- **Not found: what on the Voice page.** On the simulator the Voice page is dark in both routes and
+  every element on it has a dark token (rows, marks, the Default tag, the heart, the chips, the
+  confirm bar). Whatever the owner saw is either on the phone build's Kokoro section or something
+  the simulator cannot reach; a screenshot from the phone is the fastest way to it.
+
+`scripts/build-app.sh` → `** BUILD SUCCEEDED **`. `swift test` not run: nothing under `Sources/`
+changed. Seen in the simulator: the ink bar on the Files step, light and dark, at full
+resolution; the kind card and the mini-player in the dark with their rims; Home in both. Not
+seen: the compact pills in the Reader (they need a scroll or front matter, which a script cannot
+give) and the Voice page's "Make default" bar (needs a tap) — same component, same code path.
+Not seen on a phone.
+
+## Resume here (2026-09-10, night) — the glow in blue, green when the voice lands, and the fan re-cast
+
+Three words from the owner, with the blue "Join school" key as the palette: "make the warm-up and
+the skeuomorphic button glow blue, see the palette from the reference, also account for dark mode";
+"in the warm-up glow just as the model is ready, change the glow to green before ending the
+animation"; and "use our book mockup for the covers, don't include 2 books from the same author,
+also include 2026 popular books".
+
+- **The glow is blue** (`Tokens.glow` 0x2F5BFF / dark 0x5F84FF, with `glowSoft` and `glowFaint`).
+  Not the accent, and it says so in the token: the accent marks the app's own things — progress,
+  the read-along, the one primary pill — and the glow is a state of the engine. `WarmRamp`'s wash
+  and both bezel strokes take the colour as an argument now rather than naming `Tokens.accent`.
+  Dark mode gets a lighter blue: the light one on near-black read as a dim navy. The warm-up's two
+  other marks followed it — `WarmingDot` and the Reader's two "preparing the voice…" lines.
+- **It ends on green** (`Tokens.glowReady`, `KokoroStatusModel.readyAt` / `readyBeat` = 0.55 s).
+  When a warm-up ends, the model stamps `readyAt`, and a task clears it half a second later; that
+  clearing is what takes the glow off the screen. One date on one model, so the veil and every
+  ground bar turn on the same frame — the same rule the pulse follows. On the beat the breath stops
+  at full, the light crossfades to green over 0.28 s, and `WarmUpLine` says "Voice ready" with its
+  bar filled instead of holding the estimate it had reached.
+- **The fan re-cast**: Alex Aster's *Starside* and Kate Quinn's *The Astral Library* — both 2026,
+  both popular (Open Library's 2026 reading-log ranking, picked from sixteen candidates on a
+  contact sheet) — behind Madeline Miller's *Circe*. Three authors, one each: the first cut had
+  *Circe* and *The Song of Achilles*, both Miller's. Each book now carries a `BookCover.tilt`, the
+  3D turn the book sheet's hero uses, so the fan reads as three objects standing at angles rather
+  than three pictures laid flat. They stand 82 pt out, not 70: at 70 the hero cut both their titles
+  in half.
+- **The key is the reference's blue** (`Tokens.keyTop` → `keyBottom`, royal blue falling to indigo),
+  its wide shadow in `Tokens.glow`. The empty shelf's pool of light went blue with it, so the page's
+  one colour is the same as the warm-up's.
+- **`T2S_WARMUP` takes a word now** (screenshots): `1` holds the warm-up as before, `ready` runs the
+  green beat through once and ends, `green` stops on the beat and holds it.
+
+`scripts/build-app.sh` → `** BUILD SUCCEEDED **`. `swift test` not run: nothing under `Sources/`
+changed. Seen in the simulator (iPhone 16 Pro), light and dark: Home, the Collection, the blue
+warm-up, the green beat, and a burst through the real transition — blue, "Voice ready", green,
+gone. Measured on the top 120 rows: warming R137 G149 B194, the beat R129 G169 B146, and after it
+R193 G193 B192 — the plain ground's own value to the digit, so the glow leaves nothing behind.
+Not seen on a phone.
+
+## Resume here (2026-09-10, evening) — the empty shelf: three covers fanned, one raised button
+
+The owner, with Klarna's "Nothing saved" screen and a blue "Join school" key as references: "create
+empty states on home and collections page similar to the reference, use 3 book covers from online
+(popular, beautiful covers), stagger them with a nice animation and show a CTA below. Use a
+skeuomorphic button for the CTA." And: "don't plan, directly implement."
+
+- **`EmptyShelf`** (`Design/EmptyShelf.swift`): the one empty state Home (`rows.isEmpty`) and the
+  Collection (`all.isEmpty`) share — a fan of three real covers over a pool of light, a headline
+  in `playerTitle`, one line in `rowTitle`/`ink2`, and the button. Home says "Nothing playing yet /
+  Import a book, PDF or article and it plays right away."; the Collection "Your shelf is empty /
+  Books, PDFs, links and text you import live here." Both buttons open the Import cover. The
+  header's Import pill / `+` stay: the owner asked for a CTA below, not for the header to change.
+- **The fan** (`CoverFan`): The Midnight Library and The Song of Achilles behind at ±13°, 136 pt,
+  70 pt out and 16 pt down; Circe in front, upright, 158 pt. Each is a `BookCover` — hinge, sheen,
+  shadow, the proportion rule — through a new `BookCover.asset` (a bundled image name; wins over
+  `relativePath`, keys the backlight cache). The covers are Open Library's ISBN scans
+  (`Assets.xcassets/EmptyCovers/*`, ~330 × 500, 190 KB for the three), chosen from fifteen for
+  clean scans and a gold / navy / teal trio. The pool is a `Circle` of `accentSoft → accentFaint →
+  clear` squashed to 0.68 — a plain `RadialGradient` in a rectangular frame showed its frame as a
+  faint hard-edged patch at the first look.
+- **The entrance**: each book starts 44 pt low, at 0.9, a third of its tilt, clear, and springs
+  (response 0.68, damping 0.74) to its place — the two behind first (0 s, 0.15 s), the hero last
+  (0.32 s). After 1.3 s the hero breathes: ±5 pt, 2.8 s each way, forever. Reduce Motion: nothing
+  moves, the three fade in together in 0.35 s and there is no breath. Verified with a burst of
+  screenshots on a warm launch: one frame with the first book alone mid-rise, the next with all
+  three landing.
+- **`RaisedButton`** (`Design/RaisedButton.swift`): the skeuomorphic key, in the accent. A capsule
+  filled `accent`, a gloss-to-shade gradient over it (light from above), a bevel hairline bright on
+  the top rim and dark on the bottom, and two shadows — a tight contact one in `shade` and a wide
+  one in the accent's own hue (radius 18, y 10). Pressed: a shade wash, the shadows tighten, 0.965
+  scale, `.snappy(0.18)`. `Pill(.accent)` is still the flat one-word header action; this is for an
+  empty page's one "do this first".
+
+`scripts/build-app.sh` → `** BUILD SUCCEEDED **`. Seen in the simulator (iPhone 16 Pro): Home and
+the Collection, light and dark, and the burst. Root `swift test` not run: nothing under `Sources/`
+changed in this round. Not seen on a phone. Owed: the owner's look at the fan and the key there —
+whether 500 px covers hold up at 158 pt on a 3× screen, and whether the accent shadow under the
+key is too much on the OLED black.
+
+A second session was rebasing `dev` onto PR #16 (92fd0ac) with its import-done commit while this
+was built in the same folder; it briefly swept these files into that commit with `git add -A`,
+then took them back out. This round was committed on top once that rebase had finished.
+
+## Resume here (2026-09-10, evening) — an import stops to ask, and shows up at once
+
+Two reports from the owner: "when I import a file, weblink, text, don't play it immediately — give
+me the option to play or exit", and "I imported a doc, but could not see it in collections or
+home, till I exited and reentered the app".
+
+- **The done step** (`ImportDonePage`): every path used to end by closing the Import page and
+  opening the Reader on the first document, which loads and plays. Now `ImportPage` switches to a
+  done step whenever the model's phase is `.done`: the documents on their shelf slots (`BookCover`
+  / `SheetCover`, as Home draws them) with the title and one line — author, site, or PDF/Book/Text,
+  and the length — a **Play** bar at the foot and **Done** in plain text under it (`ImportFrame`
+  gained `secondary`), and the circle closes. Play writes the first document through `imported`
+  and dismisses, so the Reader still opens from the cover's `onDismiss` and plays; Done and the
+  circle only dismiss. A file batch that half worked lists its failures under the rows. The paths'
+  bars say **Import** now, not Listen (they no longer listen); "Import anyway" on a thin page.
+- **The missing document**: nothing refreshed `LibraryModel` after an import. The Reader's first
+  play called `notePlaying`, which looked the book up in the stale `summaries`, found nothing and
+  returned without a refresh — so the book was on neither page until the scene came back to the
+  foreground. Two fixes: `notePlaying` refreshes first when it does not know the id (test
+  `LibraryModelTests.notePlayingReadsInADocumentImportedSinceTheLastRefresh`), and
+  `AppEnvironment`'s `afterImport` refreshes the lists before priming, so the pages behind the done
+  step already show the new document whether or not it is played.
+
+`swift test` 477/87 green (one new), on `dev` after PR #16 (the phone warm-up, download and cloud
+route) was merged under it. `scripts/build-app.sh` → `** BUILD SUCCEEDED **`. Not seen in the simulator: the done step needs a
+real import (typing, or a file), which a scripted simulator cannot do — look at it on the phone:
+import a link, a text and a PDF; each should end on "Added to your library" with Play and Done, and
+be on the Collection (and Home, until three others are played) after Done.
+
+## Resume here (2026-09-10, evening) — the 17 Pro's two crashes, the model download, the warm-up, the cloud route
 
 Branch `phone-warmup-download-cloud` off `dev` @ d849036; spec
 `docs/superpowers/specs/2026-09-10-phone-warmup-download-cloud-design.md`. Harsh's asks: the app

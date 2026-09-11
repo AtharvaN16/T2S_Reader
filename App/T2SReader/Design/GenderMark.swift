@@ -51,8 +51,9 @@ struct GenderMark: View {
     }
 }
 
-/// The favorite heart (owner, 2026-09-10): red and a little glossy — a top-lit gradient, a soft
-/// highlight, a shadow under it — and it pops when it fills. Empty, it is the outline in `ink2`.
+/// The favorite heart (owner, 2026-09-10): red and a little glossy — a top-lit gradient
+/// (`Tokens.heartTop` → `heartBottom`, a shade lighter in the dark), a soft highlight, a shadow
+/// under it — and it pops when it fills. Empty, it is the outline in `ink2`.
 /// Sized to the row's radio so the two trailing marks read as one set.
 struct HeartButton: View {
     var isOn: Bool
@@ -73,17 +74,17 @@ struct HeartButton: View {
                     Image(systemName: "heart.fill")
                         .font(.system(size: 24))
                         .foregroundStyle(
-                            LinearGradient(colors: [Color(red: 1.0, green: 0.42, blue: 0.42), Color(red: 0.86, green: 0.09, blue: 0.16)],
+                            LinearGradient(colors: [Tokens.heartTop, Tokens.heartBottom],
                                            startPoint: .top, endPoint: .bottom))
                         .overlay {
                             // The gloss: a soft white ellipse over the top lobes.
                             Ellipse()
-                                .fill(Color.white.opacity(0.45))
+                                .fill(Tokens.gloss.opacity(0.45))
                                 .frame(width: 11, height: 5)
                                 .blur(radius: 1.2)
                                 .offset(x: -3, y: -6)
                         }
-                        .shadow(color: Color(red: 0.6, green: 0, blue: 0.05).opacity(0.35), radius: 2, x: 0, y: 1.5)
+                        .shadow(color: Tokens.heartShade.opacity(0.35), radius: 2, x: 0, y: 1.5)
                 } else {
                     Image(systemName: "heart")
                         .font(.system(size: 24))

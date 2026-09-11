@@ -83,8 +83,10 @@ struct CollectionPage: View {
                     }
                 }
                 if all.isEmpty {
-                    Text("Books, PDFs, links and text you import appear here; Home keeps the ones you played last.")
-                        .typeRole(.meta).foregroundStyle(Tokens.ink2)
+                    EmptyShelf(title: "Your shelf is empty",
+                               line: "Books, PDFs, links and text you import live here.",
+                               button: "Import") { showAdd = true }
+                        .padding(.top, Spacing.grid)
                 } else if books.isEmpty {
                     Text(emptyText).typeRole(.meta).foregroundStyle(Tokens.ink2)
                 } else if layout == .grid {
@@ -123,6 +125,12 @@ struct CollectionPage: View {
         }
         .sheet(item: $details) { DetailsSheet(summary: $0) }
         .sheet(item: $voiceChange) { VoiceChangeSheet(summary: $0) }
+        // The menu's two taps, felt: a light knock as it drops, the selection tick when a kind is
+        // taken. Nothing on the close — a menu dismissed by a tap outside it has nothing to confirm.
+        .sensoryFeedback(trigger: isPickingKind) { _, open in
+            open ? .impact(weight: .light, intensity: 0.7) : nil
+        }
+        .sensoryFeedback(.selection, trigger: filter)
         .confirmationDialog(
             pendingDelete.map { "Delete “\($0.document.title)”?" } ?? "",
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
@@ -147,8 +155,12 @@ struct CollectionPage: View {
     /// second row, so the layout switch joins `+` and Search on the header line.
     private func header(all: [DocumentSummary], layout: CollectionLayout) -> some View {
         HStack(alignment: .top) {
-            Button { withAnimation(.snappy) { isPickingKind.toggle() } } label: {
+            Button {
+                withAnimation(TitleMenuMotion.toggle(opening: !isPickingKind)) { isPickingKind.toggle() }
+            } label: {
                 PageTitle(text: filter.title) { TitleChevron() }
+                    // The word crossfades when the kind changes rather than snapping to the next one.
+                    .contentTransition(.opacity)
                     // The title is what gives when the row runs short (accessibility text sizes
                     // with a longer kind than "All"): one line, scaled down, never wrapped.
                     .lineLimit(1)
@@ -156,7 +168,7 @@ struct CollectionPage: View {
                     .contentShape(Rectangle())
                     .anchorPreference(key: TitleAnchorKey.self, value: .bounds) { $0 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(TitleTriggerStyle(isOpen: isPickingKind))
             .accessibilityLabel("Showing \(filter.title)")
             .accessibilityHint("Chooses which kind of thing the page shows")
             Spacer(minLength: 12)
@@ -187,12 +199,12 @@ struct CollectionPage: View {
         ZStack(alignment: .topLeading) {
             Color.clear
                 .contentShape(Rectangle())
-                .onTapGesture { withAnimation(.snappy) { isPickingKind = false } }
+                .onTapGesture { withAnimation(TitleMenuMotion.close) { isPickingKind = false } }
             TitleMenuCard(options: Filter.allCases, title: \.title, selection: filter) { kind in
-                withAnimation(.snappy) { filter = kind; isPickingKind = false }
+                withAnimation(TitleMenuMotion.close) { filter = kind; isPickingKind = false }
             }
             .offset(x: title.minX, y: title.maxY + Spacing.grid)
-            .transition(.scale(scale: 0.94, anchor: .topLeading).combined(with: .opacity))
+            .transition(TitleMenuMotion.transition)
         }
     }
 

@@ -6,10 +6,12 @@ import UniformTypeIdentifiers
 
 /// Spec §2.4.5 rev 7: three tiles, then the chosen path as its own step on `ImportFrame` — a back
 /// circle, a centred title, the path's field, and one Listen bar at the foot (ElevenReader's
-/// import, the owner's reference, 2026-09-09). The first imported document is written back through
-/// `imported`; the owner opens it from the cover's `onDismiss`, never from here — presenting the
-/// player while this page is still animating out is the classic SwiftUI case where the second
-/// presentation simply never appears.
+/// import, the owner's reference, 2026-09-09). An import that lands does not play by itself any
+/// more (owner, 2026-09-10): the page moves to `ImportDonePage`, which shows what came in and
+/// offers Play or Done. Play writes the first imported document back through `imported`; the
+/// owner opens it from the cover's `onDismiss`, never from here — presenting the player while this
+/// page is still animating out is the classic SwiftUI case where the second presentation simply
+/// never appears. Done leaves `imported` nil, so nothing opens.
 struct ImportPage: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
@@ -30,11 +32,17 @@ struct ImportPage: View {
         // to. Back also clears the model, so a failure from one path is not shown under the next.
         let back: (() -> Void)? = initialFiles.isEmpty ? { model.reset(); path = nil } : nil
         Group {
-            switch path {
-            case .link: PasteLinkPage(onBack: back)
-            case .text: PasteTextPage(onBack: back)
-            case .files: FileImportPage(onBack: back) { showFilePicker = true }
-            case nil: hub
+            if case .done(let documents) = model.phase {
+                ImportDonePage(documents: documents,
+                               play: { imported = documents.first; dismiss() },
+                               done: { dismiss() })
+            } else {
+                switch path {
+                case .link: PasteLinkPage(onBack: back)
+                case .text: PasteTextPage(onBack: back)
+                case .files: FileImportPage(onBack: back) { showFilePicker = true }
+                case nil: hub
+                }
             }
         }
         .background(Tokens.ground)
@@ -44,12 +52,6 @@ struct ImportPage: View {
             switch result {
             case .success(let urls): Task { await model.importFiles(urls) }
             case .failure: break                                               // the step stays; Choose files is there again
-            }
-        }
-        .onChange(of: model.phase) { _, phase in
-            if case .done(let docs) = phase, let first = docs.first {
-                imported = first
-                dismiss()
             }
         }
         .task {

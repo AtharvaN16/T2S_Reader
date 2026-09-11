@@ -110,9 +110,11 @@ extension PageTitle where Menu == EmptyView {
 }
 
 /// The one action of a step, as a full-width bar pinned to a page's foot (ElevenReader's "Listen",
-/// Uptime's "Select voice" — the owner's references, 2026-09-09/10): ink when it can be pressed,
-/// `surface` and `ink2` while there is nothing to act on, a spinner and `busyLabel` while the model
-/// works. Pages pin it with `safeAreaInset(edge: .bottom)` so it rides above the keyboard.
+/// Uptime's "Select voice" — the owner's references, 2026-09-09/10). Since 2026-09-10 it is the
+/// raised ink key (`RaisedButton`, `.ink`, `.bar`): black and lifted when it can be pressed,
+/// graphite in the dark, the flat `surface` slab in `ink2` while there is nothing to act on, a
+/// spinner and `busyLabel` while the model works. Pages pin it with `safeAreaInset(edge: .bottom)`
+/// so it rides above the keyboard.
 struct BarButton: View {
     var label: String
     var busyLabel: String? = nil
@@ -120,22 +122,7 @@ struct BarButton: View {
     var action: () -> Void
 
     var body: some View {
-        let busy = busyLabel != nil
-        let enabled = isEnabled && !busy
-        Button(action: action) {
-            HStack(spacing: 10) {
-                if busy { ProgressView().tint(Tokens.ink2) }
-                Text(busyLabel ?? label).typeRole(.rowTitle)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 56)
-            .foregroundStyle(enabled ? Tokens.ground : Tokens.ink2)
-            .background(enabled ? Tokens.ink : Tokens.surface, in: Capsule())
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .animation(.snappy, value: enabled)
+        RaisedButton(label: label, tone: .ink, size: .bar, busyLabel: busyLabel, isEnabled: isEnabled, action: action)
     }
 }
 
@@ -259,6 +246,9 @@ struct BookCover: View {
     /// Degrees from `MotionTilt`: the book turns a little with the phone so it reads as an object,
     /// not a picture. Only the book sheet's hero passes one.
     var tilt: CGPoint = .zero
+    /// A cover from the app bundle in place of one from the library: the empty shelf's three
+    /// (`EmptyShelf`). Wins over `relativePath`; the same proportion rule applies.
+    var asset: String? = nil
 
     /// The mockup's own proportions (1461 × 2192); a real cover uses its own, within the book range.
     /// Internal, not private: the book sheet's hero sizes from it.
@@ -282,9 +272,16 @@ struct BookCover: View {
     }
 
     private var image: UIImage? {
-        guard !isPDF, let relativePath,
-              let image = Artwork.image(at: paths.url(forRelativePath: relativePath).path),
-              image.size.height > 0, Self.coverRatios.contains(image.size.width / image.size.height)
+        let loaded: UIImage?
+        if let asset {
+            loaded = UIImage(named: asset)
+        } else if !isPDF, let relativePath {
+            loaded = Artwork.image(at: paths.url(forRelativePath: relativePath).path)
+        } else {
+            loaded = nil
+        }
+        guard let image = loaded, image.size.height > 0,
+              Self.coverRatios.contains(image.size.width / image.size.height)
         else { return nil }
         return image
     }
@@ -321,7 +318,7 @@ struct BookCover: View {
     /// lifted so a dark or greyish cover still glows; the PDF book's red; the placeholder's cloth,
     /// lifted the same way (`Tokens.coverGlow`).
     var backlight: Color {
-        if let image, let average = Self.averageColor(of: image, key: relativePath ?? "") { return average }
+        if let image, let average = Self.averageColor(of: image, key: asset ?? relativePath ?? "") { return average }
         return isPDF ? Tokens.pdfCover : Tokens.coverGlow(CoverStyle.paletteIndex(for: title, count: Tokens.coverCount))
     }
 
@@ -643,7 +640,8 @@ struct CircularProgress: View {
     }
 }
 
-/// A pulsing accent dot for the one-time voice warm-up — visually distinct from the routine
+/// A pulsing dot for the one-time voice warm-up, in the warm-up's own blue (`Tokens.glow`, not
+/// the accent — see the token) — visually distinct from the routine
 /// buffering spinner (`ProgressView`) so a reader can tell "this is the long one-time wait" from
 /// "this resolves in a second or two." Respects Reduce Motion with a static dot instead of a loop.
 struct WarmingDot: View {
@@ -652,7 +650,7 @@ struct WarmingDot: View {
 
     var body: some View {
         Circle()
-            .fill(Tokens.accent)
+            .fill(Tokens.glow)
             .frame(width: 10, height: 10)
             .opacity(bright ? 1 : 0.35)
             // Conditioned on `reduceMotion` here, not inside `onAppear`, so a live toggle of the

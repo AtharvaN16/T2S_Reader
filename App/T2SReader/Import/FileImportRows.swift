@@ -3,9 +3,9 @@ import SwiftUI
 import T2SApp
 
 /// "Upload a file" on the shared frame: one row per chosen file with its state, and "Choose files"
-/// at the foot to open the picker (again, if the first pick failed). The page closes itself when
-/// the batch ends with a success. No back circle when the files came in from another app — the
-/// circle closes instead.
+/// at the foot to open the picker (again, if the first pick failed). When the batch ends with a
+/// success the Import page moves on to the done step. No back circle when the files came in from
+/// another app — the circle closes instead.
 struct FileImportPage: View {
     @Environment(AppEnvironment.self) private var env
     var onBack: (() -> Void)?

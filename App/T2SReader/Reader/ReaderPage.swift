@@ -51,7 +51,7 @@ struct ReaderPage: View {
             } else if env.kokoroStatus.status.isWarming {
                 VStack(spacing: 10) {
                     WarmingDot()
-                    Text("Preparing the voice…").typeRole(.meta).foregroundStyle(Tokens.accent)
+                    Text("Preparing the voice…").typeRole(.meta).foregroundStyle(Tokens.glow)
                 }
             } else {
                 ProgressView().tint(Tokens.ink)
@@ -64,7 +64,8 @@ struct ReaderPage: View {
                     // Above the bottom block's fade in both senses: 32 pt up from it, and drawn
                     // over the fade the block hangs above itself (a later sibling would otherwise
                     // paint that fade across the pill).
-                    Pill(label: "Back to current", glyph: "text.line.first.and.arrowtriangle.forward", style: .selected) {
+                    RaisedButton(label: "Back to current", glyph: "text.line.first.and.arrowtriangle.forward",
+                                 tone: .ink, size: .compact) {
                         reader.resumeFollowing()
                     }
                     .padding(.bottom, 32)
@@ -73,8 +74,8 @@ struct ReaderPage: View {
                     // The same pill while the playhead is still in the front matter (owner's ask,
                     // 2026-09-09): one tap past the title page, dedication and reviews to the
                     // first numbered chapter. Goes with the chrome, so a tap on the text dismisses it.
-                    Pill(label: skip.number.map { "Skip to Chapter \($0)" } ?? "Skip the front matter",
-                         glyph: "forward.end.fill", style: .selected) {
+                    RaisedButton(label: skip.number.map { "Skip to Chapter \($0)" } ?? "Skip the front matter",
+                                 glyph: "forward.end.fill", tone: .ink, size: .compact) {
                         Task { await env.player.seek(toChapter: skip.index) }
                     }
                     .padding(.bottom, 32)
@@ -196,7 +197,7 @@ struct ReaderPage: View {
                     Text(player.elapsedText).monospacedDigit()
                     Spacer()
                     if env.isWarmingUp {
-                        Text("preparing the voice…").foregroundStyle(Tokens.accent)
+                        Text("preparing the voice…").foregroundStyle(Tokens.glow)
                     } else if player.isCatchingUp {
                         Text("catching up…")
                     }

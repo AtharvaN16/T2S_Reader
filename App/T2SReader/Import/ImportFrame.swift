@@ -14,6 +14,9 @@ struct ImportFrame<Content: View>: View {
     /// closes the page instead.
     var onBack: (() -> Void)?
     var action: ImportAction?
+    /// A quieter second choice under the bar — the done step's "Done" beside its "Play" — as
+    /// plain ink text on the ground, never a second filled bar: one thing on a step is the thing to do.
+    var secondary: ImportAction? = nil
     @ViewBuilder var content: () -> Content
 
     var body: some View {
@@ -27,12 +30,15 @@ struct ImportFrame<Content: View>: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .safeAreaInset(edge: .bottom) {
-            if let action {
-                button(action)
-                    .padding(.horizontal, Spacing.margin)
-                    .padding(.top, 12)
-                    .padding(.bottom, Spacing.grid)
-                    .background(Tokens.ground)
+            if action != nil || secondary != nil {
+                VStack(spacing: 4) {
+                    if let action { button(action) }
+                    if let secondary { textButton(secondary) }
+                }
+                .padding(.horizontal, Spacing.margin)
+                .padding(.top, 12)
+                .padding(.bottom, Spacing.grid)
+                .background(Tokens.ground)
             }
         }
         .overlay { GeometryReader { geo in TopFade(inset: geo.safeAreaInsets.top) } }
@@ -57,6 +63,20 @@ struct ImportFrame<Content: View>: View {
 
     private func button(_ action: ImportAction) -> some View {
         BarButton(label: action.label, busyLabel: action.busyLabel, isEnabled: action.isEnabled, action: action.perform)
+    }
+
+    /// The secondary choice: the bar's type and height, no fill, so the two read as one control
+    /// with a first and a second line.
+    private func textButton(_ action: ImportAction) -> some View {
+        Button(action: action.perform) {
+            Text(action.label).typeRole(.rowTitle)
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+                .foregroundStyle(action.isEnabled ? Tokens.ink : Tokens.ink2)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(!action.isEnabled)
     }
 }
 

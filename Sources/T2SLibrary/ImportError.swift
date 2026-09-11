@@ -10,4 +10,8 @@ public enum ImportError: Error, Equatable, Sendable {
     case malformedBody(String)
     /// The file offered for a placeholder is not the file the other device has (sync spec §5).
     case differentFile
+    /// A document with this content key — the same bytes, or the same article URL — is already in
+    /// the library. One row per key (sync spec §2): a second one would sync as the same record and
+    /// the two would overwrite each other forever.
+    case alreadyInLibrary
 }

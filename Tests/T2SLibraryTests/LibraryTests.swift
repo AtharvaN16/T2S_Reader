@@ -39,9 +39,11 @@ import T2SCore
 
     func exists(_ url: URL) -> Bool { FileManager.default.fileExists(atPath: url.path) }
 
+    /// A stand-in file, with bytes of its own: two scratch files are two different books, since the
+    /// content key is the bytes and one key means one document (sync spec §2).
     func scratchFile(_ ext: String) throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("t2s-\(UUID().uuidString).\(ext)")
-        try Data("PK".utf8).write(to: url)
+        try Data("PK\(UUID().uuidString)".utf8).write(to: url)
         return url
     }
 

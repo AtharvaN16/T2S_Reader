@@ -40,6 +40,22 @@ import T2SStore
         #expect(try await library.store.document(id: placeholder)?.resumePosition?.progression == 0.5)
     }
 
+    /// Sync spec §2: one row per content key. The same article URL read in twice is that same
+    /// document, not a second row sharing its record — the two would sync as one and overwrite each
+    /// other for as long as both existed.
+    @Test func importingTheSameArticleTwiceIsRefused() async throws {
+        let library = try makeLibrary()
+        let url = URL(string: "https://example.com/same-story")!
+        let article = ArticleContent(title: "Story", sourceURL: url, bodyXHTML: "<p>Once upon a time. The end.</p>")
+        let first = try await library.importArticle(article, originalHTML: "<html>…</html>")
+
+        await #expect(throws: ImportError.alreadyInLibrary) {
+            try await library.importArticle(article, originalHTML: "<html>…</html>")
+        }
+        #expect(try await library.store.documents().count == 1)
+        #expect(try await library.store.documents().first?.id == first.document.id)
+    }
+
     /// A file that is not the placeholder's is refused before anything is imported.
     @Test func fillingAPlaceholderWithTheWrongFileIsRefused() async throws {
         let library = try makeLibrary()

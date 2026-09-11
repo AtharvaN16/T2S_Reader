@@ -18,10 +18,12 @@ struct AppFixtures {
         library = Library(paths: paths, store: store, audioStore: audio, readers: readers, segmenterPackLength: 0)
     }
 
-    /// Imports a placeholder EPUB through `FakeReader` and returns the new document's id.
+    /// Imports a placeholder EPUB through `FakeReader` and returns the new document's id. Its bytes
+    /// are its own: two of these are two different books, since one content key means one document
+    /// (sync spec §2) and a second import of the same bytes is refused.
     func importFake() async throws -> UUID {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("t2s-\(UUID().uuidString).epub")
-        try Data("PK".utf8).write(to: file)
+        try Data("PK\(UUID().uuidString)".utf8).write(to: file)
         return try await library.importFile(at: file, sourceType: .epub).document.id
     }
 }

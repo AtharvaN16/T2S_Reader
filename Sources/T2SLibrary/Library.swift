@@ -50,6 +50,9 @@ public actor Library {
         // and a placeholder for them is filled rather than doubled (sync spec §5).
         let key = try contentKey ?? ContentKey.file(at: url)
         let placeholder = try await store.placeholder(contentKey: key)
+        // A placeholder is filled; a real document with the same key is not doubled. Two rows on one
+        // content key are one record to sync, and they would overwrite each other cycle after cycle.
+        if placeholder == nil, try await store.documentID(contentKey: key) != nil { throw ImportError.alreadyInLibrary }
         let id = placeholder ?? UUID()
         let directory = paths.documentDirectory(id)
         do {
@@ -68,7 +71,14 @@ public actor Library {
         // An article's key is its URL; pasted text has none and stays on this device.
         let key = article.sourceURL.map(ContentKey.article)
         let placeholder: UUID?
-        if let key { placeholder = try await store.placeholder(contentKey: key) } else { placeholder = nil }
+        if let key {
+            placeholder = try await store.placeholder(contentKey: key)
+            // As in `importFile`: the same URL, already read in, is that same document — not a second
+            // one sharing its record (sync spec §2). Pasted text has no key and is never refused.
+            if placeholder == nil, try await store.documentID(contentKey: key) != nil { throw ImportError.alreadyInLibrary }
+        } else {
+            placeholder = nil
+        }
         let id = placeholder ?? UUID()
         let directory = paths.documentDirectory(id)
         do {

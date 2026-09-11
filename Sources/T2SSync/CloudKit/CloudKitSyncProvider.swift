@@ -57,13 +57,29 @@ public actor CloudKitSyncProvider: SyncProvider {
                 more = page.moreComing
             }
         } catch {
-            throw Self.mapped(error)
+            throw mapping(error)
         }
         return SyncChanges(records: records, token: try serverToken.map(Self.archive))
     }
 
+    /// CloudKit refuses a modify of more than 400 records, and a first sync of a library built up
+    /// over months is easily more than that — so the push goes up in chunks, results concatenated.
+    static let pushChunkSize = 200
+
     public func push(_ records: [SyncRecord]) async throws -> [SyncPushResult] {
         try await ensureZone()
+        var results: [SyncPushResult] = []
+        results.reserveCapacity(records.count)
+        var start = records.startIndex
+        while start < records.endIndex {
+            let end = records.index(start, offsetBy: Self.pushChunkSize, limitedBy: records.endIndex) ?? records.endIndex
+            results += try await pushChunk(Array(records[start..<end]))
+            start = end
+        }
+        return results
+    }
+
+    private func pushChunk(_ records: [SyncRecord]) async throws -> [SyncPushResult] {
         let ckRecords = records.map { record -> (SyncRecord, CKRecord) in
             switch record {
             case .document(let d): return (record, CloudKitRecordMapping.record(for: d, zone: zoneID, updating: known[ContentKey.recordName(for: d.contentKey)]))
@@ -74,7 +90,7 @@ public actor CloudKitSyncProvider: SyncProvider {
         do {
             results = try await database.modifyRecords(saving: ckRecords.map(\.1), deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: false)
         } catch {
-            throw Self.mapped(error)
+            throw mapping(error)
         }
         return try ckRecords.map { record, ck in
             switch results.saveResults[ck.recordID] {
@@ -90,7 +106,7 @@ public actor CloudKitSyncProvider: SyncProvider {
                     log.warning("sync: conflict on \(ck.recordID.recordName, privacy: .public) with an unreadable server record")
                     throw SyncError.other("conflict on \(ck.recordID.recordName) with an unreadable server record")
                 }
-                throw Self.mapped(error)
+                throw mapping(error)
             case nil:
                 throw SyncError.other("no result for \(ck.recordID.recordName)")
             }
@@ -107,6 +123,15 @@ public actor CloudKitSyncProvider: SyncProvider {
         } catch {
             throw Self.mapped(error)
         }
+    }
+
+    /// `mapped`, plus the one piece of state a failure has to change: a zone that is gone stays gone
+    /// until it is made again, so the readiness flag goes down with it and the next cycle's
+    /// `ensureZone` recreates it. A token for the old zone then expires into a full pull.
+    private func mapping(_ error: Error) -> SyncError {
+        let mapped = Self.mapped(error)
+        if case .zoneMissing = mapped { zoneReady = false }
+        return mapped
     }
 
     static func mapped(_ error: Error) -> SyncError {

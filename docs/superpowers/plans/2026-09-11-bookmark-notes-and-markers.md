@@ -56,7 +56,7 @@
 
 **Files:**
 - Create: `Sources/T2SStore/LibrarySchemaV3.swift`
-- Modify: `Sources/T2SStore/Models.swift`, `Sources/T2SStore/LibrarySchema.swift`
+- Modify: `Sources/T2SStore/Models.swift`, `Sources/T2SStore/LibrarySchema.swift`, `Sources/T2SStore/LibraryStore.swift:73`
 - Test: `Tests/T2SStoreTests/LibraryStoreTests.swift:205`
 
 **Interfaces:**
@@ -154,6 +154,16 @@ enum LibraryMigrationPlan: SchemaMigrationPlan {
 }
 ```
 
+- [ ] **Step 5b: Point the container's registered schema at V4**
+
+`Sources/T2SStore/LibraryStore.swift:73` names the version explicitly. Left at V3, the
+`ModelContainer` registers V3's model classes while every typealias in the module resolves to V4's,
+so `userNote` is not in the registered schema at all:
+
+```swift
+    static let schema = Schema(versionedSchema: LibrarySchemaV4.self)
+```
+
 - [ ] **Step 6: Run the store tests**
 
 Run: `swift test --filter T2SStoreTests`
@@ -162,7 +172,7 @@ Expected: PASS. If the compiler reports `LibrarySchemaV3` declared twice, `Model
 - [ ] **Step 7: Commit**
 
 ```bash
-git add Sources/T2SStore/LibrarySchemaV3.swift Sources/T2SStore/Models.swift Sources/T2SStore/LibrarySchema.swift Tests/T2SStoreTests/LibraryStoreTests.swift
+git add Sources/T2SStore/LibrarySchemaV3.swift Sources/T2SStore/Models.swift Sources/T2SStore/LibrarySchema.swift Sources/T2SStore/LibraryStore.swift Tests/T2SStoreTests/LibraryStoreTests.swift
 git commit -m "Schema V4 adds the reader's own note beside the passage, and freezes V3"
 ```
 

@@ -26,7 +26,7 @@ import T2SCore
         #expect(try await s.dirtyRecords(deviceName: "iPhone").isEmpty)
 
         try await s.savePosition(Position(resourceHref: "c1.xhtml", progression: 0.5), for: doc.id)
-        let bookmark = Bookmark(documentID: doc.id, position: Position(resourceHref: "c1.xhtml", progression: 0.2), note: "here")
+        let bookmark = Bookmark(documentID: doc.id, position: Position(resourceHref: "c1.xhtml", progression: 0.2), passageText: "here")
         try await s.add(bookmark)
         let dirty = try await s.dirtyRecords(deviceName: "iPhone")
         #expect(dirty.count == 2)
@@ -104,7 +104,7 @@ import T2SCore
         let key = "sha256:ccc"
         let onA = document(key)
         try await a.insert(onA, timeline: timeline())
-        let bookmark = Bookmark(documentID: onA.id, position: Position(resourceHref: "c1.xhtml", progression: 0.2), note: "here")
+        let bookmark = Bookmark(documentID: onA.id, position: Position(resourceHref: "c1.xhtml", progression: 0.2), passageText: "here")
         try await a.add(bookmark)
         try await a.markClean(try await a.dirtyRecords(deviceName: "iPhone"))
         try await a.deleteBookmark(id: bookmark.id)

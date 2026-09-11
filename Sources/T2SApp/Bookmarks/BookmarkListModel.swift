@@ -87,7 +87,7 @@ public final class BookmarkListModel {
         let offset = (0..<utterance.source.utf16.count).contains(raw) ? raw : 0
         // A bookmark saved with its block of text (`PlayerModel.addBookmark`) shows that block from
         // its start; an older one, the timeline's text from the bookmark's own word.
-        let snippet = bookmark.note.map { BookmarkSnippet.make(from: $0, offset: 0) }
+        let snippet = bookmark.passageText.map { BookmarkSnippet.make(from: $0, offset: 0) }
             ?? BookmarkSnippet.make(from: utterance.source, offset: offset)
         return BookmarkEntry(id: bookmark.id,
                              position: bookmark.position,

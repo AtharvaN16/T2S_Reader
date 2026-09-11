@@ -54,8 +54,8 @@ import T2SStore
         let first = timeline[utterance: 0]
         let midWord = Position(resourceHref: first.position.resourceHref, progression: first.position.progression,
                                charOffset: (first.position.charOffset ?? 0) + 6)
-        try await f.store.add(Bookmark(documentID: id, position: midWord, note: first.source, createdAt: Date(timeIntervalSince1970: 2)))
-        try await f.store.add(Bookmark(documentID: id, position: midWord, note: nil, createdAt: Date(timeIntervalSince1970: 1)))
+        try await f.store.add(Bookmark(documentID: id, position: midWord, passageText: first.source, createdAt: Date(timeIntervalSince1970: 2)))
+        try await f.store.add(Bookmark(documentID: id, position: midWord, passageText: nil, createdAt: Date(timeIntervalSince1970: 1)))
 
         let model = BookmarkListModel(library: f.library, player: player)
         await model.load(summary)

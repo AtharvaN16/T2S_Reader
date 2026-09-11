@@ -9,7 +9,8 @@ extension LibraryStore {
             predicate: #Predicate { $0.documentID == documentID },
             sortBy: [SortDescriptor(\.createdAt)])
         return try modelContext.fetch(descriptor).map { row in
-            Bookmark(id: row.id, documentID: row.documentID, position: row.position, note: row.note, createdAt: row.createdAt)
+            Bookmark(id: row.id, documentID: row.documentID, position: row.position,
+                     passageText: row.note, userNote: row.userNote, createdAt: row.createdAt)
         }
     }
 
@@ -21,13 +22,15 @@ extension LibraryStore {
             row.progression = bookmark.position.progression
             row.charOffset = bookmark.position.charOffset
             row.cssSelector = bookmark.position.cssSelector
-            row.note = bookmark.note
+            row.note = bookmark.passageText
+            row.userNote = bookmark.userNote
             row.createdAt = bookmark.createdAt
             row.updatedAt = Date()
             row.isDirty = true
         } else {
             let row = StoredBookmark(id: bookmark.id, documentID: bookmark.documentID, position: bookmark.position,
-                                     note: bookmark.note, createdAt: bookmark.createdAt)
+                                     note: bookmark.passageText, createdAt: bookmark.createdAt)
+            row.userNote = bookmark.userNote
             row.updatedAt = Date()
             row.isDirty = true
             modelContext.insert(row)

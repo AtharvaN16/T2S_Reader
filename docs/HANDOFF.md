@@ -67,9 +67,19 @@ staged twin (363 MB), 0 retries, 14 stages compiled in 8.7 s, 45.7 s in all` —
 run because Hugging Face did not refuse this time. Then the warm-up: `14 stages in 517.2 s, 4
 rebuilt, slowest kokoro_duration_t256 512.13 s` — the other three long plans took 60 s each, so on
 the A13 a first launch *is* `duration_t256`'s plan build (453 s at 01:14, 490 s at 00:55, 512 s here).
-It is in the ready set because a piece may run to 176 ids; loading it after readiness like the 7 s
-and 10 s buckets, with pieces capped at 128 tokens until it lands, would make a first launch speak
-after about a minute instead of eight. The copy was deleted again afterwards.
+It was in the ready set because a piece may run to 176 ids. The copy was deleted again afterwards.
+
+**Readiness without t256 (`b8bc24b`, 02:04).** The ready set is seven stages (t128 and the 3 s and
+15 s buckets); t256 loads on the later-bucket task after the 7 s and 10 s buckets and is swapped in
+like a bucket (`install(durationTokenLength:stages:)`); until it lands pieces are cut at 126 ids
+(`pieceCap(for:)`), the split the background set's t128 already forced staying as the backstop; the
+GPU predictor warm-up warms t256 when it lands. Installed over `t2s` and launched: the wipe freed one
+generation (596 MB); `kokoro warm-up finished in 57.5 s` (was 458–513 s); the 7 s and 10 s buckets
+two seconds later; `kokoro_duration_t256 loaded in 235.19 s` at 02:08:55 — alone on the CPU it builds
+in four minutes, not eight — and `main set loaded: 14 stages in 296.2 s, 4 rebuilt`. Between 02:05
+and 02:09 a long sentence renders in pieces of up to 126 ids instead of 176: a seam more, nothing
+else. The streamed-versus-whole timing test now waits for the full load (it had caught exactly this:
+the whole render ran after t256 landed, cut elsewhere, the words 0.10–0.22 s apart).
 
 **Verified:** `swift test` 478/87; `KokoroCoreMLInstallTests` 11, `KokoroComputeUnitsTests` 4,
 `KokoroPlanCacheTests` 3, `KokoroTimingLogTests` 3, `KokoroLoadTallyTests` 2; simulator and device
@@ -80,7 +90,8 @@ builds; the phone as above.
   the change is a constant and a budget bookkeeping fix, both unit-tested; a phone would confirm the
   budget cycle covers 180 s at the A13's speed). The download retry against a real 429 (only the
   fake network has produced one).
-- `duration_t256` out of the ready set (above): the first-launch win on the A13.
+- Plan 18, `docs/superpowers/plans/2026-09-11-render-ahead-by-chapter.md` (written 02:07): render to
+  the end of the chapter while frontmost and listening, so the background loop only tops up.
 - Harsh, on the 17 Pro: playback locked on the GPU path with the CPU set behind it; whether
   serializing the GPU plan builds (the research's WhisperKit pattern) is worth its ~2× load time
   there; the §7.3 MLX spike if MLX for A14+ is ever revisited.

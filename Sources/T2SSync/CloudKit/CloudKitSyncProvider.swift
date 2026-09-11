@@ -2,6 +2,7 @@
 import CloudKit
 import Foundation
 import T2SCore
+import os
 
 /// The one CloudKit caller (sync spec §3): a custom zone in the private database, zone changes
 /// behind the token, saves that refuse to overwrite a newer server record so the engine can merge.
@@ -12,6 +13,7 @@ public actor CloudKitSyncProvider: SyncProvider {
     private let zoneID = CKRecordZone.ID(zoneName: CloudKitRecordMapping.zoneName, ownerName: CKCurrentUserDefaultName)
     private var zoneReady = false
     private var known: [String: CKRecord] = [:]
+    private let log = Logger(subsystem: "com.t2s.reader", category: "sync")
 
     public init(containerIdentifier: String) {
         container = CKContainer(identifier: containerIdentifier)
@@ -44,7 +46,11 @@ public actor CloudKitSyncProvider: SyncProvider {
                 for (_, result) in page.modificationResultsByID {
                     if case .success(let modification) = result {
                         known[modification.record.recordID.recordName] = modification.record
-                        if let mapped = CloudKitRecordMapping.syncRecord(from: modification.record) { records.append(mapped) }
+                        if let mapped = CloudKitRecordMapping.syncRecord(from: modification.record) {
+                            records.append(mapped)
+                        } else {
+                            log.warning("sync: could not read record \(modification.record.recordType, privacy: .public) \(modification.record.recordID.recordName, privacy: .public)")
+                        }
                     }
                 }
                 serverToken = page.changeToken
@@ -76,10 +82,13 @@ public actor CloudKitSyncProvider: SyncProvider {
                 known[saved.recordID.recordName] = saved
                 return SyncPushResult(record: record, outcome: .saved)
             case .failure(let error)?:
-                if let ckError = error as? CKError, ckError.code == .serverRecordChanged, let server = ckError.serverRecord,
-                   let mapped = CloudKitRecordMapping.syncRecord(from: server) {
-                    known[server.recordID.recordName] = server
-                    return SyncPushResult(record: record, outcome: .conflict(server: mapped))
+                if let ckError = error as? CKError, ckError.code == .serverRecordChanged {
+                    if let server = ckError.serverRecord, let mapped = CloudKitRecordMapping.syncRecord(from: server) {
+                        known[server.recordID.recordName] = server
+                        return SyncPushResult(record: record, outcome: .conflict(server: mapped))
+                    }
+                    log.warning("sync: conflict on \(ck.recordID.recordName, privacy: .public) with an unreadable server record")
+                    throw SyncError.other("conflict on \(ck.recordID.recordName) with an unreadable server record")
                 }
                 throw Self.mapped(error)
             case nil:
@@ -90,6 +99,8 @@ public actor CloudKitSyncProvider: SyncProvider {
 
     private func ensureZone() async throws {
         guard !zoneReady else { return }
+        // Two overlapping calls can both reach the save below before `zoneReady` flips; that's
+        // fine — CloudKit's zone save is idempotent, so no locking is needed here.
         do {
             _ = try await database.save(CKRecordZone(zoneID: zoneID))
             zoneReady = true

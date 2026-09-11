@@ -45,7 +45,7 @@ public final class BookmarkListModel {
             }
             let index = TimeIndex(timeline)
             entries = bookmarks
-                .map { bookmark in Self.entry(for: bookmark, timeline: timeline, index: index) }
+                .map { bookmark in Self.displayEntry(for: bookmark, timeline: timeline, index: index) }
                 .sorted { $0.createdAt > $1.createdAt }
         } catch {
             self.error = "\(error)"
@@ -77,7 +77,12 @@ public final class BookmarkListModel {
     /// Precondition on the empty branch: a non-empty timeline never yields an out-of-range
     /// utterance index from `PositionResolver.resolve`, so the guard below only ever fires for a
     /// document with zero utterances.
-    private static func entry(for bookmark: Bookmark, timeline: Timeline, index: TimeIndex) -> BookmarkEntry {
+    ///
+    /// Public, not internal: the Reader's toast resolves the bookmark it just saved through this,
+    /// and the App target cannot see T2SApp's internal symbols. `nonisolated`: it only touches its
+    /// parameters, and `BookmarkGrouping` (not itself actor-isolated, so it can be tested without a
+    /// player or the main actor) calls it too.
+    public nonisolated static func displayEntry(for bookmark: Bookmark, timeline: Timeline, index: TimeIndex) -> BookmarkEntry {
         guard timeline.utteranceCount > 0 else {
             return BookmarkEntry(id: bookmark.id, position: bookmark.position, chapterTitle: "", passage: "",
                                  userNote: bookmark.userNote, timeSeconds: 0, endSeconds: 0, createdAt: bookmark.createdAt)

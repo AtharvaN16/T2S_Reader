@@ -16,6 +16,13 @@ settings:
   base:
     T2S_BUNDLE_ID: com.t2s.reader
     T2S_APP_GROUP: group.com.t2s.reader
+    # Which entitlements file signs the app (sync spec §8): the plain one, app groups only, by
+    # default; `Local.xcconfig` on a paid team points at `T2SReader.iCloud.entitlements`, which
+    # adds CloudKit with `T2S_ICLOUD_CONTAINER`. The owner's free team cannot carry iCloud, so
+    # the default build never mentions it.
+    T2S_ENTITLEMENTS: T2SReader/T2SReader.entitlements
+    T2S_ICLOUD_CONTAINER: ""
+    CODE_SIGN_ENTITLEMENTS: $(T2S_ENTITLEMENTS)
 packages:
   T2S:
     path: ..
@@ -120,13 +127,6 @@ targetTemplates:
         # `Local.xcconfig.example`), wired in through `configFiles` below.
         INFOPLIST_KEY_UIUserInterfaceStyle: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        # Which entitlements file signs the app (sync spec §8): the plain one, app groups only, by
-        # default; `Local.xcconfig` on a paid team points at `T2SReader.iCloud.entitlements`, which
-        # adds CloudKit with `T2S_ICLOUD_CONTAINER`. The owner's free team cannot carry iCloud, so
-        # the default build never mentions it.
-        T2S_ENTITLEMENTS: T2SReader/T2SReader.entitlements
-        T2S_ICLOUD_CONTAINER: ""
-        CODE_SIGN_ENTITLEMENTS: $(T2S_ENTITLEMENTS)
     configFiles:
       Debug: Local.xcconfig
       Release: Local.xcconfig

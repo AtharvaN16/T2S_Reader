@@ -150,38 +150,46 @@ public actor KokoroCoreMLInstall {
             try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? FileManager.default.removeItem(at: part)
             let base = done
-            Self.log.notice("downloading \(file.path, privacy: .public) (\(file.byteCount, privacy: .public) bytes)")
-            // A refusal the server may lift (429, a 5xx, a dropped connection) is tried again after
-            // a wait — the server's own `Retry-After`, else doubling from two seconds — up to
-            // `maximumAttempts`; anything else (a 404, a checksum) fails the install at once. The
-            // `.part` is removed before every attempt: the download has no `Range`, so it restarts.
-            var attempt = 0
-            while true {
-                attempt += 1
-                try? FileManager.default.removeItem(at: part)
-                let counter = OSAllocatedUnfairLock(initialState: 0)
-                do {
-                    try await downloader(file.url, part, { bytes in
-                        let sum = counter.withLock { $0 += bytes; return $0 }
-                        progress(.downloading(bytes: base + min(sum, file.byteCount), totalBytes: total))
-                    }, {
-                        progress(.waitingForNetwork(totalBytes: total))
-                    })
-                    break
-                } catch is CancellationError {
+            // A stage's bucket variants share their weights — the manifest lists 619 MB of which
+            // 238 MB is unique — so a file whose bytes are already staged under another path is
+            // copied from there, not fetched again.
+            if let twin = stagedTwin(of: file) {
+                Self.log.notice("copying \(file.path, privacy: .public) from \(twin.lastPathComponent, privacy: .public)")
+                try FileManager.default.copyItem(at: twin, to: part)
+            } else {
+                Self.log.notice("downloading \(file.path, privacy: .public) (\(file.byteCount, privacy: .public) bytes)")
+                // A refusal the server may lift (429, a 5xx, a dropped connection) is tried again after
+                // a wait — the server's own `Retry-After`, else doubling from two seconds — up to
+                // `maximumAttempts`; anything else (a 404, a checksum) fails the install at once. The
+                // `.part` is removed before every attempt: the download has no `Range`, so it restarts.
+                var attempt = 0
+                while true {
+                    attempt += 1
                     try? FileManager.default.removeItem(at: part)
-                    throw CancellationError()
-                } catch {
-                    try? FileManager.default.removeItem(at: part)
-                    let status = (error as? HTTPStatusError)?.status
-                    Self.log.error("download failed for \(file.path, privacy: .public) (attempt \(attempt, privacy: .public)): \(String(describing: error), privacy: .public)")
-                    guard Self.isRetryable(error), attempt < Self.maximumAttempts else {
-                        throw Failure.download(file.path, status: status)
+                    let counter = OSAllocatedUnfairLock(initialState: 0)
+                    do {
+                        try await downloader(file.url, part, { bytes in
+                            let sum = counter.withLock { $0 += bytes; return $0 }
+                            progress(.downloading(bytes: base + min(sum, file.byteCount), totalBytes: total))
+                        }, {
+                            progress(.waitingForNetwork(totalBytes: total))
+                        })
+                        break
+                    } catch is CancellationError {
+                        try? FileManager.default.removeItem(at: part)
+                        throw CancellationError()
+                    } catch {
+                        try? FileManager.default.removeItem(at: part)
+                        let status = (error as? HTTPStatusError)?.status
+                        Self.log.error("download failed for \(file.path, privacy: .public) (attempt \(attempt, privacy: .public)): \(String(describing: error), privacy: .public)")
+                        guard Self.isRetryable(error), attempt < Self.maximumAttempts else {
+                            throw Failure.download(file.path, status: status)
+                        }
+                        let delay = (error as? HTTPStatusError)?.retryAfter ?? Self.backoff(afterAttempt: attempt)
+                        progress(.retrying(path: file.path, attempt: attempt + 1, after: delay))
+                        await sleeper(delay)
+                        try Task.checkCancellation()
                     }
-                    let delay = (error as? HTTPStatusError)?.retryAfter ?? Self.backoff(afterAttempt: attempt)
-                    progress(.retrying(path: file.path, attempt: attempt + 1, after: delay))
-                    await sleeper(delay)
-                    try Task.checkCancellation()
                 }
             }
             guard try Self.matches(part, file) else {
@@ -194,6 +202,17 @@ public actor KokoroCoreMLInstall {
             done += file.byteCount
             progress(.downloading(bytes: done, totalBytes: total))
         }
+    }
+
+    /// A staged file of another path with `file`'s content, verified, if there is one — the
+    /// stage's other bucket variants, or nothing once a variant's stage has been compiled and its
+    /// source removed.
+    private func stagedTwin(of file: KokoroCoreMLManifest.File) -> URL? {
+        for candidate in manifest where candidate.sha256 == file.sha256 && candidate.path != file.path {
+            let url = stagingDirectory.appending(path: candidate.path)
+            if (try? Self.matches(url, candidate)) == true { return url }
+        }
+        return nil
     }
 
     /// Whether a download failure is the passing kind: the server asking for a pause (429), a

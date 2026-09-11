@@ -99,7 +99,11 @@ import Testing
 
         _ = try await installer.install { progress.value.append($0) }
 
-        #expect(Set(served.value) == Set(fixture.manifest.map(\.path)))
+        // Every distinct content fetched exactly once (the fixture's Manifest.json files are all "{}",
+        // so they are one download and copies), every path present afterwards.
+        let hashOf = Dictionary(uniqueKeysWithValues: fixture.manifest.map { ($0.path, $0.sha256) })
+        #expect(Set(served.value.map { hashOf[$0]! }) == Set(fixture.manifest.map(\.sha256)))
+        #expect(served.value.count == Set(fixture.manifest.map(\.sha256)).count)
         let compiled = fixture.root.appending(path: "compiled/kokoro_duration_t128.mlmodelc/compiled-from")
         #expect(try String(contentsOf: compiled, encoding: .utf8) == "kokoro_duration_t128.mlpackage")
         #expect(!FileManager.default.fileExists(atPath: fixture.root.appending(path: "staging/coreml/kokoro_duration_t128.mlpackage").path()))
@@ -182,6 +186,26 @@ import Testing
         }
         #expect(served.value.filter { $0 == "voices/af_heart.bin" }.count == 1)
         #expect(sleeps.value.isEmpty)
+    }
+
+    /// Two manifest files with the same content are one download: the second is copied from the
+    /// first. (The real manifest's bucket variants share their weights — 619 MB listed, 238 MB unique.)
+    @Test func aFileWithTheSameContentIsCopiedNotDownloaded() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let heart = fixture.manifest.first { $0.path == "voices/af_heart.bin" }!
+        let twin = KokoroCoreMLManifest.File("voices/af_twin.bin", sha256: heart.sha256, byteCount: heart.byteCount)
+        let served = OSAllocatedUnfairLockBox<[String]>([])
+        // The fixture's downloader has no bytes for the twin: asking for it over the network fails.
+        let installer = KokoroCoreMLInstall(root: fixture.root, manifest: fixture.manifest + [twin],
+                                            downloader: fixture.downloader(served: served), compiler: Fixture.compiler)
+
+        _ = try await installer.install { _ in }
+
+        #expect(!served.value.contains("voices/af_twin.bin"))
+        #expect(served.value.contains("voices/af_heart.bin"))
+        let staged = fixture.root.appending(path: "staging/voices/af_twin.bin")
+        #expect(try Data(contentsOf: staged) == fixture.bytes["voices/af_heart.bin"])
     }
 
     /// A second run over an installed root downloads nothing and compiles nothing.

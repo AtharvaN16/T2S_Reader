@@ -32,29 +32,32 @@ struct QueueRow: View {
     /// Books with chapters show the chapter's own progress and time; a file with none shows the file's.
     private var hasChapters: Bool { !isArticle && (progress?.chapterCount ?? summary.chapterCount) > 1 }
 
-    /// The shelved cover's fixed width (`BookCover.shelved`), so Play can be inset to sit under the
-    /// title without being part of the book's own button.
-    private var coverWidth: CGFloat { BookCover.shelfHeight * BookCover.widestRatio }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        // 20 pt between the book and its text: the cover's shadow needs air, and the reference cell
+        // (Apple Books' Continue) breathes there too.
+        HStack(alignment: .top, spacing: 20) {
+            // On its shelf slot so the chapter line, title and Play pill start at one x on every
+            // row, whatever width the cover is; the grid stands its books the same way. Its own
+            // button, not part of the text's: the cover is the same fixed 120 pt tall regardless of
+            // how little text a row has, and folding Play in under a Button spanning that height
+            // pushed it down to the cover's foot, leaving a gap under a short excerpt.
             Button(action: onOpenBook) {
-                // 20 pt between the book and its text: the cover's shadow needs air, and the
-                // reference cell (Apple Books' Continue) breathes there too.
-                HStack(alignment: .top, spacing: 20) {
-                    // On its shelf slot so the chapter line, title and Play pill start at one x on
-                    // every row, whatever width the cover is; the grid stands its books the same way.
-                    if isArticle {
-                        // A web page or pasted text is not a book: a sheet of paper, on the same slot.
-                        SheetCover(title: summary.document.title, sourceURL: summary.document.sourceURL, height: BookCover.shelfHeight)
-                            .shelved
-                    } else {
-                        BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: BookCover.shelfHeight,
-                                  title: summary.document.title, author: summary.document.displayAuthor,
-                                  isPDF: summary.document.sourceType == .pdf)
-                            .shelved
-                    }
+                if isArticle {
+                    // A web page or pasted text is not a book: a sheet of paper, on the same slot.
+                    SheetCover(title: summary.document.title, sourceURL: summary.document.sourceURL, height: BookCover.shelfHeight)
+                        .shelved
+                } else {
+                    BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: BookCover.shelfHeight,
+                              title: summary.document.title, author: summary.document.displayAuthor,
+                              isPDF: summary.document.sourceType == .pdf)
+                        .shelved
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityHidden(true)                                          // decorative beside the text button's own label
 
+            VStack(alignment: .leading, spacing: 8) {
+                Button(action: onOpenBook) {
                     VStack(alignment: .leading, spacing: 8) {
                         // "Chapter 7 · ◔ 41%  ✓": the chapter, how far through it, and ready-offline.
                         HStack(spacing: 6) {
@@ -67,6 +70,7 @@ struct QueueRow: View {
                             if summary.isFullyRendered { PositiveCheck() }
                         }
                         .typeRole(.meta)
+                        .font(.custom("Inter-Medium", size: 13, relativeTo: .footnote))   // a step bolder than plain meta (owner, 2026-09-11)
                         .foregroundStyle(Tokens.ink2)
 
                         Text(summary.document.title)
@@ -82,47 +86,48 @@ struct QueueRow: View {
                                 .truncationMode(.tail)
                                 .foregroundStyle(Tokens.ink2)
                                 .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)      // wraps to its 2 lines instead of hugging 1
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                 }
-            }
-            .buttonStyle(.plain)
-            // One element, not the header line and the excerpt read out on top of it: the visible
-            // detail collapses to the words that matter for a listener choosing where to jump in.
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel([chapterText, summary.document.title].compactMap { $0 }.joined(separator: ", "))
-            .accessibilityHint("Opens the book")
+                .buttonStyle(.plain)
+                // One element, not the header line and the excerpt read out on top of it: the
+                // visible detail collapses to the words that matter for a listener choosing where
+                // to jump in.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel([chapterText, summary.document.title].compactMap { $0 }.joined(separator: ", "))
+                .accessibilityHint("Opens the book")
 
-            HStack(spacing: 8) {
-                Pill(label: isPlayingHere ? "Pause" : (isStarting ? "Starting…" : (hasProgress ? "Continue" : "Play")),
-                     detail: isStarting ? nil : timeDetail,
-                     glyph: isPlayingHere ? "pause.fill" : (isStarting ? nil : "play.fill"),
-                     style: .soft) {
-                    Task {
-                        if isPlayingHere { await env.player.togglePlay(); return }   // Pause stays in place
-                        if isCurrent {
-                            isStarting = true
-                            await env.player.togglePlay()                            // resume, then read along
-                            isStarting = false
+                HStack(spacing: 8) {
+                    Pill(label: isPlayingHere ? "Pause" : (isStarting ? "Starting…" : (hasProgress ? "Continue" : "Play")),
+                         detail: isStarting ? nil : timeDetail,
+                         glyph: isPlayingHere ? "pause.fill" : (isStarting ? nil : "play.fill"),
+                         style: .soft) {
+                        Task {
+                            if isPlayingHere { await env.player.togglePlay(); return }   // Pause stays in place
+                            if isCurrent {
+                                isStarting = true
+                                await env.player.togglePlay()                            // resume, then read along
+                                isStarting = false
+                            }
+                            onOpen()                                                       // the Reader loads and plays a non-current document itself
                         }
-                        onOpen()                                                       // the Reader loads and plays a non-current document itself
                     }
+                    .disabled(isStarting)
+                    .accessibilityHint(isPlayingHere ? "Pauses" : "Plays and opens the reader")
+                    Menu {
+                        contextItems
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Tokens.ink)
+                            .frame(width: 36, height: 36)
+                            .background(Tokens.surface, in: Circle())
+                    }
+                    .accessibilityLabel("More")
                 }
-                .disabled(isStarting)
-                .accessibilityHint(isPlayingHere ? "Pauses" : "Plays and opens the reader")
-                Menu {
-                    contextItems
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Tokens.ink)
-                        .frame(width: 36, height: 36)
-                        .background(Tokens.surface, in: Circle())
-                }
-                .accessibilityLabel("More")
             }
-            .padding(.leading, coverWidth + 20)                                   // under the title, past the cover
         }
         .contextMenu { contextItems }
         .sheet(isPresented: $showSleepTimer) { SleepTimerSheet() }

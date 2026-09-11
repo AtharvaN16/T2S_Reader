@@ -35,7 +35,7 @@ struct QueuePage: View {
                     QueueRow(summary: summary, onOpen: {
                         readerRoute.open(summary)
                     }, onOpenBook: { selectedBook = summary }, onDetails: { details = summary })
-                    .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
+                    .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.homeRowGap, trailing: Spacing.margin))
                 }
                 Color.clear.frame(height: Spacing.bottomClearance)        // room for the mini-player, indicator and their fade
                     .listRowInsets(EdgeInsets())

@@ -89,4 +89,10 @@ import Testing
     @Test func unknownDocumentsAreIgnored() {
         #expect(RenderPolicy.plan(input(primes: [b], manual: [c], docs: [])).isEmpty)
     }
+
+    /// The arbiter hands the lease on in `allCases` order, so declaration order must be priority order.
+    @Test func tierDeclarationOrderIsPriorityOrder() {
+        #expect(RenderTier.allCases == RenderTier.allCases.sorted())
+        #expect(RenderTier.allCases == [.playAhead, .prime, .chapterAhead, .prepare, .manual])
+    }
 }

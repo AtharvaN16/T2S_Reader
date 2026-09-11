@@ -17,9 +17,10 @@ public actor RenderArbiter {
         }
     }
 
-    /// Transfers ownership to one waiter, or makes the lease available when there are none.
+    /// Transfers ownership to one waiter — the lowest tier with one, in `RenderTier`'s declaration
+    /// order — or makes the lease available when there are none.
     public func release() {
-        for tier in [RenderTier.playAhead, .prime, .prepare, .manual] {
+        for tier in RenderTier.allCases {
             guard var queue = waiters[tier], !queue.isEmpty else { continue }
             let next = queue.removeFirst()
             waiters[tier] = queue

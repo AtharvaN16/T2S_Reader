@@ -1,8 +1,21 @@
 import Foundation
 
-/// Spec §3.4.1 tiers, in priority order.
-public enum RenderTier: Int, Hashable, Comparable, Sendable {
-    case playAhead = 0, prime, prepare, manual
+/// Spec §3.4.1 tiers, in priority order. `allCases` *is* that order: `RenderArbiter.release()`
+/// walks it to hand the lease on, so a tier added here is arbitrated without a second list to
+/// keep in step — a tier the arbiter did not know about waited forever.
+public enum RenderTier: Int, Hashable, Comparable, CaseIterable, Sendable {
+    /// The playing document's window ahead of the playhead — always wins the next boundary.
+    case playAhead = 0
+    /// A new import's first 30 s, or the continue-document's at launch.
+    case prime
+    /// The rest of the playing document's chapter, clamped, while frontmost and listening (Plan
+    /// 18). After `prime` — an import during playback must not wait ten minutes behind a fill —
+    /// and before `prepare`, which on a charger plans the same utterances at the budget's pace.
+    case chapterAhead
+    /// The continue-document, then the queue, while charging.
+    case prepare
+    /// "Render whole document".
+    case manual
     public static func < (a: RenderTier, b: RenderTier) -> Bool { a.rawValue < b.rawValue }
 }
 

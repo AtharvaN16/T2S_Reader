@@ -172,6 +172,7 @@ public final class ImportModel {
         case ImportError.unreadable(let detail): return "This file couldn't be read. \(detail)"
         case ImportError.noText: return "There's no text to read."
         case ImportError.malformedBody: return "The article text couldn't be converted."
+        case ImportError.differentFile: return "That's a different file."
         case ExtractionError.invalidURL: return "That doesn't look like a web address."
         case ExtractionError.network(let detail): return "Couldn't load the page: \(detail)"
         case ExtractionError.noArticle: return "No article was found on that page."

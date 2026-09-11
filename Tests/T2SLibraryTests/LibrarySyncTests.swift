@@ -52,5 +52,17 @@ import T2SStore
             try await library.fillPlaceholder(placeholder, from: file, sourceType: .epub)
         }
         #expect(try await library.store.documents().count == 1)
+
+        // A document that is not a placeholder at all is refused too — even if `fillPlaceholder`
+        // were only checking `contentKey`, this id has none of the placeholder's identity.
+        let real = try await library.importArticle(
+            ArticleContent(title: "Real", sourceURL: URL(string: "https://x.y/real")!, bodyXHTML: "<p>Text.</p>"),
+            originalHTML: "")
+        let anyFile = FileManager.default.temporaryDirectory.appending(path: "any-\(UUID().uuidString).epub")
+        try Data("zip".utf8).write(to: anyFile)
+        await #expect(throws: (any Error).self) {
+            try await library.fillPlaceholder(real.document.id, from: anyFile, sourceType: .epub)
+        }
+        #expect(try await library.store.documents().count == 2)
     }
 }

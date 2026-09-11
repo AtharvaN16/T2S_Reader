@@ -210,6 +210,12 @@ struct KokoroComposition {
     /// finished. Returns an empty list in the everyday build.
     private let catalogEngines: @Sendable () -> [(identity: String, label: String)]
 
+    /// Backs `noteScene(isBackground:)`; in the Kokoro build the same lock is captured by the
+    /// placement closure passed to `GatedKokoroCoreMLEngine`, so a write here is what that closure
+    /// sees on its next read. Defaulted so the everyday build's `KokoroComposition(...)` call does
+    /// not need to know about it — nothing there reads it.
+    let sceneIsBackground = OSAllocatedUnfairLock(initialState: false)
+
     /// The user default that picks the compute units for the session (`KokoroComputeUnits`
     /// raw values: `cpu`, `cpuAndNeuralEngine`, `cpuAndGPU`, `all`); unset is `cpu`, the measured
     /// policy. A developer's switch for the audit's §3.7 measurement, not a setting.
@@ -243,6 +249,19 @@ struct KokoroComposition {
         #if KOKORO_ENGINE
         KokoroCoreMLEngine.timing("render-ahead fill \(on ? "on" : "off")")
         #endif
+    }
+
+    /// Set from `ScenePlacement.placesInBackground(phase:)`, not from the foreground gate: what the
+    /// Core ML engine's placement closure reads to decide the main (GPU) set from the background
+    /// (CPU) one. `.inactive` — Control Center, a notification banner, the app switcher — leaves
+    /// this clear, so an interruption that never actually loses GPU submission does not park a
+    /// streamed head on the background set's absence or force it into discarded 3 s-bucket pieces
+    /// (2026-09-11 GPU-path review, §2.3, §5 item 3 — R4). The gate itself is untouched by this and
+    /// keeps closing on anything but `.active`, because a plan build caught running once the app is
+    /// actually backgrounded is killed for a minute of a core. A no-op in the everyday build, which
+    /// links no engine that reads `sceneIsBackground`.
+    func noteScene(isBackground: Bool) {
+        sceneIsBackground.withLock { $0 = isBackground }
     }
 
     /// `gate` is the app's foreground gate: the install's compiles and the warm-up's compute-plan
@@ -291,10 +310,15 @@ struct KokoroComposition {
         // (`KokoroCoreMLResources.backgroundBuckets`), loaded after the main one during the first
         // foreground session; until it exists, a background render waits for the foreground.
         let backgroundComputeUnits: KokoroComputeUnits? = computeUnits == .cpu ? nil : .cpu
+        // Placement reads its own flag (`sceneIsBackground`, set by `noteScene(isBackground:)` from
+        // `ScenePlacement`), not the gate: `.inactive` closes the gate (plan builds must not run
+        // once the app is actually backgrounded a moment later) but must not place a streamed head
+        // in the background too (2026-09-11 review §5 item 3, R4). `admission` stays the gate.
+        let sceneIsBackground = OSAllocatedUnfairLock(initialState: false)
         let coreMLEngine = GatedKokoroCoreMLEngine(availability: coreML, computeUnits: computeUnits,
                                                    backgroundComputeUnits: backgroundComputeUnits,
                                                    admission: { await gate.waitUntilForeground() },
-                                                   placement: { gate.isForeground ? .foreground : .background })
+                                                   placement: { sceneIsBackground.withLock { $0 } ? .background : .foreground })
         // The MLX route costs a 340 MB hash, so one probe per launch, started below and memoized —
         // the route's `isAvailable` joins this same work rather than starting a second.
         let mlx = KokoroAvailabilityModel(probe: .live(defaults: defaults))
@@ -398,7 +422,8 @@ struct KokoroComposition {
             status: status,
             playAheadWindowSeconds: computeUnits == .cpu ? 180 : 600,
             foregroundFillSeconds: fill,
-            catalogEngines: catalogEngines(mlxListed: mlxListed)
+            catalogEngines: catalogEngines(mlxListed: mlxListed),
+            sceneIsBackground: sceneIsBackground
         )
         #else
         log.notice("Kokoro engine not linked in this build")

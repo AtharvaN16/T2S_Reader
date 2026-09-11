@@ -42,12 +42,13 @@ public actor Library {
     // MARK: Import
 
     /// Copies `url` into the container (the original is never touched), reads it, segments it,
-    /// stores it, and queues it. On any failure the document directory is removed.
-    public func importFile(at url: URL, sourceType: SourceType) async throws -> ImportResult {
+    /// stores it, and queues it. On any failure the document directory is removed. `contentKey`
+    /// lets a caller that already hashed the file (`fillPlaceholder`) skip hashing it a second time.
+    public func importFile(at url: URL, sourceType: SourceType, contentKey: String? = nil) async throws -> ImportResult {
         let reader = try reader(for: sourceType)
         // The content key first (sync spec §2): the same bytes on another device are the same book,
         // and a placeholder for them is filled rather than doubled (sync spec §5).
-        let key = try ContentKey.file(at: url)
+        let key = try contentKey ?? ContentKey.file(at: url)
         let placeholder = try await store.placeholder(contentKey: key)
         let id = placeholder ?? UUID()
         let directory = paths.documentDirectory(id)
@@ -203,10 +204,16 @@ public actor Library {
 
     /// The Files picker's answer for an EPUB or PDF placeholder: accepted only when its bytes are the
     /// other device's (sync spec §5), then imported through the ordinary path, which fills the row.
+    /// Requires `id` to actually be a placeholder — not merely a document whose `contentKey` happens
+    /// to match — since a non-placeholder id has no row for `importFile` to fill, and it would mint
+    /// a second document sharing that key instead.
     public func fillPlaceholder(_ id: UUID, from url: URL, sourceType: SourceType) async throws -> ImportResult {
-        guard let expected = try await store.document(id: id)?.contentKey else { throw ImportError.unreadable("no placeholder") }
-        guard try ContentKey.file(at: url) == expected else { throw ImportError.differentFile }
-        return try await importFile(at: url, sourceType: sourceType)
+        guard let document = try await store.document(id: id), document.isPlaceholder, let expected = document.contentKey else {
+            throw ImportError.unreadable("not a placeholder")
+        }
+        let key = try ContentKey.file(at: url)
+        guard key == expected else { throw ImportError.differentFile }
+        return try await importFile(at: url, sourceType: sourceType, contentKey: key)
     }
 
     // MARK: Internals

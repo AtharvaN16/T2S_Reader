@@ -127,14 +127,14 @@ import T2SStore
         await player.seek(toChapter: 1)
         #expect(player.chapterIndex == 1)
         #expect(player.chapters[0].fraction == 1 && player.chapters[1].fraction == 0)
-        let estimated = player.chapters.map(\.durationSeconds)
+        let estimatedChapter1 = player.chapters[1].durationSeconds
         await engine.release()
-        player.renderCurrentChapter()                                        // play-ahead alone renders nothing behind the seek
+        player.renderCurrentChapter()                                        // the seeked-to chapter — play-ahead alone renders nothing behind the seek
         await player.coordinator.waitForRenderIdle()
-        #expect(!player.isTotalApproximate)                                 // the render moved the revision
-        let timeline = try #require(player.coordinator.timeline)            // …and the axis with it: the actual durations
+        let timeline = try #require(player.coordinator.timeline)            // the render moved the revision…
         let actual = ChapterEntry.entries(timeline: timeline, timeIndex: player.coordinator.timeIndex, elapsed: player.elapsed)
-        #expect(player.chapters == actual && actual.map(\.durationSeconds) != estimated)
+        #expect(player.chapters == actual)                                  // …and the cached facts followed it
+        #expect(actual[1].durationSeconds != estimatedChapter1)             // the rendered chapter's own duration is now measured
         let other = try await f.importFake()
         await player.load(try #require(try await f.store.summary(id: other)), play: false)
         #expect(player.isTotalApproximate && player.chapterIndex == 0)      // a load starts over

@@ -34,6 +34,9 @@ struct ChapterListView: View {
     var chapters: [ChapterEntry]
     var current: Int?
     var heading: TypeRole
+    /// The row to flash once, drawing the eye to where a scroll just landed (the book sheet's
+    /// open, owner 2026-09-11) — nil the rest of the time.
+    var pulsing: Int? = nil
     var onSelect: (ChapterEntry) -> Void
 
     var body: some View {
@@ -43,7 +46,8 @@ struct ChapterListView: View {
                 .padding(.bottom, 24)
             ForEach(chapters) { chapter in
                 ChapterRow(chapter: chapter, isCurrent: chapter.index == current,
-                           isHeard: current.map { chapter.index < $0 } ?? false) { onSelect(chapter) }
+                           isHeard: current.map { chapter.index < $0 } ?? false,
+                           isPulsing: chapter.index == pulsing) { onSelect(chapter) }
             }
         }
     }
@@ -57,6 +61,8 @@ struct ChapterRow: View {
     var chapter: ChapterEntry
     var isCurrent: Bool
     var isHeard: Bool
+    /// One flash of `accent` over the row's own fill, then gone — `BookSheet` sets and clears it.
+    var isPulsing: Bool = false
     var action: () -> Void
 
     var body: some View {
@@ -83,6 +89,10 @@ struct ChapterRow: View {
             .padding(.vertical, 10)
             .background(isCurrent ? Tokens.surface : Tokens.surface.opacity(0),
                         in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Tokens.accent.opacity(isPulsing ? 0.3 : 0))
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

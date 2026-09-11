@@ -24,6 +24,9 @@ struct BookSheet: View {
     @State private var isStarting = false
     /// The phone's lean for the hero. The sheet owns it: the gyro runs only while the sheet shows.
     @State private var motion = MotionTilt()
+    /// The resume chapter's one flash, right after the sheet scrolls to it (owner, 2026-09-11:
+    /// opening the sheet from Home should land the eye on where the book picks up).
+    @State private var pulsingChapter: Int?
 
     private static let heroHeight: CGFloat = 200
 
@@ -32,6 +35,8 @@ struct BookSheet: View {
     private var isPlayingHere: Bool { isCurrent && env.player.isPlaying }
     /// The chapter the book would resume in: the first not yet heard through.
     private var resumeIndex: Int? { chapters.first { $0.fraction < 1 }?.index ?? chapters.last?.index }
+    /// Whether there's a saved position to pick back up — "Continue" over "Play" once there is.
+    private var hasProgress: Bool { live.document.resumePosition != nil }
 
     /// Time left in the resume chapter, on the Play pill as the Home row shows it ("Play  17m").
     private var timeDetail: String? {
@@ -47,54 +52,73 @@ struct BookSheet: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.section) {
-                hero
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, Spacing.section)
-                VStack(spacing: 8) {
-                    Text(live.document.title).typeRole(.playerTitle).foregroundStyle(Tokens.ink)
-                        .multilineTextAlignment(.center)
-                    if let author = live.document.displayAuthor {
-                        Text(author).typeRole(.meta).foregroundStyle(Tokens.ink2).multilineTextAlignment(.center)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                playPill
-                    .frame(maxWidth: .infinity)
-                ChapterListView(chapters: chapters, current: resumeIndex, heading: .sectionHeader) { chapter in
-                    Task {
-                        if !isCurrent { await env.player.load(live, play: false) }
-                        await env.player.seek(toChapter: chapter.index)
-                        if !env.player.isPlaying { await env.player.togglePlay() }
-                        dismiss()
-                        readerRoute.open(live)
-                    }
-                }
-                .padding(.horizontal, -12)                                 // the rows' fill runs into the margin, as in the Reader
-                if let bookmarks, !bookmarks.entries.isEmpty {
-                    VStack(alignment: .leading, spacing: 20) {
-                        Text("Bookmarks").typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
-                        ForEach(bookmarks.entries) { entry in
-                            BookmarkRow(entry: entry, onJump: {
-                                Task {
-                                    await bookmarks.jump(to: entry, in: live)
-                                    dismiss()
-                                    readerRoute.open(live)
-                                }
-                            }, onDelete: { Task { await bookmarks.delete(entry) } })
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.section) {
+                    hero
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, Spacing.section)
+                    VStack(spacing: 8) {
+                        Text(live.document.title).typeRole(.playerTitle).foregroundStyle(Tokens.ink)
+                            .multilineTextAlignment(.center)
+                        if let author = live.document.displayAuthor {
+                            Text(author).typeRole(.meta).foregroundStyle(Tokens.ink2).multilineTextAlignment(.center)
                         }
                     }
+                    .frame(maxWidth: .infinity)
+                    playPill
+                        .frame(maxWidth: .infinity)
+                    ChapterListView(chapters: chapters, current: resumeIndex, heading: .sectionHeader, pulsing: pulsingChapter) { chapter in
+                        Task {
+                            if !isCurrent { await env.player.load(live, play: false) }
+                            await env.player.seek(toChapter: chapter.index)
+                            if !env.player.isPlaying { await env.player.togglePlay() }
+                            dismiss()
+                            readerRoute.open(live)
+                        }
+                    }
+                    .padding(.horizontal, -12)                                 // the rows' fill runs into the margin, as in the Reader
+                    if let bookmarks, !bookmarks.entries.isEmpty {
+                        VStack(alignment: .leading, spacing: 20) {
+                            Text("Bookmarks").typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
+                            ForEach(bookmarks.entries) { entry in
+                                BookmarkRow(entry: entry, onJump: {
+                                    Task {
+                                        await bookmarks.jump(to: entry, in: live)
+                                        dismiss()
+                                        readerRoute.open(live)
+                                    }
+                                }, onDelete: { Task { await bookmarks.delete(entry) } })
+                            }
+                        }
+                    }
+                    Color.clear.frame(height: Spacing.section)
                 }
-                Color.clear.frame(height: Spacing.section)
+                .padding(.horizontal, Spacing.margin)
             }
-            .padding(.horizontal, Spacing.margin)
+            .task {
+                await reload()
+                await scrollToResumeChapterAndPulse(proxy)
+            }
         }
         .background(Tokens.raised)
         .presentationCornerRadius(Spacing.sheetCorner)
-        .task { await reload() }
         .onChange(of: shouldTilt, initial: true) { _, on in motion.setEnabled(on) }
         .onDisappear { motion.setEnabled(false) }
+    }
+
+    /// Lands the eye on where the book picks up (owner, 2026-09-11): centres the resume chapter —
+    /// off-screen below the fold on any book past its first few chapters — then flashes it once.
+    /// No scroll and no flash without a resume chapter (a book never opened has nothing to jump to).
+    /// The short wait first gives the list one run-loop turn to lay out the rows `chapters` just
+    /// populated — `scrollTo` finds nothing to scroll to before that frame lands.
+    private func scrollToResumeChapterAndPulse(_ proxy: ScrollViewProxy) async {
+        guard let resumeIndex else { return }
+        try? await Task.sleep(for: .milliseconds(50))
+        withAnimation(.easeOut(duration: 0.4)) { proxy.scrollTo(resumeIndex, anchor: .center) }
+        withAnimation(.easeOut(duration: 0.2)) { pulsingChapter = resumeIndex }
+        try? await Task.sleep(for: .milliseconds(700))
+        withAnimation(.easeInOut(duration: 0.5)) { pulsingChapter = nil }
     }
 
     /// The book, a little smaller than before, over a soft ellipse of its own colour — a
@@ -115,9 +139,10 @@ struct BookSheet: View {
         }
     }
 
-    /// The Home row's Play pill, centred: Pause while this book plays, "Play  17m" otherwise.
+    /// The Home row's Play pill, centred: Pause while this book plays, "Continue  17m" once there's
+    /// a saved position, "Play  17m" for a book never started.
     private var playPill: some View {
-        Pill(label: isPlayingHere ? "Pause" : (isStarting ? "Starting…" : "Play"),
+        Pill(label: isPlayingHere ? "Pause" : (isStarting ? "Starting…" : (hasProgress ? "Continue" : "Play")),
              detail: isStarting ? nil : timeDetail,
              glyph: isPlayingHere ? "pause.fill" : (isStarting ? nil : "play.fill"),
              style: .soft) {

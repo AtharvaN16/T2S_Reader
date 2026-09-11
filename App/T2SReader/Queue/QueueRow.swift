@@ -8,7 +8,12 @@ import T2SStore
 struct QueueRow: View {
     @Environment(AppEnvironment.self) private var env
     var summary: DocumentSummary
+    /// Play's target: the Reader, loading and playing a non-current document itself.
     var onOpen: () -> Void
+    /// The book's target: the book sheet, scrolled to the resume chapter with a pulse on it
+    /// (owner, 2026-09-11: two touch targets, the book and Play, each its own destination — the
+    /// row used to open the Reader from either the cover's title or the pill).
+    var onOpenBook: () -> Void
     var onDetails: () -> Void
     @State private var showSleepTimer = false
     @State private var showVoiceChange = false
@@ -19,94 +24,105 @@ struct QueueRow: View {
     @State private var glimpse: RowGlimpse?
 
     private var progress: DocumentProgress? { env.libraryModel.progress(for: summary.id) }
+    /// Whether there's a saved position to pick back up — "Continue" over "Play" once there is.
+    private var hasProgress: Bool { summary.document.resumePosition != nil }
     private var isCurrent: Bool { env.player.current?.id == summary.id }
     private var isPlayingHere: Bool { isCurrent && env.player.isPlaying }
     private var isArticle: Bool { summary.document.sourceType == .article }
     /// Books with chapters show the chapter's own progress and time; a file with none shows the file's.
     private var hasChapters: Bool { !isArticle && (progress?.chapterCount ?? summary.chapterCount) > 1 }
 
+    /// The shelved cover's fixed width (`BookCover.shelved`), so Play can be inset to sit under the
+    /// title without being part of the book's own button.
+    private var coverWidth: CGFloat { BookCover.shelfHeight * BookCover.widestRatio }
+
     var body: some View {
-        // 20 pt between the book and its text: the cover's shadow needs air, and the reference cell
-        // (Apple Books' Continue) breathes there too.
-        HStack(alignment: .top, spacing: 20) {
-            // On its shelf slot so the chapter line, title and Play pill start at one x on every
-            // row, whatever width the cover is; the grid stands its books the same way.
-            if isArticle {
-                // A web page or pasted text is not a book: a sheet of paper, on the same slot.
-                SheetCover(title: summary.document.title, sourceURL: summary.document.sourceURL, height: BookCover.shelfHeight)
-                    .shelved
-            } else {
-                BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: BookCover.shelfHeight,
-                          title: summary.document.title, author: summary.document.displayAuthor,
-                          isPDF: summary.document.sourceType == .pdf)
-                    .shelved
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                // "Chapter 7 · ◔ 41%  ✓": the chapter, how far through it, and ready-offline.
-                HStack(spacing: 6) {
-                    if let chapterText { Text(chapterText) }
-                    if let fraction {
-                        if chapterText != nil { Text("·").accessibilityHidden(true) }
-                        CircularProgress(fraction: fraction, lineWidth: 2, size: 12)
-                        Text("\(Int((fraction * 100).rounded()))%")
+        VStack(alignment: .leading, spacing: 6) {
+            Button(action: onOpenBook) {
+                // 20 pt between the book and its text: the cover's shadow needs air, and the
+                // reference cell (Apple Books' Continue) breathes there too.
+                HStack(alignment: .top, spacing: 20) {
+                    // On its shelf slot so the chapter line, title and Play pill start at one x on
+                    // every row, whatever width the cover is; the grid stands its books the same way.
+                    if isArticle {
+                        // A web page or pasted text is not a book: a sheet of paper, on the same slot.
+                        SheetCover(title: summary.document.title, sourceURL: summary.document.sourceURL, height: BookCover.shelfHeight)
+                            .shelved
+                    } else {
+                        BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: BookCover.shelfHeight,
+                                  title: summary.document.title, author: summary.document.displayAuthor,
+                                  isPDF: summary.document.sourceType == .pdf)
+                            .shelved
                     }
-                    if summary.isFullyRendered { PositiveCheck() }
-                }
-                .typeRole(.meta)
-                .foregroundStyle(Tokens.ink2)
-                .accessibilityElement(children: .combine)
 
-                Button(action: onOpen) {
-                    Text(summary.document.title)
-                        .typeRole(.rowTitle)                                   // the Settings rows' face, by the owner's eye
-                        .foregroundStyle(Tokens.ink)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.plain)
-                .accessibilityHint("Opens the reader")
-
-                if let excerpt = glimpse?.excerpt, !excerpt.isEmpty {
-                    Text(excerpt)
-                        .typeRole(.meta)
-                        .lineLimit(2)
-                        .truncationMode(.tail)
-                        .foregroundStyle(Tokens.ink2)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                HStack(spacing: 8) {
-                    Pill(label: isPlayingHere ? "Pause" : (isStarting ? "Starting…" : "Play"),
-                         detail: isStarting ? nil : timeDetail,
-                         glyph: isPlayingHere ? "pause.fill" : (isStarting ? nil : "play.fill"),
-                         style: .soft) {
-                        Task {
-                            if isPlayingHere { await env.player.togglePlay(); return }   // Pause stays in place
-                            if isCurrent {
-                                isStarting = true
-                                await env.player.togglePlay()                            // resume, then read along
-                                isStarting = false
+                    VStack(alignment: .leading, spacing: 8) {
+                        // "Chapter 7 · ◔ 41%  ✓": the chapter, how far through it, and ready-offline.
+                        HStack(spacing: 6) {
+                            if let chapterText { Text(chapterText) }
+                            if let fraction {
+                                if chapterText != nil { Text("·").accessibilityHidden(true) }
+                                CircularProgress(fraction: fraction, lineWidth: 2, size: 12)
+                                Text("\(Int((fraction * 100).rounded()))%")
                             }
-                            onOpen()                                                       // the Reader loads and plays a non-current document itself
+                            if summary.isFullyRendered { PositiveCheck() }
+                        }
+                        .typeRole(.meta)
+                        .foregroundStyle(Tokens.ink2)
+
+                        Text(summary.document.title)
+                            .typeRole(.rowTitle)                                   // the Settings rows' face, by the owner's eye
+                            .foregroundStyle(Tokens.ink)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        if let excerpt = glimpse?.excerpt, !excerpt.isEmpty {
+                            Text(excerpt)
+                                .typeRole(.meta)
+                                .lineLimit(2)
+                                .truncationMode(.tail)
+                                .foregroundStyle(Tokens.ink2)
+                                .multilineTextAlignment(.leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-                    .disabled(isStarting)
-                    .accessibilityHint(isPlayingHere ? "Pauses" : "Plays and opens the reader")
-                    Menu {
-                        contextItems
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(Tokens.ink)
-                            .frame(width: 36, height: 36)
-                            .background(Tokens.surface, in: Circle())
-                    }
-                    .accessibilityLabel("More")
                 }
-                .padding(.top, 6)
             }
+            .buttonStyle(.plain)
+            // One element, not the header line and the excerpt read out on top of it: the visible
+            // detail collapses to the words that matter for a listener choosing where to jump in.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel([chapterText, summary.document.title].compactMap { $0 }.joined(separator: ", "))
+            .accessibilityHint("Opens the book")
+
+            HStack(spacing: 8) {
+                Pill(label: isPlayingHere ? "Pause" : (isStarting ? "Starting…" : (hasProgress ? "Continue" : "Play")),
+                     detail: isStarting ? nil : timeDetail,
+                     glyph: isPlayingHere ? "pause.fill" : (isStarting ? nil : "play.fill"),
+                     style: .soft) {
+                    Task {
+                        if isPlayingHere { await env.player.togglePlay(); return }   // Pause stays in place
+                        if isCurrent {
+                            isStarting = true
+                            await env.player.togglePlay()                            // resume, then read along
+                            isStarting = false
+                        }
+                        onOpen()                                                       // the Reader loads and plays a non-current document itself
+                    }
+                }
+                .disabled(isStarting)
+                .accessibilityHint(isPlayingHere ? "Pauses" : "Plays and opens the reader")
+                Menu {
+                    contextItems
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Tokens.ink)
+                        .frame(width: 36, height: 36)
+                        .background(Tokens.surface, in: Circle())
+                }
+                .accessibilityLabel("More")
+            }
+            .padding(.leading, coverWidth + 20)                                   // under the title, past the cover
         }
         .contextMenu { contextItems }
         .sheet(isPresented: $showSleepTimer) { SleepTimerSheet() }

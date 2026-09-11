@@ -10,6 +10,9 @@ struct QueuePage: View {
     /// Set by the Import page; opened from its `onDismiss`, once it has actually gone.
     @State private var pendingOpen: DocumentSummary?
     @State private var details: DocumentSummary?
+    /// The row's own touch target (owner, 2026-09-11): the book opens the sheet, Play alone opens
+    /// the Reader — matching the Collection tile.
+    @State private var selectedBook: DocumentSummary?
 
     private var rows: [DocumentSummary] { env.libraryModel.visibleRows }
 
@@ -31,7 +34,7 @@ struct QueuePage: View {
                 ForEach(rows) { summary in
                     QueueRow(summary: summary, onOpen: {
                         readerRoute.open(summary)
-                    }, onDetails: { details = summary })
+                    }, onOpenBook: { selectedBook = summary }, onDetails: { details = summary })
                     .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
                 }
                 Color.clear.frame(height: Spacing.bottomClearance)        // room for the mini-player, indicator and their fade
@@ -45,6 +48,7 @@ struct QueuePage: View {
         .refreshable { await env.libraryModel.refresh() }
         .fullScreenCover(isPresented: $showAdd, onDismiss: openPending) { ImportPage(imported: $pendingOpen) }
         .sheet(item: $details) { DetailsSheet(summary: $0) }
+        .sheet(item: $selectedBook) { BookSheet(summary: $0) }
     }
 
     private func openPending() {

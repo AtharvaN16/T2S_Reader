@@ -619,10 +619,14 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// gate — is awaited, and the main set is used once the app is back in front. The wait is
     /// logged once as it begins and once as it ends, with the set it ended in: on the phone the
     /// timing log is what says whether a silence was this wait, the CPU budget, or a failed call.
-    private func renderSet(main: Loaded) async -> Loaded {
+    private func renderSet(main: Loaded) async throws -> Loaded {
         guard options.backgroundComputeUnits != nil, let placement = renderPlacement else { return main }
         var waitStarted: ContinuousClock.Instant?
         while placement() == .background {
+            // The gate returns at once to a cancelled task, so without this a render cancelled while
+            // the phone is locked — a stream its consumer stopped, a voice preview — would spin here
+            // at full speed until the unlock (the review of 2026-09-11, R5).
+            try Task.checkCancellation()
             if let backgroundLoaded {
                 if let waitStarted {
                     Self.timing("kokoro piece placed in the background set after waiting \(Self.fixed(Self.seconds(ContinuousClock().now - waitStarted), 1)) s")
@@ -646,13 +650,13 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// when the GPU refused a call that began as the app left the foreground.
     private func placedPieces(_ piece: Piece, isFinal: Bool, words: [MToken], tokenizer: KokoroTokenizer, main: Loaded, spread: Float)
         async throws -> [(piece: Piece, result: KokoroPipelineResult, audio: [Float])] {
-        let set = await renderSet(main: main)
+        let set = try await renderSet(main: main)
         lastRenderSet = set.models === main.models ? "main" : "background"
         do {
             return try renderedPieces(piece, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: set, spread: spread)
         } catch KokoroCoreMLError.stageFailed(let reason) where set.models === main.models && renderPlacement?() == .background {
             Self.timing("kokoro call refused in the background; rendering again where it is allowed: \(reason.prefix(80))")
-            let again = await renderSet(main: main)
+            let again = try await renderSet(main: main)
             lastRenderSet = again.models === main.models ? "main" : "background"
             return try renderedPieces(piece, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: again, spread: spread)
         }

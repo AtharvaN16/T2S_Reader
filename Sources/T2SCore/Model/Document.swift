@@ -17,10 +17,16 @@ public struct Document: Codable, Hashable, Sendable, Identifiable {
     /// Per-document voice override.
     public var voiceID: String?
     public var resumePosition: Position?
+    /// `ContentKey` (sync spec §2); nil for a document sync has not keyed yet, or one with no file
+    /// and no URL, which never syncs.
+    public var contentKey: String?
+    /// A document another device has that this one has no file for (sync spec §5).
+    public var isPlaceholder: Bool
 
     public init(id: UUID = UUID(), title: String, author: String? = nil, sourceType: SourceType,
                 sourceURL: URL? = nil, coverImagePath: String? = nil, addedAt: Date = Date(),
-                voiceID: String? = nil, resumePosition: Position? = nil) {
+                voiceID: String? = nil, resumePosition: Position? = nil,
+                contentKey: String? = nil, isPlaceholder: Bool = false) {
         self.id = id
         self.title = title
         self.author = author
@@ -30,5 +36,7 @@ public struct Document: Codable, Hashable, Sendable, Identifiable {
         self.addedAt = addedAt
         self.voiceID = voiceID
         self.resumePosition = resumePosition
+        self.contentKey = contentKey
+        self.isPlaceholder = isPlaceholder
     }
 }

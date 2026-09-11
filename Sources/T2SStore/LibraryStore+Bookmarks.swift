@@ -23,17 +23,25 @@ extension LibraryStore {
             row.cssSelector = bookmark.position.cssSelector
             row.note = bookmark.note
             row.createdAt = bookmark.createdAt
+            row.updatedAt = Date()
+            row.isDirty = true
         } else {
-            modelContext.insert(StoredBookmark(id: bookmark.id, documentID: bookmark.documentID, position: bookmark.position,
-                                               note: bookmark.note, createdAt: bookmark.createdAt))
+            let row = StoredBookmark(id: bookmark.id, documentID: bookmark.documentID, position: bookmark.position,
+                                     note: bookmark.note, createdAt: bookmark.createdAt)
+            row.updatedAt = Date()
+            row.isDirty = true
+            modelContext.insert(row)
         }
         try commit()
+        noteLocalChange()
     }
 
     public func deleteBookmark(id: UUID) throws {
         guard let row = try bookmarkRow(id) else { return }
+        addTombstone(kind: Self.bookmarkTombstone, key: id.uuidString)
         modelContext.delete(row)
         try commit()
+        noteLocalChange()
     }
 
     func deleteBookmarks(for documentID: UUID) throws {
@@ -41,7 +49,7 @@ extension LibraryStore {
         for row in rows { modelContext.delete(row) }
     }
 
-    private func bookmarkRow(_ id: UUID) throws -> StoredBookmark? {
+    func bookmarkRow(_ id: UUID) throws -> StoredBookmark? {
         var descriptor = FetchDescriptor<StoredBookmark>(predicate: #Predicate { $0.id == id })
         descriptor.fetchLimit = 1
         return try modelContext.fetch(descriptor).first

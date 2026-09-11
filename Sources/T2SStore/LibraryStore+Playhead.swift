@@ -27,6 +27,10 @@ extension LibraryStore: PlayheadStore {
         let now = Date()
         row.lastPlayedAt = now
         row.updatedAt = now
+        row.resumeSavedAt = now
+        row.resumeDevice = nil
+        row.isDirty = true
         try commit()
+        noteLocalChange()
     }
 }

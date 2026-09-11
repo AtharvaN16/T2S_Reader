@@ -2,12 +2,10 @@ import Foundation
 import SwiftData
 import T2SCore
 
-/// The current schema (iCloud sync, 2026-09-11): V2 plus the sync columns — a content key, dirty
-/// flags, the pending remote position — and `StoredTombstone`, all optional or defaulted so a V2 row
-/// reads back with them nil or false. Model classes live inside their schema version (see V2's note).
-enum LibrarySchemaV3: VersionedSchema {
-    static var versionIdentifier: Schema.Version { Schema.Version(3, 0, 0) }
-    static let models: [any PersistentModel.Type] = [StoredDocument.self, StoredChapter.self, StoredBookmark.self, StoredPronunciation.self, StoredTombstone.self]
+/// The Plan 16 schema, frozen; see `LibrarySchemaV3` in Models.swift.
+enum LibrarySchemaV2: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(2, 0, 0) }
+    static let models: [any PersistentModel.Type] = [StoredDocument.self, StoredChapter.self, StoredBookmark.self, StoredPronunciation.self]
 
     /// SwiftData rows. Internal on purpose (spec §3.7.1): the store hands out `T2SCore` value types,
     /// so the persistence schema never shapes the domain model.
@@ -43,24 +41,6 @@ enum LibrarySchemaV3: VersionedSchema {
         var normalizerVersion: Int
         @Relationship(deleteRule: .cascade, inverse: \StoredChapter.document)
         var chapters: [StoredChapter]
-        /// `ContentKey` (sync spec §2); nil until computed (a row from before sync, or a document with
-        /// no file and no URL, which never syncs).
-        var contentKey: String?
-        /// A document another device has that this one has no file for (sync spec §5).
-        var isPlaceholder: Bool = false
-        /// Changed since last pushed (sync spec §6).
-        var isDirty: Bool = false
-        /// When the local resume position was saved; `updatedAt` moves for other reasons too.
-        var resumeSavedAt: Date?
-        /// The device that saved the local position (this one, or the one a placeholder came from).
-        var resumeDevice: String?
-        /// The newer remote position, offered and not applied (sync spec §4), flattened like the resume.
-        var pendingRemoteHref: String?
-        var pendingRemoteProgression: Double?
-        var pendingRemoteCharOffset: Int?
-        var pendingRemoteCSSSelector: String?
-        var pendingRemoteSavedAt: Date?
-        var pendingRemoteDevice: String?
 
         init(id: UUID, title: String, author: String?, sourceType: String, sourceURL: String?,
              coverImagePath: String?, addedAt: Date, voiceID: String?,
@@ -87,17 +67,6 @@ enum LibrarySchemaV3: VersionedSchema {
             self.segmenterVersion = segmenterVersion
             self.normalizerVersion = normalizerVersion
             self.chapters = []
-            self.contentKey = nil
-            self.isPlaceholder = false
-            self.isDirty = false
-            self.resumeSavedAt = nil
-            self.resumeDevice = nil
-            self.pendingRemoteHref = nil
-            self.pendingRemoteProgression = nil
-            self.pendingRemoteCharOffset = nil
-            self.pendingRemoteCSSSelector = nil
-            self.pendingRemoteSavedAt = nil
-            self.pendingRemoteDevice = nil
         }
     }
 
@@ -143,9 +112,6 @@ enum LibrarySchemaV3: VersionedSchema {
         var cssSelector: String?
         var note: String?
         var createdAt: Date
-        /// nil on a V2 row: read as `createdAt`.
-        var updatedAt: Date?
-        var isDirty: Bool = false
 
         init(id: UUID, documentID: UUID, position: Position, note: String?, createdAt: Date) {
             self.id = id
@@ -156,8 +122,6 @@ enum LibrarySchemaV3: VersionedSchema {
             self.cssSelector = position.cssSelector
             self.note = note
             self.createdAt = createdAt
-            self.updatedAt = nil
-            self.isDirty = false
         }
 
         var position: Position {
@@ -179,20 +143,6 @@ enum LibrarySchemaV3: VersionedSchema {
             self.replacement = replacement
             self.caseSensitive = caseSensitive
             self.updatedAt = updatedAt
-        }
-    }
-
-    /// A local deletion not yet pushed: the marker survives until the provider accepts it.
-    @Model
-    final class StoredTombstone {
-        @Attribute(.unique) var id: UUID
-        /// "document" or "bookmark".
-        var kind: String
-        /// The content key, or the bookmark's uuid string.
-        var key: String
-        var deletedAt: Date
-        init(id: UUID = UUID(), kind: String, key: String, deletedAt: Date) {
-            self.id = id; self.kind = kind; self.key = key; self.deletedAt = deletedAt
         }
     }
 }

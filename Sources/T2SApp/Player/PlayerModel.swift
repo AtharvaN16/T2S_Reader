@@ -91,6 +91,10 @@ public final class PlayerModel {
     /// (Plan 17, audit §7). `chapterIndexCache` is keyed on the playhead's utterance as well.
     @ObservationIgnored private var derivedCache: (revision: Int, isFullyRendered: Bool, axis: [ChapterSpan])?
     @ObservationIgnored private var chapterIndexCache: (revision: Int, utterance: Int, chapter: Int?)?
+    /// The scrubber's and chapter list's derived shapes over `bookmarks` — cached on the timeline
+    /// revision *and* the bookmark count, since the revision alone does not change when a bookmark
+    /// is added or deleted.
+    @ObservationIgnored private var bookmarkCache: (revision: Int, count: Int, fractions: [Double], byChapter: [Int: [BookmarkEntry]])?
     /// The loaded document's bookmarks, oldest first — read once per load and after every change.
     /// One list feeds three surfaces: the scrubber's dots, the chapter list's stamps, and the
     /// duplicate check in `saveBookmark`. Keeping one resolved list is what makes that check
@@ -165,6 +169,27 @@ public final class PlayerModel {
         let total = coordinator.timeIndex.totalDuration
         let fraction = total > 0 ? min(1, max(0, coordinator.timeIndex.time(at: coordinator.playhead) / total)) : 0
         return ScrubberModel(tickCount: tickCount, renderedTicks: ticks, fraction: fraction)
+    }
+
+    /// The loaded document's bookmarks as fractions along the whole duration — the scrubber's dots.
+    public var bookmarkFractions: [Double] { bookmarkDerived.fractions }
+    /// The same bookmarks grouped under their chapter — the chapter list's stamps.
+    public var bookmarksByChapter: [Int: [BookmarkEntry]] { bookmarkDerived.byChapter }
+
+    /// Both shapes in one pass, cached on the timeline revision *and* the bookmark count so an add
+    /// or a delete invalidates it too. Read from view bodies that run at 10 Hz while playing, so it
+    /// must not re-resolve the whole list every tick.
+    private var bookmarkDerived: (fractions: [Double], byChapter: [Int: [BookmarkEntry]]) {
+        let revision = coordinator.timelineRevision
+        if let cache = bookmarkCache, cache.revision == revision, cache.count == bookmarks.count {
+            return (cache.fractions, cache.byChapter)
+        }
+        guard let timeline = coordinator.timeline else { return ([], [:]) }
+        let index = coordinator.timeIndex
+        let derived = (BookmarkGrouping.fractions(bookmarks, timeline: timeline, index: index),
+                       BookmarkGrouping.byChapter(bookmarks, timeline: timeline, index: index))
+        bookmarkCache = (revision, bookmarks.count, derived.0, derived.1)
+        return derived
     }
 
     // MARK: Loading

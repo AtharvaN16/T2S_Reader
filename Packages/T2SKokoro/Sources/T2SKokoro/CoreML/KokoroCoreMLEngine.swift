@@ -748,7 +748,10 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// §3 R2, §5 item 2). The re-cut's first sub-piece inherits `piece`'s own `cut` — the seam before
     /// it — the same rule ``splitPiece(groups:at:isFinal:words:inheriting:)`` uses for an
     /// overflow split; the sub-pieces after it already carry the right cut, computed the same way by
-    /// ``pieces(ids:owners:words:cap:firstPieceCap:)`` itself.
+    /// ``pieces(ids:owners:words:cap:firstPieceCap:firstToken:extendToEnd:)`` itself.
+    ///
+    /// The offsets the re-cut counts each sub-piece's `phonemeUTF16Count` over are `piece`'s own,
+    /// not the whole utterance's — see ``backgroundPieces(of:isFinal:words:)``.
     private func placedPieces(_ piece: Piece, isFinal: Bool, words: [MToken], tokenizer: KokoroTokenizer, main: Loaded, spread: Float)
         async throws -> [(piece: Piece, result: KokoroPipelineResult, audio: [Float])] {
         let set = try await renderSet(main: main)
@@ -757,8 +760,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             guard set.models !== main.models else {
                 return try renderedPieces(piece, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: set, spread: spread)
             }
-            var subPieces = try Self.pieces(ids: piece.ids, owners: piece.owners, words: words, cap: Self.backgroundPieceTokenCount)
-            if !subPieces.isEmpty { subPieces[0].cut = piece.cut }
+            let subPieces = try Self.backgroundPieces(of: piece, isFinal: isFinal, words: words)
             var rendered: [(piece: Piece, result: KokoroPipelineResult, audio: [Float])] = []
             for (index, subPiece) in subPieces.enumerated() {
                 rendered += try renderedPieces(
@@ -773,6 +775,34 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             lastRenderSet = again.models === main.models ? "main" : "background"
             return try renderedPieces(piece, isFinal: isFinal, words: words, tokenizer: tokenizer, loaded: again, spread: spread)
         }
+    }
+
+    /// `piece` — cut for the main set's bucket — re-cut at ``backgroundPieceTokenCount`` for the
+    /// background set's 3 s one, with the voice-row lengths a cut of the whole utterance would have
+    /// given the same words.
+    ///
+    /// The token offsets are `piece`'s own, not the utterance's: the first sub-piece counts from
+    /// `piece`'s first owned Misaki token, and only a `piece` that really is the utterance's last
+    /// (`isFinal`) lets its last sub-piece charge the trailing tokens that phonemized to no id at
+    /// all. Left to the batch cutter's defaults — a `firstToken` of 0, and an `extendToEnd` on
+    /// whichever piece happens to be last — the first sub-piece would be charged every word before
+    /// `piece` and the last every word after it; since `KokoroTokenizer.refS` clamps to the voice
+    /// table's rows, that pins nearly every background sub-piece of a long utterance to the same
+    /// maxed-out style row, an audible prosody mismatch (the review of 2026-09-11 16:25). Only the
+    /// first token is passed: the last sub-piece's own last group already carries `piece`'s last
+    /// owned token, which is where it stops when `extendToEnd` is `false`.
+    ///
+    /// The first sub-piece inherits `piece`'s own `cut` — the seam before it; the ones after it are
+    /// cut by ``pieces(ids:owners:words:cap:firstPieceCap:firstToken:extendToEnd:)`` itself.
+    /// Internal rather than private so the offsets can be tested with no Core ML set at all.
+    static func backgroundPieces(of piece: Piece, isFinal: Bool, words: [MToken]) throws -> [Piece] {
+        var subPieces = try Self.pieces(
+            ids: piece.ids, owners: piece.owners, words: words, cap: Self.backgroundPieceTokenCount,
+            firstToken: piece.owners.first { $0 != KokoroCoreMLTimingFold.noOwner } ?? 0,
+            extendToEnd: isFinal
+        )
+        if !subPieces.isEmpty { subPieces[0].cut = piece.cut }
+        return subPieces
     }
 
     /// Waits for the predictor warm-up that readiness started and for every later bucket's. Tests.
@@ -1400,7 +1430,10 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// `firstToken` and either the last group's token or — for the piece that reaches the end of
     /// the whole utterance — `words.count - 1`, so any trailing tokens that contributed no id at
     /// all are still charged to that last piece. Returns the token index the next piece should
-    /// start counting from.
+    /// start counting from. The range never runs backwards: a caller that seeds `firstToken` from
+    /// the owners rather than from `groups` (``backgroundPieces(of:isFinal:words:)``) can hand in a
+    /// token past a leading group that owns none, and one token's length is the right answer there
+    /// rather than a trap.
     private static func piece(
         from groups: ArraySlice<Group>, firstToken: Int, words: [MToken], extendToEnd: Bool
     ) -> (piece: Piece, lastToken: Int) {
@@ -1409,11 +1442,17 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             piece.ids += group.ids
             piece.owners += group.owners
         }
-        let lastToken = extendToEnd ? max(firstToken, words.count - 1) : (groups.last?.token ?? firstToken)
+        let lastToken = max(firstToken, extendToEnd ? words.count - 1 : (groups.last?.token ?? firstToken))
         piece.phonemeUTF16Count = (firstToken ... lastToken).reduce(0) {
             $0 + ((words[$1].phonemes ?? unknownPhoneme) + words[$1].whitespace).utf16.count
         }
         return (piece, lastToken)
+    }
+
+    /// The most ids a piece may carry for what `loaded` can time: the largest duration model's
+    /// padded length minus the two frame ids, never above ``maxPieceTokenCount``.
+    private static func pieceCap(for loaded: Loaded) -> Int {
+        min(maxPieceTokenCount, loaded.models.maxDurationTokenLength - 2)
     }
 
     /// Cuts the utterance's ids into consecutive pieces of at most ``maxPieceTokenCount`` ids,
@@ -1430,14 +1469,16 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// `cap` is where a piece is cut: ``maxPieceTokenCount`` with every duration model loaded, what
     /// t128 can time before t256 lands (``pieceCap(for:)``). `firstPieceCap`, when given, caps the
     /// first piece only (a streamed head, Plan 14); every later piece is cut at `cap`.
-    /// The most ids a piece may carry for what `loaded` can time: the largest duration model's
-    /// padded length minus the two frame ids, never above ``maxPieceTokenCount``.
-    private static func pieceCap(for loaded: Loaded) -> Int {
-        min(maxPieceTokenCount, loaded.models.maxDurationTokenLength - 2)
-    }
-
+    ///
+    /// `firstToken` and `extendToEnd` place these ids inside the utterance for the voice-row lengths,
+    /// and default to the whole of it: the first piece counts from Misaki token 0, and the last piece
+    /// is charged the trailing tokens that phonemized to no id. A caller re-cutting one piece of an
+    /// already-cut utterance passes that piece's own first token and whether it was the utterance's
+    /// last — ``backgroundPieces(of:isFinal:words:)`` — so its sub-pieces get the counts the same
+    /// words would have got from a cut of the whole utterance rather than counts stretched to both
+    /// of its ends (the review of 2026-09-11 16:25).
     static func pieces(ids: [Int32], owners: [Int], words: [MToken], cap: Int = maxPieceTokenCount,
-                       firstPieceCap: Int? = nil) throws -> [Piece] {
+                       firstPieceCap: Int? = nil, firstToken: Int = 0, extendToEnd: Bool = true) throws -> [Piece] {
         let groups = Self.groups(ids: ids, owners: owners)
 
         var packed: [[Group]] = []
@@ -1462,18 +1503,19 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         }
         if !current.isEmpty { packed.append(current) }
 
-        // The pieces tile the Misaki token list: every token's phonemized length is charged to
-        // exactly one piece, including the tokens that survived the vocabulary with no id at all, so
-        // the one-piece case reproduces the whole string's length.
+        // The pieces tile the Misaki tokens from `firstToken` on: every token's phonemized length is
+        // charged to exactly one piece, including the tokens that survived the vocabulary with no id
+        // at all, so the one-piece case reproduces the whole run's length.
         var pieces: [Piece] = []
-        var firstToken = 0
+        var nextToken = firstToken
         for (index, groupSlice) in packed.enumerated() {
             var (piece, lastToken) = Self.piece(
-                from: groupSlice[...], firstToken: firstToken, words: words, extendToEnd: index == packed.count - 1
+                from: groupSlice[...], firstToken: nextToken, words: words,
+                extendToEnd: extendToEnd && index == packed.count - 1
             )
             if index > 0, let previousLast = packed[index - 1].last { piece.cut = Self.cut(after: previousLast) }
             pieces.append(piece)
-            firstToken = lastToken + 1
+            nextToken = lastToken + 1
         }
         return pieces
     }

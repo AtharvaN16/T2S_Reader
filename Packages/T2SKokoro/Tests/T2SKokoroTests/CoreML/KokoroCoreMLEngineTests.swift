@@ -624,6 +624,43 @@ import T2SCore
         #expect(pieces.flatMap(\.ids) == ids)
     }
 
+    /// The background re-cut's voice-row lengths are the parent piece's, not the utterance's (the
+    /// review of 2026-09-11 16:25). `placedPieces` re-cuts one already-cut piece, so the batch
+    /// cutter's own 0-based counting would charge the first sub-piece every word *before* that piece
+    /// and — through `extendToEnd` on whatever piece happens to be last — the final sub-piece every
+    /// word *after* it. Kokoro's voice table has ~500 rows and `refS` clamps, so on any real passage
+    /// that pins nearly every background sub-piece to the same maxed-out style row.
+    ///
+    /// Forty four-phoneme words, five ids each. Cut at 60 — a stand-in for the main set's cap, low
+    /// enough that the utterance has a middle piece to re-cut — they make four pieces of 12, 12, 12
+    /// and 4 words; `pieces[2]` is neither the first nor the last, so both errors would show.
+    @Test func theBackgroundRecutCountsPhonemesFromItsParentPiecesOwnTokens() throws {
+        var words: [MToken] = [], ids: [Int32] = [], owners: [Int] = []
+        Self.appendPlainWords(count: 40, startIndex: 0, words: &words, ids: &ids, owners: &owners)
+        let top = try KokoroCoreMLEngine.pieces(ids: ids, owners: owners, words: words, cap: 60)
+        #expect(top.count == 4)
+        let middleIndex = 2
+        let middle = top[middleIndex]
+        #expect(middle.phonemeUTF16Count == 12 * "abcd ".utf16.count)
+
+        let subPieces = try KokoroCoreMLEngine.backgroundPieces(of: middle, isFinal: false, words: words)
+
+        #expect(subPieces.count > 1)
+        #expect(subPieces.flatMap(\.ids) == middle.ids)
+        #expect(subPieces.allSatisfy { $0.ids.count <= KokoroCoreMLEngine.backgroundPieceTokenCount })
+        // The sub-pieces tile the parent piece's tokens, so their lengths add up to the parent's own
+        // — not to the whole utterance's, which is what the 0-based count would have produced.
+        #expect(subPieces.map(\.phonemeUTF16Count).reduce(0, +) == middle.phonemeUTF16Count)
+        // The first sub-piece is charged its own words and nothing before them.
+        let firstSubPieceWords = subPieces[0].ids.count / 5
+        #expect(firstSubPieceWords > 0)
+        #expect(subPieces[0].phonemeUTF16Count == firstSubPieceWords * "abcd ".utf16.count)
+        // And the last stops at the parent's last word rather than running to the utterance's end.
+        #expect(subPieces.last?.phonemeUTF16Count == (12 - firstSubPieceWords) * "abcd ".utf16.count)
+        // The first sub-piece still inherits the seam that closed the piece before the parent.
+        #expect(subPieces[0].cut == middle.cut)
+    }
+
     /// Readiness is t128 and the 3 s and 15 s buckets; t256 lands last, behind the other buckets.
     /// A passage cut for t256 renders before it lands — in pieces t128 can time — and again after,
     /// with the same words timed either way.

@@ -117,8 +117,12 @@ ready. Not verified on any phone: Plan 18, the 180 s window locked for four minu
    after the warm-up for installs that predate it; the download was already 240 MB). Still
    owed from the review: improvement 5 (the refusal retry as a decision) and 6 (the "keep the phone
    unlocked" line on the veil). The mirror: Cloudflare R2 (free egress, cents a month, a plain URL as a
-   second source) when the paid developer account is set up — not before; Hugging Face with the retries
-   holds until then.
+   second source). Nothing technical blocks it — it needs a Cloudflare account and a public bucket (the
+   owner's), then a `mirror` base URL beside `repositoryURL` in the manifest and the installer trying it
+   first with Hugging Face as the fallback; it does not depend on the paid developer account. When the
+   model is re-exported smaller, host that export there: `docs/research/2026-09-11-kokoro-quantization-quality.md`
+   has what people report (8-bit is free if the sensitive layers stay fp16; 6-bit is Apple's floor; nobody has
+   done it for Core ML yet).
 5. **Four minutes locked during playback on the CPU path** with the 180 s window (the owner skipped it
    — the change is a constant and a bookkeeping fix, both unit-tested — and the control on the MLX
    class needs a text that exercises the G2P fallback).

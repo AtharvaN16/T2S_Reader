@@ -1,9 +1,11 @@
 # t2s_reader — hand-off and next steps
 
 _Last updated 2026-09-11 morning, handed to Harsh. The top section is the state, the crash fixes and
-what is next; the Plan 18 entry under it is the first task's detail; the dated session entries since
-2026-09-04 are in `docs/HANDOFF-log.md`, newest first; the reference sections at the end are older and
-dated as marked._
+what is next; the Plan 18 entry under it is the first task's detail; the reference sections at the end are
+older and dated as marked. The dated per-session entries that used to stack here (2026-09-04 to
+2026-09-11) were removed on 2026-09-11 evening: git has them (`git show 2b0b672:docs/HANDOFF-log.md`
+for the lot, `git log` for the rest), and what mattered from them lives in `crashreport.md`,
+`docs/research/` and the specs._
 
 ## Resume here (2026-09-11, morning) — for Harsh: where things stand, the crash fixes, what's next
 
@@ -99,14 +101,20 @@ ready. Not verified on any phone: Plan 18, the 180 s window locked for four minu
    30 s (`stageLoader` seam for the test); and a pre-existing bug found on the way: `awaitFullLoad()`
    returned at once on a cold engine. Verified: the pure engine suite, the model-backed
    `aBackgroundPlacementRendersThroughTheBackgroundSet` alone, the simulator and device builds.
-   **Open, for a product decision:** `streamsALongPassageInPiecesThatFoldToTheSameTimings` fails
-   deterministically once the engine truly waits for its full load — the streamed render (a 48-id head,
-   then pieces) and the whole render (one piece) disagree by a constant ~0.18 s at the head's seam (the
-   clause seam's 320 ms budget and separate-call framing), identically on `dev` before this batch. Spec
-   §7.4 asks for ±100 ms. Either give `synthesize` the same `firstPieceCap` (one more pipeline call per
-   play-ahead render) or accept the seam and widen the tolerance; nobody changed shipped audio for it
-   overnight. Still owed from the review: improvement 5 (the refusal retry as a decision) and 6 (the
-   "keep the phone unlocked" line on the veil).
+   **Decided (2026-09-11 evening, the owner asking for a recommendation):** the streamed render (a 48-id
+   head, then pieces) and the whole render (one piece) of the same passage differ by a constant ~0.18 s
+   of pause at the head's seam — a separate pipeline call frames its own start and end — identically on
+   every commit since Plan 14; it only showed once `awaitFullLoad()` truly waited. A listener never hears
+   both (one render key per utterance), and cutting every play-ahead render the streamed way would cost a
+   pipeline call more per utterance on the A13. So the audio stays and
+   `streamsALongPassageInPiecesThatFoldToTheSameTimings` now asserts what holds: timings equal within
+   ±100 ms before the seam, within ±100 ms of one shared offset after it, that offset under 300 ms. If the two renders ever need to match byte for byte, the cheap route is to
+   trim the silence at the streamed head's seam down to the pause a single call produces (audio editing,
+   needs listening on a phone), not the extra pipeline call. Still
+   owed from the review: improvement 5 (the refusal retry as a decision) and 6 (the "keep the phone
+   unlocked" line on the veil). The mirror: Cloudflare R2 (free egress, cents a month, a plain URL as a
+   second source) when the paid developer account is set up — not before; Hugging Face with the retries
+   holds until then.
 5. **Four minutes locked during playback on the CPU path** with the 180 s window (the owner skipped it
    — the change is a constant and a bookkeeping fix, both unit-tested — and the control on the MLX
    class needs a text that exercises the G2P fallback).
@@ -141,11 +149,10 @@ old plans and rebuilds — 57 s to ready on the A13, t256 four minutes later.
 
 ### Where the details are
 
-- The night of 2026-09-10/11 — the 11 Pro test of your branch, the merge, the seven fixes, the phone's
-  second pass (the plan cache, the wipe, the lock test), the fresh install, readiness without t256, the
-  installer follow-ups, the probe and the review: `docs/HANDOFF-log.md`, its first entry.
-- Every earlier session, 2026-09-04 to 2026-09-10 (the UI rounds, Plans 9–17, the 17 Pro's two crashes):
-  `docs/HANDOFF-log.md`, in order.
+- The night of 2026-09-10/11 (the 11 Pro test of your branch, the merge, the seven fixes, the phone's
+  second pass, the fresh install, readiness without t256, the installer follow-ups, the probe and the
+  review) and the sessions before it: in git history — `git show 2b0b672:docs/HANDOFF-log.md` — and in
+  `crashreport.md` for the crashes; the commit messages carry the rest.
 - The research: `docs/research/2026-09-10-on-device-models-on-old-and-new-phones.md`; the review:
   `docs/research/2026-09-11-gpu-path-locked-playback-review.md`; the plan:
   `docs/superpowers/plans/2026-09-11-render-ahead-by-chapter.md`; the crashes: `crashreport.md`.

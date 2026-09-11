@@ -66,8 +66,10 @@ ready. Not verified on any phone: Plan 18, the 180 s window locked for four minu
    "finished" or title edit made seconds earlier; a book deleted "from this device" only returns as a
    placeholder when its record next changes; an article placeholder whose fetch fails shows nothing —
    the Import page shows the failure later; the 60 s floor and the transient-outage handling in
-   `SyncModel` have no test (wall-clock behaviour). Merge to `dev` was done by the owner's session only
-   after the reviews; if your two-device run fails, the spec's §4 and §7 are the rules to check the
+   `SyncModel` have no test (wall-clock behaviour); during a passing iCloud outage the row shows the generic
+   "iCloud is not available" and the toggle stays operable; turning sync off in the middle of a cycle can let
+   one more cycle finish (the next "on" then pulls incrementally). Merge to `dev` was done by the owner's
+   session only after the reviews; if your two-device run fails, the spec's §4 and §7 are the rules to check the
    code against.
 
 1. **Plan 18 on a phone** (either phone; the protocol is §4.1 of

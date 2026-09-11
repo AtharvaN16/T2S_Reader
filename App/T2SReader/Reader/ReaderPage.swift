@@ -24,6 +24,12 @@ struct ReaderPage: View {
     /// Where the book proper starts, for the "Skip to Chapter 1" pill; nil when there is no front
     /// matter to skip. Read once per document in `open`.
     @State private var bodyStart: (index: Int, number: Int?)?
+    /// The other device's saved place for the loaded document, while it is still worth offering
+    /// (sync spec §4); nil once dismissed, jumped to, or ten seconds of listening have passed.
+    @State private var syncOffer: SyncedPosition?
+    /// `player.elapsed` when `syncOffer` last appeared, so the ten-second auto-dismiss measures
+    /// listening time from there rather than from playback's own start.
+    @State private var offerShownAt: TimeInterval = 0
 
     var body: some View {
         let reader = env.readerModel
@@ -87,6 +93,21 @@ struct ReaderPage: View {
             .animation(.easeInOut(duration: 0.2), value: chromeVisible)
         }
         .task(id: summary.id) { await open() }
+        .task(id: env.player.current?.id) {
+            // Not `player.current.map { await … }`: `Optional.map`'s transform is synchronous, and
+            // a closure with `await` inside cannot satisfy that (confirmed against the compiler).
+            if let id = env.player.current?.id {
+                syncOffer = await env.syncModel.offer(for: id)
+            } else {
+                syncOffer = nil
+            }
+            if syncOffer != nil { offerShownAt = env.player.elapsed }
+        }
+        .onChange(of: env.player.elapsed) { _, new in
+            guard syncOffer != nil, new - offerShownAt > 10 else { return }
+            if let id = env.player.current?.id { Task { await env.syncModel.dismissOffer(for: id) } }
+            syncOffer = nil
+        }
         .appTheme()
         .onChange(of: shownVoiceID, initial: true) { _, id in resolveVoiceName(id) }
         .onDisappear {
@@ -208,6 +229,18 @@ struct ReaderPage: View {
                 if let error = player.renderError {
                     Text(error).typeRole(.meta).foregroundStyle(Tokens.destructive).lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if let offer = syncOffer, let where_ = player.describe(offer.position), let id = player.current?.id {
+                    HStack(spacing: 8) {
+                        Text("Continue from \(offer.deviceName) · \(where_)").typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(1)
+                        Spacer(minLength: 0)
+                        Button("Jump") { Task { await player.jump(to: offer.position); await env.syncModel.dismissOffer(for: id); syncOffer = nil } }
+                            .typeRole(.pill)
+                        Button { Task { await env.syncModel.dismissOffer(for: id); syncOffer = nil } } label: {
+                            Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Tokens.ink3)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .padding(.bottom, 10)

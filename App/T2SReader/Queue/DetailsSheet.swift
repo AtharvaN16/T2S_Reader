@@ -45,11 +45,16 @@ struct DetailsSheet: View {
         .padding(.top, Spacing.grid)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .confirmationDialog("Delete “\(summary.document.title)”?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Delete from library", role: .destructive) {
+            Button("Delete from this device", role: .destructive) {
                 Task { await env.deleteDocument(summary.id); dismiss() }
             }
+            if env.syncModel.isEnabled {
+                Button("Delete everywhere", role: .destructive) {
+                    Task { await env.deleteDocument(summary.id, everywhere: true); dismiss() }
+                }
+            }
         } message: {
-            Text(AppEnvironment.deleteMessage)
+            Text(env.syncModel.isEnabled ? AppEnvironment.deleteMessageWithSync : AppEnvironment.deleteMessage)
         }
         .presentationBackground(Tokens.raised)
         .presentationDetents([.medium, .large])

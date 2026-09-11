@@ -3,6 +3,7 @@ import SwiftUI
 import T2SApp
 import T2SCore
 import T2SStore
+import UniformTypeIdentifiers
 
 struct CollectionPage: View {
     /// Which kinds the page shows. Everything imported is in the Collection now (articles too,
@@ -43,6 +44,11 @@ struct CollectionPage: View {
     @State private var voiceChange: DocumentSummary?
     /// The book a menu's Delete named; the confirmation dialog presents it and clears it.
     @State private var pendingDelete: DocumentSummary?
+    /// The placeholder a tap named, waiting on the Files picker (sync spec §5); the `.fileImporter`
+    /// presents it and clears it.
+    @State private var pendingFill: DocumentSummary?
+    /// What `fillPlaceholder` said went wrong, for the alert; nil once dismissed.
+    @State private var fillMessage: String?
     @State private var searchText = ""
     @State private var isSearching = false
     @State private var filter: Filter = .all
@@ -137,10 +143,21 @@ struct CollectionPage: View {
             titleVisibility: .visible,
             presenting: pendingDelete
         ) { book in
-            Button("Delete from library", role: .destructive) { Task { await env.deleteDocument(book.id) } }
+            Button("Delete from this device", role: .destructive) { Task { await env.deleteDocument(book.id) } }
+            if env.syncModel.isEnabled {
+                Button("Delete everywhere", role: .destructive) { Task { await env.deleteDocument(book.id, everywhere: true) } }
+            }
         } message: { _ in
-            Text(AppEnvironment.deleteMessage)
+            Text(env.syncModel.isEnabled ? AppEnvironment.deleteMessageWithSync : AppEnvironment.deleteMessage)
         }
+        .fileImporter(isPresented: Binding(get: { pendingFill != nil }, set: { if !$0 { pendingFill = nil } }),
+                      allowedContentTypes: [.epub, .pdf]) { result in
+            guard let summary = pendingFill, case .success(let url) = result else { return }
+            Task { fillMessage = await env.libraryModel.fillPlaceholder(summary.id, from: url, sourceType: summary.document.sourceType) }
+        }
+        .alert("Couldn't add this book", isPresented: Binding(get: { fillMessage != nil }, set: { if !$0 { fillMessage = nil } })) {
+            Button("OK") { fillMessage = nil }
+        } message: { Text(fillMessage ?? "") }
     }
 
     private func openPending() {
@@ -243,9 +260,22 @@ struct CollectionPage: View {
     private func list(_ books: [DocumentSummary]) -> some View {
         LazyVStack(alignment: .leading, spacing: Spacing.row) {
             ForEach(books) { book in
-                CollectionRow(summary: book, onOpen: { selected = book }) { menuItems(for: book) }
+                CollectionRow(summary: book, onOpen: {
+                    if book.document.isPlaceholder { addHere(book) } else { selected = book }
+                }) { menuItems(for: book) }
                     .contextMenu { menuItems(for: book) }
             }
+        }
+    }
+
+    /// A placeholder's row tapped (sync spec §5): a link refetches straight into it (its content
+    /// key matches, so `importArticle` fills it instead of doubling it); anything else needs the
+    /// reader's own file, from the Files picker.
+    private func addHere(_ summary: DocumentSummary) {
+        if summary.document.sourceType == .article, let url = summary.document.sourceURL {
+            Task { await env.importModel.fetch(link: url); await env.importModel.confirmPreview(); await env.libraryModel.refresh() }
+        } else {
+            pendingFill = summary
         }
     }
 
@@ -335,6 +365,9 @@ private struct CollectionRow<Items: View>: View {
                         Text(summary.document.title).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
                         if let author = summary.document.author {
                             Text(author).typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(1)
+                        }
+                        if summary.document.isPlaceholder {
+                            Text("On \(summary.remoteDeviceName ?? "another device") · tap to add here").typeRole(.meta).foregroundStyle(Tokens.ink3)
                         }
                         Text(CollectionText.lengthLine(for: summary)).typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(1)
                     }

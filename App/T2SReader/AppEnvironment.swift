@@ -194,6 +194,9 @@ extension AppEnvironment {
 
     /// The confirmation's one line, wherever a delete is offered.
     static let deleteMessage = "Removes it, its audio and its progress from this device."
+
+    /// The confirmation's line once sync is on and a delete has two meanings (sync spec §5).
+    static let deleteMessageWithSync = "This device: removes it, its audio and its progress here; it stays on your other devices. Everywhere: removes it from every device signed into your iCloud."
 }
 
 /// `AudioPlayer`'s init can throw — a real `AVAudioEngine` failing to start, not something a preview

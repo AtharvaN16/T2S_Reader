@@ -93,10 +93,11 @@ struct PreferencesPage: View {
                         }
                     }
                     section("iCloud sync") {
-                        row("Sync positions and bookmarks", subtitle: "Coming later") {
-                            Toggle("", isOn: .constant(false))
+                        row("Sync positions and bookmarks", subtitle: env.syncModel.unavailableReason ?? env.syncModel.statusText) {
+                            Toggle("", isOn: Binding(get: { env.syncModel.isEnabled },
+                                                     set: { on in Task { await env.syncModel.setEnabled(on) } }))
                                 .labelsHidden()
-                                .disabled(true)
+                                .disabled(!env.syncModel.canEnable && !env.syncModel.isEnabled)
                         }
                     }
                     section("About") {
@@ -120,6 +121,7 @@ struct PreferencesPage: View {
             await env.pronunciation.refresh()
             await env.storage.refresh()
         }
+        .task { await env.syncModel.refreshAvailability() }
     }
 
     /// The default voice: the radio moves, "Make default" applies.

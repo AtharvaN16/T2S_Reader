@@ -2,7 +2,7 @@
 
 _Last updated 2026-09-11 small hours (Harsh's branch tested on the 11 Pro and merged, six fixes on dev, the research; before that the kind title pops with its menu; before that the kind menu's spring pop; before that the black buttons raised — graphite in the dark — and the dark-mode pass; before that the glow in blue and green when the voice lands, the fan re-cast on 2026 books; before that the empty shelf on Home and the Collection — three covers fanned, a raised button; before that an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
-## Resume here (2026-09-11, latest) — the 11 Pro test of Harsh's branch, the merge, six fixes, and the research
+## Resume here (2026-09-11, latest) — the 11 Pro test of Harsh's branch, the merge, seven fixes, the phone, and the research
 
 The owner asked whether Harsh's `phone-warmup-download-cloud` could be tried on the 11 Pro without
 disturbing the working app. It was: a worktree, a second bundle id (`com.t2s.reader.harsh`, its own
@@ -36,16 +36,38 @@ the front-GPU/back-CPU split, the screen staying awake, and his HANDOFF):
 - `1c29cec` — the G2P comment agrees with `mlxPinnedToCPU`.
 - `b6548e6` — the installer copies a file whose bytes are staged under another path: the manifest
   is 619 MB, 238 MB unique (the bucket variants share weights), so a first launch fetches 238.
+- `6bc589a` — one generation of compute plans per install, and a timing log that keeps the first
+  launch's numbers (found on the phone, below): `KokoroPlanCache.prepare(for:)` at composition wipes
+  `Library/Caches/<bundle>/com.apple.e5rt.e5bundlecache` when it was built for another warm-up
+  identity (or before the record existed); `KokoroTimingLog` appends each launch under a header
+  and moves a file past 256 KB to `.1`; `KokoroLoadTally` ends each set with one line —
+  `kokoro main set loaded: 14 stages in 460.4 s, 4 rebuilt (a plan built, ≥ 5 s), slowest …`.
 
-**Verified:** `swift test` 478/87; `KokoroCoreMLInstallTests` 11 and `KokoroComputeUnitsTests` 4 (with
-the new ones); simulator and device builds of each tree before its merge. Not verified: a phone.
-The 11 Pro still has `t2s H` (his branch as of ae23248) beside `t2s` (dev at 19:40 on 2026-09-10).
+**What the phone said, second pass (2026-09-11, 00:55–01:25).** dev went onto the 11 Pro as `t2s`
+(the signed Phone-scheme Release build, `devicectl device install app` over the old one; the
+container survived). The first launch rebuilt three plans and then stage 8's BNNS compile failed with
+"No space left on device" *inside the app's own Caches*: iOS keys Core ML's plan cache on the install
+and never removes the last install's — `t2s` held 4.36 GB across 211 entries from a day of builds,
+`t2s H` 3.11 GB from one warm-up — so a shipped user would keep ~1 GB per update too. `t2s H` was
+deleted (his branch is merged; the third slot is free again). With `6bc589a` installed: the launch
+wiped 4707 MB, and the owner locked the phone ~2.7 min during the first warm-up — no crash, the same
+process, the four long plan builds paused while locked and resumed on unlock (222 s and 453 s for the
+two concurrent pairs, against 59 s and 228 s unlocked at 00:56). The summary: `14 stages in 460.4 s,
+4 rebuilt, slowest kokoro_duration_t256 452.97 s`; the plan cache afterwards 0.58 GB in 42 files. Only
+`duration_t128`, `duration_t256`, `decoder_har_post_3s` and `_15s` ever need a long compile on the A13;
+the other ten load in under 2 s even after a wipe, so an unlocked first launch is about five minutes.
+The old launch, read from the log after the fact, had also finished: stage 8 compiled on the full
+disk in 490 s and the warm-up closed at 494.6 s.
+
+**Verified:** `swift test` 478/87; `KokoroCoreMLInstallTests` 11, `KokoroComputeUnitsTests` 4,
+`KokoroPlanCacheTests` 3, `KokoroTimingLogTests` 3, `KokoroLoadTallyTests` 2; simulator and device
+builds; the phone as above.
 
 **Owed:**
-- A phone install of this dev: `t2s` from the Phone scheme, then a fresh-install download over
-  Wi-Fi (the retry and the dedupe have only been tested against a fake network), a > 90 s lock
-  during the first warm-up (Finding 2's residual), and four minutes locked during playback with
-  the 180 s window.
+- A fresh-install download over Wi-Fi on a phone (the retry and the dedupe have only been tested
+  against a fake network): a third copy under `com.t2s.reader.harsh` from dev is the vehicle (the
+  slot is free; `Local.xcconfig` in a worktree, no share extension). Four minutes locked during
+  playback with the 180 s window.
 - Harsh, on the 17 Pro: playback locked on the GPU path with the CPU set behind it; whether
   serializing the GPU plan builds (the research's WhisperKit pattern) is worth its ~2× load time
   there; the §7.3 MLX spike if MLX for A14+ is ever revisited.

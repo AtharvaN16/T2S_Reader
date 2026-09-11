@@ -59,15 +59,28 @@ the other ten load in under 2 s even after a wipe, so an unlocked first launch i
 The old launch, read from the log after the fact, had also finished: stage 8 compiled on the full
 disk in 490 s and the warm-up closed at 494.6 s.
 
+**The fresh install, over Wi-Fi (01:31–01:41).** dev at `38b40c5` as a third copy under
+`com.t2s.reader.harsh` (the worktree, detached on dev, its identity edits kept), installed fresh and
+launched with the console: `kokoro install finished: 63 files downloaded (227 MB), 9 copied from a
+staged twin (363 MB), 0 retries, 14 stages compiled in 8.7 s, 45.7 s in all` — the dedupe is real
+(a 39 MB weight fetched once, its three bucket twins copied in 60 ms each), the retry path did not
+run because Hugging Face did not refuse this time. Then the warm-up: `14 stages in 517.2 s, 4
+rebuilt, slowest kokoro_duration_t256 512.13 s` — the other three long plans took 60 s each, so on
+the A13 a first launch *is* `duration_t256`'s plan build (453 s at 01:14, 490 s at 00:55, 512 s here).
+It is in the ready set because a piece may run to 176 ids; loading it after readiness like the 7 s
+and 10 s buckets, with pieces capped at 128 tokens until it lands, would make a first launch speak
+after about a minute instead of eight. The copy was deleted again afterwards.
+
 **Verified:** `swift test` 478/87; `KokoroCoreMLInstallTests` 11, `KokoroComputeUnitsTests` 4,
 `KokoroPlanCacheTests` 3, `KokoroTimingLogTests` 3, `KokoroLoadTallyTests` 2; simulator and device
 builds; the phone as above.
 
 **Owed:**
-- A fresh-install download over Wi-Fi on a phone (the retry and the dedupe have only been tested
-  against a fake network): a third copy under `com.t2s.reader.harsh` from dev is the vehicle (the
-  slot is free; `Local.xcconfig` in a worktree, no share extension). Four minutes locked during
-  playback with the 180 s window.
+- Four minutes locked during playback with the 180 s window (the owner chose to skip it for now:
+  the change is a constant and a budget bookkeeping fix, both unit-tested; a phone would confirm the
+  budget cycle covers 180 s at the A13's speed). The download retry against a real 429 (only the
+  fake network has produced one).
+- `duration_t256` out of the ready set (above): the first-launch win on the A13.
 - Harsh, on the 17 Pro: playback locked on the GPU path with the CPU set behind it; whether
   serializing the GPU plan builds (the research's WhisperKit pattern) is worth its ~2× load time
   there; the §7.3 MLX spike if MLX for A14+ is ever revisited.

@@ -72,7 +72,9 @@ struct BookSheet: View {
                     .frame(maxWidth: .infinity)
                     playPill
                         .frame(maxWidth: .infinity)
-                    ChapterListView(chapters: chapters, current: resumeIndex, heading: .sectionHeader, pulsing: pulsingChapter) { chapter in
+                    ChapterListView(chapters: chapters, current: resumeIndex, heading: .sectionHeader,
+                                    pulsing: pulsingChapter,
+                                    bookmarks: isCurrent ? env.player.bookmarksByChapter : [:]) { chapter in
                         Task {
                             if !isCurrent { await env.player.load(live, play: false) }
                             await env.player.seek(toChapter: chapter.index)

@@ -222,7 +222,8 @@ struct ReaderPage: View {
             chapterRow
                 .padding(.bottom, 2)
             VStack(spacing: 2) {
-                ThinScrubber(model: player.scrubber, segments: chapterSegments) { fraction in
+                ThinScrubber(model: player.scrubber, segments: chapterSegments,
+                             bookmarkFractions: player.bookmarkFractions) { fraction in
                     Task { await player.seek(fraction: fraction) }
                 }
                 // Elapsed on the left, time left on the right (Apple Music's "-1:02:33"), in the

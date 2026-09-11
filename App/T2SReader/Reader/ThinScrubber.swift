@@ -14,6 +14,10 @@ struct ThinScrubber: View {
     var model: ScrubberModel
     /// Chapter spans as fractions of the whole, in order. Fewer than two draws one bar.
     var segments: [Range<Double>] = []
+    /// Bookmarks as fractions of the whole, in any order. Drawn only while the bar is pressed, and
+    /// only for the chapter under the finger (2026-09-11 spec §8): at rest the bar is 6 pt and
+    /// already carries the render frontier, and a dulled 11 pt-wide chapter would show a smear.
+    var bookmarkFractions: [Double] = []
     var onSeek: (Double) -> Void
     @State private var dragFraction: Double?
     /// The chapter under the finger while pressed; the layout widens it.
@@ -113,6 +117,15 @@ struct ThinScrubber: View {
                 .fill(Tokens.ink)
                 .frame(width: width * played)
                 .transaction { $0.animation = nil }
+            if rounded {
+                ForEach(Array(dots(in: span).enumerated()), id: \.offset) { _, local in
+                    Circle()
+                        .fill(Tokens.accent)
+                        .frame(width: 10, height: 10)
+                        .overlay(Circle().strokeBorder(Tokens.ground, lineWidth: 2.5))
+                        .offset(x: width * local - 5)
+                }
+            }
         }
         .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: rounded ? height / 2 : 0, style: .continuous))
@@ -125,5 +138,13 @@ struct ThinScrubber: View {
         let first = min(n - 1, max(0, Int(span.lowerBound * Double(n))))
         let last = min(n - 1, max(first, Int((span.upperBound * Double(n)).rounded(.up)) - 1))
         return Array(first...last)
+    }
+
+    /// The bookmarks inside this chapter, as 0…1 along the chapter itself.
+    private func dots(in span: Range<Double>) -> [Double] {
+        let length = max(span.upperBound - span.lowerBound, .leastNonzeroMagnitude)
+        return bookmarkFractions
+            .filter { $0 >= span.lowerBound && $0 <= span.upperBound }
+            .map { min(1, max(0, ($0 - span.lowerBound) / length)) }
     }
 }

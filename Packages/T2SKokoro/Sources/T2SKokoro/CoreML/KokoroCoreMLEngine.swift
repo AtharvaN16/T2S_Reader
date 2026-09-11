@@ -384,9 +384,21 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         backgroundSetLoadRetryInterval = interval
     }
 
-    /// Waits for the buckets after the ready set, if their load has begun. `preload()` returns at
-    /// readiness; a probe that wants to render in every bucket calls this after it.
+    /// Waits for the whole set: the main load, started here when it has not begun, and then the
+    /// buckets and duration models that land after the ready set. `preload()` returns at readiness;
+    /// a caller that wants to render in every bucket calls this, and gets the same set whether or
+    /// not it preloaded first.
+    ///
+    /// Starting the load rather than only joining one already in flight is what makes this a
+    /// barrier. On an engine nothing has loaded yet, `laterBucketsTask` is still nil, and the old
+    /// body returned at once: the caller then rendered against whatever part of the set its own
+    /// first render had brought in, and a second render moments later saw a fuller one — a
+    /// different piece cap and a different bucket for the same words, so the two disagreed on where
+    /// the words fell (the streamed and whole renders of
+    /// ``KokoroCoreMLEngineTests/streamsALongPassageInPiecesThatFoldToTheSameTimings()`` drifted
+    /// 0.10-0.27 s apart; the run of 2026-09-11 19:40).
     public func awaitFullLoad() async throws {
+        _ = try await load()
         try await laterBucketsTask?.value
     }
 

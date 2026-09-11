@@ -10,6 +10,7 @@ struct BookmarksSheet: View {
     @Environment(\.dismiss) private var dismiss
     var summary: DocumentSummary
     @State private var model: BookmarkListModel?
+    @State private var editing: BookmarkEntry?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.section) {
@@ -17,7 +18,7 @@ struct BookmarksSheet: View {
                 .padding(.horizontal, Spacing.margin)
             if let model {
                 if model.entries.isEmpty {
-                    Text("No bookmarks yet. Tap the bookmark button while listening to save your place.")
+                    Text("No bookmarks yet. Tap the bookmark button while listening to save your place — you can add a note to any of them.")
                         .typeRole(.meta).foregroundStyle(Tokens.ink2)
                         .padding(.horizontal, Spacing.margin)
                     Spacer()
@@ -26,6 +27,7 @@ struct BookmarksSheet: View {
                         ForEach(model.entries) { entry in
                             BookmarkRow(entry: entry,
                                         onJump: { Task { await model.jump(to: entry, in: summary); dismiss() } },
+                                        onEditNote: { editing = entry },
                                         onDelete: { Task { await model.delete(entry) } })
                             .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -49,6 +51,10 @@ struct BookmarksSheet: View {
         .presentationBackground(Tokens.raised)
         .presentationDetents([.medium, .large])
         .presentationCornerRadius(Spacing.sheetCorner)
+        .sheet(item: $editing) { entry in
+            BookmarkNoteSheet(summary: summary, entry: entry,
+                              onSaved: { Task { await model?.load(summary) } })
+        }
         .task {
             let model = self.model ?? BookmarkListModel(library: env.library, player: env.player)
             self.model = model

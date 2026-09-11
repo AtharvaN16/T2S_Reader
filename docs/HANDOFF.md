@@ -2,6 +2,85 @@
 
 _Last updated 2026-09-11 (Plan 18 — render ahead by chapter while in front — on `render-ahead-by-chapter`; before that Harsh's branch tested on the 11 Pro and merged, six fixes on dev, the research; before that the kind title pops with its menu; before that the kind menu's spring pop; before that the black buttons raised — graphite in the dark — and the dark-mode pass; before that the glow in blue and green when the voice lands, the fan re-cast on 2026 books; before that the empty shelf on Home and the Collection — three covers fanned, a raised button; before that an import ends on a done step — Play or Done — and shows on Home and the Collection at once; before that the 17 Pro's two crashes, the model download, the warm-up and the cloud route on `phone-warmup-download-cloud`; before that the glow as a bezel, the Voice page's seam; before that the tail click removed by place on every voice, the Reader's voice chip; before that the glow concave and higher, the Voice page's cut, web ≠ text, PDF in cloth; before that generated covers — cloth for books, a sheet for links and text; before that one warm-up glow; before that the Collection's title is its filter; before that the share-sheet book bug, the veil moved behind the page and hushed while sound plays, the skip pill on unnumbered books; before that the warm-up veil with real stage progress, the signing team in Local.xcconfig, picker round 7; before that voice picker round 6 from the phone: subpages own the screen, no Default row, waveform + heart + radio per row, a bar that rises on a choice; before that round 5 — a radio per row, the avatar plays, a Change voice bar in the Reader's sheet; before that top fade, no Autoplay row, Collection tabs with Text and Links, ElevenReader-style import steps; before that books on one shelf height and slot on Home and in the Collection; before that the book sheet's tilt eased back a step after being made bolder, then book sheet rework + no queue, then chapter sheets, skip pill, bookmark toggle on `dev`; before that Plan 17 — the rest of the audit — on `plan-17-rest-of-audit`, in the worktree `.worktrees/plan-17-rest-of-audit`, off `origin/dev` @ 7dc7498 and rebased onto the voice-picker pass at 1e23c1a). Written for whoever picks up the coding next._
 
+## Resume here (2026-09-11, morning) — for Harsh: where things stand, the crash fixes, what's next
+
+_Written 03:20 by the owner's session as it handed over. `dev` is pushed; the owner's iPhone 11 Pro runs
+it as `t2s`. Your `phone-warmup-download-cloud` is fully merged (01f7560); everything below is on `dev`._
+
+### The crashes, and where each fix is
+
+The phone's crash store had eight reports for `t2s` on 2026-09-10 in three classes (`crashreport.md`
+at the repo root, the `.ips` in `crashreport-ips/`), plus what the night's phone runs found:
+
+| what crashed or failed | the fix | commit |
+|---|---|---|
+| `EXC_BREAKPOINT` in the `BGTaskScheduler` launch handler — six of the eight, every Prepare launch | the handler is `@Sendable` and hops to the main actor itself | PR #16 (`21d1940`) |
+| `cpu_resource_fatal`: a plan build at 99 % CPU in a non-frontmost process | the `ForegroundGate` before every compute-plan build; a background launch never builds one | PR #16 (`68233bd`) |
+| `SIGABRT`, a C++ exception out of MLX on Metal while locked (the G2P fallback network) | `mlxPinnedToCPU`: MLX's default device is the CPU for the process | your `072ab74`, on `dev` since the merge |
+| `std::bad_alloc` in MPSGraph: the GPU path's plan compile on a 4 GB phone | the GPU needs 5 GB; the chip policy and `kokoro.computeUnits` both hold to it | `84e16f9` |
+| the model download dying on the first non-2xx (Hugging Face 429s) | retry with `Retry-After`/backoff (`5d40ac8`); a file whose bytes are staged under another path is copied, 238 MB fetched of 619 (`b6548e6`); one `URLSession` per install, `Range` resume, the rate-limit headers (`7c0f1dc`) | see left |
+| "No space left on device" inside the app's own Caches: iOS keeps every install's Core ML plans, 4.36 GB on the 11 Pro | `KokoroPlanCache.prepare(for:)` wipes plans built for another install identity before the warm-up; one generation (~600 MB) at a time — this hits shipped users at every app or iOS update too | `6bc589a` |
+| a render cancelled while the phone is locked spinning on the gate at full CPU | `renderSet` throws `CancellationError` | `37f79df` |
+| not a crash: the audio starving once a minute while locked (`CPUBudget` bursts against a 60 s window) | the budget's floor (`abb3875`), a 180 s window on the CPU path (`b5b34fa`), and Plan 18 — render to the end of the chapter while in front, so a lock only tops up (`54f3a7b`, **not yet run on a phone**) | see left |
+| not a crash: an eight-minute first launch on the A13 (the `duration_t256` plan) | readiness waits for seven stages, t256 lands after the buckets; 57 s to speaking | `b8bc24b` |
+
+Verified on the 11 Pro: a >2.5 min lock during the first warm-up (no crash, the plan builds pause and
+resume); a fresh install over Wi-Fi (227 MB fetched, 363 copied, 0 retries, 46 s); the wipe; 57 s to
+ready. Not verified on any phone: Plan 18, the 180 s window locked for four minutes, a real 429.
+
+### What's next, in this order
+
+1. **Plan 18 on a phone** (either phone; the protocol is §4.1 of
+   `docs/superpowers/plans/2026-09-11-render-ahead-by-chapter.md`): play three minutes in front,
+   lock ten minutes at 1x, ten at 1.5x. In `kokoro-timing.log`: `render-ahead fill on/off`, `kokoro
+   scene …; foreground gate …`, and whether any `kokoro call` lines appear during the lock at all (the
+   window should already be rendered). Console.app over USB: `render.fill` at play/lock/unlock,
+   `render.pacing` at most once after the lock. Then Step 8 (`.fair` halves the bound) and raising the
+   CPU bound from 10–20 min to 10–30 if the phone stays cool.
+2. **The `MLComputePlan` probe on the 17 Pro** — why the A19's CPU compiler never finishes the 15 s
+   generator. From `Packages/T2SKokoro`: `xcodebuild test -scheme T2SKokoro -destination
+   'platform=iOS,id=<UDID>' -only-testing:T2SKokoroTests/KokoroComputePlanProbe
+   -allowProvisioningUpdates DEVELOPMENT_TEAM=<team> CODE_SIGN_STYLE=Automatic
+   TEST_RUNNER_KOKORO_COMPUTE_PLAN_PROBE=1 2>&1 | grep 'kokoro compute plan'`. The probe downloads the
+   stage's three files over Wi-Fi and caches them; on the Mac the same plan loads in 1.1 s with every
+   op CPU-supported (`spikes/findings/compute-plan-probe/report.md`), so it is the phone's per-op
+   costs we need. The recipe is untried from a CLI; the Xcode scheme with the env var is the fallback.
+3. **Locked playback on the GPU path, on the 17 Pro**, with the new timing lines: the review
+   `docs/research/2026-09-11-gpu-path-locked-playback-review.md` traces the flow, names eight races
+   (R1–R8) and ends with a reading guide for exactly this run.
+4. **The review's improvements 1–3 and R6**, each small with its test named there: the CPU budget's
+   pacing in the timing log; cut a piece for the 3 s background set *before* rendering (a third of the
+   background calls are thrown away after a full pipeline run today); place by `.background`, not by
+   the gate (Control Center or a banner must not park a streamed head); retry a failed background-set
+   load instead of a session without one.
+5. **Four minutes locked during playback on the CPU path** with the 180 s window (the owner skipped it
+   — the change is a constant and a bookkeeping fix, both unit-tested — and the control on the MLX
+   class needs a text that exercises the G2P fallback).
+6. **From the research** (`docs/research/2026-09-10-on-device-models-on-old-and-new-phones.md`):
+   done — the rate-limit headers, one session with `Range` resume, render by chapter (code), the
+   compute-plan probe; left — a mirror for the model (R2 or Background Assets: a hosting decision the
+   owner has to make, ~240 MB), whether serializing the GPU plan builds is worth its ~2× load time,
+   and the §7.3 MLX spike only if MLX for A14+ is ever revisited.
+7. **Two open questions from the crash report** are still yours: did the 17 Pro's 15:23 download go
+   through in one launch, and which tier did the playback test plan under with the phone on USB?
+
+### Reading a phone from a Mac
+
+```bash
+# the timing log: every launch under a header, install lines, stage loads, calls, fills, scene changes
+xcrun devicectl device copy from --device <UDID> --domain-type appDataContainer \
+  --domain-identifier com.t2s.reader --source 'Library/Caches/kokoro-timing.log' --destination ./kokoro-timing.log
+# the same lines live, until the phone locks
+xcrun devicectl device process launch --console --terminate-existing --device <UDID> com.t2s.reader -- -kokoro.timingConsole YES
+# what the container holds (the plan cache is under Library/Caches/<bundle id>/com.apple.e5rt.e5bundlecache)
+xcrun devicectl device info files --device <UDID> --domain-type appDataContainer --username mobile \
+  --domain-identifier com.t2s.reader --subdirectory 'Library/Caches'
+```
+
+The log is written in every build (256 KB, then rotated to `.1`; no reader text in it); the console
+mirror only under the flag. A build from the Mac is a new install identity: the next launch wipes the
+old plans and rebuilds — 57 s to ready on the A13, t256 four minutes later.
+
 ## Resume here (2026-09-11, render-ahead) — Plan 18: the foreground renders the chapter; a lock only tops up
 
 The 11 Pro, locked during playback, ran dry once a minute (crashreport.md, Finding 2b): the

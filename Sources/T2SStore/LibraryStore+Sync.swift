@@ -39,14 +39,17 @@ extension LibraryStore {
         return records
     }
 
+    /// Upserts a pulled document (sync spec §4, §6): a known row — placeholder or not — gets an
+    /// offer, never a moved position; only a document with no row of its own yet (the `else` below)
+    /// takes one directly. Never touches `isDirty`: only `markClean` after a successful push clears
+    /// it, so a row that keeps a newer local position (a resume the offer left alone) stays queued
+    /// for the next push.
     public func writeSynced(_ document: SyncedDocument, offering remote: SyncedPosition?) throws {
         if let row = try rowWithContentKey(document.contentKey) {
             row.title = document.title
             row.author = document.author
             row.isFinished = document.isFinished
             row.updatedAt = document.updatedAt
-            // A known row — placeholder or not — gets an offer, never a moved position; only a
-            // document with no row of its own yet (the `else` below) takes one directly.
             if let remote {
                 row.pendingRemoteHref = remote.position.resourceHref
                 row.pendingRemoteProgression = remote.position.progression
@@ -61,7 +64,6 @@ extension LibraryStore {
                 row.resumeSavedAt = resume.savedAt
                 row.resumeDevice = resume.deviceName
             }
-            row.isDirty = false
         } else {
             let row = StoredDocument(id: UUID(), title: document.title, author: document.author, sourceType: document.sourceType.rawValue,
                                      sourceURL: document.sourceURL?.absoluteString, coverImagePath: nil, addedAt: document.addedAt, voiceID: nil,
@@ -80,6 +82,9 @@ extension LibraryStore {
         try commit()
     }
 
+    /// Upserts a pulled bookmark, or removes it when `deletedAt` is set; ignored when no local
+    /// document has its key. Never touches `isDirty`: only `markClean` after a successful push
+    /// clears it.
     public func writeSynced(_ bookmark: SyncedBookmark) throws {
         guard let document = try rowWithContentKey(bookmark.contentKey) else { return }
         if bookmark.deletedAt != nil {
@@ -87,7 +92,7 @@ extension LibraryStore {
         } else if let row = try bookmarkRow(bookmark.id) {
             row.href = bookmark.position.resourceHref; row.progression = bookmark.position.progression
             row.charOffset = bookmark.position.charOffset; row.cssSelector = bookmark.position.cssSelector
-            row.note = bookmark.note; row.updatedAt = bookmark.updatedAt; row.isDirty = false
+            row.note = bookmark.note; row.updatedAt = bookmark.updatedAt
         } else {
             let row = StoredBookmark(id: bookmark.id, documentID: document.id, position: bookmark.position, note: bookmark.note, createdAt: bookmark.createdAt)
             row.updatedAt = bookmark.updatedAt

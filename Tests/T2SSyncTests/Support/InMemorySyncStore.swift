@@ -24,10 +24,9 @@ actor InMemorySyncStore: SyncStore {
     func write(_ document: SyncedDocument, offering remote: SyncedPosition?) {
         if var local = documents[document.contentKey] {
             local.title = document.title; local.author = document.author; local.isFinished = document.isFinished; local.updatedAt = document.updatedAt
-            if let remote, !placeholders.contains(document.contentKey) { pending[document.contentKey] = remote }
-            else { local.resume = remote ?? document.resume }
+            if let remote { pending[document.contentKey] = remote }
+            else { local.resume = document.resume }
             documents[document.contentKey] = local
-            dirty.remove("doc:\(document.contentKey)")
         } else {
             documents[document.contentKey] = document
             placeholders.insert(document.contentKey)
@@ -36,7 +35,6 @@ actor InMemorySyncStore: SyncStore {
     func write(_ bookmark: SyncedBookmark) {
         guard documents[bookmark.contentKey] != nil else { return }
         if bookmark.deletedAt != nil { bookmarks[bookmark.id] = nil } else { bookmarks[bookmark.id] = bookmark }
-        dirty.remove("bm:\(bookmark.id)")
     }
     func removeDocument(contentKey: String) {
         documents[contentKey] = nil; pending[contentKey] = nil; placeholders.remove(contentKey)

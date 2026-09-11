@@ -89,6 +89,26 @@ import T2SCore
         #expect(await d.a.dirtyRecords().isEmpty)
     }
 
+    /// A position saved on each device before either syncs is not a real conflict on the record's
+    /// clock (only one of them is ever newer), but the offer mechanism must not eat the loser's edit:
+    /// A's own newer save still has to reach B once the dust settles.
+    @Test func aLocalPositionSavedDuringAConflictStillReachesTheOtherDevice() async throws {
+        let d = Devices()
+        await d.a.importLocal("k", title: "Book", at: t(1))
+        _ = await d.engineA.sync(); _ = await d.engineB.sync()
+
+        await d.b.savePosition("k", 0.4, at: t(10), device: "iPad")
+        await d.a.savePosition("k", 0.6, at: t(20), device: "iPhone")
+
+        _ = await d.engineB.sync()
+        _ = await d.engineA.sync()
+        #expect(await d.a.documents["k"]?.resume?.position.progression == 0.6)
+        #expect(await d.a.dirtyRecords().isEmpty)
+
+        _ = await d.engineB.sync()
+        #expect(await d.b.pending["k"]?.position.progression == 0.6)
+    }
+
     /// An expired token is a full pull, and a full pull changes nothing that was already right.
     @Test func anExpiredTokenIsAFullPullThatChangesNothing() async throws {
         let d = Devices()
@@ -102,5 +122,22 @@ import T2SCore
         #expect(await d.b.documents == before.0)
         #expect(await d.b.bookmarks == before.1)
         #expect(await d.b.pending == before.2)
+    }
+
+    /// A deletion beats anything older than it, but a newer local edit outlives an older deletion
+    /// marker (sync spec §4) — the marker doesn't win just because it arrived first.
+    @Test func aNewerLocalEditOutlivesAnOlderDeletionMarker() async throws {
+        let d = Devices()
+        await d.a.importLocal("k", title: "Book", at: t(1))
+        _ = await d.engineA.sync(); _ = await d.engineB.sync()
+
+        await d.b.deleteEverywhere("k", at: t(50))
+        await d.a.savePosition("k", 0.5, at: t(60), device: "iPhone")
+
+        for _ in 0..<2 {
+            _ = await d.engineA.sync()
+            _ = await d.engineB.sync()
+        }
+        #expect(await d.a.documents["k"] != nil)
     }
 }

@@ -137,9 +137,11 @@ ready. Not verified on any phone: Plan 18, the 180 s window locked for four minu
    on a non-retryable failure (a 404 on the mirror must not fail the install) — one test each in
    `KokoroCoreMLInstallTests` with the fake network, then one real fresh install over Wi-Fi (`kokoro install
    finished: …` in the timing log names what was fetched). Not a dependency on the paid developer
-   account. When the model is later re-exported smaller, it goes into the same bucket:
-   `docs/research/2026-09-11-kokoro-quantization-quality.md` has what people report (8-bit is free if the
-   sensitive layers stay fp16; 6-bit is Apple's floor; nobody has done it for Core ML yet).
+   account. When the model is later quantized smaller, it goes into the same bucket:
+   `docs/research/2026-09-11-kokoro-quantization-how-to-and-publishing.md` has the verified recipe (no
+   PyTorch needed — `coremltools` compresses our staged `.mlpackage` files directly, ~227 → ~120 MB at
+   int8, the hard-link dedupe survives) and confirms three other people already shipped an 8-bit Core ML
+   Kokoro this year, which the earlier doc's "nobody has done it yet" missed.
 5. **Four minutes locked during playback on the CPU path** with the 180 s window (the owner skipped it
    — the change is a constant and a bookkeeping fix, both unit-tested — and the control on the MLX
    class needs a text that exercises the G2P fallback).

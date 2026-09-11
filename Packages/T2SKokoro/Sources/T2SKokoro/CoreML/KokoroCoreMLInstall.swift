@@ -111,9 +111,13 @@ public actor KokoroCoreMLInstall {
         try fileManager.createDirectory(at: compiledDirectory, withIntermediateDirectories: true)
         try Self.excludeFromBackup(root)
 
-        try await downloadMissingFiles(progress: progress)
-        try await compileMissingStages(progress: progress)
+        // What this install cost, for the timing log (`KokoroInstallTally`): a phone's fresh install
+        // is watched from a Mac through that log, since the system log does not reach one.
+        let tally = OSAllocatedUnfairLock(initialState: KokoroInstallTally())
+        try await downloadMissingFiles(progress: progress, tally: tally)
+        try await compileMissingStages(progress: progress, tally: tally)
         try removeCompiledSources()
+        KokoroCoreMLEngine.timing(tally.withLock { $0.summary() })
 
         switch KokoroCoreMLResources.locate(installedIn: root) {
         case .success(let located): return located
@@ -123,7 +127,8 @@ public actor KokoroCoreMLInstall {
 
     // MARK: Download
 
-    private func downloadMissingFiles(progress: @escaping @Sendable (Progress) -> Void) async throws {
+    private func downloadMissingFiles(progress: @escaping @Sendable (Progress) -> Void,
+                                      tally: OSAllocatedUnfairLock<KokoroInstallTally>) async throws {
         let total = manifest.reduce(0) { $0 + $1.byteCount }
         var done = 0
         // Everything already verified counts as done from the start, so a resumed install's bar
@@ -155,9 +160,12 @@ public actor KokoroCoreMLInstall {
             // copied from there, not fetched again.
             if let twin = stagedTwin(of: file) {
                 Self.log.notice("copying \(file.path, privacy: .public) from \(twin.lastPathComponent, privacy: .public)")
+                KokoroCoreMLEngine.timing("kokoro install copying \(file.path) from \(twin.lastPathComponent)")
                 try FileManager.default.copyItem(at: twin, to: part)
+                tally.withLock { $0.copied(bytes: file.byteCount) }
             } else {
                 Self.log.notice("downloading \(file.path, privacy: .public) (\(file.byteCount, privacy: .public) bytes)")
+                KokoroCoreMLEngine.timing("kokoro install downloading \(file.path) (\(file.byteCount) bytes)")
                 // A refusal the server may lift (429, a 5xx, a dropped connection) is tried again after
                 // a wait — the server's own `Retry-After`, else doubling from two seconds — up to
                 // `maximumAttempts`; anything else (a 404, a checksum) fails the install at once. The
@@ -174,6 +182,7 @@ public actor KokoroCoreMLInstall {
                         }, {
                             progress(.waitingForNetwork(totalBytes: total))
                         })
+                        tally.withLock { $0.downloaded(bytes: file.byteCount) }
                         break
                     } catch is CancellationError {
                         try? FileManager.default.removeItem(at: part)
@@ -183,9 +192,12 @@ public actor KokoroCoreMLInstall {
                         let status = (error as? HTTPStatusError)?.status
                         Self.log.error("download failed for \(file.path, privacy: .public) (attempt \(attempt, privacy: .public)): \(String(describing: error), privacy: .public)")
                         guard Self.isRetryable(error), attempt < Self.maximumAttempts else {
+                            KokoroCoreMLEngine.timing("kokoro install failed: \(file.path) after \(attempt) attempt(s), \(status.map { "HTTP \($0)" } ?? String(describing: error))")
                             throw Failure.download(file.path, status: status)
                         }
                         let delay = (error as? HTTPStatusError)?.retryAfter ?? Self.backoff(afterAttempt: attempt)
+                        KokoroCoreMLEngine.timing("kokoro install retry \(attempt + 1) for \(file.path) in \(KokoroCoreMLEngine.fixed(delay, 0)) s after \(status.map { "HTTP \($0)" } ?? "a dropped connection")")
+                        tally.withLock { $0.retried() }
                         progress(.retrying(path: file.path, attempt: attempt + 1, after: delay))
                         await sleeper(delay)
                         try Task.checkCancellation()
@@ -195,6 +207,7 @@ public actor KokoroCoreMLInstall {
             guard try Self.matches(part, file) else {
                 try? FileManager.default.removeItem(at: part)
                 Self.log.error("checksum mismatch for \(file.path, privacy: .public)")
+                KokoroCoreMLEngine.timing("kokoro install failed: checksum mismatch for \(file.path)")
                 throw Failure.checksumMismatch(file.path)
             }
             try? FileManager.default.removeItem(at: destination)
@@ -262,7 +275,8 @@ public actor KokoroCoreMLInstall {
         return compiledDirectory.appending(path: "\(name).mlmodelc", directoryHint: .isDirectory)
     }
 
-    private func compileMissingStages(progress: @escaping @Sendable (Progress) -> Void) async throws {
+    private func compileMissingStages(progress: @escaping @Sendable (Progress) -> Void,
+                                      tally: OSAllocatedUnfairLock<KokoroInstallTally>) async throws {
         let all = stages
         let pending = all.filter { !FileManager.default.fileExists(atPath: $0.compiled.path(percentEncoded: false)) }
         guard !pending.isEmpty else { return }
@@ -281,6 +295,7 @@ public actor KokoroCoreMLInstall {
                 throw CancellationError()
             } catch {
                 Self.log.error("compile failed for \(stage.name, privacy: .public): \(String(describing: error), privacy: .public)")
+                KokoroCoreMLEngine.timing("kokoro install failed: compile \(stage.name): \(String(describing: error))")
                 throw Failure.compile(stage.name)
             }
             // Into place atomically: a half-moved directory would read as "compiled" next time.
@@ -291,7 +306,10 @@ public actor KokoroCoreMLInstall {
             try FileManager.default.moveItem(at: temporary, to: stage.compiled)
             compiledCount += 1
             let elapsed = clock.now - started
-            Self.log.notice("compiled \(stage.name, privacy: .public) in \(Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) * 1e-18, format: .fixed(precision: 1), privacy: .public) s (\(compiledCount, privacy: .public)/\(all.count, privacy: .public))")
+            let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) * 1e-18
+            Self.log.notice("compiled \(stage.name, privacy: .public) in \(seconds, format: .fixed(precision: 1), privacy: .public) s (\(compiledCount, privacy: .public)/\(all.count, privacy: .public))")
+            KokoroCoreMLEngine.timing("kokoro install compiled \(stage.name) in \(KokoroCoreMLEngine.fixed(seconds, 1)) s (\(compiledCount)/\(all.count))")
+            tally.withLock { $0.compiled(seconds: seconds) }
             progress(.compiling(stage: compiledCount, totalStages: all.count))
         }
     }

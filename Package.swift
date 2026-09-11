@@ -9,6 +9,7 @@ let package = Package(
         .library(name: "T2SAudio", targets: ["T2SAudio"]),
         .library(name: "T2SStore", targets: ["T2SStore"]),
         .library(name: "T2SLibrary", targets: ["T2SLibrary"]),
+        .library(name: "T2SSync", targets: ["T2SSync"]),
         .library(name: "T2SApp", targets: ["T2SApp"]),
     ],
     targets: [
@@ -16,7 +17,8 @@ let package = Package(
         .target(name: "T2SAudio", dependencies: ["T2SCore"], swiftSettings: [.swiftLanguageMode(.v6)]),
         .target(name: "T2SStore", dependencies: ["T2SCore"], swiftSettings: [.swiftLanguageMode(.v6)]),
         .target(name: "T2SLibrary", dependencies: ["T2SCore", "T2SStore"], swiftSettings: [.swiftLanguageMode(.v6)]),
-        .target(name: "T2SApp", dependencies: ["T2SCore", "T2SAudio", "T2SStore", "T2SLibrary"],
+        .target(name: "T2SSync", dependencies: ["T2SCore"], swiftSettings: [.swiftLanguageMode(.v6)]),
+        .target(name: "T2SApp", dependencies: ["T2SCore", "T2SAudio", "T2SStore", "T2SLibrary", "T2SSync"],
                 swiftSettings: [.swiftLanguageMode(.v6)]),
         .testTarget(
             name: "T2SCoreTests",
@@ -42,6 +44,11 @@ let package = Package(
         .testTarget(
             name: "T2SAppTests",
             dependencies: ["T2SApp", "T2SCore", "T2SAudio", "T2SStore", "T2SLibrary"],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "T2SSyncTests",
+            dependencies: ["T2SSync", "T2SCore"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]

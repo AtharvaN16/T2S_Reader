@@ -111,7 +111,10 @@ ready. Not verified on any phone: Plan 18, the 180 s window locked for four minu
    the A13. So the audio stays and `streamsALongPassageInPiecesThatFoldToTheSameTimings` asserts what
    holds: one timing per word in both, every word within half a second of the other performance, the
    streamed total within a second of the whole. (Trimming silence at a join would not make them agree —
-   the difference is prosody, not a pause.) Still
+   the difference is prosody, not a pause.) Also landed the same evening: the compiled model on the
+   phone drops from ~580 MB to ~240 MB — the bucket variants' identical compiled `weight.bin`s become
+   hard links (`KokoroCoreMLInstall.linkDuplicateWeights`, after every compile and once per revision
+   after the warm-up for installs that predate it; the download was already 240 MB). Still
    owed from the review: improvement 5 (the refusal retry as a decision) and 6 (the "keep the phone
    unlocked" line on the veil). The mirror: Cloudflare R2 (free egress, cents a month, a plain URL as a
    second source) when the paid developer account is set up — not before; Hugging Face with the retries

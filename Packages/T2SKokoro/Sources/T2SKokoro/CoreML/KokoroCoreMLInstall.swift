@@ -216,6 +216,8 @@ public actor KokoroCoreMLInstall {
         }
         try await compileMissingStages(progress: progress, tally: tally)
         try removeCompiledSources()
+        let reclaimed = Self.linkDuplicateWeights(in: compiledDirectory)
+        if reclaimed > 0 { KokoroCoreMLEngine.timing("kokoro install linked duplicate weights: \(reclaimed / 1_048_576) MB reclaimed") }
         KokoroCoreMLEngine.timing(tally.withLock { $0.summary() })
 
         switch KokoroCoreMLResources.locate(installedIn: root) {
@@ -420,6 +422,43 @@ public actor KokoroCoreMLInstall {
             tally.withLock { $0.compiled(seconds: seconds) }
             progress(.compiling(stage: compiledCount, totalStages: all.count))
         }
+    }
+
+    /// The bucket variants of a stage share their weights, and the compiler writes each variant its own
+    /// copy: the compiled layout held 580 MB for 240 MB of distinct bytes (the 11 Pro, 2026-09-11; two
+    /// variants' compiled `weight.bin` hash identically). One copy per distinct content stays, the
+    /// others become hard links to it — Core ML reads a link like the file — and the bytes come back.
+    /// Returns the bytes reclaimed; a file that cannot be linked is left as it is. Safe to run again
+    /// (a link is not a duplicate) and while a model is open (the open descriptor keeps its inode).
+    @discardableResult
+    public static func linkDuplicateWeights(in compiledDirectory: URL) -> Int64 {
+        let fileManager = FileManager.default
+        guard let files = fileManager.enumerator(at: compiledDirectory, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .fileResourceIdentifierKey],
+                                                 options: [.skipsHiddenFiles]) else { return 0 }
+        var byHash: [String: (url: URL, identifier: NSObject)] = [:]
+        var reclaimed: Int64 = 0
+        for case let url as URL in files where url.pathComponents.contains("weights") {
+            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey, .fileResourceIdentifierKey]),
+                  values.isRegularFile == true, let size = values.fileSize, size > 0,
+                  let identifier = values.fileResourceIdentifier as? NSObject,
+                  let hash = try? KokoroResources.sha256Hex(of: url) else { continue }
+            if let first = byHash[hash] {
+                if first.identifier.isEqual(identifier) { continue }             // already the same file
+                let aside = url.appendingPathExtension("duplicate")
+                do {
+                    try? fileManager.removeItem(at: aside)
+                    try fileManager.moveItem(at: url, to: aside)
+                    try fileManager.linkItem(at: first.url, to: url)
+                    try fileManager.removeItem(at: aside)
+                    reclaimed += Int64(size)
+                } catch {
+                    if !fileManager.fileExists(atPath: url.path(percentEncoded: false)) { try? fileManager.moveItem(at: aside, to: url) }
+                }
+            } else {
+                byHash[hash] = (url, identifier)
+            }
+        }
+        return reclaimed
     }
 
     /// The `.mlpackage` sources of compiled stages are 590 MB the compiled layout duplicates; gone

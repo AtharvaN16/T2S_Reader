@@ -94,6 +94,27 @@ import Testing
     }
 
     /// A fresh root: every file downloaded, every stage compiled, the sources removed, the layout locatable.
+    /// Two variants' compiled weights are the same bytes: one copy stays, the other becomes a hard link
+    /// to it and its size is reclaimed; a different file is left alone; a second pass changes nothing.
+    @Test func linksDuplicateCompiledWeights() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "compiled-\(UUID().uuidString)")
+        let shared = Data(repeating: 7, count: 4096), other = Data(repeating: 9, count: 2048)
+        for (name, bytes) in [("a_3s", shared), ("a_15s", shared), ("b", other)] {
+            let weights = root.appending(path: "\(name).mlmodelc/weights")
+            try FileManager.default.createDirectory(at: weights, withIntermediateDirectories: true)
+            try bytes.write(to: weights.appending(path: "weight.bin"))
+        }
+        #expect(KokoroCoreMLInstall.linkDuplicateWeights(in: root) == 4096)
+        func inode(_ name: String) throws -> NSObject? {
+            try root.appending(path: "\(name).mlmodelc/weights/weight.bin").resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier as? NSObject
+        }
+        #expect(try inode("a_3s")?.isEqual(try inode("a_15s")) == true)
+        #expect(try inode("a_3s")?.isEqual(try inode("b")) == false)
+        #expect(try Data(contentsOf: root.appending(path: "a_15s.mlmodelc/weights/weight.bin")) == shared)
+        #expect(try Data(contentsOf: root.appending(path: "b.mlmodelc/weights/weight.bin")) == other)
+        #expect(KokoroCoreMLInstall.linkDuplicateWeights(in: root) == 0)
+    }
+
     @Test func installsEverythingIntoTheCompiledLayout() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }

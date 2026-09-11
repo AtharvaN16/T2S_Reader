@@ -556,6 +556,7 @@ struct KokoroComposition {
                     + Double(elapsed.components.attoseconds) * 1e-18
                 log.notice("Kokoro Core ML warm-up finished in \(seconds, format: .fixed(precision: 1), privacy: .public) s")
                 KokoroCoreMLEngine.timing("kokoro warm-up finished in \(KokoroCoreMLEngine.fixed(seconds, 1)) s")
+                linkDuplicateWeightsOnce()
                 status.recordWarmUp(seconds: seconds)
                 // Never an override: the Core ML decision is measured, not a development escape hatch.
                 status.update(.available(isDebugOverride: false))
@@ -584,6 +585,22 @@ struct KokoroComposition {
                 KokoroCoreMLEngine.timing("kokoro warm-up failed, retrying: \(String(describing: error))")
                 do { try await Task.sleep(for: .seconds(2)) } catch { return }
             }
+        }
+    }
+
+    /// An install compiled before 2026-09-11 holds every bucket variant's copy of the weights it
+    /// shares (580 MB for 240 MB of distinct bytes); once per model revision, after the warm-up has
+    /// the models open, the duplicates become hard links (`KokoroCoreMLInstall.linkDuplicateWeights`).
+    /// Off the main actor: it hashes the compiled layout once, a few seconds of reads on an A13.
+    private static func linkDuplicateWeightsOnce() {
+        let key = "kokoro.compiledWeightsLinked." + KokoroCoreMLResources.revisionPrefix
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        guard let support = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false) else { return }
+        let compiled = KokoroCoreMLInstall.defaultRoot(applicationSupport: support).appending(path: "compiled", directoryHint: .isDirectory)
+        Task.detached(priority: .utility) {
+            let reclaimed = KokoroCoreMLInstall.linkDuplicateWeights(in: compiled)
+            KokoroCoreMLEngine.timing("kokoro compiled weights linked once for this revision: \(reclaimed / 1_048_576) MB reclaimed")
+            UserDefaults.standard.set(true, forKey: key)
         }
     }
 

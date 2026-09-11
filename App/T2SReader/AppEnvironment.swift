@@ -6,6 +6,8 @@ import T2SAudio
 import T2SCore
 import T2SLibrary
 import T2SStore
+import T2SSync
+import UIKit
 
 /// Builds the object graph once (spec §3): store → library → coordinator → models. Rendered audio
 /// is cache, so its directory is excluded from backup (spec §3.7.3).
@@ -22,6 +24,7 @@ final class AppEnvironment {
     let libraryModel: LibraryModel
     let player: PlayerModel
     let importModel: ImportModel
+    let syncModel: SyncModel
     let preferences: ReaderPreferences
     let cloudVoiceSettings: CloudVoiceSettings
     let cloudVoiceSecrets: any SecretStoring
@@ -65,8 +68,9 @@ final class AppEnvironment {
          importModel: ImportModel, coordinator: PlaybackCoordinator, engine: any SynthesisEngine,
          renderArbiter: RenderArbiter, cloudVoiceSettings: CloudVoiceSettings,
          cloudVoiceSecrets: any SecretStoring, cloudRouter: RoutedEngine,
-         kokoro: KokoroComposition, foregroundGate: ForegroundGate, cpuBudget: CPUBudget?) {
+         kokoro: KokoroComposition, foregroundGate: ForegroundGate, cpuBudget: CPUBudget?, syncModel: SyncModel) {
         self.paths = paths
+        self.syncModel = syncModel
         self.foregroundGate = foregroundGate
         self.store = store
         self.audioStore = audioStore
@@ -164,12 +168,18 @@ final class AppEnvironment {
                                               playheadStore: shared.store, timeSource: SystemTimeSource(),
                                               configuration: configuration,
                                               arbiter: renderArbiter, budget: cpuBudget)
+        // The provider (sync spec §8): CloudKit when the build carries a container, the fake under
+        // `-t2s.sync fake` for a simulator run, else none — the toggle stays off with its reason.
+        let container = ((Bundle.main.infoDictionary?["T2SICloudContainer"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let provider: (any SyncProvider)? = UserDefaults.standard.string(forKey: "t2s.sync") == "fake" ? FakeSyncProvider()
+            : (container.isEmpty || container.hasPrefix("$(")) ? nil : CloudKitSyncProvider(containerIdentifier: container)
+        let syncModel = SyncModel(provider: provider, library: shared.library, deviceName: UIDevice.current.name)
         return AppEnvironment(paths: shared.paths, store: shared.store, audioStore: shared.audioStore,
                               library: shared.library, importModel: shared.importModel, coordinator: coordinator,
                               engine: cloudRouter, renderArbiter: renderArbiter,
                               cloudVoiceSettings: cloudVoiceSettings,
                               cloudVoiceSecrets: cloudVoiceSecrets, cloudRouter: cloudRouter,
-                              kokoro: kokoro, foregroundGate: foregroundGate, cpuBudget: cpuBudget)
+                              kokoro: kokoro, foregroundGate: foregroundGate, cpuBudget: cpuBudget, syncModel: syncModel)
     }
 }
 
@@ -177,9 +187,9 @@ extension AppEnvironment {
     /// Delete removes a document from Queue and Collection both (spec §2.3). The player lets go of
     /// it first, so nothing keeps sounding from — or tries to save into — a document the library
     /// no longer has. Every delete in the app goes through here.
-    func deleteDocument(_ id: UUID) async {
+    func deleteDocument(_ id: UUID, everywhere: Bool = false) async {
         if player.current?.id == id { player.unload() }
-        await libraryModel.delete(id)
+        await libraryModel.delete(id, everywhere: everywhere)
     }
 
     /// The confirmation's one line, wherever a delete is offered.

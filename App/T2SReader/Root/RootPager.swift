@@ -213,6 +213,7 @@ struct RootPager: View {
         .onChange(of: scenePhase, initial: true) { _, phase in
             env.foregroundGate.set(foreground: phase == .active)
             env.coordinator.isForeground = phase == .active
+            if phase == .active { Task { await env.syncModel.refreshAvailability(); await env.syncModel.syncIfEnabled() } }
             #if KOKORO_ENGINE
             // Into the phone's timing log too, so a lock can be read against the render lines
             // around it rather than against a time noted by hand.

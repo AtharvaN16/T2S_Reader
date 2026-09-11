@@ -226,7 +226,23 @@ public final class LibraryModel {
         await perform { try await self.library.store.finish(id, finished) }
     }
 
-    public func delete(_ id: UUID) async { await perform { try await self.library.delete(id) } }
+    public func delete(_ id: UUID, everywhere: Bool = false) async { await perform { try await self.library.delete(id, everywhere: everywhere) } }
+
+    /// The Files picker's answer for a placeholder (sync spec §5): nil on success, else what to tell
+    /// the reader.
+    public func fillPlaceholder(_ id: UUID, from url: URL, sourceType: SourceType) async -> String? {
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+        do {
+            _ = try await library.fillPlaceholder(id, from: url, sourceType: sourceType)
+            await refresh()
+            return nil
+        } catch ImportError.differentFile {
+            return "That's a different file."
+        } catch {
+            return error.localizedDescription
+        }
+    }
 
     private func perform(_ action: @MainActor @Sendable () async throws -> Void) async {
         do {

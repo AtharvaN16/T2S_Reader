@@ -1047,8 +1047,10 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     ///
     /// MisakiSwift's out-of-lexicon fallback is a BART network on MLX, whose GEMMs are exactly what a
     /// pre-A14 GPU cannot run — so both the construction and every `phonemize` call are wrapped in
-    /// `MLX.Device.withDefaultDevice(.cpu)`, which is a task-local. Deliberately *not*
-    /// `MLX.Device.setDefault`: that is process-global, and the MLX Kokoro engine is wired beside this
+    /// `MLX.Device.withDefaultDevice(.cpu)`, a task-local, *and* `MLX.Device.setDefault(.cpu)` in
+    /// `mlxPinnedToCPU` above: the task-local alone did not hold across MLX's Metal completion
+    /// handler (the 16:16 abort, 2026-09-10), so the process-global default is the CPU too — the MLX
+    /// Kokoro engine, which would want the GPU, is gated off beside this
     /// one in the app, where pinning the process to the CPU would cripple it (RTF 15).
     private func g2p(british: Bool) -> EnglishG2P {
         if let cached = british ? britishG2P : americanG2P { return cached }

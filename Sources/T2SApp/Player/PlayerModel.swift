@@ -277,6 +277,27 @@ public final class PlayerModel {
     /// Seeks to an exact playhead, e.g. a resolved bookmark (spec §2.2).
     public func seek(to playhead: Playhead) async { await coordinator.seek(to: playhead) }
 
+    /// "Chapter 7, 12:40" for a remote position, against the loaded timeline — what the offer line
+    /// says (sync spec §4). nil when nothing is loaded.
+    public func describe(_ position: Position) -> String? {
+        guard let timeline = coordinator.timeline else { return nil }
+        let playhead = PositionResolver.resolve(position, in: timeline)
+        // `chapterIndex(forUtterance:)` returns `Int?` (brief has it feeding `utteranceRange(ofChapter:)`
+        // directly, which takes `Int`); nil only when the timeline has no utterances, which import
+        // already guarantees never happens for a loaded document.
+        guard let chapter = timeline.chapterIndex(forUtterance: playhead.utteranceIndex) else { return nil }
+        let range = timeline.utteranceRange(ofChapter: chapter)
+        var seconds = playhead.offset
+        for index in range.lowerBound ..< playhead.utteranceIndex { seconds += timeline[utterance: index].duration.seconds }
+        return "\(timeline.chapters[chapter].title), \(DurationFormatter.clock(seconds))"
+    }
+
+    /// The offer accepted: a seek, which the coordinator saves as this device's newest position.
+    public func jump(to position: Position) async {
+        guard let timeline = coordinator.timeline else { return }
+        await coordinator.seek(to: PositionResolver.resolve(position, in: timeline))
+    }
+
     public func setRate(_ rate: Double) { coordinator.setRate(rate) }
 
     public func renderWholeDocument() { coordinator.renderWholeDocument() }

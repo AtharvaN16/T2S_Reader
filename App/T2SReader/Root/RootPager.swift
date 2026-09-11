@@ -204,10 +204,15 @@ struct RootPager: View {
         }
         // The foreground gate, first and on the initial value: everything that must not run in
         // the background — the Kokoro warm-up's plan builds, the model install's compiles, an
-        // unpaced render — waits on it (`AppEnvironment.foregroundGate`).
+        // unpaced render — waits on it (`AppEnvironment.foregroundGate`). The coordinator learns
+        // the same fact on the same line: frontmost and listening is when it renders the rest of
+        // the chapter, and a lock replans to the window alone (Plan 18).
         .onChange(of: scenePhase, initial: true) { _, phase in
             env.foregroundGate.set(foreground: phase == .active)
+            env.coordinator.isForeground = phase == .active
         }
+        // The fill's edges in the phone's timing log, beside the engine's utterance lines.
+        .onChange(of: env.coordinator.isFilling) { _, on in env.kokoro.noteFill(on) }
         // The screen stays awake while the one-time setup runs: the download, the compile and the
         // warm-up's plan builds all wait on that gate, so an auto-lock part-way through would stop
         // them until the next unlock — and a first launch is minutes of them (Harsh's 17 Pro,

@@ -194,6 +194,17 @@ struct KokoroComposition {
     /// every cycle's end; two cycles' worth (31 s of A13 rendering at RTF 0.17 to fill) rides
     /// through them.
     let playAheadWindowSeconds: TimeInterval?
+    /// How far past the window the live player renders while the app is frontmost and the listener
+    /// is listening: the rest of the current chapter, clamped to this range of audio seconds at 1x
+    /// (Plan 18; `CoordinatorConfiguration.foregroundFill`). The point is the lock that follows:
+    /// the budget-paced background loop sustains ~0.9 audio-seconds per wall-second at 1x on the
+    /// A13 (crashreport.md, Finding 2b) — it can hold a buffer, never grow one — so the buffer is
+    /// built while the screen is on, at RTF 0.17 and no budget, and the loop then finds its window
+    /// already rendered. CPU path: 10–20 min, 2–11 min of A13 CPU per fill (RTF 0.17–0.56), 6–11 MB
+    /// of AAC; a 20-minute buffer drains in ~3 h locked at 1x, ~33 min at 1.5x (deficit 0.6 s/s).
+    /// GPU path: 20–60 min, 1–3 min of GPU at RTF 0.05, 34 MB at the most. Nil in the everyday
+    /// build. Not rate-scaled — a CPU and disk spend, not a time-to-dry.
+    let foregroundFillSeconds: ClosedRange<TimeInterval>?
     /// The runtimes whose voices the picker lists, with the qualifier each row carries — asked every
     /// time the list is drawn, because the MLX probe answers seconds after the composition root has
     /// finished. Returns an empty list in the everyday build.
@@ -203,6 +214,19 @@ struct KokoroComposition {
     /// raw values: `cpu`, `cpuAndNeuralEngine`, `cpuAndGPU`, `all`); unset is `cpu`, the measured
     /// policy. A developer's switch for the audit's §3.7 measurement, not a setting.
     static let computeUnitsKey = "kokoro.computeUnits"
+    /// The user default that bounds the foreground fill for the session, in audio seconds at 1x:
+    /// `0` disables it, a positive value is its maximum (the minimum stays the path's own, or the
+    /// value if that is smaller); unset is the path's policy. A developer's switch for the phone
+    /// test and the first of Plan 18's three rollbacks — no rebuild — not a setting.
+    static let foregroundFillKey = "render.foregroundFillMaxSeconds"
+
+    /// The fill's range for the session: `policy` unless `override` says otherwise — nil for 0 or
+    /// anything unusable, `min(policy.lowerBound, v)...v` for a positive `v`.
+    nonisolated static func foregroundFill(policy: ClosedRange<TimeInterval>, override: Double?) -> ClosedRange<TimeInterval>? {
+        guard let override else { return policy }
+        guard override.isFinite, override > 0 else { return nil }
+        return min(policy.lowerBound, override)...override
+    }
 
     /// Adds the bundled Kokoro voices to the picker, in the build that has the engine.
     func catalog(wrapping base: any VoiceCatalog) -> any VoiceCatalog {
@@ -210,6 +234,15 @@ struct KokoroComposition {
         // changes as the probes answer, and that is the catalog's own question from here on.
         guard !catalogEngines().isEmpty else { return base }
         return KokoroVoiceCatalog(base: base, engines: catalogEngines)
+    }
+
+    /// The fill's edges in the phone's timing log (`Library/Caches/kokoro-timing.log`), beside the
+    /// engine's utterance lines, so a lock test can read where the fill stopped and what the window
+    /// rendered after it (Plan 18 §4.1). Nothing in the everyday build.
+    func noteFill(_ on: Bool) {
+        #if KOKORO_ENGINE
+        KokoroCoreMLEngine.timing("render-ahead fill \(on ? "on" : "off")")
+        #endif
     }
 
     /// `gate` is the app's foreground gate: the install's compiles and the warm-up's compute-plan
@@ -241,6 +274,17 @@ struct KokoroComposition {
         }
         if computeUnits != policy {
             log.notice("Kokoro compute units overridden for this session: \(computeUnits.runtimeName, privacy: .public) (this phone's default is \(policy.runtimeName, privacy: .public))")
+        }
+        // The fill's bound by path (Plan 18): 10–20 min on the CPU path, 20–60 on the GPU's; the
+        // developer default caps it or turns it off for the session. `double(forKey:)` reads a
+        // launch argument's string as well as a stored number; the `object` test tells unset from 0.
+        let fillPolicy: ClosedRange<TimeInterval> = computeUnits == .cpu ? 600...1200 : 1200...3600
+        let fillOverride: Double? = defaults.object(forKey: foregroundFillKey) == nil ? nil : defaults.double(forKey: foregroundFillKey)
+        let fill = Self.foregroundFill(policy: fillPolicy, override: fillOverride)
+        if let fill {
+            log.notice("render-ahead fill for this session: \(Int(fill.lowerBound), privacy: .public)–\(Int(fill.upperBound), privacy: .public) s of audio at 1x")
+        } else {
+            log.notice("render-ahead fill off for this session (\(foregroundFillKey, privacy: .public) = 0)")
         }
         // A main set on the GPU cannot render while the app is in the background — iOS refuses the
         // work — so such a phone keeps a small CPU set for what the gate says is in the background
@@ -353,6 +397,7 @@ struct KokoroComposition {
             ),
             status: status,
             playAheadWindowSeconds: computeUnits == .cpu ? 180 : 600,
+            foregroundFillSeconds: fill,
             catalogEngines: catalogEngines(mlxListed: mlxListed)
         )
         #else
@@ -374,7 +419,7 @@ struct KokoroComposition {
             }
         }
         return KokoroComposition(engines: [], voiceRouting: KokoroVoiceRouting.unavailable,
-                                 status: status, playAheadWindowSeconds: nil, catalogEngines: { [] })
+                                 status: status, playAheadWindowSeconds: nil, foregroundFillSeconds: nil, catalogEngines: { [] })
         #endif
     }
 

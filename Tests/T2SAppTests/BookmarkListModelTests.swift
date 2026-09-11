@@ -33,10 +33,10 @@ import T2SStore
         #expect(model.error == nil)
         #expect(model.entries.count == 2)
         #expect(model.entries[0].chapterTitle == "Chapter 2")
-        #expect(model.entries[0].snippet == "Sentence number 2 here.")
+        #expect(model.entries[0].passage == "Sentence number 2 here.")
         #expect(model.entries[0].timeSeconds == player.chapters[1].startSeconds)
         #expect(model.entries[1].chapterTitle == "Chapter 1")
-        #expect(model.entries[1].snippet == "First sentence.")
+        #expect(model.entries[1].passage == "First sentence.")
         #expect(model.entries[1].timeText == "0:00")
         #expect(model.entries[0].createdAt >= model.entries[1].createdAt)
     }
@@ -60,8 +60,8 @@ import T2SStore
         let model = BookmarkListModel(library: f.library, player: player)
         await model.load(summary)
         #expect(model.entries.count == 2)
-        #expect(model.entries[0].snippet == "First sentence.")               // the saved block
-        #expect(model.entries[1].snippet == "sentence.")                     // from the word, as before
+        #expect(model.entries[0].passage == "First sentence.")               // the saved block
+        #expect(model.entries[1].passage == "sentence.")                     // from the word, as before
     }
 
     /// Deleting from the list keeps the player's own `bookmarks` list honest for the loaded book.
@@ -150,8 +150,8 @@ import T2SStore
         #expect(model.entries.count == 1)
         let entry = try #require(model.entries.first)
         #expect(entry.chapterTitle == "Chapter 1")
-        #expect(!entry.snippet.isEmpty)
-        #expect(entry.snippet == BookmarkSnippet.make(from: "First sentence.", offset: 0))
+        #expect(!entry.passage.isEmpty)
+        #expect(entry.passage == BookmarkSnippet.make(from: "First sentence.", offset: 0))
     }
 
     @Test func aDocumentWithoutBookmarksListsNothing() async throws {
@@ -162,5 +162,31 @@ import T2SStore
         let model = BookmarkListModel(library: f.library, player: player)
         await model.load(summary)
         #expect(model.entries.isEmpty && model.error == nil)
+    }
+
+    @Test func theReadersNoteBecomesTheHeadlineAndThePassageBecomesTheQuote() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let summary = try #require(try await f.store.summary(id: id))
+        let (player, _) = try await makePlayer(f)
+        await player.load(summary, play: false)
+        #expect(await player.saveBookmark() != .failed)
+
+        let model = BookmarkListModel(library: f.library, player: player)
+        await model.load(summary)
+        let before = try #require(model.entries.first)
+        #expect(before.headline == "First sentence.")
+        #expect(before.quote == nil)
+        #expect(before.endSeconds > before.timeSeconds)
+        #expect(before.rangeText == "\(DurationFormatter.clock(before.timeSeconds)) – \(DurationFormatter.clock(before.endSeconds))")
+
+        await model.setNote("my own words", on: before)
+        let after = try #require(model.entries.first)
+        #expect(after.headline == "my own words")
+        #expect(after.quote == "First sentence.")
+
+        await model.setNote("   ", on: after)
+        #expect(model.entries.first?.headline == "First sentence.")
+        #expect(model.entries.first?.quote == nil)
     }
 }

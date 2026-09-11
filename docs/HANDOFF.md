@@ -41,11 +41,15 @@ listening — so that after a lock the same loop finds its window already render
   `kokoro-timing.log` through `KokoroComposition.noteFill` (the environment keeps the composition
   for it). Low Power Mode: no fill (the owner's choice).
 - **Docs.** This entry; spec §3.4.1's tier 2b row and rev 20; crashreport.md Finding 2b's pointer.
+- **The metadata's lag (Step 7).** `PlayerModel.tick()` writes the changed chapters every 30 s
+  (`persistInterval`; `init` takes a `TimeSource`, a manual clock in the test) when there is
+  something to write — a fill's refs used to reach the store only on pause, lock, or the next
+  load, so a jetsam in front, and the Storage page's count, lagged it by up to ten minutes.
 
-**Verified:** `swift test` 495/87 (478 before; the 17 new: the arbiter's order, `allCases` sorted,
+**Verified:** `swift test` 496/87 (478 before; the 18 new: the arbiter's order, `allCases` sorted,
 the chapter starts, eight policy tables, six coordinator tests on two chapters of five sentences
-with `windowSeconds: 1` and a 5…10 s fill). The app target by reading and `swiftc -parse` only.
-Not on a phone.
+with `windowSeconds: 1` and a 5…10 s fill, the player model's 30 s write). The app target by
+reading and `swiftc -parse` only. Not on a phone.
 
 **Owed — the phone protocol (plan §4.1):** a novel with 15–25-minute chapters; play three minutes
 in front (`kokoro utterance` lines at ~1/s, the scrubber's frontier well past the playhead, and
@@ -54,7 +58,7 @@ renders in the log during the lock (or a few near the fill's end); Console.app, 
 `com.t2s.reader`: `render.fill` at play/lock/unlock, `render.pacing` at most once after the lock;
 the thermal state after a full fill (the `.serious` guard shows as the fill stopping early). Then
 the plan's Step 8 (`.fair` halves the bound) if the phone says so, and the CPU bound to 30 min if
-it does not. Step 7 (persisting the changed chapters every 30 s while a fill runs) was optional.
+it does not.
 
 ## Resume here (2026-09-11, small hours) — the 11 Pro test of Harsh's branch, the merge, seven fixes, the phone, and the research
 

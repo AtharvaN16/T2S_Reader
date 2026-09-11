@@ -51,6 +51,36 @@ import T2SStore
         #expect(try await f.store.summary(id: id)?.renderedCount == 0)
     }
 
+    /// A foreground fill renders for minutes while the reader listens; the refs used to reach the
+    /// store only on pause, lock, or the next load. `tick()` now writes the changed chapters every
+    /// 30 s (Plan 18, Step 7), so a jetsam in front — and the Storage page — lag a fill by half a
+    /// minute at most. The clock is manual: ten seconds is too soon, thirty-one is due.
+    @Test func changedChaptersArePersistedEveryThirtySecondsWhilePlaying() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let summary = try #require(try await f.store.summary(id: id))
+        let clock = ManualTimeSource()
+        let coordinator = PlaybackCoordinator(engine: FakeEngine(secondsPerCharacter: 0.05), store: f.audio,
+                                              player: try AudioPlayer(manualRendering: true), playheadStore: f.store,
+                                              timeSource: clock)
+        let player = PlayerModel(coordinator: coordinator, library: f.library, timeSource: clock)
+        await player.load(summary, play: true)
+        await coordinator.waitForRenderIdle()                               // the window's renders marked their chapters
+        #expect(!coordinator.changedChapters.isEmpty)
+        clock.advance(by: 10)
+        player.tick()                                                       // too soon: nothing written
+        await player.settlePersist()
+        #expect(try await f.store.summary(id: id)?.renderedCount == 0)
+        clock.advance(by: 21)
+        player.tick()                                                       // 31 s since the load's write: due
+        await player.settlePersist()
+        #expect(try #require(try await f.store.summary(id: id)?.renderedCount) > 0)
+        #expect(coordinator.changedChapters.isEmpty)
+        clock.advance(by: 31)
+        player.tick()                                                       // due again, but nothing changed: no write starts
+        await player.settlePersist()
+    }
+
     @Test func transportAndSeeks() async throws {
         let f = try AppFixtures()
         let id = try await f.importFake()

@@ -85,7 +85,7 @@ public final class BookmarkListModel {
         // utterance that does not contain the bookmark's offset; show it from its start rather
         // than let a negative or out-of-range offset produce an empty snippet.
         let offset = (0..<utterance.source.utf16.count).contains(raw) ? raw : 0
-        // A bookmark saved with its block of text (`PlayerModel.addBookmark`) shows that block from
+        // A bookmark saved with its block of text (`PlayerModel.saveBookmark`) shows that block from
         // its start; an older one, the timeline's text from the bookmark's own word.
         let snippet = bookmark.passageText.map { BookmarkSnippet.make(from: $0, offset: 0) }
             ?? BookmarkSnippet.make(from: utterance.source, offset: offset)

@@ -46,4 +46,43 @@ import Testing
         let position = PositionResolver.position(for: Playhead(utteranceIndex: 1), in: timeline)
         #expect(PositionResolver.resolve(position, in: timeline).utteranceIndex == 0)
     }
+
+    /// The `offset` half of the round trip. Every assertion above leaves `Playhead.offset` at its
+    /// default of 0, where `time(atSourceOffset: 0)` and `sourceOffset(atTime: 0)` both return 0
+    /// whatever the seconds-to-character maths does — so a bug in the conversion that lands a
+    /// resume on the wrong word would pass unnoticed.
+    ///
+    /// The round trip is deliberately **not** asserted as the identity on `offset`. A `Position`
+    /// stores a character, so a time is quantised to a character boundary on the way out and comes
+    /// back as that character's time. The invariant that matters is idempotence: a saved position
+    /// re-resolves to the same character and re-saves to the same `Position`, which is what makes a
+    /// resume re-highlight the word it was saved on (`PositionResolver.swift:20-22`).
+    @Test func offsetsWithinAnUtteranceSurviveTheRoundTripAsCharacters() throws {
+        let timeline = realisticTimeline()
+        let index = 1                                  // "Second one is longer than the first."
+        let seconds = timeline[utterance: index].duration.seconds
+        for fraction in [0.25, 0.5, 0.75] {
+            let playhead = Playhead(utteranceIndex: index, offset: seconds * fraction)
+            let position = PositionResolver.position(for: playhead, in: timeline)
+            let back = PositionResolver.resolve(position, in: timeline)
+            #expect(back.utteranceIndex == index, "offset at \(fraction) left the utterance")
+            #expect(PositionResolver.position(for: back, in: timeline) == position,
+                    "offset at \(fraction) did not re-save to the same position")
+        }
+    }
+
+    /// Proof the offset is not simply discarded: three different times inside one utterance must
+    /// store three different characters. Without this, the idempotence above would hold just as
+    /// well for a `position(for:)` that threw the offset away entirely.
+    @Test func differentOffsetsInOneUtteranceStoreDifferentCharacters() throws {
+        let timeline = realisticTimeline()
+        let index = 1
+        let seconds = timeline[utterance: index].duration.seconds
+        let stored = [0.0, 0.5, 0.9].map { fraction in
+            PositionResolver.position(for: Playhead(utteranceIndex: index, offset: seconds * fraction),
+                                      in: timeline).charOffset
+        }
+        #expect(Set(stored).count == stored.count,
+                "the playhead's offset is not reaching the stored position: \(stored)")
+    }
 }

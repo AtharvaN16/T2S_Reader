@@ -179,7 +179,7 @@ final class NowPlayingController {
         let queue = libraryModel.queue
         let snapshot = NowPlayingSnapshot(
             title: current.document.title,
-            author: current.document.author ?? "",
+            author: current.document.displayAuthor ?? "",
             duration: player.total,
             elapsed: player.elapsed,
             rate: player.coordinator.rate,

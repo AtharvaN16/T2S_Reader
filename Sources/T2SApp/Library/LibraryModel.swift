@@ -11,6 +11,11 @@ public enum QueueView: Hashable, Sendable { case queue, finished }
 public struct RowGlimpse: Hashable, Sendable {
     /// A few lines of text from the resume position on; nil when the chapter has no text.
     public var excerpt: String?
+    /// What the book calls the resume chapter, as its table of contents wrote it — empty when it
+    /// named the section nothing. The row prints this rather than counting entries: a book's first
+    /// entries are its cover, contents and introduction, so a number would name the title page
+    /// "Chapter 1" (owner, 2026-09-11).
+    public var chapterTitle: String
     /// Seconds into the resume chapter at 1x, and the chapter's whole length.
     public var chapterElapsedSeconds: TimeInterval
     public var chapterTotalSeconds: TimeInterval
@@ -20,8 +25,9 @@ public struct RowGlimpse: Hashable, Sendable {
     }
     public var chapterRemainingSeconds: TimeInterval { max(0, chapterTotalSeconds - chapterElapsedSeconds) }
 
-    public init(excerpt: String?, chapterElapsedSeconds: TimeInterval, chapterTotalSeconds: TimeInterval) {
+    public init(excerpt: String?, chapterTitle: String = "", chapterElapsedSeconds: TimeInterval, chapterTotalSeconds: TimeInterval) {
         self.excerpt = excerpt
+        self.chapterTitle = chapterTitle
         self.chapterElapsedSeconds = chapterElapsedSeconds
         self.chapterTotalSeconds = chapterTotalSeconds
     }
@@ -165,7 +171,7 @@ public final class LibraryModel {
             if text.count >= Self.excerptLength { break }
         }
         let excerpt = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")   // one line, trimmed
-        let glimpse = RowGlimpse(excerpt: excerpt.isEmpty ? nil : excerpt,
+        let glimpse = RowGlimpse(excerpt: excerpt.isEmpty ? nil : excerpt, chapterTitle: chapter.title,
                                  chapterElapsedSeconds: index.time(at: playhead), chapterTotalSeconds: index.totalDuration)
         glimpseCache[summary.id] = (key, glimpse)
         return glimpse

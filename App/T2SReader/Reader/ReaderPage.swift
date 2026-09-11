@@ -379,7 +379,7 @@ struct ReaderPage: View {
         bodyStart = ChapterLabel.bodyStart(titles: timeline.chapters.map(\.title))
         let document = summary.document
         let model = await Task.detached(priority: .userInitiated) {
-            ReaderText(documentID: document.id, timeline: timeline, title: document.title, author: document.author)
+            ReaderText(documentID: document.id, timeline: timeline, title: document.title, author: document.displayAuthor)
         }.value
         // The page was dismissed, or moved to another document, while the model was building.
         guard !Task.isCancelled else { return }

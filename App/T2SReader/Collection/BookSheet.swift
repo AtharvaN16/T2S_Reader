@@ -55,7 +55,7 @@ struct BookSheet: View {
                 VStack(spacing: 8) {
                     Text(live.document.title).typeRole(.playerTitle).foregroundStyle(Tokens.ink)
                         .multilineTextAlignment(.center)
-                    if let author = live.document.author {
+                    if let author = live.document.displayAuthor {
                         Text(author).typeRole(.meta).foregroundStyle(Tokens.ink2).multilineTextAlignment(.center)
                     }
                 }
@@ -101,7 +101,7 @@ struct BookSheet: View {
     /// backlight, blurred wide so it reads as light and not as a shape — turning with the phone.
     private var hero: some View {
         let cover = BookCover(relativePath: live.document.coverImagePath, paths: env.paths, height: Self.heroHeight,
-                              title: live.document.title, author: live.document.author,
+                              title: live.document.title, author: live.document.displayAuthor,
                               isPDF: live.document.sourceType == .pdf, tilt: motion.tilt)
         return ZStack {
             Ellipse()

@@ -4,7 +4,7 @@ import Foundation
 import Observation
 
 /// The phone's lean, as a few degrees for `BookCover` to add to its rotation so the book on the
-/// Collection's book sheet visibly turns with the hand that holds it (owner's ask, 2026-09-09,
+/// Collection's book sheet visibly turns in the hand that holds it (owner's ask, 2026-09-09,
 /// made bolder same day after the first cut read as too subtle to notice — the Home rows had this
 /// once and lost it at the owner's request; only the sheet's book has it). Relative, not absolute:
 /// a slowly adapting baseline makes whatever angle the phone rests at neutral within a few
@@ -14,8 +14,8 @@ import Observation
 @Observable
 final class MotionTilt {
     /// Degrees. `x` turns about the vertical axis (from roll), `y` about the horizontal axis (from
-    /// pitch). Clamped to ±7°, `.zero` whenever updates are off or motion is unavailable (the
-    /// simulator).
+    /// pitch), each *against* the lean (`TiltFilter.step`). Clamped to ±7°, `.zero` whenever
+    /// updates are off or motion is unavailable (the simulator).
     private(set) var tilt: CGPoint = .zero
     /// What the caller last asked for. Stays true on the simulator even though `tilt` never moves,
     /// so `RootPager`'s on/off bookkeeping behaves the same everywhere.
@@ -104,8 +104,11 @@ private struct TiltFilter {
         base.roll += baselineWeight * (roll - base.roll)
         base.pitch += baselineWeight * (pitch - base.pitch)
         baseline = base
-        let target = CGPoint(x: Self.degrees(roll - base.roll) * Self.scale,
-                             y: Self.degrees(pitch - base.pitch) * Self.scale)
+        // Baseline minus sample, not the other way about (owner, 2026-09-11: "reverse the gyro
+        // tilt direction"): the book turns *against* the phone, the way a held object keeps facing
+        // you as the hand under it turns, rather than swinging with it.
+        let target = CGPoint(x: Self.degrees(base.roll - roll) * Self.scale,
+                             y: Self.degrees(base.pitch - pitch) * Self.scale)
         smoothed.x += Self.smoothing * (target.x - smoothed.x)
         smoothed.y += Self.smoothing * (target.y - smoothed.y)
         return CGPoint(x: Self.clamp(smoothed.x), y: Self.clamp(smoothed.y))

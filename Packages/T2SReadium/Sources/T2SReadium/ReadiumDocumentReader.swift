@@ -91,12 +91,14 @@ public struct ReadiumDocumentReader: DocumentReader {
         }
 
         let title = publication.metadata.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let authors = publication.metadata.authors.map(\.name).filter { !$0.isEmpty }
+        // Collapsed, not just joined: an OPF that names its author twice — the plain `dc:creator`
+        // and the role-tagged one — gave "Jane Austen, Jane Austen" (owner, 2026-09-11).
+        let author = AuthorNames.collapse(publication.metadata.authors.map(\.name))
         let cover = (try? await publication.cover().get())?.flatMap { $0.jpegData(compressionQuality: 0.8) }
         let skipped = readingOrder.filter { blocksByHref[$0] == nil }
         return ReadDocument(
             title: (title?.isEmpty == false ? title : nil) ?? fileURL.deletingPathExtension().lastPathComponent,
-            author: authors.isEmpty ? nil : authors.joined(separator: ", "),
+            author: author,
             coverImage: cover,
             chapters: chapters,
             skippedResources: skipped)

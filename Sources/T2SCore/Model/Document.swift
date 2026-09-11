@@ -40,3 +40,30 @@ public struct Document: Codable, Hashable, Sendable, Identifiable {
         self.isPlaceholder = isPlaceholder
     }
 }
+
+extension Document {
+    /// The author as a screen should print it: the same name twice is one name. EPUBs routinely
+    /// carry `dc:creator` more than once — the plain name and the role-tagged one — and joining
+    /// them gave "Jane Austen, Jane Austen" (owner, 2026-09-11). Applied on the way out as well as
+    /// at import, so books already on the shelf read right without being imported again.
+    public var displayAuthor: String? { author.flatMap { AuthorNames.collapse($0) } }
+}
+
+/// One author line out of however many names a file lists.
+public enum AuthorNames {
+    /// Trims, drops blanks and repeats (ignoring case), and rejoins with ", "; nil when nothing is
+    /// left. Order is the file's: the first spelling of a name is the one kept.
+    public static func collapse(_ author: String) -> String? {
+        var seen = Set<String>()
+        let names = author
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+        return names.isEmpty ? nil : names.joined(separator: ", ")
+    }
+
+    /// The same rule over names that have not been joined yet (the importers' path).
+    public static func collapse(_ names: [String]) -> String? {
+        collapse(names.joined(separator: ", "))
+    }
+}

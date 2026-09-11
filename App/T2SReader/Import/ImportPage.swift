@@ -7,8 +7,8 @@ import UniformTypeIdentifiers
 /// Spec §2.4.5 rev 7: three tiles, then the chosen path as its own step on `ImportFrame` — a back
 /// circle, a centred title, the path's field, and one Listen bar at the foot (ElevenReader's
 /// import, the owner's reference, 2026-09-09). An import that lands does not play by itself any
-/// more (owner, 2026-09-10): the page moves to `ImportDonePage`, which shows what came in and
-/// offers Play or Done. Play writes the first imported document back through `imported`; the
+/// more (owner, 2026-09-10): the page moves to `ImportDonePage`, which shows what came in, a Play
+/// pill per book and Done at the foot. A pill writes that document back through `imported`; the
 /// owner opens it from the cover's `onDismiss`, never from here — presenting the player while this
 /// page is still animating out is the classic SwiftUI case where the second presentation simply
 /// never appears. Done leaves `imported` nil, so nothing opens.
@@ -34,7 +34,7 @@ struct ImportPage: View {
         Group {
             if case .done(let documents) = model.phase {
                 ImportDonePage(documents: documents,
-                               play: { imported = documents.first; dismiss() },
+                               play: { imported = $0; dismiss() },
                                done: { dismiss() })
             } else {
                 switch path {

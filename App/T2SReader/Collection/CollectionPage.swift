@@ -67,7 +67,7 @@ struct CollectionPage: View {
         if isSearching, !searchText.isEmpty {
             books = books.filter {
                 $0.document.title.localizedCaseInsensitiveContains(searchText)
-                    || ($0.document.author?.localizedCaseInsensitiveContains(searchText) ?? false)
+                    || ($0.document.displayAuthor?.localizedCaseInsensitiveContains(searchText) ?? false)
             }
         }
         return books
@@ -289,7 +289,7 @@ struct CollectionPage: View {
 
     private func cover(_ book: DocumentSummary, height: CGFloat) -> BookCover {
         BookCover(relativePath: book.document.coverImagePath, paths: env.paths, height: height,
-                  title: book.document.title, author: book.document.author, isPDF: book.document.sourceType == .pdf)
+                  title: book.document.title, author: book.document.displayAuthor, isPDF: book.document.sourceType == .pdf)
     }
 
     // MARK: Menu
@@ -347,7 +347,7 @@ private struct CollectionTile: View {
                 ShelfArt(summary: summary, height: BookCover.shelfHeight)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(summary.document.title).typeRole(.pill).foregroundStyle(Tokens.ink).lineLimit(2)
-                    if let author = summary.document.author {
+                    if let author = summary.document.displayAuthor {
                         Text(author).typeRole(.caption).foregroundStyle(Tokens.ink2).lineLimit(1)
                     }
                     if summary.document.isPlaceholder {
@@ -382,7 +382,7 @@ private struct CollectionRow<Items: View>: View {
                     ShelfArt(summary: summary, height: 88)                     // the text column stays put row to row
                     VStack(alignment: .leading, spacing: 4) {
                         Text(summary.document.title).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
-                        if let author = summary.document.author {
+                        if let author = summary.document.displayAuthor {
                             Text(author).typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(1)
                         }
                         if summary.document.isPlaceholder {
@@ -432,7 +432,7 @@ private struct ShelfArt: View {
             }
         } else {
             BookCover(relativePath: document.coverImagePath, paths: env.paths, height: height,
-                      title: document.title, author: document.author, isPDF: document.sourceType == .pdf)
+                      title: document.title, author: document.displayAuthor, isPDF: document.sourceType == .pdf)
                 .shelved
         }
     }
@@ -449,7 +449,7 @@ private enum CollectionText {
     /// "Title, by Author, PDF" (or "link", "text"): what VoiceOver reads for a tile or a row.
     static func accessibilityLabel(for summary: DocumentSummary) -> String {
         var parts = [summary.document.title]
-        if let author = summary.document.author { parts.append("by \(author)") }
+        if let author = summary.document.displayAuthor { parts.append("by \(author)") }
         switch summary.document.sourceType {
         case .pdf: parts.append("PDF")
         case .article: parts.append(summary.document.sourceURL == nil ? "text" : "link")

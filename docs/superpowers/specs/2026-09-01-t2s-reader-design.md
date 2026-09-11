@@ -937,6 +937,22 @@ against a pipeline that is already proven.
 
 ## 11. Changelog
 
+**rev 21 (2026-09-11)** — four corrections from the owner's eye on the phone
+- **§2.4.5** the Home row names the section the book named it (`ChapterLabel.text`, from the
+  glimpse's `chapterTitle`), never "Chapter n" counted off the table of contents: the first entries
+  of an EPUB are its cover, contents and introduction, so the count called the title page
+  "Chapter 1" and its one minute read as the first chapter's. Nothing is shown when the book left
+  the section unnamed or named it after itself.
+- **§2.4.5** the import's done step: a Play pill per book under its title, the length inside it
+  (the Home row's control), and the black bar at the foot is Done alone — `ImportFrame` has no
+  secondary action any more. The length never wears a `~` there: nothing is rendered at that step,
+  so every import would have one.
+- **§2.4.5** one author, however many times a file names it: `dc:creator` twice gave "Jane Austen,
+  Jane Austen". `AuthorNames.collapse` is applied at import and again on the way out
+  (`Document.displayAuthor`), so books already on the shelf read right without a re-import.
+- **§2.4.2** the book sheet's tilt is reversed: the cover turns *against* the phone's lean, the way
+  a held object keeps facing you as the hand under it turns.
+
 **rev 20 (2026-09-11)** — Plan 18: render ahead by chapter while in front
 - **§3.4.1** tier 2b, the foreground fill: while the app is frontmost and the listener is
   listening, the rest of the current chapter renders behind the window — clamped to 10–20 min on

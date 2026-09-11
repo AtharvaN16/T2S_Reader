@@ -1,6 +1,7 @@
 // App/T2SReader/Queue/DetailsSheet.swift
 import SwiftUI
 import T2SApp
+import T2SCore
 import T2SStore
 
 /// Context-menu "Details": what the library knows about a document, and a place to delete it
@@ -16,7 +17,7 @@ struct DetailsSheet: View {
         VStack(alignment: .leading, spacing: Spacing.section) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(summary.document.title).typeRole(.playerTitle).foregroundStyle(Tokens.ink)
-                if let author = summary.document.author { Text(author).typeRole(.meta).foregroundStyle(Tokens.ink2) }
+                if let author = summary.document.displayAuthor { Text(author).typeRole(.meta).foregroundStyle(Tokens.ink2) }
             }
             VStack(alignment: .leading, spacing: 12) {
                 row("Source", summary.document.sourceType.rawValue.uppercased())

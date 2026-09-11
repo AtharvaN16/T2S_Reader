@@ -37,7 +37,7 @@ struct QueueRow: View {
                     .shelved
             } else {
                 BookCover(relativePath: summary.document.coverImagePath, paths: env.paths, height: BookCover.shelfHeight,
-                          title: summary.document.title, author: summary.document.author,
+                          title: summary.document.title, author: summary.document.displayAuthor,
                           isPDF: summary.document.sourceType == .pdf)
                     .shelved
             }
@@ -130,10 +130,19 @@ struct QueueRow: View {
         } label: { Label("Render whole document", systemImage: "waveform") }
     }
 
-    /// "Chapter 7": books only, once the playhead's chapter is known and there is more than one.
+    /// What the book calls the section being listened to — "Introduction", "Chp 7: A Precarious
+    /// Position" — as the chapter list and the Reader print it (`ChapterLabel`), never a number
+    /// counted off the table of contents. Counting called a book's first entry "Chapter 1" when it
+    /// was the title page or the contents, so the minute left in the front matter read as the
+    /// minute left in chapter 1 (owner, 2026-09-11). Books only, once the glimpse has read the
+    /// chapter; nothing at all when the book left the section unnamed or named it after itself,
+    /// since a made-up number and the title repeated are both worse than one line fewer.
     private var chapterText: String? {
-        guard let progress, !isArticle, progress.chapterCount > 1, let c = progress.chapterIndex else { return nil }
-        return "Chapter \(c + 1)"
+        guard let progress, !isArticle, progress.chapterCount > 1, let c = progress.chapterIndex,
+              let title = glimpse?.chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty,
+              title.localizedCaseInsensitiveCompare(summary.document.title) != .orderedSame
+        else { return nil }
+        return ChapterLabel.text(for: title, ordinal: c + 1)
     }
 
     /// How far through the chapter (books) or the file (everything else). Nil until a chaptered

@@ -33,10 +33,6 @@ struct QueuePage: View {
                         readerRoute.open(summary)
                     }, onDetails: { details = summary })
                     .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
-                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                        Button { Task { await env.libraryModel.archive(summary.id) } } label: { Label("Archive", systemImage: "archivebox") }
-                            .tint(Tokens.destructive)
-                    }
                 }
                 Color.clear.frame(height: Spacing.bottomClearance)        // room for the mini-player, indicator and their fade
                     .listRowInsets(EdgeInsets())

@@ -77,7 +77,12 @@ struct QueueRow: View {
                             }
                             if summary.isFullyRendered { PositiveCheck() }
                         }
-                        .typeRole(.meta)
+                        // No `typeRole(.meta)` here: it sets the font through the environment, and
+                        // an override applied after it sits *further* from the Text, so the role
+                        // wins and the override is dropped in silence. That is why this line and
+                        // the excerpt had both been rendering as plain meta — identical, which is
+                        // exactly the complaint (owner, 2026-09-11). Meta's tracking is 0, so the
+                        // role has nothing else to give here.
                         .font(.custom("Inter-SemiBold", size: 12, relativeTo: .footnote))  // smaller and denser than the excerpt, not the same size a shade heavier
                         .foregroundStyle(Tokens.ink2)
                         .padding(.bottom, 4)                                              // it labels the title under it, so it sits with it
@@ -90,10 +95,10 @@ struct QueueRow: View {
 
                         if let excerpt = glimpse?.excerpt, !excerpt.isEmpty {
                             Text(excerpt)
-                                .typeRole(.meta)
                                 // The real face, not `.italic()`: that asks for a trait the system
-                                // fonts carry, and a `Font.custom` face without one is left upright
-                                // — which is exactly what it rendered as (owner, 2026-09-11).
+                                // fonts carry, and a `Font.custom` face without one is left upright.
+                                // And no `typeRole(.meta)` above it — see the chapter line: the role
+                                // would win and this face would never be reached (owner, 2026-09-11).
                                 .font(.custom("Inter-Italic", size: 13, relativeTo: .footnote))
                                 .lineLimit(2)
                                 .truncationMode(.tail)

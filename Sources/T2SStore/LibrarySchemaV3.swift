@@ -2,12 +2,10 @@ import Foundation
 import SwiftData
 import T2SCore
 
-/// The current schema (bookmark notes, 2026-09-11): V3 plus `StoredBookmark.userNote`, the reader's
-/// own words. Optional, so a V3 row reads back with it nil. `note` is untouched and still holds the
-/// passage text — see the spec's §3 for why that name can never be reused.
-/// Model classes live inside their schema version (see V2's note).
-enum LibrarySchemaV4: VersionedSchema {
-    static var versionIdentifier: Schema.Version { Schema.Version(4, 0, 0) }
+/// The iCloud-sync schema, frozen; see `LibrarySchemaV4` in Models.swift. Never edit these
+/// classes — a change is a new version and a migration stage (spec §3.7.4).
+enum LibrarySchemaV3: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(3, 0, 0) }
     static let models: [any PersistentModel.Type] = [StoredDocument.self, StoredChapter.self, StoredBookmark.self, StoredPronunciation.self, StoredTombstone.self]
 
     /// SwiftData rows. Internal on purpose (spec §3.7.1): the store hands out `T2SCore` value types,
@@ -143,9 +141,6 @@ enum LibrarySchemaV4: VersionedSchema {
         var charOffset: Int?
         var cssSelector: String?
         var note: String?
-        /// The reader's own note, nil on a V3 row and on every bookmark nobody has written on.
-        /// Distinct from `note`, which is the passage the app captured at save.
-        var userNote: String?
         var createdAt: Date
         /// nil on a V2 row: read as `createdAt`.
         var updatedAt: Date?
@@ -159,7 +154,6 @@ enum LibrarySchemaV4: VersionedSchema {
             self.charOffset = position.charOffset
             self.cssSelector = position.cssSelector
             self.note = note
-            self.userNote = nil
             self.createdAt = createdAt
             self.updatedAt = nil
             self.isDirty = false

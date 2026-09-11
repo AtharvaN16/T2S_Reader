@@ -8,4 +8,6 @@ public enum ImportError: Error, Equatable, Sendable {
     case noText
     /// The article body is not well-formed XHTML.
     case malformedBody(String)
+    /// The file offered for a placeholder is not the file the other device has (sync spec §5).
+    case differentFile
 }

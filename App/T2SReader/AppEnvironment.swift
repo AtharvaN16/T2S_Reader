@@ -132,6 +132,16 @@ final class AppEnvironment {
                 if player.isPlaying { await player.togglePlay() }
             }
         )
+        // A cycle that pulled something has already written it to the store; the lists still show
+        // what was there before, until they are read again (sync spec §7).
+        syncModel.onPulled = { [libraryModel] in await libraryModel.refresh() }
+        // A deletion pulled from another device removes the book, its audio and its rows: the
+        // player lets go of it first, exactly as a delete made here does (`deleteDocument`).
+        Task { [syncModel, player] in
+            await syncModel.setOnRemove { id in
+                await MainActor.run { if player.current?.id == id { player.unload() } }
+            }
+        }
     }
 
     static func live() throws -> AppEnvironment {

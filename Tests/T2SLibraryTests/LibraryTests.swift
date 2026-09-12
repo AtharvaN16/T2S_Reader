@@ -192,6 +192,28 @@ import T2SCore
         #expect(try await h.store.summary(id: doc.id)?.renderedCount == 0)
     }
 
+    /// The render screen evicts one chapter at a time, so the chapter beside it — rendered in the
+    /// same pass, and not saved back by this call — must keep both its audio and its `audioRef`s.
+    @Test func evictAudioForOneChapterLeavesItsNeighbourAlone() async throws {
+        let h = try makeHarness(readers: [FakeDocumentReader()])
+        let doc = try await importFake(h).document
+        var timeline = try #require(try await h.store.timeline(for: doc.id)).timeline
+        for i in 0 ..< timeline.utteranceCount {                    // "One" holds utterances 0 and 1, "Two" holds 2
+            try await h.audio.write(PCMAudio(samples: [0, 0]), for: RenderKey(rawValue: "k\(i)"))
+            timeline[utterance: i].audioRef = "k\(i)"
+        }
+        for c in timeline.chapters.indices { try await h.store.saveChapter(timeline.chapters[c], at: c, of: doc.id) }
+
+        try await h.library.evictAudio(for: doc.id, chapter: 0)
+        let after = try #require(try await h.store.timeline(for: doc.id)).timeline
+        #expect(after.chapters[0].utterances.allSatisfy { $0.audioRef == nil })
+        #expect(after[utterance: 2].audioRef == "k2")
+        #expect(await h.audio.contains(RenderKey(rawValue: "k0")) == false)
+        #expect(await h.audio.contains(RenderKey(rawValue: "k1")) == false)
+        #expect(await h.audio.contains(RenderKey(rawValue: "k2")))
+        #expect(try await h.store.summary(id: doc.id)?.renderedCount == 1)
+    }
+
     @Test func renderSnapshotFollowsResumeAndAudioRefs() async throws {
         let h = try makeHarness(readers: [FakeDocumentReader()])
         let doc = try await importFake(h).document

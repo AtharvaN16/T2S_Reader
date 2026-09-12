@@ -177,6 +177,22 @@ public actor Library {
         }
     }
 
+    /// The same for one chapter — the render screen's per-chapter trash (chapter-rendering design,
+    /// "Storage and eviction"). Only this chapter's keys leave the cache and only its rows are saved,
+    /// so a neighbour rendered in the same pass keeps its audio. A chapter that holds none is not
+    /// written back at all.
+    public func evictAudio(for id: UUID, chapter: Int) async throws {
+        guard let stored = try await store.timeline(for: id),
+              stored.timeline.chapters.indices.contains(chapter) else { return }
+        var evicted = stored.timeline.chapters[chapter]
+        guard evicted.utterances.contains(where: { $0.audioRef != nil }) else { return }
+        for u in evicted.utterances.indices {
+            if let ref = evicted.utterances[u].audioRef { try? await audioStore.remove(RenderKey(rawValue: ref)) }
+            evicted.utterances[u].audioRef = nil
+        }
+        try await store.saveChapter(evicted, at: chapter, of: id)
+    }
+
     /// What `RenderPolicy` needs for one document (spec §3.4.1). `rendered` follows `audioRef`;
     /// the coordinator reconciles against the store when it loads (Plan 2). Never re-derives: a stale
     /// document is nil here and is re-derived when it is opened (`timelineForPlayback`).

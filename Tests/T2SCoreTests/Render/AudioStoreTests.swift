@@ -137,6 +137,19 @@ import Testing
         }
     }
 
+    /// The Book sheet's per-chapter size: what evicting these keys would free, which is not the
+    /// whole cache `stats()` reports.
+    @Test func bytesCountsTheKeysHeldAndNothingElse() async throws {
+        for (name, s) in stores() {
+            try await s.write(pcm(1), for: key(1))
+            try await s.write(pcm(1), for: key(2))
+            #expect(await s.bytes(for: [key(1), key(2)]) == 8_016, "\(name)")
+            #expect(await s.bytes(for: [key(1), key(9)]) == 4_008, "\(name)")   // key 9 was never written
+            #expect(await s.bytes(for: [key(1), key(1)]) == 4_008, "\(name)")   // one blob, freed once
+            #expect(await s.bytes(for: []) == 0, "\(name)")
+        }
+    }
+
     @Test func runningByteTotalMatchesEntries() async throws {
         for (name, s) in stores() {
             try await s.write(pcm(1), for: key(1))

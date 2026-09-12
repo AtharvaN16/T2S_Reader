@@ -6,6 +6,7 @@ import T2SApp
 /// right-aligned control.
 struct PreferencesPage: View {
     @Environment(AppEnvironment.self) private var env
+    @Environment(Chrome.self) private var chrome
     @State private var showAppearance = false
     /// What "System default" actually resolves to on this device: Kokoro Heart where the Core ML
     /// route is available, the system voice otherwise (spec §6). Resolved in `.task` because
@@ -77,7 +78,7 @@ struct PreferencesPage: View {
                             StoragePage()
                         } label: {
                             row(
-                                "Rendered audio and prepare on charge",
+                                storageRowTitle,
                                 subtitle: ByteCountFormatter.string(
                                     fromByteCount: Int64(env.storage.stats.bytes),
                                     countStyle: .file
@@ -114,6 +115,8 @@ struct PreferencesPage: View {
             .containerBackground(Color.clear, for: .navigation)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showVoices) { voiceList }
+            // The "voice model removed" toast's action, tapped from any page (`Chrome.opensStorage`).
+            .navigationDestination(isPresented: Bindable(chrome).opensStorage) { StoragePage() }
         }
         .sheet(isPresented: $showAppearance) { AppearanceSheet(showsTextControls: false) }
         .task {
@@ -122,6 +125,13 @@ struct PreferencesPage: View {
             await env.storage.refresh()
         }
         .task { await env.syncModel.refreshAvailability() }
+    }
+
+    /// The row names the voice model only where there is one to name: the everyday build has no
+    /// model, and a row offering to manage what does not exist is worse than a shorter row.
+    private var storageRowTitle: String {
+        env.kokoroModel.isSupported ? "Voice model, rendered audio and prepare on charge"
+                                    : "Rendered audio and prepare on charge"
     }
 
     /// The default voice: the radio moves, "Make default" applies.

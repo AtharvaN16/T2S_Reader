@@ -147,6 +147,10 @@ struct RootPager: View {
                     .padding(.bottom, Spacing.grid)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
+                // Above the mini-player, where a message about what was just tapped belongs; the
+                // Reader draws the same toast over its own page while it is up.
+                ToastHost()
+                    .padding(.bottom, Spacing.grid + 96)
             }
             .animation(.snappy, value: chrome.isSubpageOpen)
         }
@@ -192,6 +196,27 @@ struct RootPager: View {
         }
         .onChange(of: env.libraryModel.summaries.map(\.id)) { _, ids in
             if let current = env.player.current, !ids.contains(current.id) { env.nowPlaying.clear() }
+        }
+        // The reader deleted the voice model and then tapped play: say so, and offer the way back.
+        // Here rather than at each play button — Home, the Collection, the mini-player, the Reader's
+        // transport and a queue continuation all reach the same transport, and this is where they meet.
+        .onChange(of: env.player.isPlaying) { was, isPlaying in
+            guard !was, isPlaying, env.kokoroStatus.status == .removed else { return }
+            env.toasts.show(
+                ToastContent(title: "Voice model removed",
+                             detail: "Playing with the system voice",
+                             actionLabel: "Download",
+                             actionGlyph: "arrow.down.circle")
+            ) {
+                readerDocument = nil
+                page = .preferences
+                // After the cover has gone: a push into a stack that is still behind a full-screen
+                // cover is dropped.
+                Task {
+                    try? await Task.sleep(for: .seconds(0.35))
+                    chrome.opensStorage = true
+                }
+            }
         }
         .onChange(of: env.preferences.defaultVoiceID) { _, voiceID in
             env.player.defaultVoiceID = voiceID

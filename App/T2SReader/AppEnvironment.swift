@@ -52,6 +52,11 @@ final class AppEnvironment {
     let deviceMonitor: DeviceMonitor
     /// What Preferences tells the reader about the on-device engine on this device.
     let kokoroStatus: KokoroStatusModel
+    /// What Settings → Storage shows and does for the downloaded voice model.
+    let kokoroModel: KokoroModelStore
+    /// Messages raised outside the view that shows them — today, the one under a play tapped after
+    /// the voice model was deleted (`ToastCenter`).
+    let toasts = ToastCenter()
     /// The on-device engine's composition, kept for what only its build can do — the timing log's
     /// line at the fill's edges (`noteFill`); its parts are the properties above.
     let kokoro: KokoroComposition
@@ -90,6 +95,7 @@ final class AppEnvironment {
         voices = kokoro.catalog(wrapping: CloudVoiceCatalog(base: SystemVoiceCatalog(),
                                                             configurationStore: cloudVoiceSettings.configurationStore))
         kokoroStatus = kokoro.status
+        kokoroModel = kokoro.modelStore
         voiceRouting = kokoro.voiceRouting
         pronunciation = PronunciationModel(store: store)
         storage = StorageModel(library: library, audioStore: audioStore, player: player, libraryModel: libraryModel)
@@ -208,6 +214,15 @@ extension AppEnvironment {
     func deleteDocument(_ id: UUID, everywhere: Bool = false) async {
         if player.current?.id == id { player.unload() }
         await libraryModel.delete(id, everywhere: everywhere)
+    }
+
+    /// Deletes the downloaded voice model (Settings → Storage). Playback pauses first: the stages
+    /// it is rendering from are about to go, and a listener is better served by a pause they can
+    /// undo than by a chapter that thins into the system voice mid-sentence. The position is kept —
+    /// this is a pause, not an unload — so play resumes where they were, in whichever voice is left.
+    func deleteVoiceModel() async {
+        if player.isPlaying { await player.togglePlay() }
+        await kokoroModel.delete()
     }
 
     /// The confirmation's one line, wherever a delete is offered.

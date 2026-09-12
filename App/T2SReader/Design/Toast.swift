@@ -8,6 +8,9 @@ struct ToastContent: Equatable, Identifiable {
     var title: String
     var detail: String?
     var actionLabel: String?
+    /// The glyph on the action pill. The bookmark toasts that came first all offer a note, so the
+    /// pencil is the default rather than a value each of them repeats.
+    var actionGlyph: String = "square.and.pencil"
 
     static func == (a: ToastContent, b: ToastContent) -> Bool { a.id == b.id }
 }
@@ -34,7 +37,7 @@ struct Toast: View {
             }
             Spacer(minLength: 12)
             if let label = content.actionLabel {
-                Pill(label: label, glyph: "square.and.pencil", style: .soft, action: onAction)
+                Pill(label: label, glyph: content.actionGlyph, style: .soft, action: onAction)
             }
         }
         .padding(.leading, 18)

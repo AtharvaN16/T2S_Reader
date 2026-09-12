@@ -86,6 +86,15 @@ actor GatedKokoroCoreMLEngine: SynthesisEngine {
         }
     }
 
+    /// Lets go of the constructed engine, so the next render builds one from the files that are
+    /// there now. The one thing that needs it: the reader deletes the model in Settings → Storage
+    /// and downloads it again in the same session — the engine held open the stages of the install
+    /// that was removed (an open file outlives its directory entry), and would go on rendering from
+    /// them rather than from what was just downloaded.
+    func discard() {
+        constructed = nil
+    }
+
     /// Constructing the engine only stores the resource URLs the verdict vouched for, so there is
     /// nothing here that can fail transiently. The verdict is read on the main actor — one hop —
     /// and the actor's own isolation makes the construction happen once.

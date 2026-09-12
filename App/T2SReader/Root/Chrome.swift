@@ -9,6 +9,9 @@ import UIKit
 final class Chrome {
     var subpageDepth = 0
     var isSubpageOpen: Bool { subpageDepth > 0 }
+    /// Set from outside Settings to push Storage: the "voice model removed" toast's action, which
+    /// has to reach a page two levels in from wherever the reader tapped play.
+    var opensStorage = false
 }
 
 /// Stops the page swipe while a subpage is up. SwiftUI's paged `TabView` is a

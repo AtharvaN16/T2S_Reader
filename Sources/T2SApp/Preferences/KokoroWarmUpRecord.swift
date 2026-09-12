@@ -23,4 +23,11 @@ public enum KokoroWarmUpRecord {
     public static func markWarmed(identity: String, defaults: UserDefaults) {
         defaults.set(identity, forKey: key)
     }
+
+    /// Forgets the record, so the next warm-up is a foreground one again. What a delete of the
+    /// model from Settings → Storage leaves behind otherwise is a record claiming plans that were
+    /// removed with it, and a background Prepare pass that renders against nothing.
+    public static func clear(defaults: UserDefaults) {
+        defaults.removeObject(forKey: key)
+    }
 }

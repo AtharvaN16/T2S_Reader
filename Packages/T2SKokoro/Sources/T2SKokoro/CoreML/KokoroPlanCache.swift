@@ -44,28 +44,11 @@ public enum KokoroPlanCache {
     /// removal that fails part-way reports what did go.
     @discardableResult
     public static func wipe(_ directory: URL, fileManager: FileManager = .default) -> Int64 {
-        var isDirectory: ObjCBool = false
-        guard fileManager.fileExists(atPath: directory.path(percentEncoded: false), isDirectory: &isDirectory),
-              isDirectory.boolValue else { return 0 }
-        let before = size(of: directory, fileManager: fileManager)
-        do {
-            try fileManager.removeItem(at: directory)
-            return before
-        } catch {
-            return before - size(of: directory, fileManager: fileManager)
-        }
+        KokoroDiskUse.remove(directory, fileManager: fileManager)
     }
 
     /// The bytes of every regular file under `directory`.
     public static func size(of directory: URL, fileManager: FileManager = .default) -> Int64 {
-        guard let files = fileManager.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
-                                                 options: [.skipsHiddenFiles]) else { return 0 }
-        var total: Int64 = 0
-        for case let file as URL in files {
-            guard let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
-                  values.isRegularFile == true else { continue }
-            total += Int64(values.fileSize ?? 0)
-        }
-        return total
+        KokoroDiskUse.size(of: directory, fileManager: fileManager)
     }
 }

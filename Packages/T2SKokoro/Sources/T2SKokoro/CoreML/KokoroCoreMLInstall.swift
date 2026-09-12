@@ -189,9 +189,27 @@ public actor KokoroCoreMLInstall {
 
     /// The revision directory under the app's Application Support: `KokoroCoreML/<revision prefix>`.
     public static func defaultRoot(applicationSupport: URL) -> URL {
-        applicationSupport
-            .appending(path: "KokoroCoreML", directoryHint: .isDirectory)
+        modelsDirectory(applicationSupport: applicationSupport)
             .appending(path: KokoroCoreMLResources.revisionPrefix, directoryHint: .isDirectory)
+    }
+
+    /// Every revision's directory, which is what a delete has to reach: moving the revision pin
+    /// leaves the install before it on disk (nothing prunes it), so "what the model occupies" and
+    /// "remove the model" both mean `KokoroCoreML/`, not this launch's revision under it.
+    public static func modelsDirectory(applicationSupport: URL) -> URL {
+        applicationSupport.appending(path: "KokoroCoreML", directoryHint: .isDirectory)
+    }
+
+    /// What every downloaded revision occupies — sources, compiled stages and voices together.
+    public static func installedBytes(applicationSupport: URL, fileManager: FileManager = .default) -> Int64 {
+        KokoroDiskUse.size(of: modelsDirectory(applicationSupport: applicationSupport), fileManager: fileManager)
+    }
+
+    /// Removes every downloaded revision and reports the bytes freed; 0 when there was none. The
+    /// compute-plan cache is Core ML's, not ours, and goes separately (``KokoroPlanCache/wipe(_:fileManager:)``).
+    @discardableResult
+    public static func removeAll(applicationSupport: URL, fileManager: FileManager = .default) -> Int64 {
+        KokoroDiskUse.remove(modelsDirectory(applicationSupport: applicationSupport), fileManager: fileManager)
     }
 
     /// Where the sources are staged (`coreml/`, `voices/`, `runtime/`) and the compiled stages go.

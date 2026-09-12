@@ -87,7 +87,12 @@ public final class KokoroCoreMLAvailabilityModel {
     /// Decided in `init`; an install that completes later moves it to available (`installed(_:)`).
     public private(set) var verdict: KokoroCoreMLAvailability.Verdict
 
+    private let bundle: Bundle
+    private let installRoot: URL?
+
     public init(bundle: Bundle = .main, installRoot: URL? = nil) {
+        self.bundle = bundle
+        self.installRoot = installRoot
         let verdict = KokoroCoreMLAvailability.check(bundle: bundle, installRoot: installRoot)
         self.verdict = verdict
         switch verdict {
@@ -106,5 +111,16 @@ public final class KokoroCoreMLAvailabilityModel {
     public func installed(_ resources: KokoroCoreMLResources.Located) {
         verdict = .available(decision: .current, resources: resources)
         state = .available(.current)
+    }
+
+    /// Asks the files again, for the one thing that can take them away mid-session: the reader
+    /// deleting the model in Settings → Storage. The verdict is otherwise decided once, in `init`,
+    /// and only ever moves forward through ``installed(_:)``.
+    public func recheck() {
+        verdict = KokoroCoreMLAvailability.check(bundle: bundle, installRoot: installRoot)
+        switch verdict {
+        case .available(let decision, _): state = .available(decision)
+        case .unavailable(let reason): state = .unavailable(reason.description)
+        }
     }
 }

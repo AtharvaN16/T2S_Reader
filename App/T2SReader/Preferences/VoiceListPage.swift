@@ -280,6 +280,8 @@ struct VoiceListPage: View {
             // be building their compute plans — minutes on an A13. Say so, rather than let a
             // reader wonder why the first sentence is slow to arrive.
             return "Preparing the Kokoro voice (one-time, up to a few minutes on the first launch)…"
+        case .removed:
+            return "Removed from this device (Settings → Storage). Documents set to a Kokoro voice play with the system default voice until it is downloaded again."
         case .available(let isDebugOverride):
             return isDebugOverride ? "Runs on this device (development override)." : "Runs on this device."
         case .unavailable(let reason):

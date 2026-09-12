@@ -268,17 +268,24 @@ struct ReaderPage: View {
         .padding(.top, 12)
         .padding(.bottom, Spacing.grid)
         .overlay(alignment: .top) {
-            if let toast {
-                Toast(content: toast,
-                      onAction: { openNoteEditor(); dismissToast() },
-                      // The body of it opens the list, rather than only getting out of the way:
-                      // "bookmark saved" invites you to go and look (owner, 2026-09-12).
-                      onTap: { dismissToast(); showBookmarks = true })
-                    .padding(.horizontal, Spacing.margin)
-                    // The toast's bottom sits on the block's top edge, 10 pt clear, so it floats
-                    // over the text and never covers the chapter row, the scrubber or the transport.
-                    .alignmentGuide(.top) { d in d[.bottom] + 10 }
+            // One slot, and the Reader's own toast has it: a bookmark saved here is answered here.
+            // An app-wide message (`ToastCenter` — the voice model removed under a play) uses the
+            // slot when the Reader has nothing of its own to say, which is all but four seconds.
+            Group {
+                if let toast {
+                    Toast(content: toast,
+                          onAction: { openNoteEditor(); dismissToast() },
+                          // The body of it opens the list, rather than only getting out of the way:
+                          // "bookmark saved" invites you to go and look (owner, 2026-09-12).
+                          onTap: { dismissToast(); showBookmarks = true })
+                        .padding(.horizontal, Spacing.margin)
+                } else {
+                    ToastHost()
+                }
             }
+            // The toast's bottom sits on the block's top edge, 10 pt clear, so it floats
+            // over the text and never covers the chapter row, the scrubber or the transport.
+            .alignmentGuide(.top) { d in d[.bottom] + 10 }
         }
         .background(alignment: .bottom) {
             Tokens.ground

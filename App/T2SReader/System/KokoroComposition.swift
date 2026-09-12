@@ -24,6 +24,11 @@ enum KokoroStatus: Hashable, Sendable {
     case preparing
     case available(isDebugOverride: Bool)
     case unavailable(String)
+    /// The reader deleted the model in Settings → Storage, and no launch downloads it again until
+    /// they ask (`KokoroModelRemovalRecord`). Distinct from ``unavailable``, which is a phone or a
+    /// download that could not: this one is a choice, it is undone by one tap in Storage, and it is
+    /// what puts the "voice model removed" toast under a play the reader taps meanwhile.
+    case removed
 
     /// True while the model is being installed or its stages are still loading — the one-time wait
     /// a fresh launch pays, up to minutes on an old phone. The playback UI shows this distinctly
@@ -31,7 +36,7 @@ enum KokoroStatus: Hashable, Sendable {
     var isWarming: Bool {
         switch self {
         case .checking, .installing, .preparing: true
-        case .notLinked, .available, .unavailable: false
+        case .notLinked, .available, .unavailable, .removed: false
         }
     }
 }
@@ -147,6 +152,12 @@ final class KokoroStatusModel {
         warmedInstall = true
     }
 
+    /// The model was deleted: its compute plans went with it, so a background Prepare pass must
+    /// wait for a foreground warm-up again rather than render against plans that are gone.
+    func clearWarmedInstall() {
+        warmedInstall = false
+    }
+
     /// Remembered so the next launch's veil can say "about 6 s" instead of guessing. A first
     /// launch after install builds compute plans (minutes on an A13) and would mislead every
     /// later launch; the veil already knows a first launch by the absence of a stored number, so
@@ -185,6 +196,8 @@ struct KokoroComposition {
     /// How `PlayerModel` and `PrepareRunner` decide a document's effective voice.
     let voiceRouting: any VoiceRouteResolving
     let status: KokoroStatusModel
+    /// What Settings → Storage shows and does for the downloaded model (`KokoroModelStore`).
+    let modelStore: KokoroModelStore
     /// How far ahead the live player renders, in every state (the window is one value; the
     /// coordinator does not know the foreground from the background). Ten minutes on a phone whose
     /// main set is on the GPU (30 s of GPU at RTF 0.05), because it cannot render while locked
@@ -349,6 +362,13 @@ struct KokoroComposition {
         // removes the last install's, and the 11 Pro filled up under 4.36 GB of them (2026-09-11).
         // Here, before anything can load a stage, a cache built for another identity — or before
         // this record existed — goes; the warm-up below then builds this install's.
+        // Where those plans live, kept because a delete in Settings → Storage has to reach them as
+        // well: they are the larger half of what the voice costs the phone.
+        let planCacheDirectory: URL? = {
+            guard let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first,
+                  let bundleIdentifier = Bundle.main.bundleIdentifier else { return nil }
+            return KokoroPlanCache.directory(cachesDirectory: caches, bundleIdentifier: bundleIdentifier)
+        }()
         if let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first,
            let bundleIdentifier = Bundle.main.bundleIdentifier,
            let removed = KokoroPlanCache.prepare(for: warmUpIdentity, cachesDirectory: caches,
@@ -370,6 +390,56 @@ struct KokoroComposition {
             Task { @MainActor in status.markWarmedInstall() }
         }
 
+        // Settings → Storage: what the model occupies, the delete that reclaims it, and the
+        // download that brings it back. Every piece it needs — the installer's paths, the verdict,
+        // the engine, the route, the status — is in scope here and nowhere else.
+        let modelStore = KokoroModelStore(
+            isSupported: true,
+            measure: {
+                KokoroModelStore.Measurement(
+                    model: KokoroCoreMLInstall.installedBytes(applicationSupport: applicationSupport),
+                    plans: planCacheDirectory.map { KokoroDiskUse.size(of: $0) } ?? 0
+                )
+            },
+            delete: {
+                // The route first: a document opened after this must resolve to the system voice
+                // (spec §6) rather than to files that are about to go.
+                coreMLRouteOpen.withLock { $0 = false }
+                KokoroModelRemovalRecord.suppress(defaults: .standard)
+                let modelBytes = KokoroCoreMLInstall.removeAll(applicationSupport: applicationSupport)
+                let planBytes = planCacheDirectory.map { KokoroDiskUse.remove($0) } ?? 0
+                // The plan cache's recorded identity is left as it is: it says which install the
+                // cache belongs to, and that is still this one — what a re-download builds under it
+                // is this install's, and the next launch must keep it rather than wipe it.
+                KokoroWarmUpRecord.clear(defaults: .standard)
+                UserDefaults.standard.removeObject(forKey: linkedWeightsKey)
+                status.clearWarmedInstall()
+                coreML.recheck()
+                // The engine held the removed install's stages open, and an open file outlives its
+                // directory entry: without this a re-download in the same session would go on
+                // rendering from the copy that was just deleted.
+                await coreMLEngine.discard()
+                status.update(.removed)
+                let freed = (modelBytes + planBytes) / 1_048_576
+                log.notice("Kokoro model deleted by the reader: \(freed, privacy: .public) MB freed (\(modelBytes / 1_048_576, privacy: .public) MB model, \(planBytes / 1_048_576, privacy: .public) MB plans)")
+                KokoroCoreMLEngine.timing("kokoro model deleted by the reader: \(freed) MB freed")
+            },
+            download: {
+                KokoroModelRemovalRecord.allow(defaults: .standard)
+                // A second tap while the first download runs would start a second installer over
+                // the same directory; the status is the one place that knows one is running.
+                guard !status.status.isWarming else { return }
+                status.update(.installing)
+                status.updateInstall(.waitingForNetwork(totalBytes: KokoroCoreMLManifest.totalByteCount))
+                log.notice("Kokoro model download asked for in Settings")
+                Task {
+                    await gate.waitUntilForeground()
+                    await install(into: installRoot, gate: gate, availability: coreML, engine: coreMLEngine,
+                                  routeOpen: coreMLRouteOpen, status: status, log: log, markWarmed: markWarmed)
+                }
+            }
+        )
+
         switch coreML.verdict {
         case .available(let decision, _):
             coreMLRouteOpen.withLock { $0 = true }
@@ -383,6 +453,12 @@ struct KokoroComposition {
                 await gate.waitUntilForeground()
                 await warmUp(coreMLEngine, routeOpen: coreMLRouteOpen, status: status, log: log, markWarmed: markWarmed)
             }
+        case .unavailable(.notInstalled) where KokoroModelRemovalRecord.isSuppressed(defaults: defaults):
+            // The reader deleted it. Downloading it again on this launch is exactly what they asked
+            // the delete to stop, so the app waits for the download button in Storage — and says so
+            // under the next play they tap.
+            log.notice("Kokoro Core ML model removed by the reader; not downloading")
+            status.update(.removed)
         case .unavailable(.notInstalled(let missing)):
             log.notice("Kokoro Core ML model not installed (\(missing.errorDescription ?? "\(missing)", privacy: .public)); downloading")
             status.update(.installing)
@@ -430,6 +506,7 @@ struct KokoroComposition {
                 defaultVoice: KokoroVoiceID(engineID: KokoroCoreMLEngine.identity, voice: "af_heart").rawValue
             ),
             status: status,
+            modelStore: modelStore,
             playAheadWindowSeconds: computeUnits == .cpu ? 180 : 600,
             foregroundFillSeconds: fill,
             catalogEngines: catalogEngines(mlxListed: mlxListed),
@@ -454,7 +531,8 @@ struct KokoroComposition {
             }
         }
         return KokoroComposition(engines: [], voiceRouting: KokoroVoiceRouting.unavailable,
-                                 status: status, playAheadWindowSeconds: nil, foregroundFillSeconds: nil, catalogEngines: { [] },
+                                 status: status, modelStore: .unsupported,
+                                 playAheadWindowSeconds: nil, foregroundFillSeconds: nil, catalogEngines: { [] },
                                  sceneIsBackground: OSAllocatedUnfairLock(initialState: true))
         #endif
     }
@@ -588,12 +666,18 @@ struct KokoroComposition {
         }
     }
 
+    /// Whether this revision's compiled weights have already been de-duplicated into hard links.
+    /// Cleared with the model, so a re-download links its own copy's duplicates again.
+    private static var linkedWeightsKey: String {
+        "kokoro.compiledWeightsLinked." + KokoroCoreMLResources.revisionPrefix
+    }
+
     /// An install compiled before 2026-09-11 holds every bucket variant's copy of the weights it
     /// shares (580 MB for 240 MB of distinct bytes); once per model revision, after the warm-up has
     /// the models open, the duplicates become hard links (`KokoroCoreMLInstall.linkDuplicateWeights`).
     /// Off the main actor: it hashes the compiled layout once, a few seconds of reads on an A13.
     private static func linkDuplicateWeightsOnce() {
-        let key = "kokoro.compiledWeightsLinked." + KokoroCoreMLResources.revisionPrefix
+        let key = linkedWeightsKey
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         guard let support = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false) else { return }
         let compiled = KokoroCoreMLInstall.defaultRoot(applicationSupport: support).appending(path: "compiled", directoryHint: .isDirectory)

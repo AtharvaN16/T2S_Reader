@@ -4,10 +4,15 @@ import T2SCore
 import UIKit
 
 /// The page's text (spec 2026-09-07 §4): one `UITextView` on TextKit 2 showing the whole document,
-/// the paragraph and word tints drawn as rounded rectangles under the glyphs, taps mapped to
-/// utterances, and following that keeps the spoken word in the middle third. Takes plain values —
-/// SwiftUI re-runs `updateUIView` when any of them changes, which is what makes the Appearance
-/// sheet work live. Never touch `layoutManager`: reading it downgrades the view to TextKit 1.
+/// taps mapped to utterances, and following that keeps the spoken word in the middle third. Takes
+/// plain values — SwiftUI re-runs `updateUIView` when any of them changes, which is what makes the
+/// Appearance sheet work live. Never touch `layoutManager`: reading it downgrades the view to TextKit 1.
+///
+/// The read-along is a boundary, not a tint (owner, 2026-09-12): everything up to the word being
+/// spoken is `ink`, everything after it `inkUnread`, so the page reads as done above and coming
+/// below. It is drawn with TextKit 2 *rendering attributes*, which override colour at paint time
+/// without touching the text storage — so a word landing costs one fragment's repaint, where the
+/// tint it replaced rebuilt two `CAShapeLayer` paths, and no edit ever invalidates layout.
 struct ReaderTextView: UIViewRepresentable {
     enum Tap: Equatable {
         case word(utteranceIndex: Int, sourceOffset: Int)
@@ -49,7 +54,7 @@ struct ReaderTextView: UIViewRepresentable {
         view.delegate = context.coordinator
         view.addGestureRecognizer(UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:))))
         _ = view.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak coordinator = context.coordinator] (_: UITextView, _: UITraitCollection) in
-            coordinator?.redrawHighlight()
+            coordinator?.restateFade()
         }
         context.coordinator.attach(view)
         return view
@@ -92,16 +97,13 @@ struct ReaderTextView: UIViewRepresentable {
         private var highlightTheme: HighlightTheme = .amber
         private var wasFollowing = true
         private var wordRange: Range<Int>?
-        private var tintRange: Range<Int>?
+        /// Flattened offset of the word being spoken: everything before it has been read. Nil before
+        /// the first word lands, when the whole document is still "coming".
+        private var readBoundary: Int?
         /// Centre the word without animation as soon as content exists: the initial build for a
         /// document, or a settings rebuild made while following. A settings rebuild made while
         /// following is suspended never sets this — the page stays where the reader left it.
         private var pendingCentre = true
-        /// Sits under the text canvas (subview index 0); its bounds origin tracks the content offset so
-        /// paths in content coordinates draw in place with no transforms.
-        private let overlay = UIView()
-        private let tintLayer = CAShapeLayer()
-        private let wordLayer = CAShapeLayer()
 
         init(onTap: @escaping (Tap) -> Void, onUserScroll: @escaping () -> Void) {
             self.onTap = onTap
@@ -115,12 +117,73 @@ struct ReaderTextView: UIViewRepresentable {
 
         func attach(_ view: UITextView) {
             self.view = view
-            overlay.isUserInteractionEnabled = false
-            overlay.backgroundColor = .clear
-            overlay.layer.addSublayer(tintLayer)
-            overlay.layer.addSublayer(wordLayer)
-            view.insertSubview(overlay, at: 0)
-            syncOverlay()
+        }
+
+        // MARK: The read/unread boundary
+
+        /// Rendering attributes are set here rather than left to `renderingAttributesValidator`: the
+        /// validator is asked once, as a fragment is first laid out, and `invalidateRenderingAttributes`
+        /// does not ask it again — measured on the simulator, 744 calls, every one of them before the
+        /// first word had landed, and none after (2026-09-12). Setting them directly paints at once.
+        ///
+        /// Ordinary reading moves the boundary one word: only that word is restated. A first word, a
+        /// seek backwards or a rebuild restates the whole document, which is rare and still touches no
+        /// layout — rendering attributes are a paint-time override.
+        private func setReadBoundary(_ new: Int?) {
+            let old = readBoundary
+            readBoundary = new
+            guard old != new else { return }
+            if let old, let new, old < new {
+                markRead(old..<new)
+            } else {
+                restateFade()
+            }
+        }
+
+        /// States both sides from scratch. Also the light/dark path: the dimmed colour is resolved
+        /// when it is set, so a theme change has to set it again.
+        func restateFade() {
+            guard let text else { return }
+            guard let boundary = readBoundary else {
+                markRead(0..<text.length)                      // nothing read yet reads as nothing dimmed
+                return
+            }
+            markRead(0..<boundary)
+            markUnread(boundary..<text.length)
+        }
+
+        /// Puts back the colour the run was typeset in. Not `invalidateRenderingAttributes`, which
+        /// clears the override but does not repaint what is already on screen — that left a band of
+        /// stale dimmed text behind the boundary (seen in dark mode, 2026-09-12). Not a blanket `ink`
+        /// either: that would flatten the byline's `ink2`, so each colour run is restated as its own.
+        private func markRead(_ range: Range<Int>) {
+            guard let manager = view?.textLayoutManager,
+                  let content = manager.textContentManager as? NSTextContentStorage,
+                  let storage = content.textStorage,
+                  range.lowerBound < range.upperBound
+            else { return }
+            let ns = NSRange(location: range.lowerBound, length: range.upperBound - range.lowerBound)
+            guard ns.upperBound <= storage.length else { return }
+            storage.enumerateAttribute(.foregroundColor, in: ns) { value, sub, _ in
+                guard let textRange = self.textRange(sub.location ..< sub.location + sub.length) else { return }
+                manager.setRenderingAttributes([.foregroundColor: (value as? UIColor) ?? UIColor(Tokens.ink)],
+                                               for: textRange)
+            }
+        }
+
+        private func markUnread(_ range: Range<Int>) {
+            guard let manager = view?.textLayoutManager, let range = textRange(range) else { return }
+            manager.setRenderingAttributes([.foregroundColor: UIColor(Tokens.inkUnread)], for: range)
+        }
+
+        /// A flattened-offset range as TextKit's own, or nil if it is empty or out of bounds.
+        private func textRange(_ range: Range<Int>) -> NSTextRange? {
+            guard range.lowerBound < range.upperBound,
+                  let manager = view?.textLayoutManager, let content = manager.textContentManager,
+                  let start = content.location(content.documentRange.location, offsetBy: range.lowerBound),
+                  let end = content.location(content.documentRange.location, offsetBy: range.upperBound)
+            else { return nil }
+            return NSTextRange(location: start, end: end)
         }
 
         // MARK: Text
@@ -149,14 +212,16 @@ struct ReaderTextView: UIViewRepresentable {
                     guard let self, self.styleKey == key, let view = self.view else { return }
                     self.text = text
                     view.attributedText = typeset.string
+                    // Assigning the string replaces the content storage, so both sides of the
+                    // boundary are stated again over the rebuilt document.
                     self.recomputeRanges()
-                    self.redrawHighlight()
+                    self.readBoundary = self.wordRange?.lowerBound ?? self.readBoundary
+                    self.restateFade()
                     guard isInitial || following else { return }
                     self.pendingCentre = true
                     self.centreIfNeeded(animated: false)
                     // TextKit 2 estimates the height of text it has not laid out; the first answer can be off.
                     Task { @MainActor [weak self] in
-                        self?.redrawHighlight()
                         self?.centreIfNeeded(animated: false)
                     }
                 }
@@ -170,7 +235,7 @@ struct ReaderTextView: UIViewRepresentable {
             self.highlight = highlight
             if changed {
                 recomputeRanges()
-                redrawHighlight()
+                setReadBoundary(wordRange?.lowerBound ?? readBoundary)
             }
             if following, changed || !wasFollowing {
                 // A centre still pending from the rebuild is the opening one: land on the word
@@ -180,43 +245,20 @@ struct ReaderTextView: UIViewRepresentable {
             wasFollowing = following
         }
 
-        /// The tint pair is a fill, not a layout: a change repaints in place without touching the ranges.
+        /// The theme now colours the reader's own selection rather than a read-along tint, so it is
+        /// the text view's tint: UIKit paints the selection and its handles with it.
         func setHighlightTheme(_ theme: HighlightTheme) {
             guard theme != highlightTheme else { return }
             highlightTheme = theme
-            redrawHighlight()
+            view?.tintColor = UIColor(Tokens.highlightWord(theme))
         }
 
         private func recomputeRanges() {
             guard let text, let highlight else {
                 wordRange = nil
-                tintRange = nil
                 return
             }
             wordRange = text.wordRange(for: highlight)
-            tintRange = text.tintRange(forUtterance: highlight.utteranceIndex)
-        }
-
-        func redrawHighlight() {
-            guard let view else { return }
-            let traits = view.traitCollection
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            tintLayer.fillColor = UIColor(Tokens.highlightTint(highlightTheme)).resolvedColor(with: traits).cgColor
-            wordLayer.fillColor = UIColor(Tokens.highlightWord(highlightTheme)).resolvedColor(with: traits).cgColor
-            tintLayer.path = tintRange.flatMap { path(for: rects(for: $0), padding: 0) }
-            wordLayer.path = wordRange.flatMap { path(for: rects(for: $0), padding: 1) }
-            syncOverlay()
-            CATransaction.commit()
-        }
-
-        private func path(for rects: [CGRect], padding: CGFloat) -> CGPath? {
-            guard !rects.isEmpty else { return nil }
-            let path = UIBezierPath()
-            for rect in rects {
-                path.append(UIBezierPath(roundedRect: rect.insetBy(dx: -padding, dy: 0), cornerRadius: ReaderTextView.cornerRadius))
-            }
-            return path.cgPath
         }
 
         /// Per-line rectangles of a flattened-string range, in content coordinates.
@@ -235,12 +277,6 @@ struct ReaderTextView: UIViewRepresentable {
                 return true
             }
             return rects
-        }
-
-        private func syncOverlay() {
-            guard let view else { return }
-            overlay.frame = view.bounds
-            overlay.bounds = CGRect(origin: view.contentOffset, size: view.bounds.size)
         }
 
         // MARK: Following
@@ -291,10 +327,6 @@ struct ReaderTextView: UIViewRepresentable {
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
             onUserScroll()
-        }
-
-        func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            syncOverlay()
         }
     }
 }

@@ -10,6 +10,9 @@ enum Tokens {
     static let surface = dynamic(light: 0xEEEEEC, dark: 0x1E1E1E)
     static let raised = dynamic(light: 0xFFFFFF, dark: 0x1A1A1A)
     static let ink = dynamic(light: 0x111111, dark: 0xF2F2F2)
+    /// The Reader's text that has not been read out yet (owner, 2026-09-12): `ink`, dimmed, so the
+    /// page shows what is done and what is coming rather than tinting one paragraph at a time.
+    static let inkUnread = dynamic(light: 0x111111, dark: 0xF2F2F2, lightAlpha: 0.28, darkAlpha: 0.34)
     static let ink2 = dynamic(light: 0x8A8A8A, dark: 0x8E8E8E)
     static let ink3 = dynamic(light: 0xC9C9C7, dark: 0x3A3A3A)
     static let accent = dynamic(light: 0xFF7A1A, dark: 0xFF8C3A)

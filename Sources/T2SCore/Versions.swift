@@ -11,5 +11,8 @@ public enum Versions {
     /// Not bumped for Plan 16's one-pass dictionary (2026-09-08): its output differs only for a
     /// dictionary whose entries chain (one replacement contains another's term) or overlap, which a
     /// reader would have to build on purpose; a bump would re-derive and re-render every book.
-    public static let normalizer = 4
+    /// 5 (2026-09-12): a run of five or more capitals is lowercased, so the phonemiser says the
+    /// word instead of spelling it (`SpellOutOnlyShortCapsRule`). Worth the re-derivation: a book
+    /// whose title page or headings are set in capitals read them out as an alphabet.
+    public static let normalizer = 5
 }

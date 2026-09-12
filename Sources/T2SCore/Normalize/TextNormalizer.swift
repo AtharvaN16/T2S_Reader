@@ -11,6 +11,8 @@ public struct TextNormalizer: Sendable {
             CollapseURLsRule(),          // before numbers: a URL with digits must survive intact
             SplitHyphenatedCompoundsRule(), // after URLs: a host keeps its hyphen long enough to be recognised
             ExpandNumbersRule(),
+            SpellOutOnlyShortCapsRule(),   // after the rules that match on capitals
+
             CollapseWhitespaceRule(),
             PronunciationDictionaryRule(entries: dictionary),
         ]

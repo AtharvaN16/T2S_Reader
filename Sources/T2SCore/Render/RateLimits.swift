@@ -11,10 +11,13 @@ public enum RateLimits {
         return rtf * rate <= safetyFactor + 1e-9
     }
 
-    /// The highest listed rate that is sustainable; the lowest listed rate when none is.
+    /// The highest listed rate that is sustainable, and never below 1.0: a route that cannot keep
+    /// up costs the listener a brief catch-up, not a slower voice. Time-pitch at half speed smears
+    /// speech, and the first renders of an engine that has not warmed yet — the moment a
+    /// cloud-first reader taps play — measure exactly like a machine that cannot keep up.
     public static func maxSustainableRate(rtf: Double?) -> Double {
         guard let rtf, rtf.isFinite, rtf > 0 else { return allRates.last! }
-        return allRates.last(where: { isSustainable(rate: $0, rtf: rtf) }) ?? allRates.first!
+        return max(1.0, allRates.last(where: { isSustainable(rate: $0, rtf: rtf) }) ?? 1.0)
     }
 
     public static func availableRates(rtf: Double?) -> [Double] {

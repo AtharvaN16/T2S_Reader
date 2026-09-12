@@ -153,6 +153,50 @@ import T2SCore
         #expect(throws: Never.self) { try fine.validate() }
     }
 
+    /// Four concurrent calls land one on each mirror: the engine's width is its mirror count and
+    /// a batch that wide never queues behind itself.
+    @Test func spreadsConcurrentRequestsOneToEachMirror() async throws {
+        let hosts = ["one.example", "two.example", "three.example", "four.example"]
+        let pcm = TestURLProtocol.pcmResponse(samples: [1])
+        let session = TestURLProtocol.session(byHost: Dictionary(uniqueKeysWithValues: hosts.map { ($0, pcm) }))
+        let configuration = HTTPVoiceConfiguration(
+            endpoints: try hosts.map { try #require(URL(string: "https://\($0)/v1/audio/speech")) },
+            model: "m", voice: "v", requestRatePerMinute: 60)
+        let engine = HTTPVoiceEngine(configuration: configuration, key: { "test-key" }, session: session, limiterSleeper: { _ in })
+
+        #expect(engine.maxConcurrentRenders(for: "cloud:x:v") == 4)
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for i in 0..<4 {
+                group.addTask { _ = try await engine.synthesize(.init(spoken: "piece \(i)", voiceID: "cloud:x:v")) }
+            }
+            try await group.waitForAll()
+        }
+        #expect(Set(TestURLProtocol.allRequests.compactMap { $0.url?.host }) == Set(hosts))
+    }
+
+    /// A busy mirror answers 429; the request walks to the next mirror and fails only when every
+    /// mirror has refused it, each tried once.
+    @Test func aBusyMirrorHandsTheRequestToTheNext() async throws {
+        let busy = TestURLProtocol.Response(status: 429, headers: ["Retry-After": "2"], data: Data("{\"detail\":\"Synthesis busy\"}".utf8))
+        let fine = TestURLProtocol.pcmResponse(samples: [7])
+        let one = try #require(URL(string: "https://one.example/v1/audio/speech"))
+        let two = try #require(URL(string: "https://two.example/v1/audio/speech"))
+        let configuration = HTTPVoiceConfiguration(endpoints: [one, two], model: "m", voice: "v", requestRatePerMinute: 60)
+
+        let session = TestURLProtocol.session(byHost: ["one.example": busy, "two.example": fine])
+        let engine = HTTPVoiceEngine(configuration: configuration, key: { "test-key" }, session: session, limiterSleeper: { _ in })
+        let result = try await engine.synthesize(.init(spoken: "x", voiceID: "cloud:x:v"))
+        #expect(result.audio.samples.count == 1)
+        #expect(TestURLProtocol.allRequests.compactMap { $0.url?.host } == ["one.example", "two.example"])
+
+        let allBusy = TestURLProtocol.session(byHost: ["one.example": busy, "two.example": busy])
+        let refused = HTTPVoiceEngine(configuration: configuration, key: { "test-key" }, session: allBusy, limiterSleeper: { _ in })
+        await #expect(throws: HTTPVoiceError.rateLimited(retryAfter: 2)) {
+            try await refused.synthesize(.init(spoken: "x", voiceID: "cloud:x:v"))
+        }
+        #expect(TestURLProtocol.allRequests.count == 2)
+    }
+
     @Test func rateLimiterSpacesRequestsAndHonoursRetryAfter() async {
         let clock = TestRateClock()
         let limiter = RequestRateLimiter(requestsPerMinute: 60, now: { clock.now }, sleeper: { seconds in
@@ -169,7 +213,7 @@ import T2SCore
 }
 
 final class TestURLProtocol: URLProtocol, @unchecked Sendable {
-    private struct Response {
+    struct Response: Sendable {
         var status: Int
         var headers: [String: String]
         var data: Data
@@ -177,7 +221,12 @@ final class TestURLProtocol: URLProtocol, @unchecked Sendable {
 
     private static let lock = NSLock()
     nonisolated(unsafe) private static var response = Response(status: 500, headers: [:], data: Data())
+    /// Answers by host when set; a host with no entry gets `response`.
+    nonisolated(unsafe) private static var responsesByHost: [String: Response] = [:]
+    /// Answers from the request itself when set; wins over the host table.
+    nonisolated(unsafe) private static var responder: (@Sendable (URLRequest) -> Response)?
     nonisolated(unsafe) private static var capturedRequest: URLRequest?
+    nonisolated(unsafe) private static var capturedRequests: [URLRequest] = []
 
     static var lastRequest: URLRequest? {
         lock.lock()
@@ -185,16 +234,51 @@ final class TestURLProtocol: URLProtocol, @unchecked Sendable {
         return capturedRequest
     }
 
+    /// Every request since the session was made, in arrival order.
+    static var allRequests: [URLRequest] {
+        lock.lock()
+        defer { lock.unlock() }
+        return capturedRequests
+    }
+
     static func session(status: Int, headers: [String: String] = [:], json: String) -> URLSession {
         session(status: status, headers: headers, body: Data(json.utf8))
     }
 
     static func session(status: Int, headers: [String: String] = [:], body: Data) -> URLSession {
-        lock.lock()
-        response = Response(status: status, headers: headers, data: body)
-        capturedRequest = nil
-        lock.unlock()
+        session(byHost: [:], fallback: Response(status: status, headers: headers, data: body))
+    }
 
+    /// One answer per host; `fallback` answers any host not listed.
+    static func session(byHost: [String: Response], fallback: Response = Response(status: 500, headers: [:], data: Data())) -> URLSession {
+        reset(response: fallback, byHost: byHost, responder: nil)
+        return make()
+    }
+
+    /// An answer computed from each request, for tests that need to tell pieces apart by body.
+    static func session(answering responder: @escaping @Sendable (URLRequest) -> Response) -> URLSession {
+        reset(response: Response(status: 500, headers: [:], data: Data()), byHost: [:], responder: responder)
+        return make()
+    }
+
+    /// Raw 16-bit little-endian PCM at 24 kHz, the pilot server's answer.
+    static func pcmResponse(samples: [Int16], status: Int = 200) -> Response {
+        var data = Data()
+        for value in samples { withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) } }
+        return Response(status: status, headers: ["Content-Type": "audio/pcm"], data: data)
+    }
+
+    private static func reset(response: Response, byHost: [String: Response], responder: (@Sendable (URLRequest) -> Response)?) {
+        lock.lock()
+        self.response = response
+        responsesByHost = byHost
+        self.responder = responder
+        capturedRequest = nil
+        capturedRequests = []
+        lock.unlock()
+    }
+
+    private static func make() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [TestURLProtocol.self]
         return URLSession(configuration: configuration)
@@ -210,7 +294,10 @@ final class TestURLProtocol: URLProtocol, @unchecked Sendable {
             captured.httpBody = Self.readBody(from: captured.httpBodyStream)
         }
         Self.capturedRequest = captured
-        let response = Self.response
+        Self.capturedRequests.append(captured)
+        let response = Self.responder?(captured)
+            ?? captured.url?.host.flatMap { Self.responsesByHost[$0] }
+            ?? Self.response
         Self.lock.unlock()
 
         let urlResponse = HTTPURLResponse(url: request.url!, statusCode: response.status, httpVersion: nil,

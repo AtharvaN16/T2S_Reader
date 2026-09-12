@@ -198,30 +198,81 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
     private let configuration: HTTPVoiceConfiguration
     private let key: @Sendable () async throws -> String?
     private let session: URLSession
-    private let limiter: RequestRateLimiter
+    /// One per endpoint, in the configuration's order: each mirror is rate-limited on its own.
+    private let routes: [Route]
+    private let cursor = Cursor()
 
+    private struct Route: Sendable {
+        let endpoint: URL
+        let limiter: RequestRateLimiter
+    }
+
+    /// Round-robin over the routes. Each request takes the next, so a batch as wide as the mirror
+    /// list lands one request on each mirror.
+    private final class Cursor: @unchecked Sendable {
+        private let lock = NSLock()
+        private var next = 0
+
+        func take(of count: Int) -> Int {
+            lock.lock()
+            defer { lock.unlock() }
+            let index = next % count
+            next = (next + 1) % count
+            return index
+        }
+    }
+
+    /// `limiterSleeper` replaces every route's limiter sleep — a test's no-op, so pieces sent at
+    /// once to one endpoint do not wait a real second apart.
     public init(configuration: HTTPVoiceConfiguration, key: @escaping @Sendable () async throws -> String?,
-                session: URLSession = .shared, limiter: RequestRateLimiter? = nil) {
+                session: URLSession = .shared, limiterSleeper: RequestRateLimiter.Sleeper? = nil) {
         self.configuration = configuration
         self.key = key
         self.session = session
-        self.limiter = limiter ?? RequestRateLimiter(requestsPerMinute: configuration.requestRatePerMinute)
+        routes = configuration.endpoints.map { endpoint in
+            let limiter = limiterSleeper.map { RequestRateLimiter(requestsPerMinute: configuration.requestRatePerMinute, sleeper: $0) }
+                ?? RequestRateLimiter(requestsPerMinute: configuration.requestRatePerMinute)
+            return Route(endpoint: endpoint, limiter: limiter)
+        }
     }
+
+    public func maxConcurrentRenders(for voiceID: String) -> Int { routes.count }
 
     public func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
         try configuration.validate()
-        await limiter.wait()
-        guard let key = try await key()?.trimmed, !key.isEmpty else { throw HTTPVoiceError.missingKey }
+        let providerVoice = CloudVoiceID(rawValue: request.voiceID)?.voice ?? configuration.voice
+        return try await synthesizePiece(request.spoken, voice: providerVoice)
+    }
 
-        var urlRequest = URLRequest(url: configuration.endpoint)
+    /// One request, on the next mirror. A mirror that answers 429 has its limiter deferred and the
+    /// request walks on; each mirror is tried at most once, and only when all have refused does
+    /// the request fail as rate limited.
+    private func synthesizePiece(_ text: String, voice: String) async throws -> SynthesisResult {
+        guard let key = try await key()?.trimmed, !key.isEmpty else { throw HTTPVoiceError.missingKey }
+        let start = cursor.take(of: routes.count)
+        var refused: HTTPVoiceError?
+        for attempt in 0 ..< routes.count {
+            let route = routes[(start + attempt) % routes.count]
+            await route.limiter.wait()
+            do {
+                return try await post(text: text, voice: voice, key: key, to: route.endpoint)
+            } catch HTTPVoiceError.rateLimited(let retryAfter) {
+                await route.limiter.deferUntil(seconds: retryAfter)
+                refused = .rateLimited(retryAfter: retryAfter)
+            }
+        }
+        throw refused ?? HTTPVoiceError.transport("no mirror answered")
+    }
+
+    private func post(text: String, voice: String, key: String, to endpoint: URL) async throws -> SynthesisResult {
+        var urlRequest = URLRequest(url: endpoint)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        let providerVoice = CloudVoiceID(rawValue: request.voiceID)?.voice ?? configuration.voice
         urlRequest.httpBody = try JSONEncoder().encode(WireRequest(
             model: configuration.model,
-            input: request.spoken,
-            voice: providerVoice,
+            input: text,
+            voice: voice,
             responseFormat: "pcm"
         ))
 
@@ -239,9 +290,7 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
                 throw HTTPVoiceError.transport("no HTTP response")
             }
             if http.statusCode == 429 {
-                let seconds = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
-                await limiter.deferUntil(seconds: seconds)
-                throw HTTPVoiceError.rateLimited(retryAfter: seconds)
+                throw HTTPVoiceError.rateLimited(retryAfter: http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init))
             }
             guard (200...299).contains(http.statusCode) else {
                 throw HTTPVoiceError.server(status: http.statusCode, message: Self.safeServerMessage(status: http.statusCode))
@@ -276,7 +325,7 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
             let duration = Double(samples.count) / 24_000
             return SynthesisResult(
                 audio: PCMAudio(sampleRate: 24_000, samples: samples),
-                wordTimings: try Self.timings(wire.wordTimings, text: request.spoken, duration: duration)
+                wordTimings: try Self.timings(wire.wordTimings, text: text, duration: duration)
             )
         } catch let error as HTTPVoiceError {
             throw error

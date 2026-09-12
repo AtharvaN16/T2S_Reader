@@ -40,6 +40,10 @@ public actor InMemoryAudioStore: AudioStore {
         AudioStoreStats(bytes: lru.bytes, entries: blobs.count, capacityBytes: capacity)
     }
 
+    public func bytes(for keys: [RenderKey]) -> Int {
+        Set(keys).reduce(0) { $0 + (lru.sizes[$1] ?? 0) }
+    }
+
     public func setCapacity(bytes: Int) {
         capacity = bytes
         for victim in lru.victims(toFit: 0, capacity: capacity) { blobs[victim] = nil; lru.remove(victim) }

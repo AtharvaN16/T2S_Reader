@@ -6,9 +6,9 @@ import Foundation
 /// it — through a temporary file each way — so every second heard was the cache, never the render
 /// (`docs/superpowers/specs/2026-09-08-performance-audit.md` §3.3). This tier keeps the PCM of the
 /// last `limit` writes (~1 MB each for 10 s at 24 kHz mono float) and serves a read from memory when
-/// the base store still holds the key. The base store stays the truth: `contains`, `stats`, capacity
-/// and eviction are its; a key the base has dropped is dropped here on the next read; a write the
-/// base refuses is never remembered.
+/// the base store still holds the key. The base store stays the truth: `contains`, `stats`, `bytes`,
+/// capacity and eviction are its; a key the base has dropped is dropped here on the next read; a write
+/// the base refuses is never remembered.
 public actor RecentAudioStore: AudioStore {
     private let base: any AudioStore
     private let limit: Int
@@ -44,6 +44,8 @@ public actor RecentAudioStore: AudioStore {
     }
 
     public func stats() async -> AudioStoreStats { await base.stats() }
+
+    public func bytes(for keys: [RenderKey]) async -> Int { await base.bytes(for: keys) }
 
     public func setCapacity(bytes: Int) async { await base.setCapacity(bytes: bytes) }
 

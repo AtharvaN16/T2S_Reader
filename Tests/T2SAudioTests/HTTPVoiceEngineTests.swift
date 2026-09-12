@@ -251,6 +251,61 @@ import T2SCore
         #expect(await pool.waitingCount == 0)
     }
 
+    /// The head utterance the player is waiting on streams in clause-sized pieces, each handed over
+    /// the moment it lands, in order — the first sound needs one short render, not the whole line.
+    @Test func theStreamingHeadArrivesInPiecesInOrder() async throws {
+        let clauses = (1...3).map { n in "\(n) " + String(repeating: "w", count: 70) + "," }      // 74 each: three pieces of ≤ 80
+        let text = clauses.joined(separator: " ")
+        let session = TestURLProtocol.session { request in
+            let body = request.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let input = body?["input"] as? String ?? "0"
+            return TestURLProtocol.pcmResponse(samples: [Int16(String(input.prefix(1))) ?? 0])
+        }
+        let engine = HTTPVoiceEngine(configuration: .example, key: { "test-key" }, session: session, limiterSleeper: { _ in })
+
+        var chunks: [SynthesisChunk] = []
+        for try await chunk in engine.synthesizeStreaming(.init(spoken: text, voiceID: "cloud:x:v")) { chunks.append(chunk) }
+
+        #expect(chunks.count == 4)                                                                // three pieces, then finished
+        var samples: [Int16] = []
+        for (i, chunk) in chunks.prefix(3).enumerated() {
+            guard case .piece(let audio, let ordinal, let isLast) = chunk else { Issue.record("piece \(i): \(chunk)"); continue }
+            #expect(ordinal == i && isLast == (i == 2))
+            samples += audio.samples.map { Int16(($0 * 32768).rounded()) }.filter { $0 != 0 }        // the gap is silence
+            if i > 0 { #expect(audio.samples.prefix(Int(0.08 * 24_000)).allSatisfy { $0 == 0 }) }     // 80 ms before every later piece
+        }
+        #expect(samples == [1, 2, 3])
+        guard case .finished(let timings) = chunks[3] else { Issue.record("no finished: \(chunks[3])"); return }
+        #expect(timings.isEmpty)
+    }
+
+    /// A head that fits one piece streams as the protocol default would: one piece, then finished.
+    @Test func aShortHeadStreamsAsOnePiece() async throws {
+        let session = TestURLProtocol.session(status: 200, headers: ["Content-Type": "audio/pcm"], body: Data([1, 0]))
+        let engine = HTTPVoiceEngine(configuration: .example, key: { "test-key" }, session: session, limiterSleeper: { _ in })
+        var chunks: [SynthesisChunk] = []
+        for try await chunk in engine.synthesizeStreaming(.init(spoken: "One short line.", voiceID: "cloud:x:v")) { chunks.append(chunk) }
+        #expect(chunks.count == 2)
+        guard case .piece(_, 0, true) = chunks[0] else { Issue.record("\(chunks)"); return }
+        #expect(TestURLProtocol.allRequests.count == 1)
+    }
+
+    /// An urgent request — a head piece the player is waiting on — takes the next free mirror ahead
+    /// of requests that were already waiting.
+    @Test func anUrgentRequestJumpsThePoolsQueue() async {
+        let pool = HTTPVoiceEngine.RoutePool(count: 1)
+        let held = await pool.acquire()
+        let ordinary = Task { await pool.acquire() }
+        var spins = 0
+        while await pool.waitingCount != 1, spins < 10_000 { await Task.yield(); spins += 1 }
+        let urgent = Task { await pool.acquire(urgent: true) }
+        while await pool.waitingCount != 2, spins < 20_000 { await Task.yield(); spins += 1 }
+        await pool.release(held)
+        #expect(await urgent.value == 0)                                                          // the urgent one went first
+        await pool.release(0)
+        #expect(await ordinary.value == 0)
+    }
+
     @Test func rateLimiterSpacesRequestsAndHonoursRetryAfter() async {
         let clock = TestRateClock()
         let limiter = RequestRateLimiter(requestsPerMinute: 60, now: { clock.now }, sleeper: { seconds in

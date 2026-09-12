@@ -223,9 +223,13 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
 
         init(count: Int) { free = Array((0..<count).reversed()) }
 
-        func acquire() async -> Int {
+        /// `urgent` — a head piece the player is waiting on — is served before requests already
+        /// waiting: the next free mirror goes to the sound the reader is waiting for.
+        func acquire(urgent: Bool = false) async -> Int {
             if let index = free.popLast() { return index }
-            return await withCheckedContinuation { waiters.append($0) }
+            return await withCheckedContinuation { continuation in
+                if urgent { waiters.insert(continuation, at: 0) } else { waiters.append(continuation) }
+            }
         }
 
         func release(_ index: Int) {
@@ -252,6 +256,56 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
 
     public func maxConcurrentRenders(for voiceID: String) -> Int { routes.count }
 
+    /// The longest piece of a streaming head. Small, so the first sound after a tap or a seek
+    /// waits for one short render rather than the whole utterance; the pieces render at once
+    /// across the mirrors and are handed to the player in order as they land.
+    static let headPieceCharacters = 80
+    /// The pause between a head's pieces, matching what the server puts between its own chunks.
+    static let headPieceGap: TimeInterval = 0.08
+
+    /// The head utterance the player is waiting on (Plan 14): cut at clauses into short pieces,
+    /// rendered at once, each urgent for the next free mirror, and yielded in order the moment
+    /// it and everything before it has landed. A head that fits one piece streams as the whole.
+    public func synthesizeStreaming(_ request: SynthesisRequest) -> AsyncThrowingStream<SynthesisChunk, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    try configuration.validate()
+                    let providerVoice = CloudVoiceID(rawValue: request.voiceID)?.voice ?? configuration.voice
+                    let pieces = ClauseSplitter.pieces(of: request.spoken, maxLength: Self.headPieceCharacters)
+                    guard pieces.count > 1 else {
+                        let whole = try await synthesizePiece(request.spoken, voice: providerVoice, urgent: true)
+                        continuation.yield(.piece(whole.audio, ordinal: 0, isLast: true))
+                        continuation.yield(.finished(wordTimings: []))
+                        continuation.finish()
+                        return
+                    }
+                    try await withThrowingTaskGroup(of: (Int, SynthesisResult).self) { group in
+                        for (index, piece) in pieces.enumerated() {
+                            group.addTask { (index, try await self.synthesizePiece(piece, voice: providerVoice, urgent: true)) }
+                        }
+                        var landed: [Int: SynthesisResult] = [:]
+                        var next = 0
+                        for try await (index, result) in group {
+                            landed[index] = result
+                            while let ready = landed.removeValue(forKey: next) {
+                                var audio = ready.audio
+                                if next > 0 { audio.samples.insert(contentsOf: PCMAudio.silence(seconds: Self.headPieceGap).samples, at: 0) }
+                                continuation.yield(.piece(audio, ordinal: next, isLast: next == pieces.count - 1))
+                                next += 1
+                            }
+                        }
+                    }
+                    continuation.yield(.finished(wordTimings: []))
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
     public func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
         try configuration.validate()
         let providerVoice = CloudVoiceID(rawValue: request.voiceID)?.voice ?? configuration.voice
@@ -275,9 +329,9 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
     /// mirror is busy. A mirror that answers 429 anyway (another client's render) has its limiter
     /// deferred and the request walks on; each mirror is tried at most once, and only when all
     /// have refused does the request fail as rate limited.
-    private func synthesizePiece(_ text: String, voice: String) async throws -> SynthesisResult {
+    private func synthesizePiece(_ text: String, voice: String, urgent: Bool = false) async throws -> SynthesisResult {
         guard let key = try await key()?.trimmed, !key.isEmpty else { throw HTTPVoiceError.missingKey }
-        let start = await pool.acquire()
+        let start = await pool.acquire(urgent: urgent)
         do {
             let result = try await walk(text, voice: voice, key: key, from: start)
             await pool.release(start)

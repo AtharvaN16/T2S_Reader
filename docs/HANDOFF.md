@@ -47,6 +47,9 @@ listen — the handoff at the chapter boundary and locked-screen continuity — 
 Also: `scripts/test-kokoro.sh` runs well over 40 minutes (the compute-plan probe); a run killed
 mid-way leaves an unfinalized `.xcresult` with no verdict.
 
+**PR #17** (2026-09-12) opens `dev` against `main` with all of the above, merged over the
+bookmarks-and-notes work that was already on `main`: https://github.com/AtharvaN16/T2S_Reader/pull/17.
+
 ## Resume here (2026-09-11, morning) — for Harsh: where things stand, the crash fixes, what's next
 
 _Written 03:20 by the owner's session as it handed over. `dev` is pushed; the owner's iPhone 11 Pro runs

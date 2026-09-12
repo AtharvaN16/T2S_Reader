@@ -501,8 +501,14 @@ struct ReaderPage: View {
         }
     }
 
-    /// A tap marks the word and offers it; the pill is what actually moves the playhead.
+    /// A tap marks the word and offers it; the pill is what actually moves the playhead. While an
+    /// offer is up, the next tap anywhere takes it down — otherwise it followed every press around
+    /// the page with no way to be rid of it (owner, 2026-09-12).
     private func handleTap(_ tap: ReaderTextView.Tap) {
+        if previewTap != nil {
+            withAnimation(.snappy) { previewTap = nil }
+            return
+        }
         if case .word(let index, let offset) = tap {
             withAnimation(.snappy) {
                 previewTap = (index, offset)
@@ -510,9 +516,7 @@ struct ReaderPage: View {
             }
             return
         }
-        withAnimation {
-            if previewTap != nil { previewTap = nil } else { chromeVisible.toggle() }
-        }
+        withAnimation { chromeVisible.toggle() }
     }
 
     /// Loads and starts the requested document when necessary, then draws its timeline's text

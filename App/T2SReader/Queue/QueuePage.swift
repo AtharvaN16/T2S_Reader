@@ -45,6 +45,7 @@ struct QueuePage: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .scrollIndicators(.hidden)
         .refreshable { await env.libraryModel.refresh() }
         .fullScreenCover(isPresented: $showAdd, onDismiss: openPending) { ImportPage(imported: $pendingOpen) }
         .sheet(item: $details) { DetailsSheet(summary: $0) }

@@ -478,6 +478,9 @@ struct ReaderTextView: UIViewRepresentable {
 
         private func centreIfNeeded(animated: Bool) {
             guard let view, let wordRange else { return }
+            // Never against a finger: inside the stray distance the page is still following, and
+            // re-centring mid-drag would pull it out from under the reader.
+            guard !view.isDragging, !view.isDecelerating else { return }
             let rects = rects(for: wordRange)
             guard let first = rects.first else { return }
             let word = rects.dropFirst().reduce(first) { $0.union($1) }
@@ -538,13 +541,31 @@ struct ReaderTextView: UIViewRepresentable {
 
         // MARK: UIScrollViewDelegate
 
+        /// Where a drag started, so following is only given up once the reader has actually gone
+        /// somewhere. Any touch on the page used to hand it over, and "Back to current" appeared on
+        /// the slightest nudge (owner, 2026-09-12).
+        private var dragOrigin: CGFloat?
+        private static let strayDistance: CGFloat = 140
+
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
-            onUserScroll()
+            dragOrigin = scrollView.contentOffset.y
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
             syncOverlay()
             if previewRange != nil { reportPreviewRect() }
+            if let origin = dragOrigin, abs(scrollView.contentOffset.y - origin) > Self.strayDistance {
+                dragOrigin = nil
+                onUserScroll()
+            }
+        }
+
+        func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate: Bool) {
+            if !willDecelerate { dragOrigin = nil }
+        }
+
+        func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+            dragOrigin = nil
         }
 
         // MARK: Selection
@@ -556,9 +577,17 @@ struct ReaderTextView: UIViewRepresentable {
             true
         }
 
+        /// Keeps the two gestures apart: while a selection is up, a tap is the system's to handle —
+        /// ours would mark a word underneath the menu (owner, 2026-09-12).
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard gestureRecognizer === tap else { return true }
+            return view.map { $0.selectedRange.length == 0 } ?? true
+        }
+
         /// Following would scroll the page out from under the selection handles.
         func textViewDidChangeSelection(_ textView: UITextView) {
             guard textView.selectedRange.length > 0 else { return }
+            clearPreview()                                   // a held passage is not an offered word
             onUserScroll()
         }
 

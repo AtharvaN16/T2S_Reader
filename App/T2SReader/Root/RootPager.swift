@@ -133,8 +133,12 @@ struct RootPager: View {
                         .transition(.opacity)
                 }
                 // The bar paints the glow itself while the warm-up shows, so bar and page are one
-                // surface; the warm-up's line rides over it.
-                TopFade(inset: geo.safeAreaInsets.top, warm: WarmUpVeil.isShowing(env))
+                // surface; the warm-up's line rides over it. `warm` is always on and `WarmGround`
+                // decides: gating it on `isShowing` here swapped the bar back to flat ground on the
+                // frame the warm-up ended, and that opaque band covered the top of the green before
+                // the veil under it had finished fading (owner, 2026-09-12). Both now cross the
+                // same fade, so the glow leaves the bar and the page together.
+                TopFade(inset: geo.safeAreaInsets.top, warm: true)
                 WarmUpLine(band: geo.safeAreaInsets.top)
 
                 if !chrome.isSubpageOpen {

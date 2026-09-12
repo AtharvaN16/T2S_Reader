@@ -181,9 +181,9 @@ li::marker{color:var(--ink3)}
 <div class="col">
   <div class="eyebrow">t2s_reader &middot; branch warmup-indicator &middot; v5</div>
   <h1>The warm-up line</h1>
-  <p class="lede">A weighted title, one faint row under it holding two slots, and the bar. Handoff at the seam. Megabytes hold still while the reassurance cycles; the clock waits until the download is done; and when the voice is ready the middle row closes rather than leaving a gap.</p>
+  <p class="lede">A weighted title, one faint row under it holding two slots &mdash; words on the left, whatever is counting on the right &mdash; and the bar. Handoff at the seam. The megabytes give way to the clock the moment the download ends, and when the voice is ready the middle row closes rather than leaving a gap.</p>
   <div class="meta">
-    <b>Settled</b> &nbsp;title / subtext / bar &middot; 88 &times; 5 &middot; handoff at the seam &middot; one cycling message per phase &middot; MB only while downloading &middot; clock only after it<br>
+    <b>Settled</b> &nbsp;title / subtext / bar &middot; 88 &times; 5 &middot; handoff at the seam &middot; words left, number right &middot; MB only while downloading &middot; clock only after it<br>
     <b>Open</b> &nbsp;title weight and size &middot; subtext size and opacity &middot; three segments or eight<br>
     <b>Component</b> &nbsp;WarmUpLine &mdash; App/T2SReader/Design/WarmUpVeil.swift:264<br>
     <b>Faces</b> &nbsp;the app bundles Inter Regular / Medium / SemiBold / Bold
@@ -199,9 +199,10 @@ li::marker{color:var(--ink3)}
   </div>
   <div class="note">
     <div class="eyebrow">What the loop shows</div>
-    <p><b>While downloading</b> &mdash; &ldquo;120 of 350 MB&rdquo; holds the left slot and counts up in place. The right slot cycles the reassurance. No clock: a download&rsquo;s remaining time is the least trustworthy number the app has, and the megabytes already say how far along it is.<br>
+    <p><b>Words left, number right</b> &mdash; always. The left slot holds the message, the right slot holds whatever is counting. Nothing swaps sides at any point in the sequence.<br>
+    <b>While downloading</b> &mdash; &ldquo;120 of 350 MB&rdquo; counts up in the right slot, in place, with no crossfade: the digits would blink once a second. No clock &mdash; a download&rsquo;s remaining time is the least trustworthy number the app has, and the megabytes already say how far along it is.<br>
     <b>At the seam</b> &mdash; the handoff. The 88 pt bar contracts to 46 and stays full while two 18 pt boxes grow beside it.<br>
-    <b>After the download</b> &mdash; the megabytes are done, so the reassurance moves left and the clock takes the right slot. This is the first moment a time appears, and it is backed by a real remembered duration.<br>
+    <b>After the download</b> &mdash; the megabytes are spent, so the same right slot swaps them for the clock. First time in the sequence a time appears, and the first time one is backed by a remembered duration.<br>
     <b>At ready</b> &mdash; the subtext row closes over 0.34 s and the bar rises to meet &ldquo;Voice ready&rdquo;. Nothing follows it but the fade, so there is no gap to reserve.</p>
   </div>
   <div class="toggles">
@@ -227,7 +228,7 @@ li::marker{color:var(--ink3)}
   <div class="shead">
     <div class="snum">03 / SUBTEXT</div>
     <h2>How faint is faint</h2>
-    <p>All four running the download state, so you are judging the row at its busiest &mdash; live megabytes on the left, cycling copy on the right. Below about 40% the megabytes stop being reliably legible on the bright ground under the glow&rsquo;s brightest breath. The clock, when it appears, is set one weight heavier than the copy beside it for the same reason.</p>
+    <p>All four running the download state &mdash; message on the left, live megabytes on the right. Below about 40% the megabytes stop being reliably legible on the bright ground under the glow&rsquo;s brightest breath, which is why the right slot is set one weight heavier than the words beside it.</p>
   </div>
   <div class="rail" id="subs"></div>
 </section>
@@ -236,22 +237,21 @@ li::marker{color:var(--ink3)}
   <div class="shead">
     <div class="snum">04 / WHAT GOES WHERE</div>
     <h2>Every phase, in three slots</h2>
-    <p>One message per phase, drawn from a deliberately small vocabulary. Only the download cycles &mdash; everywhere else the line is said once and left alone. The clock appears only where there is a real remembered duration behind it, and degrades into words and then into nothing rather than counting into the negative.</p>
+    <p>One message per phase, and almost all of them are the same message. Nothing cycles any more &mdash; &ldquo;one-time install&rdquo; covers the whole of a first launch, so it is simply stated once and left there while the number beside it moves. The remaining lines exist only where something specific has happened: a retry, a stall, a failure. The clock appears only where there is a real remembered duration behind it, and degrades into words and then into nothing rather than counting into the negative.</p>
   </div>
   <div class="tablewrap"><table>
     <thead><tr><th style="width:16%">Phase</th><th style="width:21%">Title <span style="font-weight:400;text-transform:none;letter-spacing:0">(fixed)</span></th><th style="width:23%">Lead slot</th><th style="width:24%">Trail slot</th><th>Bar</th></tr></thead>
     <tbody>
       <tr><td class="state">Checking</td><td class="str">Checking the voice</td><td class="dimc">&mdash;</td><td class="dimc">&mdash;</td><td>empty</td></tr>
-      <tr><td class="state">Waiting for Wi-Fi</td><td class="str">Waiting for Wi-Fi</td><td class="str">just this once</td><td class="dimc">&mdash;</td><td>empty, plain</td></tr>
-      <tr><td class="state">Downloading</td><td class="str">Downloading the voice</td><td class="str">120 of 350 MB <span class="dimc">live</span></td><td class="str">only this once <span class="dimc">&harr;</span> you can keep reading</td><td>plain</td></tr>
+      <tr><td class="state">Waiting for Wi-Fi</td><td class="str">Waiting for Wi-Fi</td><td class="str">one-time install</td><td class="dimc">&mdash;</td><td>empty, plain</td></tr>
+      <tr><td class="state">Downloading</td><td class="str">Downloading the voice</td><td class="str">one-time install</td><td class="str">120 of 350 MB <span class="dimc">live</span></td><td>plain</td></tr>
       <tr><td class="state">Retrying</td><td class="str">Download interrupted</td><td class="str">your place is kept</td><td class="str">6s <span class="dimc">ticking</span></td><td>plain, held</td></tr>
       <tr><td class="state">Preparing</td><td class="str">Preparing the voice</td><td class="str">one-time install</td><td class="str">0:40</td><td><span class="tag rec">segments</span></td></tr>
       <tr><td class="state">Warming, first</td><td class="str">Warming up the voice</td><td class="str">one-time install</td><td class="str">a few min</td><td>segments</td></tr>
-      <tr><td class="state">Warming, after update</td><td class="str">Warming up the voice</td><td class="str">after an update</td><td class="str">20s</td><td>plain</td></tr>
-      <tr><td class="state">Warming, normal</td><td class="str">Warming up the voice</td><td class="str">you can keep reading</td><td class="str">15s</td><td>plain</td></tr>
+      <tr><td class="state">Warming, normal</td><td class="str">Warming up the voice</td><td class="dimc">&mdash;</td><td class="str">15s</td><td>plain</td></tr>
       <tr><td class="state">Warming, spent</td><td class="str">Warming up the voice</td><td class="str">almost there</td><td class="dimc">&mdash;</td><td>plain</td></tr>
-      <tr><td class="state">Warming, stalled</td><td class="str">Still warming up</td><td class="str">it won&rsquo;t need to do this again</td><td class="dimc">&mdash;</td><td><span class="tag new">new</span> plain</td></tr>
-      <tr><td class="state">Cloud voice</td><td class="str">Reading in the cloud voice</td><td class="str">it will take over on its own</td><td class="str">about 2 min</td><td><span class="tag new">new</span> segments</td></tr>
+      <tr><td class="state">Warming, stalled</td><td class="str">Still warming up</td><td class="str">your phone is busy</td><td class="dimc">&mdash;</td><td><span class="tag new">new</span> plain</td></tr>
+      <tr><td class="state">Cloud voice</td><td class="str">Reading in the cloud voice</td><td class="dimc">&mdash;</td><td class="str">about 2 min</td><td><span class="tag new">new</span> segments</td></tr>
       <tr><td class="state">Ready</td><td class="str">Voice ready</td><td class="dimc">&mdash; row collapses &mdash;</td><td class="dimc">&mdash;</td><td>full, green</td></tr>
       <tr><td class="state">Ready, set building</td><td class="str">Voice ready</td><td class="str">finishing up in the background</td><td class="dimc">&mdash;</td><td><span class="tag new">new</span> full, green</td></tr>
       <tr><td class="state">Warm-up failed</td><td class="str">Voice unavailable</td><td class="str">reading in the system voice instead</td><td class="dimc">&mdash;</td><td><span class="tag bug">fix</span> amber, not green</td></tr>
@@ -288,11 +288,11 @@ li::marker{color:var(--ink3)}
     <tbody>
       <tr><td class="state">Title</td><td>Inter-Regular 11</td><td class="str">Inter-Medium 11, tracking &minus;0.01 em</td></tr>
       <tr><td class="state">Subtext row</td><td>&mdash;</td><td class="str">two slots: lead &middot; trail &middot; Inter-Regular 9.5 @ 50%</td></tr>
-      <tr><td class="state">Lead slot</td><td>&mdash;</td><td class="str">megabytes while downloading (tabular), otherwise the message</td></tr>
-      <tr><td class="state">Trail slot</td><td>&mdash;</td><td class="str">cycling copy while downloading, otherwise the clock (Medium, tabular)</td></tr>
+      <tr><td class="state">Lead slot</td><td>&mdash;</td><td class="str">the message &mdash; always words, never a number</td></tr>
+      <tr><td class="state">Trail slot</td><td>&mdash;</td><td class="str">megabytes while downloading, then the clock &mdash; tabular, Medium</td></tr>
       <tr><td class="state">Separator</td><td>&mdash;</td><td class="str">&ldquo;&middot;&rdquo; with 3.5 pt either side, only when both slots are filled</td></tr>
       <tr><td class="state">Slot width</td><td>&mdash;</td><td class="str">the current string, glided over 0.42 s so the row re-centres</td></tr>
-      <tr><td class="state">Cycle dwell</td><td>&mdash;</td><td class="str">3.2 s &middot; download only &middot; held on Reduce Motion</td></tr>
+      <tr><td class="state">Live values</td><td>&mdash;</td><td class="str">swapped in place, no crossfade &mdash; digits must not blink per second</td></tr>
       <tr><td class="state">Title &rarr; subtext</td><td>&mdash;</td><td class="str">2 pt &mdash; both animate to 0 on the ready beat</td></tr>
       <tr><td class="state">Subtext &rarr; bar</td><td>7 pt</td><td class="str">7 pt</td></tr>
       <tr><td class="state">Bar</td><td>120 &times; 3</td><td class="str">88 &times; 5, centred, nothing beside it</td></tr>
@@ -351,7 +351,7 @@ li::marker{color:var(--ink3)}
       <tr><td class="state">8</td><td>Stage load fails twice &rarr; unavailable</td><td><span class="tag bug">green &ldquo;Voice ready&rdquo;</span></td><td>Amber &ldquo;Voice unavailable&rdquo;</td></tr>
       <tr><td class="state">9</td><td>Model removed in Settings &rsaquo; Storage</td><td><span class="tag bug">green &ldquo;Voice ready&rdquo;</span></td><td>Suppress the beat</td></tr>
       <tr><td class="state">10</td><td>Cloud-first: hosted Heart speaking through the wait</td><td>Warm-up copy, as if silent</td><td><span class="tag rec">Its own title</span></td></tr>
-      <tr><td class="state">11</td><td>Play tapped mid-warm-up (catching up)</td><td>Glow stays, generic copy</td><td>&ldquo;you can keep reading&rdquo; covers it</td></tr>
+      <tr><td class="state">11</td><td>Play tapped mid-warm-up (catching up)</td><td>Glow stays, generic copy</td><td>Nothing extra &mdash; the clock is the answer to &ldquo;how long&rdquo;</td></tr>
       <tr><td class="state">12</td><td>System voice starts speaking</td><td>Glow leaves immediately</td><td><span class="tag keep">correct</span></td></tr>
       <tr><td class="state">13</td><td>Ready, CPU background set still compiling</td><td>Nothing, and the screen is held awake</td><td>&ldquo;finishing up in the background&rdquo; &mdash; the one Ready state that keeps its row</td></tr>
       <tr><td class="state">14</td><td>Reduce Motion on</td><td>Breath held at full</td><td>The download holds one string; everything else already static</td></tr>
@@ -369,11 +369,11 @@ li::marker{color:var(--ink3)}
   <div class="col stack">
     <ul>
       <li><b>Title weight</b> &mdash; Medium 11 or SemiBold 11. My read is Medium: SemiBold turns a transient status into a heading on a page someone is reading. &sect;02 has both at true scale.</li>
-      <li><b>Subtext</b> &mdash; 9.5 pt at 50% is what &sect;01 runs. &sect;03 has 9 / 9.5 / 10 and 40 / 50 / 60% so you can pick the pair, judged at the row&rsquo;s busiest.</li>
+      <li><b>Subtext</b> &mdash; 9.5 pt at 50% is what &sect;01 runs. &sect;03 has 9 / 9.5 / 10 and 40 / 50 / 60% so you can pick the pair, judged against live megabytes.</li>
       <li><b>Three segments or eight</b> &mdash; &sect;05 shows both. Three is calmer; eight is what the code actually knows.</li>
     </ul>
     <hr>
-    <p class="spec">Settled: handoff at the seam &middot; 88 &times; 5 centred and alone &middot; plain for the download &middot; one message per phase, cycling only while downloading &middot; megabytes persistent in the lead slot &middot; clock only after the download &middot; the row reserved mid-flow and collapsed at Ready. The three <span class="tag bug">fix</span> rows in &sect;04 land with the same change.</p>
+    <p class="spec">Settled: handoff at the seam &middot; 88 &times; 5 centred and alone &middot; plain for the download &middot; words left, number right, never swapping &middot; &ldquo;one-time install&rdquo; carries the whole first launch &middot; megabytes only while downloading, clock only after &middot; the row reserved mid-flow and collapsed at Ready. The three <span class="tag bug">fix</span> rows in &sect;04 land with the same change.</p>
   </div>
 </section>
 
@@ -578,7 +578,7 @@ li::marker{color:var(--ink3)}
           api.collapse(false);
           api.title.textContent = "Waiting for Wi-Fi";
           api.setWidths(plainWidths());
-          api.setLead("just this once");
+          api.setLead("one-time install");
           api.setTrail(null);
         }
         api.setFill(0);
@@ -587,22 +587,23 @@ li::marker{color:var(--ink3)}
           stage = "down";
           api.title.textContent = "Downloading the voice";
           api.setWidths(plainWidths());
-          // the megabytes hold the left slot; only the reassurance cycles, and no clock yet
-          api.setTrail(["only this once", "you can keep reading"]);
-          api.lead.box.classList.add("tabular");
-          api.trail.box.classList.remove("clockish");
+          // words left, number right — the right slot holds the megabytes now and the clock later
+          api.setLead("one-time install");
+          api.setTrail(null, false);
+          api.trail.box.classList.add("tabular");
         }
         var v = (s - A) / (B - A);
         api.setFill(v);
-        api.leadLive(mb(v));
+        api.trailLive(mb(v));
       } else if (s < C) {
         if (stage !== "prep") {
           stage = "prep";
           api.title.textContent = "Preparing the voice";
           api.setWidths(dividedWidths());                    // the handoff
-          // download done: the message moves left, the clock takes the right slot
+          // download done: the same right slot swaps megabytes for the clock
           api.setLead("one-time install");
           api.setTrail(null, true);
+          api.trail.box.classList.remove("tabular");
         }
         var f = eight ? 0.52 : THREE[0] / (THREE[0] + THREE[1] + THREE[2]);
         api.setFill(f + (1 - f) * 0.42 * ((s - B) / (C - B)));
@@ -611,7 +612,7 @@ li::marker{color:var(--ink3)}
         if (stage !== "warm") {
           stage = "warm";
           api.title.textContent = "Warming up the voice";
-          api.setLead("you can keep reading");
+          api.setLead("one-time install");
         }
         var base = eight ? 0.52 + 0.48 * 0.42 : 0.72;
         api.setFill(base + (1 - base) * ((s - C) / (D - C)));
@@ -638,8 +639,8 @@ li::marker{color:var(--ink3)}
     var api = makeLine(p, {cls: "w500"});
     sequence(api, p);
     host.appendChild(unit("The line, running &nbsp;<span class='pick'>◆</span>",
-      "Title in Medium 11 naming the phase. Under it one faint row of two slots — megabytes counting up on the left while the reassurance cycles on the right, then the message on the left and the clock on the right once the download is done. Bar 88 × 5, handing off into three at the seam, and the row closing at Ready. 26-second loop.",
-      "Inter-Medium 11 · Inter-Regular 9.5 @ 50% · 88 × 5 · handoff · dwell 3.2 s", p));
+      "Title in Medium 11 naming the phase. Under it one faint row of two slots: “one-time install” on the left the whole way through, and on the right the megabytes counting up, then the clock counting down once the download is done. Bar 88 × 5, handing off into three at the seam, and the row closing at Ready. 26-second loop.",
+      "Inter-Medium 11 · Inter-Regular 9.5 @ 50% · words left, number right · 88 × 5 · handoff", p));
 
     var p2 = phone();
     var line = el("div", "wline old");
@@ -682,8 +683,9 @@ li::marker{color:var(--ink3)}
       var api = makeLine(p, {cls: o[0]});
       api.title.textContent = "Downloading the voice";
       api.setWidths([W, 0, 0]);
-      api.setLead("120 of 350 MB", true);
-      api.setTrail("only this once");
+      api.setLead("one-time install");
+      api.setTrail("120 of 350 MB");
+      api.trail.box.classList.add("tabular");
       ramps.push(function(v){ api.setFill(0.34 + v * 0.03); });
       host.appendChild(unit(o[1], o[2], o[3], p));
     });
@@ -710,9 +712,9 @@ li::marker{color:var(--ink3)}
       var api = makeLine(p, {cls: o[0]});
       api.title.textContent = "Downloading the voice";
       api.setWidths([W, 0, 0]);
-      api.setTrail(["only this once", "you can keep reading"]);
-      api.lead.box.classList.add("tabular");
-      ramps.push(function(v){ api.setFill(v * 0.9); api.leadLive(mb(v * 0.9)); });
+      api.setLead("one-time install");
+      api.trail.box.classList.add("tabular");
+      ramps.push(function(v){ api.setFill(v * 0.9); api.trailLive(mb(v * 0.9)); });
       host.appendChild(unit(o[1], o[2], o[3], p));
     });
   })();

@@ -65,6 +65,18 @@ import T2SCore
         #expect((await engine.requests).count == renders)                           // both chapters: cache hits
     }
 
+    /// With nothing queued, the head and the two after it render in pieces: a route that turns five
+    /// seconds of speech into audio in ten would otherwise leave the player dry behind a head that
+    /// landed in three. The rest of the window renders whole.
+    @Test func theFirstThreeUtterancesAfterASeekRenderInPieces() async throws {
+        let (c, engine, doc, timeline) = twoChapterFixture()
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        let streamed = await engine.streamedRequests.map(\.spoken)
+        #expect(streamed == (0..<3).map { timeline[utterance: $0].spoken })
+        #expect(await engine.requests.count == timeline.utteranceCount)
+    }
+
     @Test func aLoadClearsTheHandoffAndNothingHandsOffWithoutADocument() {
         let (c, _, doc, timeline) = twoChapterFixture()
         c.handOff(to: "kokoro:local:af_heart", fromChapter: 0)

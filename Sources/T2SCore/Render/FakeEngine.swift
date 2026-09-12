@@ -24,6 +24,9 @@ public actor FakeEngine: SynthesisEngine {
     /// rather than parking.
     private var pieceReleases = 0
     public private(set) var requests: [SynthesisRequest] = []
+    /// The requests that came through `synthesizeStreaming`, in order — which utterances a plan
+    /// asked for in pieces.
+    public private(set) var streamedRequests: [SynthesisRequest] = []
 
     public init(secondsPerCharacter: TimeInterval = 0.05, simulatedRTF: Double? = nil, timeSource: ManualTimeSource? = nil,
                 pieceCount: Int = 1, concurrentRenders: Int = 1, rendersOnDevice: Bool = true) {
@@ -124,6 +127,7 @@ public actor FakeEngine: SynthesisEngine {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
+                    await self.noteStreamed(request)
                     let whole = try await self.synthesize(request)
                     let samples = whole.audio.samples
                     let count = max(1, min(self.pieceCount, max(1, samples.count)))
@@ -163,6 +167,8 @@ public actor FakeEngine: SynthesisEngine {
     // the park so a *mid-park* cancellation also resumes it (from `resumeParkedPieces()`, hopping back
     // onto the actor since `onCancel` itself runs outside actor isolation) — the resumed call then
     // returns here, and the caller's `try Task.checkCancellation()` throws and ends the stream.
+    private func noteStreamed(_ request: SynthesisRequest) { streamedRequests.append(request) }
+
     private func failIfAsked(afterPiece ordinal: Int) throws {
         if let failAfterPiece, ordinal == failAfterPiece { throw SynthesisError.failed("failed after piece \(ordinal)") }
     }

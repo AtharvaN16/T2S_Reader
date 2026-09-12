@@ -108,6 +108,8 @@ public final class PlaybackCoordinator {
     /// ceiling `refreshRates` raises back towards as the measured RTF recovers; a load leaves it,
     /// since the listener's choice of speed outlives the book.
     private var requestedRate: Double = 1
+    /// How many utterances from the head render in pieces when nothing is queued.
+    static let urgentUtterances = 3
     private var lastPlayed: UUID?
     /// Index of the segment at the head of the player and the player's consumed time when that
     /// segment started (negative right after a seek into the middle of an utterance). Index-anchored
@@ -494,14 +496,18 @@ public final class PlaybackCoordinator {
             }
         }
         // Nothing queued: the next `fill()` will wait on the head, so the head renders in pieces and
-        // the first sound needs one short piece, not the whole utterance (audit #2, Plan 14).
-        let streamIndex = queuedCount == 0 && streaming == nil ? headIndex : nil
+        // the first sound needs one short piece, not the whole utterance (audit #2, Plan 14). The
+        // two after it render in pieces too: a route that turns five seconds of speech into audio
+        // in ten — the mirrors — would otherwise leave the player dry behind a head that landed in
+        // three, and pieces keep landing every few seconds while the buffer fills. Only the head's
+        // pieces reach the player; the others' are stored whole, sooner.
+        let urgent: Range<Int>? = queuedCount == 0 && streaming == nil ? headIndex ..< headIndex + Self.urgentUtterances : nil
         let requests = RenderPolicy.plan(input).map { job in
             RenderRequest(job: job,
                           key: renderKey(for: document, timeline: timeline, utteranceIndex: job.utteranceIndex),
                           spoken: timeline[utterance: job.utteranceIndex].spoken,
                           voiceID: voiceID(forUtterance: job.utteranceIndex, in: timeline, document: document),
-                          stream: job.utteranceIndex == streamIndex && job.tier == .playAhead)
+                          stream: urgent?.contains(job.utteranceIndex) == true && job.tier == .playAhead)
         }
         submitsInFlight += 1
         let scheduler = self.scheduler

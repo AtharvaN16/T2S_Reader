@@ -131,15 +131,14 @@ struct ReaderTextView: UIViewRepresentable {
         /// Flattened offset of the word being spoken: everything before it has been read. Nil before
         /// the first word lands, when the whole document is still "coming".
         private var readBoundary: Int?
-        /// The word a tap has offered to continue from: brightened and underlined until taken up.
+        /// The word a tap has offered to continue from, in `accent` until it is taken up or dropped.
+        /// No rule under it: that wanted a layer hand-synced to a scrolling coordinate space, which
+        /// failed three ways, while the colour — the same mechanism the read-along itself uses — is
+        /// the one thing here that was ever measured working (owner asked for the simplest, 2026-09-12).
         private var previewRange: Range<Int>?
         /// The marked word's box in content coordinates, kept so a scroll can re-report it.
         private var previewBox: CGRect?
-        /// Under the glyphs, its bounds origin tracking the content offset — the underline is drawn
-        /// here because `setRenderingAttributes` carries colour, not `underlineStyle` (measured:
-        /// the attribute is accepted and never painted, 2026-09-12).
-        private let overlay = UIView()
-        private let underline = CAShapeLayer()
+
         /// The word crossing from unread to read, eased rather than snapped (owner, 2026-09-12).
         private var fade: (range: Range<Int>, from: UIColor, to: UIColor, start: CFTimeInterval)?
         /// Words waiting their turn. Each takes the same `fadeSeconds`, whatever the speech is
@@ -168,25 +167,6 @@ struct ReaderTextView: UIViewRepresentable {
 
         func attach(_ view: UITextView) {
             self.view = view
-            overlay.isUserInteractionEnabled = false
-            overlay.backgroundColor = .clear
-            overlay.layer.addSublayer(underline)
-            view.addSubview(overlay)                                   // over the glyphs, not behind them
-            syncOverlay()
-        }
-
-        private func syncOverlay() {
-            guard let view else { return }
-            overlay.frame = view.bounds
-            overlay.bounds = CGRect(origin: view.contentOffset, size: view.bounds.size)
-            // The shape layer is given the same rectangle rather than left at zero size: a sublayer
-            // with no bounds of its own does not inherit the overlay's shifted origin, so a path in
-            // content coordinates was being drawn a whole scroll offset away (owner, 2026-09-12).
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            underline.frame = overlay.bounds
-            underline.bounds = overlay.bounds
-            CATransaction.commit()
         }
 
         // MARK: The read/unread boundary
@@ -220,7 +200,6 @@ struct ReaderTextView: UIViewRepresentable {
             guard let view else { return }
             guard force || (!view.isDragging && !view.isDecelerating) else { return }
             view.textLayoutManager?.textViewportLayoutController.layoutViewport()
-            if previewRange != nil { view.bringSubviewToFront(overlay) }   // laying out re-stacks the canvas
         }
 
         /// States both sides from scratch. Also the light/dark path: the dimmed colour is resolved
@@ -260,8 +239,8 @@ struct ReaderTextView: UIViewRepresentable {
             guard let current = fade else { endFade(); return }
             let t = min(1, (CACurrentMediaTime() - current.start) / Self.fadeSeconds)
             if t >= 1 {
+                markRead(current.range)
                 fade = nil
-                collapseRead()
                 startNextFade()
                 if fade == nil { endFade(); return }
             } else {
@@ -271,10 +250,11 @@ struct ReaderTextView: UIViewRepresentable {
             repaint()
         }
 
-        /// Everything read, stated as one run. A word was being given a run of its own as it
-        /// landed, and those piled up for the whole session — TextKit consults that map for every
-        /// fragment it lays out, so scrolling back over text already read grew slower the longer
-        /// the book had been playing (owner, 2026-09-12). Restating the span collapses them.
+        /// Everything read, stated as one run. A word is given a run of its own as it lands, and
+        /// those pile up — TextKit consults that map for every fragment it lays out, so scrolling
+        /// back over text already read grew slower the longer the book had been playing (owner,
+        /// 2026-09-12). Collapsing them is done as a drag begins, not per word: restating the whole
+        /// span on every word made the page flicker.
         private func collapseRead() {
             guard let boundary = readBoundary else { return }
             markRead(0..<boundary)
@@ -295,19 +275,13 @@ struct ReaderTextView: UIViewRepresentable {
         private func markPreview(_ range: Range<Int>) {
             clearPreview()
             previewRange = range
-            paint(UIColor(Tokens.ink), over: range)
+            // `accent`, not `ink`: brightening to the read colour said nothing at all on a word
+            // already read, which is half the page (owner, 2026-09-12).
+            paint(UIColor(Tokens.accent), over: range)
             let boxes = rects(for: range)
             guard let first = boxes.first else { repaint(); return }
             let box = boxes.dropFirst().reduce(first) { $0.union($1) }
             previewBox = box
-            let rule = UIBezierPath(roundedRect: CGRect(x: box.minX, y: box.maxY - 1,
-                                                        width: box.width, height: 2), cornerRadius: 1)
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            underline.fillColor = UIColor(Tokens.ink).resolvedColor(with: view?.traitCollection ?? .current).cgColor
-            underline.path = rule.cgPath
-            syncOverlay()
-            CATransaction.commit()
             reportPreviewRect()
             repaint(force: true)               // a tap during a glide must still show its mark
         }
@@ -323,7 +297,6 @@ struct ReaderTextView: UIViewRepresentable {
             guard let range = previewRange else { return }
             previewRange = nil
             previewBox = nil
-            underline.path = nil
             onPreviewRect?(nil)
             if let boundary = readBoundary, range.lowerBound >= boundary {
                 markUnread(range)
@@ -362,11 +335,10 @@ struct ReaderTextView: UIViewRepresentable {
             }
         }
 
-        /// One colour over a range, with no underline — which also wipes a preview's.
+        /// One colour over a range.
         private func paint(_ colour: UIColor, over range: Range<Int>) {
             guard let manager = view?.textLayoutManager, let textRange = textRange(range) else { return }
-            manager.setRenderingAttributes([.foregroundColor: colour,
-                                            .underlineStyle: NSUnderlineStyle().rawValue], for: textRange)
+            manager.setRenderingAttributes([.foregroundColor: colour], for: textRange)
         }
 
         /// What the run at `offset` was typeset in — `ink`, or the byline's `ink2`.
@@ -542,7 +514,7 @@ struct ReaderTextView: UIViewRepresentable {
 
         /// The run of non-space around `offset` in the flattened string: the word under the finger.
         /// A tap that lands between two words lands *on the space*, and marking that gave a rule
-        /// under a blank — the pill arrived with nothing underlined (owner, 2026-09-12). The nearer
+        /// under a blank — the pill arrived with no word marked (owner, 2026-09-12). The nearer
         /// neighbour is taken instead, so every tap marks a word.
         private func wordBounds(around offset: Int) -> Range<Int> {
             guard let content = view?.textLayoutManager?.textContentManager as? NSTextContentStorage,
@@ -600,10 +572,10 @@ struct ReaderTextView: UIViewRepresentable {
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
             dragOrigin = scrollView.contentOffset.y
+            collapseRead()          // the one moment the accumulated runs cost anything
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            syncOverlay()
             if previewRange != nil { reportPreviewRect() }
             if pressOrigin == nil, let origin = dragOrigin,
                abs(scrollView.contentOffset.y - origin) > Self.strayDistance {

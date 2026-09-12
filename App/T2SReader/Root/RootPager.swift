@@ -111,11 +111,6 @@ struct RootPager: View {
         // row the screen goes, and a fixed frame plus `ignoresSafeArea` alone cannot tell it.
         GeometryReader { geo in
             ZStack(alignment: .bottom) {
-                // First in the stack, so every page's content draws over it: the pages carry no
-                // ground of their own any more (this view's `.background` below is the one ground
-                // for all three), which is what lets the glow read as light behind them.
-                WarmUpVeil()
-
                 TabView(selection: $page) {
                     CollectionPage().tag(RootPage.collection)
                     QueuePage().tag(RootPage.queue)
@@ -132,13 +127,19 @@ struct RootPager: View {
                     bottomFill(inset: geo.safeAreaInsets.bottom)
                         .transition(.opacity)
                 }
-                // The bar paints the glow itself while the warm-up shows, so bar and page are one
-                // surface; the warm-up's line rides over it. `warm` is always on and `WarmGround`
-                // decides: gating it on `isShowing` here swapped the bar back to flat ground on the
-                // frame the warm-up ended, and that opaque band covered the top of the green before
-                // the veil under it had finished fading (owner, 2026-09-12). Both now cross the
-                // same fade, so the glow leaves the bar and the page together.
-                TopFade(inset: geo.safeAreaInsets.top, warm: true)
+                // The bar is the bar again — plain ground, its own job — and the glow goes over it
+                // rather than being painted by it (owner, 2026-09-12: "why can't the glow stay on a
+                // higher z index?"). It used to be the other way round: a `WarmUpVeil` at the back of
+                // this stack, under the pages, with the bar painting the same ramp so the two met
+                // without a join. That only ever worked while every layer between the veil and the
+                // bar stayed transparent, and where one was not, the glow was cut off at the bar's
+                // foot — the Voice page's seam of 2026-09-10, and the cut the owner kept seeing here.
+                // The rim is the glow with no ground under it, so laid on top it needs nothing
+                // underneath to cooperate: one layer, uncuttable, and the line still rides over it.
+                TopFade(inset: geo.safeAreaInsets.top)
+                WarmRim(edge: .top)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .ignoresSafeArea(edges: .top)
                 WarmUpLine(band: geo.safeAreaInsets.top)
 
                 if !chrome.isSubpageOpen {

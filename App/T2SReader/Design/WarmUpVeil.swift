@@ -254,10 +254,21 @@ struct WarmRamp: View {
 /// The glow with no ground under it: the wash and the lit bezel alone, transparent everywhere else,
 /// so it can be laid over something that has already painted (owner, 2026-09-12 — the bottom of the
 /// pager is an opaque `ground` fill drawn over the veil, and it was covering the foot of the glow).
-/// Flipped for the bottom, so the same lit edge faces the foot of the screen.
+/// `edge` says which way the lit edge faces: `.bottom` flips it to the foot of the screen, `.top`
+/// leaves it as `WarmRamp` draws it.
+///
+/// **This is the glow that can go on top.** `WarmRamp` cannot: it is opaque on purpose — it carries
+/// its own `ground` so a bar painting it over the veil shows exactly the veil's pixels — so raising
+/// it above the pages would hide them. That is why every bar paints the ramp itself instead of the
+/// glow being drawn over the bars. The catch is that the trick only holds while *everything* between
+/// the veil and the bar is transparent; the moment one layer is not, the glow is cut off at the
+/// bar's foot with nothing to say so (the Voice page, 2026-09-10). Laid over the bar instead, this
+/// view needs nothing underneath to cooperate.
 struct WarmRim: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Which edge of the screen the lit rim faces.
+    var edge: VerticalEdge = .bottom
 
     var body: some View {
         let showing = WarmUpVeil.isShowing(env)
@@ -273,7 +284,7 @@ struct WarmRim: View {
                     WarmRamp.bezel(pulse: pulse, light: light)
                 }
                 .frame(height: WarmRamp.height)
-                .scaleEffect(y: -1, anchor: .center)
+                .scaleEffect(y: edge == .bottom ? -1 : 1, anchor: .center)
             }
                 .frame(height: WarmRamp.height)
                 .transition(.opacity)

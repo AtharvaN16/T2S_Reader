@@ -6,8 +6,9 @@ import T2SApp
 /// and the book's passage drops to a quote beneath them; with no note the passage keeps the
 /// headline. The list then reads as a notebook rather than a second copy of the book.
 ///
-/// The row is tappable *and* carries a Listen pill. Two targets for one action is usually a fault;
-/// it is not one here, because both do the same thing and a mis-tap therefore costs nothing.
+/// Tapping the row opens the note in full; only the Listen pill plays (owner, 2026-09-12). The two
+/// targets used to do the same thing, which left no way to read a long bookmark without starting
+/// the audio.
 struct BookmarkRow: View {
     var entry: BookmarkEntry
     var onJump: () -> Void
@@ -32,15 +33,19 @@ struct BookmarkRow: View {
                     }
             }
             HStack(spacing: 8) {
-                Pill(label: "Listen", glyph: "play.fill", style: .selected, action: onJump)
+                // The Home row's grey play pill, the app's own (owner, 2026-09-12); writing the
+                // note is the dark one, since reading the row is what a tap now does. The hairline
+                // is for the dark: this sheet is `raised`, and `surface` on it is the same grey.
+                Pill(label: "Listen", glyph: "play.fill", style: .soft, action: onJump)
+                    .overlay(Capsule().strokeBorder(Tokens.ink3, lineWidth: 1).allowsHitTesting(false))
                 Pill(label: entry.hasNote ? "Edit note" : "Add a note", glyph: "square.and.pencil",
-                     style: .soft, action: onEditNote)
+                     style: .selected, action: onEditNote)
             }
             .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .onTapGesture(perform: onJump)
+        .onTapGesture(perform: onEditNote)
         .contextMenu {
             Button(action: onEditNote) {
                 Label(entry.hasNote ? "Edit note" : "Add a note", systemImage: "square.and.pencil")
@@ -49,8 +54,8 @@ struct BookmarkRow: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(entry.headline), \(meta)")
-        .accessibilityHint("Plays from this bookmark")
-        .accessibilityAction(named: entry.hasNote ? "Edit note" : "Add a note", onEditNote)
+        .accessibilityHint("Opens the note")
+        .accessibilityAction(named: "Listen", onJump)
         .accessibilityAction(named: "Delete bookmark", onDelete)
     }
 }

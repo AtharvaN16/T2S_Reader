@@ -97,6 +97,9 @@ public final class BookmarkListModel {
         let offset = (0..<utterance.source.utf16.count).contains(raw) ? raw : 0
         // A bookmark saved with its block of text (`PlayerModel.saveBookmark`) shows that block from
         // its start; an older one, the timeline's text from the bookmark's own word.
+        // `offset` counts UTF-16 units, as every offset in `Position` does.
+        let source = bookmark.passageText
+            ?? String(utterance.source[String.Index(utf16Offset: offset, in: utterance.source)...])
         let passage = bookmark.passageText.map { BookmarkSnippet.make(from: $0, offset: 0) }
             ?? BookmarkSnippet.make(from: utterance.source, offset: offset)
         let start = index.time(at: playhead)
@@ -104,6 +107,7 @@ public final class BookmarkListModel {
                              position: bookmark.position,
                              chapterTitle: chapter,
                              passage: passage,
+                             fullPassage: source,
                              userNote: bookmark.userNote,
                              timeSeconds: start,
                              endSeconds: start + utterance.duration.seconds,

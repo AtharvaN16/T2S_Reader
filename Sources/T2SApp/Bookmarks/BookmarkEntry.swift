@@ -14,6 +14,9 @@ public struct BookmarkEntry: Identifiable, Hashable, Sendable {
     public let chapterTitle: String
     /// The book's words at the bookmark, trimmed for a row.
     public let passage: String
+    /// The same words untrimmed, for a screen with room to print them — the note editor shows the
+    /// whole of what is being annotated (owner, 2026-09-12). Falls back to `passage`.
+    public let fullPassage: String
     /// The reader's own note, nil or blank when they have written none.
     public let userNote: String?
     /// Seconds at 1x from the document start.
@@ -22,12 +25,13 @@ public struct BookmarkEntry: Identifiable, Hashable, Sendable {
     public let endSeconds: TimeInterval
     public let createdAt: Date
 
-    public init(id: UUID, position: Position, chapterTitle: String, passage: String, userNote: String?,
-                timeSeconds: TimeInterval, endSeconds: TimeInterval, createdAt: Date) {
+    public init(id: UUID, position: Position, chapterTitle: String, passage: String, fullPassage: String? = nil,
+                userNote: String?, timeSeconds: TimeInterval, endSeconds: TimeInterval, createdAt: Date) {
         self.id = id
         self.position = position
         self.chapterTitle = chapterTitle
         self.passage = passage
+        self.fullPassage = fullPassage ?? passage
         self.userNote = userNote
         self.timeSeconds = timeSeconds
         self.endSeconds = endSeconds

@@ -24,22 +24,24 @@ struct Toast: View {
     var onDismiss: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(content.title).typeRole(.pill).foregroundStyle(Tokens.ground)
                 if let detail = content.detail {
                     Text(detail).typeRole(.meta).foregroundStyle(Tokens.ground.opacity(0.65)).lineLimit(1)
                 }
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: 12)
             if let label = content.actionLabel {
                 Pill(label: label, glyph: "square.and.pencil", style: .soft, action: onAction)
             }
         }
-        .padding(.leading, 16)
-        .padding(.trailing, content.actionLabel == nil ? 16 : 8)
-        .padding(.vertical, 10)
-        .background(Tokens.ink, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .padding(.leading, 18)
+        .padding(.trailing, content.actionLabel == nil ? 18 : 12)
+        .padding(.vertical, 14)
+        // Squarer than it was: at 16 on a short bar it read as a lozenge, and the message wants
+        // the shape of a card (owner, 2026-09-12).
+        .background(Tokens.ink, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .contentShape(Rectangle())
         .onTapGesture(perform: onDismiss)
         .transition(.move(edge: .bottom).combined(with: .opacity))

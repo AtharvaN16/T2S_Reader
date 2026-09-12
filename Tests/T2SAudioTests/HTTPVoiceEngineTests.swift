@@ -306,6 +306,45 @@ import T2SCore
         #expect(await ordinary.value == 0)
     }
 
+    /// A mirror that cannot be reached, or answers a server error — a dyno mid-restart — is passed
+    /// over for the next one; the line fails only when every mirror is down.
+    @Test func aMirrorThatIsDownIsPassedOver() async throws {
+        let one = try #require(URL(string: "https://one.example/v1/audio/speech"))
+        let two = try #require(URL(string: "https://two.example/v1/audio/speech"))
+        let configuration = HTTPVoiceConfiguration(endpoints: [one, two], model: "m", voice: "v", requestRatePerMinute: 60)
+        let fine = TestURLProtocol.pcmResponse(samples: [7])
+
+        let unreachable = TestURLProtocol.session(byHost: ["one.example": .unreachable, "two.example": fine])
+        let engine = HTTPVoiceEngine(configuration: configuration, key: { "test-key" }, session: unreachable, limiterSleeper: { _ in })
+        #expect(try await engine.synthesize(.init(spoken: "x", voiceID: "cloud:x:v")).audio.samples.count == 1)
+        #expect(TestURLProtocol.allRequests.compactMap { $0.url?.host } == ["one.example", "two.example"])
+
+        let restarting = TestURLProtocol.session(byHost: ["one.example": TestURLProtocol.Response(status: 503, headers: [:], data: Data("<html>".utf8)), "two.example": fine])
+        let engine2 = HTTPVoiceEngine(configuration: configuration, key: { "test-key" }, session: restarting, limiterSleeper: { _ in })
+        #expect(try await engine2.synthesize(.init(spoken: "x", voiceID: "cloud:x:v")).audio.samples.count == 1)
+        #expect(TestURLProtocol.allRequests.compactMap { $0.url?.host } == ["one.example", "two.example"])
+
+        let allDown = TestURLProtocol.session(byHost: ["one.example": .unreachable, "two.example": .unreachable])
+        let engine3 = HTTPVoiceEngine(configuration: configuration, key: { "test-key" }, session: allDown, limiterSleeper: { _ in })
+        await #expect(throws: HTTPVoiceError.transport("request failed")) {
+            try await engine3.synthesize(.init(spoken: "x", voiceID: "cloud:x:v"))
+        }
+        #expect(TestURLProtocol.allRequests.count == 2)
+    }
+
+    /// A rejected key is the reader's to fix, not a mirror's fault: it is never walked.
+    @Test func aRejectedKeyIsNotWalked() async throws {
+        let one = try #require(URL(string: "https://one.example/v1/audio/speech"))
+        let two = try #require(URL(string: "https://two.example/v1/audio/speech"))
+        let configuration = HTTPVoiceConfiguration(endpoints: [one, two], model: "m", voice: "v", requestRatePerMinute: 60)
+        let session = TestURLProtocol.session(byHost: ["one.example": TestURLProtocol.Response(status: 401, headers: [:], data: Data()), "two.example": TestURLProtocol.pcmResponse(samples: [7])])
+        let engine = HTTPVoiceEngine(configuration: configuration, key: { "test-key" }, session: session, limiterSleeper: { _ in })
+        await #expect(throws: HTTPVoiceError.server(status: 401, message: "key rejected")) {
+            try await engine.synthesize(.init(spoken: "x", voiceID: "cloud:x:v"))
+        }
+        #expect(TestURLProtocol.allRequests.count == 1)
+    }
+
     @Test func rateLimiterSpacesRequestsAndHonoursRetryAfter() async {
         let clock = TestRateClock()
         let limiter = RequestRateLimiter(requestsPerMinute: 60, now: { clock.now }, sleeper: { seconds in
@@ -326,6 +365,10 @@ final class TestURLProtocol: URLProtocol, @unchecked Sendable {
         var status: Int
         var headers: [String: String]
         var data: Data
+
+        /// A host that cannot be reached at all: the load fails with a connection error, as a dyno
+        /// mid-restart does.
+        static let unreachable = Response(status: 0, headers: [:], data: Data())
     }
 
     private static let lock = NSLock()
@@ -409,6 +452,10 @@ final class TestURLProtocol: URLProtocol, @unchecked Sendable {
             ?? Self.response
         Self.lock.unlock()
 
+        if response.status == 0 {
+            client?.urlProtocol(self, didFailWithError: URLError(.cannotConnectToHost))
+            return
+        }
         let urlResponse = HTTPURLResponse(url: request.url!, statusCode: response.status, httpVersion: nil,
                                           headerFields: response.headers)!
         client?.urlProtocol(self, didReceive: urlResponse, cacheStoragePolicy: .notAllowed)

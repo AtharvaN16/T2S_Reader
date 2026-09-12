@@ -264,6 +264,8 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
     static let headPieceCharacters = 80
     /// The pause between a head's pieces, matching what the server puts between its own chunks.
     static let headPieceGap: TimeInterval = 0.08
+    /// How long a mirror that could not be reached, or answered a server error, is left alone.
+    static let downMirrorPause: TimeInterval = 30
 
     /// The head utterance the player is waiting on (Plan 14): cut at clauses into short pieces,
     /// rendered at once, each urgent for the next free mirror, and yielded in order the moment
@@ -354,6 +356,11 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
             } catch HTTPVoiceError.rateLimited(let retryAfter) {
                 await route.limiter.deferUntil(seconds: retryAfter)
                 refused = .rateLimited(retryAfter: retryAfter)
+            } catch let error as HTTPVoiceError where error.isMirrorDown {
+                // Unreachable, or a server error — a dyno mid-restart: the next mirror takes the
+                // line, and this one is left alone for about as long as a dyno takes to come back.
+                await route.limiter.deferUntil(seconds: Self.downMirrorPause)
+                refused = error
             }
         }
         throw refused ?? HTTPVoiceError.transport("no mirror answered")
@@ -517,5 +524,18 @@ private struct WireTiming: Decodable {
         case start, end
         case startUTF16 = "start_utf16"
         case endUTF16 = "end_utf16"
+    }
+}
+
+
+private extension HTTPVoiceError {
+    /// A mirror that is down, as opposed to one that refused the request: unreachable, or a 5xx.
+    /// A rejected key or a rejected request would only repeat on the next mirror.
+    var isMirrorDown: Bool {
+        switch self {
+        case .transport: true
+        case .server(let status, _): (500...599).contains(status)
+        default: false
+        }
     }
 }

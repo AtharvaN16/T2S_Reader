@@ -93,6 +93,18 @@ final class KokoroStatusModel {
     /// Whether the beat has been held — which is what asks the glow to go, in place of clearing
     /// ``readyAt``. Both are put back when a fresh warm-up begins.
     private(set) var readyBeatEnded = false
+    /// Whether the wait ``readyAt`` dates ended in failure rather than in a voice. The beat used to
+    /// be unconditional: ``update(_:)`` began it on *any* exit from a warming state, and both
+    /// ``KokoroStatus/unavailable`` and ``KokoroStatus/removed`` are non-warming — so a download that
+    /// failed, a stage load that failed twice, and a model the reader had just deleted in Storage all
+    /// ended on the green light and the words "Voice ready", and then the glow faded and the book
+    /// read in the system voice with nothing said (owner, 2026-09-12). A failure now gets its own
+    /// ending: amber, held still, and a line saying what happens to the book instead.
+    private(set) var endedFailed = false
+    /// Which half of the setup the failure belongs to — a download will try again by itself next
+    /// launch, a stage load will not, and the two want different words. Read from the phase the wait
+    /// was in when it failed rather than from the reader-facing string, which is not a type.
+    private(set) var endedFailedDuringInstall = false
     /// Warming is over and the green is still owed its beat: with ``KokoroStatus/isWarming``, what
     /// puts the glow on screen (`WarmUpVeil.isShowing`).
     var isHoldingReadyBeat: Bool { readyAt != nil && !readyBeatEnded }
@@ -101,9 +113,13 @@ final class KokoroStatusModel {
     /// ramp eases the breath up to full and the colour across over `readyEase`, and this holds it
     /// there a moment before the glow goes (owner, 2026-09-12).
     static let readyBeat: Double = 2.0
+    /// How long an amber ending is held. Longer than the green: "Voice ready" is a tick to notice,
+    /// "Voice unavailable · reading in the system voice instead" is two clauses to read.
+    static let failedBeat: Double = 4.0
     private var readyBeatTask: Task<Void, Never>?
-    /// `T2S_WARMUP=green` holds the beat instead of ending it, so it can be photographed.
-    private static let holdsReadyBeat = ProcessInfo.processInfo.environment["T2S_WARMUP"] == "green"
+    /// `T2S_WARMUP=green` and `=failed` hold the beat instead of ending it, so either ending can be
+    /// photographed. Both endings run the same timing, so holding either one holds the other.
+    private static let holdsReadyBeat = ["green", "failed"].contains(ProcessInfo.processInfo.environment["T2S_WARMUP"] ?? "")
     /// The install as it stands, while `status` is `.installing`.
     private(set) var installProgress: KokoroInstallProgress?
     /// The warm-up bar's high-water mark, 0…1, across however this launch's wait runs — install
@@ -116,6 +132,18 @@ final class KokoroStatusModel {
     /// so the bar holds at its peak through a reset and picks up climbing once the raw value passes
     /// it again, rather than ever retreating.
     private(set) var warmUpProgressFloor: Double = 0
+    /// Whether this launch paid for an install before its stages, which is what decides whether the
+    /// bar has three phases to divide into or is one plain run. Set when the install begins and put
+    /// back with the floor, so an everyday launch's six seconds are never drawn as three parts.
+    private(set) var launchIncludedInstall = false
+    /// When ``installProgress`` was last set. A `.retrying` case carries the delay it was scheduled
+    /// with and nothing else, so a line drawn a second later has no way to count it down — the
+    /// number simply sat there reading "trying again in 7 s" for the whole seven seconds. With the
+    /// date, the line can subtract.
+    private(set) var installProgressAt = Date()
+    /// The share of the whole launch's bar the install owns, when there is one. Roughly measured:
+    /// the download and compile dominate a first launch, the stage load that follows is the tail.
+    static let installShare = 0.56
     /// Whether a foreground warm-up has built this install's compute plans (`KokoroWarmUpRecord`):
     /// what a background Prepare launch checks before it touches the engine. True in the everyday
     /// build, which has no plans to build.
@@ -131,6 +159,7 @@ final class KokoroStatusModel {
 
     func update(_ status: KokoroStatus) {
         let wasWarming = self.status.isWarming
+        let wasInstalling = { if case .installing = self.status { true } else { false } }()
         self.status = status
         if case .preparing = status {
             warmUpStarted = Date()
@@ -147,24 +176,45 @@ final class KokoroStatusModel {
         // a full bar and a green light.
         if !wasWarming, status.isWarming {
             warmUpProgressFloor = 0
+            launchIncludedInstall = false
             readyBeatTask?.cancel()
             readyAt = nil
             readyBeatEnded = false
+            endedFailed = false
+            endedFailedDuringInstall = false
         }
-        if wasWarming, !status.isWarming { beginReadyBeat() }
+        if case .installing = status { launchIncludedInstall = true }
+        // Leaving a warming state is not the same as succeeding at one. Only a voice that actually
+        // loaded earns the green; a failure gets the amber beat, and a model the reader deleted on
+        // purpose gets no beat at all — they already know, and the last thing that belongs on that
+        // screen is a celebration.
+        if wasWarming, !status.isWarming {
+            switch status {
+            case .available:
+                beginEndBeat(failed: false, duringInstall: false)
+            case .unavailable:
+                beginEndBeat(failed: true, duringInstall: wasInstalling)
+            case .removed, .notLinked, .checking, .installing, .preparing:
+                break
+            }
+        }
         if case .installing = status {} else { installProgress = nil }
     }
 
     /// The green beat: `readyAt` now, ``readyBeatEnded`` once it has been held, which is what takes
     /// the glow off the screen. Cancelling any beat already running keeps a second warm-up in the
     /// same launch (an install, then the stages) from cutting the first one's beat short.
-    private func beginReadyBeat() {
+    private func beginEndBeat(failed: Bool, duringInstall: Bool) {
         readyBeatTask?.cancel()
         readyAt = Date()
         readyBeatEnded = false
+        endedFailed = failed
+        endedFailedDuringInstall = failed && duringInstall
         guard !Self.holdsReadyBeat else { return }
+        // A failure is a sentence to read, not a tick to notice, so it is held longer than the green.
+        let beat = failed ? Self.failedBeat : Self.readyBeat
         readyBeatTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(Self.readyBeat))
+            try? await Task.sleep(for: .seconds(beat))
             guard !Task.isCancelled else { return }
             self?.readyBeatEnded = true
         }
@@ -172,7 +222,7 @@ final class KokoroStatusModel {
 
     func updateWarmUp(loaded: Int, total: Int) {
         warmUpStages = (loaded, total)
-        warmUpProgressFloor = max(warmUpProgressFloor, Double(loaded) / Double(max(1, total)))
+        bumpProgress(Double(loaded) / Double(max(1, total)), inInstall: false)
     }
 
     func updateInstall(_ progress: KokoroInstallProgress) {
@@ -182,7 +232,26 @@ final class KokoroStatusModel {
         } else {
             installProgress = progress
         }
-        warmUpProgressFloor = max(warmUpProgressFloor, installProgress?.fraction ?? 0)
+        installProgressAt = Date()
+        bumpProgress(installProgress?.fraction ?? 0, inInstall: true)
+    }
+
+    /// The floor, kept on one 0…1 scale across the whole launch rather than two runs of it. The
+    /// install's own fraction restarts at zero the moment the stage load begins, and a retried stage
+    /// load starts over from its first stage; on a single scale the bar simply holds at its peak
+    /// through either seam and picks up climbing when the raw value passes it again, which is what
+    /// stops it visibly retreating (owner, 2026-09-12). It also lets the bar be drawn in phases:
+    /// the install owns the first ``installShare`` of it, the stages the rest.
+    private func bumpProgress(_ local: Double, inInstall: Bool) {
+        let overall: Double
+        if !launchIncludedInstall {
+            overall = local
+        } else if inInstall {
+            overall = Self.installShare * local
+        } else {
+            overall = Self.installShare + (1 - Self.installShare) * local
+        }
+        warmUpProgressFloor = max(warmUpProgressFloor, min(1, overall))
     }
 
     func updateBackgroundSet(building: Bool) {
@@ -552,20 +621,36 @@ struct KokoroComposition {
         )
         #else
         log.notice("Kokoro engine not linked in this build")
-        // `T2S_WARMUP=1` (screenshots): the everyday build has no warm-up, so this stands in for
-        // one — `preparing` for the launch, with a remembered 12 s and stages ticking by.
+        // `T2S_WARMUP=…` (screenshots): the everyday build has no warm-up, so this stands in for
+        // one. `1` warms for as long as the screenshot needs; `ready` runs the green beat through
+        // once and `green` stops on it and holds; `failed` ends amber and holds there; `install`
+        // plays a first launch from the download through the handoff into the stages.
         let status = KokoroStatusModel(.notLinked)
         if let fake = ProcessInfo.processInfo.environment["T2S_WARMUP"] {
-            status.recordWarmUp(seconds: 12)
-            status.update(.preparing)
             Task { @MainActor in
+                if fake == "install" {
+                    status.update(.installing)
+                    let total = 350_000_000
+                    for step in stride(from: 0, through: 20, by: 1) {
+                        try? await Task.sleep(for: .seconds(0.6))
+                        status.updateInstall(.downloading(bytes: total / 20 * step, totalBytes: total))
+                    }
+                    for stage in 1...8 {
+                        try? await Task.sleep(for: .seconds(0.6))
+                        status.updateInstall(.compiling(stage: stage, totalStages: 8))
+                    }
+                }
+                status.recordWarmUp(seconds: 12)
+                status.update(.preparing)
                 for loaded in 1...8 {
                     try? await Task.sleep(for: .seconds(1.5))
                     status.updateWarmUp(loaded: loaded, total: 8)
                 }
-                // `T2S_WARMUP=1` leaves the glow warming for as long as the screenshot needs;
-                // `ready` runs the green beat through once, `green` stops on it and holds.
-                if fake != "1" { status.update(.available(isDebugOverride: true)) }
+                switch fake {
+                case "1": break
+                case "failed": status.update(.unavailable("The Kokoro voice could not be prepared."))
+                default: status.update(.available(isDebugOverride: true))
+                }
             }
         }
         return KokoroComposition(engines: [],

@@ -2,6 +2,7 @@
 import CoreGraphics
 import Foundation
 import SwiftUI
+import T2SApp
 import UIKit
 
 /// The one-time voice warm-up, shown wherever the reader is (owner, 2026-09-10, Tabby's launch
@@ -50,6 +51,10 @@ enum WarmUpVeil {
     static func isShowing(_ env: AppEnvironment) -> Bool {
         guard env.kokoroStatus.status.isWarming || env.kokoroStatus.isHoldingReadyBeat else { return false }
         if isFaked { return true }
+        // An amber ending outlasts whatever starts speaking underneath it. The fallback voice
+        // beginning mid-beat is exactly the moment the reader needs the line that explains it, and
+        // the rule below would take it off the screen on that frame.
+        if env.kokoroStatus.endedFailed { return true }
         // Sound from the phone's own voice means the wait is over. Sound from the hosted voice
         // means the wait is under way — Heart from the mirrors while Heart installs — and the
         // owner asked to watch it (cloud-first bootstrap, 2026-09-12), so the glow stays until green.
@@ -57,16 +62,38 @@ enum WarmUpVeil {
         return hostedSpeaking || !(env.player.isPlaying && !env.player.isCatchingUp)
     }
 
+    /// Whether the hosted voice is the one speaking through this wait.
+    static func isHostedSpeaking(_ env: AppEnvironment) -> Bool {
+        env.player.routedVoiceID?.hasPrefix("cloud:") == true
+    }
+
     /// Whether this warm-up has ended — the glow's last beat, green. Deliberately *not* the same
     /// gate as `isShowing`: it stays true right through the fade that `isShowing` going false
     /// starts, so the green, "Voice ready" and the full bar are what leaves the screen. The two
     /// parted company when the beat's end stopped clearing `readyAt` (`KokoroStatusModel`).
-    static func isReady(_ env: AppEnvironment) -> Bool { env.kokoroStatus.readyAt != nil }
+    static func isReady(_ env: AppEnvironment) -> Bool {
+        env.kokoroStatus.readyAt != nil && !env.kokoroStatus.endedFailed
+    }
+
+    /// Whether this wait ended amber. Shares ``isReady``'s timing — the same date, the same ease,
+    /// the same hold — and only the colour and the words differ, so a failure leaves the screen the
+    /// way a success does rather than flashing something new at the reader.
+    static func isFailed(_ env: AppEnvironment) -> Bool {
+        env.kokoroStatus.readyAt != nil && env.kokoroStatus.endedFailed
+    }
+
+    /// The colour this wait is ending in, or nil while it is still running.
+    static func endColour(_ env: AppEnvironment) -> Color? {
+        guard env.kokoroStatus.readyAt != nil else { return nil }
+        return env.kokoroStatus.endedFailed ? Tokens.accent : Tokens.glowReady
+    }
 
     /// How far into the green, 0…1, eased on the same curve the breath uses. The blue takes a second
     /// and a half to breathe in; the green takes the same to arrive, rather than cutting in over a
     /// quarter-second and reading as a flash (owner, 2026-09-12).
     static let readyEase: Double = 1.4
+
+    static func endSettle(_ env: AppEnvironment, now: Date) -> Double { readySettle(env, now: now) }
 
     static func readySettle(_ env: AppEnvironment, now: Date) -> Double {
         guard let readyAt = env.kokoroStatus.readyAt else { return 0 }
@@ -211,10 +238,16 @@ struct WarmRim: View {
         ZStack {
             if showing {
             TimelineView(.animation) { context in
-                let settle = WarmUpVeil.isReady(env) ? WarmUpVeil.readySettle(env, now: context.date) : 0
+                // Both endings ride the same curve: the breath eases up to full while the colour
+                // crosses over `readyEase`, so green and amber each arrive the way the blue moved.
+                // Amber settles to two thirds rather than full — a warning that keeps breathing at
+                // full reads as something still working on it, and nothing is.
+                let ending = WarmUpVeil.endColour(env)
+                let settle = ending != nil ? WarmUpVeil.endSettle(env, now: context.date) : 0
                 let breath = reduceMotion || WarmUpVeil.isFaked ? 1 : WarmRamp.pulse(at: context.date)
-                let pulse = breath + (1 - breath) * settle
-                let light = Tokens.glow.mix(with: Tokens.glowReady, by: settle)
+                let held = WarmUpVeil.isFailed(env) ? 0.66 : 1.0
+                let pulse = breath + (held - breath) * settle
+                let light = Tokens.glow.mix(with: ending ?? Tokens.glowReady, by: settle)
                 let glow = ZStack {
                     WarmRamp.wash(pulse: pulse, light: light)
                     WarmRamp.bezel(pulse: pulse, light: light)
@@ -255,24 +288,50 @@ struct WarmRim: View {
     }
 }
 
-/// The warm-up's one line and its hairline of progress, under the status bar, over the bar there.
-/// What it knows: the stage count as each compute plan finishes (`KokoroStatusModel.warmUpStages`,
-/// eight stages), and the last warm-up's length on this phone (`expectedWarmUpSeconds`). The bar is
-/// the larger of the two readings — stages are exact but coarse, the clock is smooth but a guess —
-/// and never claims done. A first launch after install has no remembered length, and says so.
+/// The warm-up's three rows, under the status bar, over whatever is drawn there.
+///
+/// **Title, subtext, bar** (owner, 2026-09-12). A weighted line naming the phase, which never
+/// moves. One faint row beneath it carrying two slots — words on the left, whatever is counting on
+/// the right — of which only the words ever change. Then the bar, centred, with nothing beside it.
+///
+/// **What goes in the right slot, and when.** The megabytes while a download runs, then the clock
+/// once one is over. Never both, and never the other way round: a download's remaining time is the
+/// least trustworthy number the app has and the megabytes already say how far along it is, so the
+/// first time a clock appears is also the first time one is backed by a remembered duration
+/// (`expectedWarmUpSeconds`). The slot holds still while the left one cycles, because the time is
+/// what a waiting reader is looking for and it cannot be the thing that rotates away.
+///
+/// **The row reserves its height, except at the end.** A phase with nothing to say keeps the row
+/// blank rather than closing it — `.checking` has no message, and a row that collapsed there would
+/// drop the bar 13 pt and pull it straight back when the download began. Ready is the exception:
+/// nothing follows it but the fade, so the row closes and the bar rises to meet "Voice ready"
+/// rather than leaving a gap under it.
+///
+/// Everything this view says is resolved by `WarmUpReading`, which is a plain value and is tested.
+/// This file only draws it.
 struct WarmUpLine: View {
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The safe-area top inset, from a host whose `GeometryProxy` still reports it: this view
     /// spans the screen with `ignoresSafeArea`, and a proxy under that reports the insets it now
     /// covers as zero.
     var band: CGFloat
 
+    /// 88 × 5 (owner, 2026-09-12, choosing between four widths at true scale): thicker than the
+    /// 120 × 3 hairline it replaces and narrower, so it reads as an object without becoming the
+    /// download bar that 80 × 6 looked like.
+    private static let barWidth: CGFloat = 88
+    private static let barHeight: CGFloat = 5
+    private static let segmentGap: CGFloat = 3
+
     var body: some View {
         let showing = WarmUpVeil.isShowing(env)
         ZStack {
             if showing {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    message(env.kokoroStatus, now: context.date)
+                // Half-second ticks: a retry counts down in whole seconds, and a one-second period
+                // lands the change up to a second late on half of them.
+                TimelineView(.periodic(from: .now, by: 0.5)) { context in
+                    line(reading(now: context.date), now: context.date)
                 }
                 .padding(.top, band + 8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -285,64 +344,191 @@ struct WarmUpLine: View {
         .animation(.easeInOut(duration: WarmUpVeil.fadeOut), value: showing)
     }
 
-    private func message(_ status: KokoroStatusModel, now: Date) -> some View {
-        // The green beat: the wait is over, so the line says so and the bar fills, rather than
-        // holding the last estimate — which reads as a countdown that stopped short.
-        let ready = WarmUpVeil.isReady(env)
-        let elapsed = status.warmUpStarted.map { now.timeIntervalSince($0) } ?? 0
-        let byStages = status.warmUpStages.map { Double($0.loaded) / Double(max(1, $0.total)) } ?? 0
-        let byClock = status.expectedWarmUpSeconds.map { min(0.92, elapsed / max(1, $0)) } ?? 0
-        let warming = status.status == .installing ? (status.installProgress?.fraction ?? 0) : max(byStages, byClock)
-        // Never below the high-water mark (`warmUpProgressFloor`): the raw signal above resets at
-        // the install-to-stages seam and on a retried stage load, and without this the bar visibly
-        // slid backward at either one (owner, 2026-09-12).
-        let progress = ready ? 1 : max(warming, status.warmUpProgressFloor)
-        return VStack(spacing: 7) {
-            Text(ready ? "Voice ready" : line(status, elapsed: elapsed))
-                .typeRole(.caption)
-                .foregroundStyle(Tokens.ink)
-            Capsule().fill(Tokens.ink3.opacity(0.6))
-                .frame(width: 120, height: 3)
-                .overlay(alignment: .leading) {
-                    Capsule().fill(Tokens.ink).frame(width: 120 * progress)
-                        .animation(.easeOut(duration: 0.6), value: progress)
-                }
-                .opacity(progress > 0 ? 1 : 0)
+    // MARK: drawing
+
+    @ViewBuilder
+    private func line(_ reading: WarmUpReading, now: Date) -> some View {
+        // The words go amber only on a failure. The bar also goes green on a success, so the fill
+        // and the glow finish on the same colour, but the title stays ink there — "Voice ready" in
+        // green over a green rim is the same thing said twice.
+        let tint: Color = reading.tone == .failed ? Tokens.accent : Tokens.ink
+        let barTint: Color = switch reading.tone {
+        case .failed: Tokens.accent
+        case .ready: Tokens.glowReady
+        case .waiting: Tokens.ink
+        }
+        // Read from the wall clock, like `WarmRamp.pulse`, rather than from `warmUpStarted` — that
+        // date is only set for `.preparing`, so anchoring to it left the whole download stuck on the
+        // first message. The cycle does not need an anchor, only a tick, and the wall clock has the
+        // side benefit that every copy on screen says the same thing on the same frame.
+        let message = reading.message(elapsed: now.timeIntervalSinceReferenceDate)
+        VStack(spacing: 0) {
+            Text(reading.title)
+                .font(.custom("Inter-Medium", size: 11, relativeTo: .caption2))
+                .tracking(-0.01 * 11)
+                .foregroundStyle(tint)
+
+            // `maxWidth: .infinity` matters: the clip below is only meant to hide the row as its
+            // height animates to zero, but a frame sized to the content clips sideways too — and
+            // because the row's width is itself animating between messages, it took a bite out of
+            // both ends of every swap ("ht take some time · 123 of 35").
+            subtext(message, value: reading.value, tint: tint)
+                .frame(maxWidth: .infinity,
+                       minHeight: reading.collapsesSubtext ? 0 : 13,
+                       maxHeight: reading.collapsesSubtext ? 0 : 13)
+                .opacity(reading.collapsesSubtext ? 0 : 1)
+                .padding(.top, reading.collapsesSubtext ? 0 : 2)
+                .clipped()
+
+            bar(reading, tint: barTint)
+                .padding(.top, 7)
         }
         .frame(maxWidth: .infinity)
+        .animation(.easeInOut(duration: 0.34), value: reading.collapsesSubtext)
     }
 
-    /// "Warming up the voice · about 6 s", or on a first launch "Warming up the voice · a few
-    /// minutes the first time". Past a minute and a half it counts in minutes (the owner's phone
-    /// remembered a 220 s warm-up, and the line read "about 220 s"). Once the estimate is spent,
-    /// "almost there" rather than a number that has gone wrong.
-    private func line(_ status: KokoroStatusModel, elapsed: TimeInterval) -> String {
-        if status.status == .installing { return Self.installLine(status.installProgress) }
-        guard let expected = status.expectedWarmUpSeconds else {
-            return "Warming up the voice · a few minutes the first time"
+    /// The faint row. The two slots sit either side of a separator that exists only when both of
+    /// them do — one slot alone is centred on its own, with no orphaned dot beside it. The message
+    /// crossfades in place while the row re-centres around it, so the change is one movement.
+    @ViewBuilder
+    private func subtext(_ message: String?, value: String?, tint: Color) -> some View {
+        HStack(spacing: 0) {
+            if let message {
+                Text(message)
+                    .font(.custom("Inter-Regular", size: 9.5, relativeTo: .caption2))
+                    .id(message)                                     // a new identity, so it crossfades
+                    // Opacity only. A rise of a few points is the nicer motion, but the row is
+                    // clipped to 13 pt so the lift is cut off half way up.
+                    .transition(.opacity)
+            }
+            if message != nil, value != nil {
+                Text("·").font(.custom("Inter-Regular", size: 9.5, relativeTo: .caption2)).padding(.horizontal, 3.5)
+            }
+            if let value {
+                Text(value)
+                    .font(.custom("Inter-Medium", size: 9.5, relativeTo: .caption2))
+                    .monospacedDigit()                               // or the digits shuffle each tick
+            }
         }
-        let left = expected - elapsed
-        if left <= 1 { return "Warming up the voice · almost there" }
-        if left >= 90 { return "Warming up the voice · about \(Int((left / 60).rounded())) min" }
-        let rounded = left < 10 ? Int(left.rounded(.up)) : Int((left / 5).rounded(.up)) * 5
-        return "Warming up the voice · about \(rounded) s"
+        .foregroundStyle(tint.opacity(0.5))
+        .lineLimit(1)
+        .fixedSize()
+        .animation(.easeInOut(duration: 0.42), value: message)
     }
 
-    /// The install's line: what is being waited for, downloaded or compiled, and how far along.
-    static func installLine(_ progress: KokoroInstallProgress?) -> String {
-        switch progress {
+    /// One capsule, or three proportioned to how long each phase really takes. A download is one
+    /// continuous byte count so it stays plain; the bar divides only once the install's phases are
+    /// behind it, and the division is a handoff — the full-width bar contracts to the first segment
+    /// and stays full while the others grow out of the space it gave up, so the download becomes
+    /// step one rather than being replaced (owner, 2026-09-12, against four alternatives).
+    @ViewBuilder
+    private func bar(_ reading: WarmUpReading, tint: Color) -> some View {
+        let weights = reading.segments
+        let total = weights.reduce(0, +)
+        let gaps = Self.segmentGap * CGFloat(max(0, weights.count - 1))
+        let usable = Self.barWidth - gaps
+        let filled = usable * reading.progress
+        HStack(spacing: Self.segmentGap) {
+            ForEach(Array(weights.enumerated()), id: \.offset) { index, weight in
+                let width = usable * (weight / total)
+                let before = weights.prefix(index).reduce(0, +) / total * usable
+                Capsule().fill(Tokens.ink3.opacity(0.6))
+                    .frame(width: width, height: Self.barHeight)
+                    .overlay(alignment: .leading) {
+                        Capsule().fill(tint)
+                            .frame(width: min(width, max(0, filled - before)))
+                    }
+                    .clipShape(Capsule())
+            }
+        }
+        .frame(width: Self.barWidth, alignment: .leading)
+        .opacity(reading.progress > 0 || reading.tone != .waiting ? 1 : 0)
+        .animation(.easeOut(duration: 0.55), value: weights.count)
+        .animation(.easeOut(duration: 0.6), value: reading.progress)
+    }
+
+    // MARK: what the status means
+
+    /// Maps this launch's state onto the phase `WarmUpReading` answers about. The mapping is the
+    /// only part of the line that knows about `KokoroStatus`.
+    private func reading(now: Date) -> WarmUpReading {
+        let status = env.kokoroStatus
+        return WarmUpReading(phase: phase(status, now: now),
+                             progress: progress(status, now: now),
+                             afterAnInstall: status.launchIncludedInstall)
+    }
+
+    private func phase(_ status: KokoroStatusModel, now: Date) -> WarmUpReading.Phase {
+        if status.readyAt != nil {
+            guard !status.endedFailed else {
+                return .failed(status.endedFailedDuringInstall ? .install : .warmUp)
+            }
+            return .ready(buildingBackgroundSet: status.isBuildingBackgroundSet)
+        }
+        if case .installing = status.status { return installPhase(status, now: now) }
+        // Heart from the mirrors is speaking while Heart installs on the phone. The glow stays up
+        // through that audio on purpose, and this is the only line that explains why it is there.
+        if WarmUpVeil.isHostedSpeaking(env) {
+            return .hostedVoiceSpeaking(secondsLeft: secondsLeft(status, now: now))
+        }
+        if case .checking = status.status { return .checking }
+        let left = secondsLeft(status, now: now)
+        return .warming(secondsLeft: left, stalled: isStalled(status, now: now))
+    }
+
+    private func installPhase(_ status: KokoroStatusModel, now: Date) -> WarmUpReading.Phase {
+        switch status.installProgress {
         case .none:
-            return "Downloading the voice · once, over Wi-Fi"
-        case .waitingForNetwork(let total):
-            return "Waiting for Wi-Fi to download the voice · \(megabytes(total)) MB, once"
+            // The split second after the install begins and before its first callback: nothing has
+            // been counted yet, so there is nothing to count with.
+            return .waitingForNetwork
+        case .waitingForNetwork:
+            return .waitingForNetwork
         case .downloading(let bytes, let total):
-            return "Downloading the voice · \(megabytes(bytes)) of \(megabytes(total)) MB"
-        case .retrying(let attempt, let of, let after, _):
-            return "Download interrupted · trying again in \(Int(after.rounded())) s (\(attempt) of \(of))"
+            return .downloading(received: megabytes(bytes), total: megabytes(total))
+        case .retrying(_, _, let after, _):
+            // `after` is the delay the retry was scheduled with, so on its own it never counts down
+            // — the line read "trying again in 7 s" for the whole seven seconds. Subtracting the
+            // time since the model took it makes it tick.
+            let left = after - now.timeIntervalSince(status.installProgressAt)
+            return .retrying(secondsLeft: Int(max(0, left).rounded(.up)))
         case .compiling(let stage, let total):
-            return "Preparing the voice · \(stage) of \(total)"
+            return .preparing(step: stage, of: total, secondsLeft: nil)
         }
     }
 
-    private static func megabytes(_ bytes: Int) -> Int { Int((Double(bytes) / 1_000_000).rounded()) }
+    /// The clock: what is left of the length this phone remembered. Nil before there is one to
+    /// remember, once it is spent, and while the warm-up has not started counting.
+    private func secondsLeft(_ status: KokoroStatusModel, now: Date) -> Int? {
+        guard let expected = status.expectedWarmUpSeconds, let started = status.warmUpStarted else { return nil }
+        let left = expected - now.timeIntervalSince(started)
+        guard left > 1 else { return nil }
+        // Rounded up to the next five above ten seconds, so it does not tick every second for
+        // minutes; below that it counts honestly, because a reader is watching the last few.
+        return left < 10 ? Int(left.rounded(.up)) : Int((left / 5).rounded(.up)) * 5
+    }
+
+    /// Well past what this phone remembered, the estimate has stopped being a fact about anything.
+    /// The title admits it and the clock goes, rather than freezing on a number that went wrong.
+    private func isStalled(_ status: KokoroStatusModel, now: Date) -> Bool {
+        guard let expected = status.expectedWarmUpSeconds, let started = status.warmUpStarted else { return false }
+        return now.timeIntervalSince(started) > expected * 2
+    }
+
+    /// The floor and the clock's own guess, whichever is further on. Stages are exact but coarse and
+    /// the clock is smooth but a guess; the floor is what keeps either of them from retreating at
+    /// the install-to-stages seam or on a retried stage load.
+    private func progress(_ status: KokoroStatusModel, now: Date) -> Double {
+        if status.readyAt != nil { return status.endedFailed ? status.warmUpProgressFloor : 1 }
+        guard let expected = status.expectedWarmUpSeconds, let started = status.warmUpStarted else {
+            return status.warmUpProgressFloor
+        }
+        let byClock = min(0.92, now.timeIntervalSince(started) / max(1, expected))
+        let scaled = status.launchIncludedInstall
+            ? KokoroStatusModel.installShare + (1 - KokoroStatusModel.installShare) * byClock
+            : byClock
+        return max(status.warmUpProgressFloor, scaled)
+    }
+
+    private func megabytes(_ bytes: Int) -> Int { Int((Double(bytes) / 1_000_000).rounded()) }
 }

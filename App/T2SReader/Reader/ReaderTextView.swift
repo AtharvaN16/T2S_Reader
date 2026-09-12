@@ -179,6 +179,14 @@ struct ReaderTextView: UIViewRepresentable {
             guard let view else { return }
             overlay.frame = view.bounds
             overlay.bounds = CGRect(origin: view.contentOffset, size: view.bounds.size)
+            // The shape layer is given the same rectangle rather than left at zero size: a sublayer
+            // with no bounds of its own does not inherit the overlay's shifted origin, so a path in
+            // content coordinates was being drawn a whole scroll offset away (owner, 2026-09-12).
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            underline.frame = overlay.bounds
+            underline.bounds = overlay.bounds
+            CATransaction.commit()
         }
 
         // MARK: The read/unread boundary

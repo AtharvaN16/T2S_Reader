@@ -12,14 +12,6 @@ import T2SKokoro
 enum RootPage: Hashable, CaseIterable {
     case collection, queue, preferences
 
-    var glyph: String {
-        switch self {
-        case .collection: return "books.vertical"
-        case .queue: return "house"
-        case .preferences: return "gearshape"
-        }
-    }
-
     var title: String {
         switch self {
         case .collection: return "Collection"
@@ -152,7 +144,12 @@ struct RootPager: View {
                 WarmUpLine(band: geo.safeAreaInsets.top)
 
                 if !chrome.isSubpageOpen {
-                    VStack(spacing: 12) {
+                    // 10 to the marks, not 12: the row below is 22 pt now where the icons were 32,
+                    // and this stack stands on its foot, so the whole of what the marks gave back
+                    // carries the player down rather than opening a gap over them. The player took
+                    // those 12 pt as height, all of it downward — its top edge is where it was, so
+                    // `Spacing.bottomClearance` still clears it (owner, 2026-09-12).
+                    VStack(spacing: 10) {
                         if !env.libraryModel.isQueueEmpty || env.player.current != nil {
                             MiniPlayer { readerDocument = $0 }
                         }

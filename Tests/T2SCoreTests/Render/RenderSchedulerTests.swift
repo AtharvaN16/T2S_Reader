@@ -441,6 +441,31 @@ import Testing
         #expect(requests.count == 2)                                // both rendered
     }
 
+    /// Four hosted renders in flight are one batch to the budget: one wait and one report — not
+    /// four, each charging the whole process's CPU to itself, which is what stalled a locked phone.
+    @Test func aBatchWaitsOnTheBudgetOnce() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let gate = ForegroundGate(isForeground: false)
+        let clock = ManualTimeSource(0)
+        let cpu = OSAllocatedUnfairLockBox<TimeInterval>(0)
+        let sleeps = OSAllocatedUnfairLockBox<[TimeInterval]>([])
+        let budget = CPUBudget(gate: gate, windowSeconds: 60, budgetSeconds: 36,
+                               clock: { clock.now() }, cpuTime: { cpu.value },
+                               sleeper: { seconds in sleeps.value.append(seconds); clock.advance(by: seconds) })
+        clock.set(50)
+        cpu.value = 40
+        let reported = OSAllocatedUnfairLockBox<[String]>([])
+        budget.report = { reported.value.append($0) }
+        let engine = FakeEngine(secondsPerCharacter: 0.1, concurrentRenders: 4)
+        let scheduler = RenderScheduler(engine: engine, store: store, timeSource: clock, budget: budget)
+        await scheduler.setPlan([request(0), request(1), request(2), request(3)])
+        for await event in scheduler.events { if event == .idle { break } }
+
+        #expect(await engine.requests.count == 4)
+        #expect(reported.value.filter { $0.contains("paced in the background:") }.count == 1)
+        #expect(reported.value.filter { $0.contains("waited") }.count == 1)
+    }
+
     @Test func aCacheHitNeverWaits() async throws {
         let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
         let gate = ForegroundGate(isForeground: false)

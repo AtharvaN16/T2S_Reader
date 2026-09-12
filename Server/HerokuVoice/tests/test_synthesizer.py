@@ -10,6 +10,7 @@ from voice_service.synthesizer import (
     KokoroSynthesizer,
     low_memory_session_options,
     release_memory,
+    session_options_from_environment,
     split_text,
 )
 
@@ -173,6 +174,30 @@ def test_eco_session_uses_one_thread_without_retained_cpu_arenas() -> None:
     assert options.execution_mode == ort.ExecutionMode.ORT_SEQUENTIAL
     assert options.enable_cpu_mem_arena is False
     assert options.enable_mem_pattern is False
+
+
+def test_session_defaults_to_the_settings_a_512_mb_dyno_survives() -> None:
+    options = session_options_from_environment({})
+
+    assert options.intra_op_num_threads == 1
+    assert options.enable_cpu_mem_arena is False
+    assert options.enable_mem_pattern is False
+
+
+def test_a_roomier_dyno_can_buy_speed_back_with_threads_and_arenas() -> None:
+    options = session_options_from_environment(
+        {"T2S_ORT_THREADS": "2", "T2S_ORT_ARENA": "1"}
+    )
+
+    assert options.intra_op_num_threads == 2
+    assert options.enable_cpu_mem_arena is True
+    assert options.enable_mem_pattern is True
+
+
+def test_session_ignores_a_thread_count_that_is_not_a_positive_number() -> None:
+    for bad in ("0", "-3", "many", ""):
+        options = session_options_from_environment({"T2S_ORT_THREADS": bad})
+        assert options.intra_op_num_threads == 1, bad
 
 
 def test_synthesizer_returns_freed_pages_after_every_chunk(tmp_path) -> None:

@@ -5,7 +5,7 @@ import ctypes.util
 import errno
 import os
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Protocol
 
@@ -96,13 +96,38 @@ def release_memory() -> None:
 
 
 def low_memory_session_options() -> ort.SessionOptions:
+    return session_options_from_environment({})
+
+
+def session_options_from_environment(
+    environment: Mapping[str, str] | None = None,
+) -> ort.SessionOptions:
+    """Session settings, defaulting to what a 512 MB dyno survives.
+
+    One thread with no arena and no mem pattern is what keeps resident size
+    under an Eco quota, and it costs real speed: the arena and the pattern
+    exist so ONNX can reuse buffers instead of asking for them again. A dyno
+    with room to spare can buy that speed back, so both are settings rather
+    than constants.
+    """
+    values = os.environ if environment is None else environment
     options = ort.SessionOptions()
-    options.intra_op_num_threads = 1
+    threads = _positive_int(values.get("T2S_ORT_THREADS"), default=1)
+    roomy = values.get("T2S_ORT_ARENA", "").strip() in {"1", "true", "yes", "on"}
+    options.intra_op_num_threads = threads
     options.inter_op_num_threads = 1
     options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-    options.enable_cpu_mem_arena = False
-    options.enable_mem_pattern = False
+    options.enable_cpu_mem_arena = roomy
+    options.enable_mem_pattern = roomy
     return options
+
+
+def _positive_int(raw: str | None, *, default: int) -> int:
+    try:
+        value = int("" if raw is None else raw.strip())
+    except ValueError:
+        return default
+    return value if value > 0 else default
 
 
 def default_kokoro_factory(model_path: Path, voices_path: Path) -> KokoroRuntime:
@@ -110,7 +135,7 @@ def default_kokoro_factory(model_path: Path, voices_path: Path) -> KokoroRuntime
 
     session = ort.InferenceSession(
         str(model_path),
-        sess_options=low_memory_session_options(),
+        sess_options=session_options_from_environment(),
         providers=["CPUExecutionProvider"],
     )
     return Kokoro.from_session(session, str(voices_path))

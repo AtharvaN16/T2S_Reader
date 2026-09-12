@@ -626,12 +626,11 @@ Add to the `PlayerModelTests` suite, after `anUnavailableKokoroVoiceRendersTheWh
 ```swift
     /// A route that answers one thing until told otherwise: the hosted voice while Heart installs,
     /// then the on-device voice.
-    private final class FlippingRouting: VoiceRouteResolving, @unchecked Sendable {
-        private let lock = NSLock()
+    private actor FlippingRouting: VoiceRouteResolving {
         private var answer: String
         init(_ answer: String) { self.answer = answer }
-        func flip(to answer: String) { lock.lock(); self.answer = answer; lock.unlock() }
-        func effectiveVoiceID(_ requested: String) async -> String { lock.lock(); defer { lock.unlock() }; return answer }
+        func flip(to answer: String) { self.answer = answer }
+        func effectiveVoiceID(_ requested: String) async -> String { answer }
     }
 
     @Test func aChapterChangeWhileStillHostedHandsNothingOff() async throws {
@@ -666,7 +665,7 @@ Add to the `PlayerModelTests` suite, after `anUnavailableKokoroVoiceRendersTheWh
         let rendered = await engine.requests.count
 
         // Ready, but no chapter change yet: nothing happens on a tick.
-        routing.flip(to: local)
+        await routing.flip(to: local)
         player.tick()
         await player.settleHandoff()
         #expect(player.coordinator.voiceHandoff == nil)

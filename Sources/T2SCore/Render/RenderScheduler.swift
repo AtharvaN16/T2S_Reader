@@ -208,6 +208,10 @@ public actor RenderScheduler {
             if let hit = await cachedResult(request) { results[index] = hit } else { uncached.append((index, request)) }
         }
         if !uncached.isEmpty {
+            // The budget paces and measures only what renders on this device: a hosted render costs
+            // the phone nothing, and charged for the process's CPU anyway — a warm-up or a compile
+            // that happened to overlap it — its estimate held a locked phone until it was unlocked.
+            let budget = engine.rendersOnDevice(for: batch[0].voiceID) ? self.budget : nil
             // In the background, only when the trailing window has room for what a batch costs: the
             // lease is held meanwhile, so the other tier waits behind this one rather than pile on.
             var waited: TimeInterval = 0

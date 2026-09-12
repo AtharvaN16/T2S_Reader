@@ -466,6 +466,32 @@ import Testing
         #expect(reported.value.filter { $0.contains("waited") }.count == 1)
     }
 
+    /// A hosted render costs the phone nothing, so the CPU budget never paces it and never measures
+    /// it: in the background, behind a full window, it renders at once — a locked phone kept
+    /// waiting on a budget nothing had spent, until the reader unlocked it.
+    @Test func aHostedRenderIsNeverPacedByTheBudget() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let gate = ForegroundGate(isForeground: false)
+        let clock = ManualTimeSource(0)
+        let cpu = OSAllocatedUnfairLockBox<TimeInterval>(0)
+        let sleeps = OSAllocatedUnfairLockBox<[TimeInterval]>([])
+        let budget = CPUBudget(gate: gate, windowSeconds: 60, budgetSeconds: 36,
+                               clock: { clock.now() }, cpuTime: { cpu.value },
+                               sleeper: { seconds in sleeps.value.append(seconds); clock.advance(by: seconds) })
+        clock.set(50)
+        cpu.value = 40                                              // the window is full
+        let reported = OSAllocatedUnfairLockBox<[String]>([])
+        budget.report = { reported.value.append($0) }
+        let engine = FakeEngine(secondsPerCharacter: 0.1, concurrentRenders: 4, rendersOnDevice: false)
+        let scheduler = RenderScheduler(engine: engine, store: store, timeSource: clock, budget: budget)
+        await scheduler.setPlan([request(0), request(1)])
+        for await event in scheduler.events { if event == .idle { break } }
+
+        #expect(await engine.requests.count == 2)
+        #expect(sleeps.value.isEmpty)                                // no wait
+        #expect(reported.value.isEmpty)                              // nothing to report: it was never paced
+    }
+
     @Test func aCacheHitNeverWaits() async throws {
         let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
         let gate = ForegroundGate(isForeground: false)

@@ -256,6 +256,8 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
 
     public func maxConcurrentRenders(for voiceID: String) -> Int { routes.count }
 
+    public func rendersOnDevice(for voiceID: String) -> Bool { false }
+
     /// The longest piece of a streaming head. Small, so the first sound after a tap or a seek
     /// waits for one short render rather than the whole utterance; the pieces render at once
     /// across the mirrors and are handed to the player in order as they land.

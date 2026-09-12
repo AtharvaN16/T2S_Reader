@@ -9,6 +9,8 @@ public actor FakeEngine: SynthesisEngine {
     public let pieceCount: Int
     /// What `maxConcurrentRenders(for:)` answers: the width a scheduler test wants to see.
     public let concurrentRenders: Int
+    /// What `rendersOnDevice(for:)` answers: false for a fake standing in for a hosted route.
+    public let onDevice: Bool
     /// When set, each call advances `timeSource` by `simulatedRTF × audio seconds`.
     public private(set) var simulatedRTF: Double?
     private let timeSource: ManualTimeSource?
@@ -24,12 +26,13 @@ public actor FakeEngine: SynthesisEngine {
     public private(set) var requests: [SynthesisRequest] = []
 
     public init(secondsPerCharacter: TimeInterval = 0.05, simulatedRTF: Double? = nil, timeSource: ManualTimeSource? = nil,
-                pieceCount: Int = 1, concurrentRenders: Int = 1) {
+                pieceCount: Int = 1, concurrentRenders: Int = 1, rendersOnDevice: Bool = true) {
         self.secondsPerCharacter = secondsPerCharacter
         self.simulatedRTF = simulatedRTF
         self.timeSource = timeSource
         self.pieceCount = pieceCount
         self.concurrentRenders = concurrentRenders
+        self.onDevice = rendersOnDevice
     }
 
     public func fail(on spoken: String) { failures.insert(spoken) }
@@ -58,6 +61,8 @@ public actor FakeEngine: SynthesisEngine {
     public var parkedCount: Int { parked.count }
 
     public nonisolated func maxConcurrentRenders(for voiceID: String) -> Int { concurrentRenders }
+
+    public nonisolated func rendersOnDevice(for voiceID: String) -> Bool { onDevice }
 
     public func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
         while held { await withCheckedContinuation { parked.append($0) } }

@@ -75,6 +75,11 @@ public actor RoutedEngine: SynthesisEngine {
         return max(1, configuration.endpoints.count)
     }
 
+    /// A cloud voice renders on the mirrors; everything else renders here.
+    public nonisolated func rendersOnDevice(for voiceID: String) -> Bool {
+        CloudVoiceID(rawValue: voiceID) == nil
+    }
+
     /// Resolves which engine owns `request`'s voice and the request to hand it — shared by
     /// `synthesize` and `synthesizeStreaming` so the routing rules live in exactly one place.
     private func engine(for request: SynthesisRequest) async throws -> (engine: any SynthesisEngine, request: SynthesisRequest) {

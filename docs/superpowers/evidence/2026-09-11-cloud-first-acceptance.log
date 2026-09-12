@@ -1,0 +1,16 @@
+# Cloud-first bootstrap — acceptance record (running; the final listen is appended when the owner reports it)
+# build: dev, with 08ab4f7 pool, 3b6629e/35eedeb rate, fbe2e60 budget, 5b1cea9 route-after-warm-up, eab515f streaming head, 9dc46c9 name, 4108cf8 veil
+## cloud-first bootstrap: first phone run (2026-09-12T03:01Z), before the route-pool fix
+phone fwd=73.63.164.213 reached all four mirrors with nothing configured on the phone
+  kokoro-t2s: 200s=8 429s=1 H12=0 H27=1
+  kokoro-t2s-m2: 200s=3 429s=4 H12=1 H27=0
+  kokoro-t2s-m3: 200s=10 429s=2 H12=0 H27=0
+  kokoro-t2s-m4: 200s=9 429s=1 H12=0 H27=0
+  03:01:53-55Z one request walked m3 -> m4 -> primary -> m2, 429 from each: the 'rate limiting' banner. Fixed by the route pool (08ab4f7).
+  03:01:31Z H12 on m2: its first render on a cold dyno exceeded the router's 30 s. Owed: a warm-up render at dyno boot.
+
+
+## cloud-first bootstrap: fresh install, first run (2026-09-12T04:00-04:04Z), Basic mirrors, pool + budget + rate-floor fixes
+fresh install (app deleted, model absent): first sound from the mirrors with nothing typed; the reader reported it works
+48 renders across four mirrors, 0 x 429, 0 x H12, 0 x H27; per-render rtf 2.2-2.5x; mean utterance 3.7-5.0 s audio; slowest single renders 7.6-9.8 s
+reported slow after a chapter skip: the head rendered whole (up to ~10 s) behind the batch holding the mirrors. Fixed by the streaming head (eab515f).

@@ -16,6 +16,36 @@ design is `docs/superpowers/specs/2026-09-11-heroku-kokoro-pilot-design.md`; its
 INT8 ONNX weights from Hugging Face, and the existing OpenAI-compatible 24 kHz PCM contract. Eco
 sleep is accepted; do not add a pinger or upgrade the dyno without the owner's approval.
 
+**Mirrors (2026-09-11 → 12):** one Eco dyno measured 2.7x realtime and Standard-2X 1.96x, neither
+ahead of playback, so the route runs on four identical apps (`kokoro-t2s`, `-m2`, `-m3`, `-m4`;
+`Server/HerokuVoice/scripts/mirrors.sh`) and the scheduler holds one render in flight per mirror.
+They are Basic dynos ($28/mo, never asleep) since the owner asked for every mirror always warm and
+authorized up to $50. Design: `docs/superpowers/specs/2026-09-11-eco-voice-mirrors-design.md`;
+measured: `docs/superpowers/evidence/2026-09-11-heroku-eco-measurements.log` and
+`…/2026-09-11-eco-mirrors-acceptance.log`. The key lives at `~/.t2s/heroku-voice-key` (0600) on
+the Mac and in the git-ignored `App/Local.xcconfig`. Found on the phone and fixed the same night:
+the engine's round-robin cursor sent a busy mirror a second request and its 429 read as "provider
+rate limiting" → a pool of free routes (`08ab4f7`); a batch with a failed render skewed the RTF and
+the rate control played at 0.5x → no sample from a failed batch (`3b6629e`) and a floor of 1.0x on
+the automatic rate (`35eedeb`); four in-flight renders each charged the whole process's CPU to
+themselves and a locked phone paused on the budget → one wait and one measurement per batch
+(`fbe2e60`); the head rendered whole before the first sound → clause-sized pieces, urgent for the
+next free mirror (`eab515f`). Owed: the server's boot-time warm-up render (`5165c23`, committed,
+deploy with `mirrors.sh 4` when nobody is listening); per-reader tokens before any reader beyond
+the two phones.
+
+**Cloud-first bootstrap (2026-09-12):** the route and key ship with the app (`CloudVoiceDefaults.pilot`;
+`T2S_CLOUD_VOICE_KEY` in `App/Local.xcconfig` → Info.plist → Keychain, once); hosted Heart stands in
+wherever the on-device default is not open; the on-device route opens only when its warm-up finishes
+(`5b1cea9`); the player hands the book to on-device Heart at the first chapter change after it
+answers; prepare waits; the warm-up glow stays over the hosted voice (`4108cf8`); the hosted voice is
+named "Heart · Cloud" (`9dc46c9`). Design: `docs/superpowers/specs/2026-09-11-cloud-first-bootstrap-design.md`;
+run: `docs/superpowers/evidence/2026-09-11-cloud-first-acceptance.log`. A fresh install on the 17 Pro
+spoke from the mirrors with nothing typed (04:00Z: 48 renders, no 429, no H12). Owed: the final
+listen — the handoff at the chapter boundary and locked-screen continuity — written into the log.
+Also: `scripts/test-kokoro.sh` runs well over 40 minutes (the compute-plan probe); a run killed
+mid-way leaves an unfinalized `.xcresult` with no verdict.
+
 ## Resume here (2026-09-11, morning) — for Harsh: where things stand, the crash fixes, what's next
 
 _Written 03:20 by the owner's session as it handed over. `dev` is pushed; the owner's iPhone 11 Pro runs

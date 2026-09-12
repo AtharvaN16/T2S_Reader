@@ -124,6 +124,35 @@ import T2SCore
         #expect(throws: HTTPVoiceError.invalidConfiguration) { try configuration.validate() }
     }
 
+    /// Mirrors serve the same audio, so adding one keeps cached renders; changing the primary is
+    /// a new route, as it always was.
+    @Test func mirrorsDoNotChangeTheRouteIdentityButThePrimaryDoes() throws {
+        let primary = try #require(URL(string: "https://one.example/v1/audio/speech"))
+        let mirror = try #require(URL(string: "https://two.example/v1/audio/speech"))
+        let alone = HTTPVoiceConfiguration(endpoint: primary, model: "m", voice: "v", requestRatePerMinute: 60)
+        let mirrored = HTTPVoiceConfiguration(endpoints: [primary, mirror], model: "m", voice: "v", requestRatePerMinute: 60)
+        let swapped = HTTPVoiceConfiguration(endpoints: [mirror, primary], model: "m", voice: "v", requestRatePerMinute: 60)
+
+        #expect(mirrored.fingerprint == alone.fingerprint)
+        #expect(swapped.fingerprint != alone.fingerprint)
+        #expect(mirrored.endpoint == primary)
+    }
+
+    @Test func everyMirrorMustPassTheEndpointRulesAndBeDistinct() throws {
+        let good = try #require(URL(string: "https://one.example/v1/audio/speech"))
+        let plain = try #require(URL(string: "http://two.example/v1/audio/speech"))
+        let leaky = try #require(URL(string: "https://two.example/v1/audio/speech?key=x"))
+        for bad in [plain, leaky] {
+            let configuration = HTTPVoiceConfiguration(endpoints: [good, bad], model: "m", voice: "v", requestRatePerMinute: 60)
+            #expect(throws: HTTPVoiceError.invalidConfiguration) { try configuration.validate() }
+        }
+        let duplicated = HTTPVoiceConfiguration(endpoints: [good, good], model: "m", voice: "v", requestRatePerMinute: 60)
+        #expect(throws: HTTPVoiceError.invalidConfiguration) { try duplicated.validate() }
+        let other = try #require(URL(string: "https://two.example/v1/audio/speech"))
+        let fine = HTTPVoiceConfiguration(endpoints: [good, other], model: "m", voice: "v", requestRatePerMinute: 60)
+        #expect(throws: Never.self) { try fine.validate() }
+    }
+
     @Test func rateLimiterSpacesRequestsAndHonoursRetryAfter() async {
         let clock = TestRateClock()
         let limiter = RequestRateLimiter(requestsPerMinute: 60, now: { clock.now }, sleeper: { seconds in

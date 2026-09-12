@@ -11,47 +11,62 @@ public struct HTTPVoiceConfiguration: Hashable, Sendable {
     /// so it never rendered anything outside the tests.
     public static let formatVersion = "pcm-v2"
 
-    public let endpoint: URL
+    /// The primary first, then its mirrors: identical deployments that serve the same audio for
+    /// the same request. Never empty.
+    public let endpoints: [URL]
     public let model: String
     public let voice: String
+    /// Applies to each endpoint separately.
     public let requestRatePerMinute: Int
 
-    public init(endpoint: URL, model: String, voice: String, requestRatePerMinute: Int) {
-        self.endpoint = endpoint
+    public init(endpoints: [URL], model: String, voice: String, requestRatePerMinute: Int) {
+        precondition(!endpoints.isEmpty, "a cloud route needs at least one endpoint")
+        self.endpoints = endpoints
         self.model = model.trimmed
         self.voice = voice.trimmed
         self.requestRatePerMinute = requestRatePerMinute
     }
 
+    public init(endpoint: URL, model: String, voice: String, requestRatePerMinute: Int) {
+        self.init(endpoints: [endpoint], model: model, voice: voice, requestRatePerMinute: requestRatePerMinute)
+    }
+
+    /// The primary. Its identity is the route's; a mirror is interchangeable with it.
+    public var endpoint: URL { endpoints[0] }
+
     /// A non-secret identity for rendered audio. Rate limiting is intentionally excluded: changing
-    /// it does not change a provider's PCM output, while endpoint/model/voice/format do.
+    /// it does not change a provider's PCM output, while endpoint/model/voice/format do. Mirrors
+    /// are excluded for the same reason: they serve the primary's output.
     public var fingerprint: String {
-        let material = [Self.formatVersion, canonicalEndpoint, model.trimmed, voice.trimmed].joined(separator: "\u{1F}")
+        let material = [Self.formatVersion, Self.canonical(endpoint), model.trimmed, voice.trimmed].joined(separator: "\u{1F}")
         return SHA256.hash(data: Data(material.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     public func validate() throws {
+        guard !model.isEmpty, !voice.isEmpty, (1...120).contains(requestRatePerMinute) else { throw HTTPVoiceError.invalidConfiguration }
+        for endpoint in endpoints { try Self.validate(endpoint: endpoint) }
+        guard Set(endpoints.map(Self.canonical)).count == endpoints.count else { throw HTTPVoiceError.invalidConfiguration }
+    }
+
+    private static func validate(endpoint: URL) throws {
         guard let components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false),
               components.scheme?.lowercased() == "https",
               components.host?.isEmpty == false,
               components.user == nil,
               components.password == nil,
               components.query == nil,
-              components.fragment == nil,
-              !model.isEmpty,
-              !voice.isEmpty,
-              (1...120).contains(requestRatePerMinute)
+              components.fragment == nil
         else { throw HTTPVoiceError.invalidConfiguration }
     }
 
-    private var canonicalEndpoint: String {
-        guard var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
-            return endpoint.absoluteString
+    private static func canonical(_ url: URL) -> String {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url.absoluteString
         }
         components.scheme = components.scheme?.lowercased()
         components.host = components.host?.lowercased()
         components.fragment = nil
-        return components.string ?? endpoint.absoluteString
+        return components.string ?? url.absoluteString
     }
 
     public static let example = HTTPVoiceConfiguration(

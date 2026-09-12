@@ -3,13 +3,13 @@
 # Safe to re-run: every step is idempotent. Basic only, by construction: a Basic dyno never
 # sleeps, so every mirror stays warm (owner's decision of 2026-09-12, $7 each).
 #
-#   scripts/mirrors.sh [count]        default 4
+#   scripts/mirrors.sh [count]        default 7
 #
 # The bearer key is read from $T2S_VOICE_KEY_FILE (default ~/.t2s/heroku-voice-key),
 # which must be mode 0600. It is never printed.
 set -euo pipefail
 
-COUNT="${1:-4}"
+COUNT="${1:-7}"
 PRIMARY="kokoro-t2s"
 KEY_FILE="${T2S_VOICE_KEY_FILE:-$HOME/.t2s/heroku-voice-key}"
 SIZE="basic"                                  # the only size this script will ever scale to

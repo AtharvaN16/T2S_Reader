@@ -52,7 +52,7 @@ Secrets and input text must not appear in source control or logs.
 
 One dyno renders at about 2.7x realtime, and one app cannot run more than one web
 dyno on the small tiers, so the route runs on several identical apps.
-`scripts/mirrors.sh [count]` (default 4) deploys this directory to `kokoro-t2s`,
+`scripts/mirrors.sh [count]` (default 7) deploys this directory to `kokoro-t2s`,
 `kokoro-t2s-m2`, … from one `git subtree split`, sets the same key on each from
 `~/.t2s/heroku-voice-key` (mode 0600, never printed), scales each to exactly
 `web=1:basic` — a Basic dyno never sleeps, so every mirror stays warm ($7 each;

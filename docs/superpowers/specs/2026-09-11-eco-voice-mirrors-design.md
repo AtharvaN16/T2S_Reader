@@ -219,8 +219,9 @@ logs are kept, and the measured blocker is reported. No paid upgrade.
 ## Constraints
 
 - Basic, since 2026-09-12: the owner authorized up to $50 a month for mirrors that
-  never sleep, and four Basic dynos ($7 each, Eco's hardware without the sleep) are
-  live at $28. The script scales to `basic` and nothing else. The Eco-hours bullet
+  never sleep. Seven Basic dynos ($7 each, Eco's hardware without the sleep) are
+  live at $49: four measured ~0.6x aggregate at best and left the player catching
+  up after every seek, so the rest of the budget went to three more. The script scales to `basic` and nothing else. The Eco-hours bullet
   below no longer applies; it is kept as the record of why the tier changed.
 - The Eco pool is 1000 dyno-hours a month across all four apps, and a
   mirror consumes hours only while awake. A few hours of reading a day is

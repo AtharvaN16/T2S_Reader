@@ -37,11 +37,16 @@ store schema change; any change to the server or the mirrors.
 endpoints in order, model `kokoro`, voice `af_heart`, request rate 20.
 `CloudVoiceSettings` takes an optional `shipped: CloudVoiceDefaults?`; when
 it is given and `UserDefaults` holds no endpoint at all, the shipped values
-are written once, so the Cloud voices screen shows them and they can be
-edited, and the configuration store is active from the first launch. A
-stored endpoint, even an empty edit later, is never overwritten. The app
-passes the pilot defaults; tests pass nothing unless they test the seeding,
-so every existing settings test keeps its empty starting state.
+are written, so the Cloud voices screen shows them and they can be edited,
+and the configuration store is active from the first launch. The app also
+keeps a marker of the endpoint text it wrote itself; a stored route that
+still matches the marker — or, for a build that kept none, one of the
+endpoint texts listed in `CloudVoiceDefaults.superseded` — is the app's own
+and follows the build, so a phone first launched with four mirrors takes
+seven on its next launch. Anything the reader edited, even to nothing, is
+never overwritten. The app passes the pilot defaults; tests pass nothing
+unless they test the seeding, so every existing settings test keeps its
+empty starting state.
 
 ## The key
 

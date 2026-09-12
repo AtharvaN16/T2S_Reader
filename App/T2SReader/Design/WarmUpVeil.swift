@@ -320,7 +320,10 @@ struct WarmUpLine: View {
         let byStages = status.warmUpStages.map { Double($0.loaded) / Double(max(1, $0.total)) } ?? 0
         let byClock = status.expectedWarmUpSeconds.map { min(0.92, elapsed / max(1, $0)) } ?? 0
         let warming = status.status == .installing ? (status.installProgress?.fraction ?? 0) : max(byStages, byClock)
-        let progress = ready ? 1 : warming
+        // Never below the high-water mark (`warmUpProgressFloor`): the raw signal above resets at
+        // the install-to-stages seam and on a retried stage load, and without this the bar visibly
+        // slid backward at either one (owner, 2026-09-12).
+        let progress = ready ? 1 : max(warming, status.warmUpProgressFloor)
         return VStack(spacing: 7) {
             Text(ready ? "Voice ready" : line(status, elapsed: elapsed))
                 .typeRole(.caption)

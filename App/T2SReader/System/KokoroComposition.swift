@@ -92,6 +92,16 @@ final class KokoroStatusModel {
     private static let holdsReadyBeat = ProcessInfo.processInfo.environment["T2S_WARMUP"] == "green"
     /// The install as it stands, while `status` is `.installing`.
     private(set) var installProgress: KokoroInstallProgress?
+    /// The warm-up bar's high-water mark, 0…1, across however this launch's wait runs — install
+    /// then stages, or stages alone. Two things reset the raw signal it is drawn from without the
+    /// wait itself going backward: install's own fraction starts over at zero the moment the stage
+    /// load begins (`warmUpStages` and `warmUpStarted` both clear), and a stage load that fails
+    /// once retries from its first stage rather than where it left off. Without a floor the reader
+    /// watched the bar slide back at either seam (owner, 2026-09-12: "the warmup bar moved
+    /// backwards, when the model warmup was done"). `WarmUpLine` shows `max(floor, the raw value)`,
+    /// so the bar holds at its peak through a reset and picks up climbing once the raw value passes
+    /// it again, rather than ever retreating.
+    private(set) var warmUpProgressFloor: Double = 0
     /// Whether a foreground warm-up has built this install's compute plans (`KokoroWarmUpRecord`):
     /// what a background Prepare launch checks before it touches the engine. True in the everyday
     /// build, which has no plans to build.
@@ -116,6 +126,10 @@ final class KokoroStatusModel {
             warmUpStarted = nil
             warmUpStages = nil
         }
+        // A fresh warm-up, not the install-to-stages seam within one already under way (both keep
+        // `isWarming` true, so this does not fire between them): the floor starts over so a second
+        // wait later in the same launch is not shown already full.
+        if !wasWarming, status.isWarming { warmUpProgressFloor = 0 }
         if wasWarming, !status.isWarming { beginReadyBeat() }
         if case .installing = status {} else { installProgress = nil }
     }
@@ -136,6 +150,7 @@ final class KokoroStatusModel {
 
     func updateWarmUp(loaded: Int, total: Int) {
         warmUpStages = (loaded, total)
+        warmUpProgressFloor = max(warmUpProgressFloor, Double(loaded) / Double(max(1, total)))
     }
 
     func updateInstall(_ progress: KokoroInstallProgress) {
@@ -145,6 +160,7 @@ final class KokoroStatusModel {
         } else {
             installProgress = progress
         }
+        warmUpProgressFloor = max(warmUpProgressFloor, installProgress?.fraction ?? 0)
     }
 
     func updateBackgroundSet(building: Bool) {

@@ -1314,7 +1314,7 @@ Add to the `CloudVoiceSettingsTests` suite, after `invalidValuesCannotEnableTheC
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `swift test --filter CloudVoiceSettingsTests`
-Expected: `oneEndpointPerLineTheFirstBeingThePrimary` and `aMirrorEditKeepsTheRouteIdentity` fail with `invalidConfiguration` (a newline is not a URL); `aBadMirrorLineInvalidatesTheRoute` passes by accident and stays as the guard.
+Expected: all three fail. Today's code hands the whole multi-line text to `URL(string:)`, which on current Foundation percent-encodes the newlines instead of returning nil, so the route silently becomes one mangled `one.example` URL: the first test sees a single endpoint, the second sees the identity change, and the third sees no error at all.
 
 - [ ] **Step 3: Parse lines**
 
@@ -1477,7 +1477,7 @@ else
   heroku config:get T2S_VOICE_API_KEY -a kokoro-t2s > ~/.t2s/heroku-voice-key
 fi
 chmod 600 ~/.t2s/heroku-voice-key
-wc -c < ~/.t2s/heroku-voice-key      # a length, never the key: expect 44
+wc -c < ~/.t2s/heroku-voice-key      # a length, never the key: expect 43 (token_urlsafe(32), no newline)
 ```
 
 - [ ] **Step 2: Write the script**

@@ -164,7 +164,7 @@ struct RootPager: View {
                          onDismiss: openPending) {
             ImportPage(imported: $pendingOpen, initialFiles: openedFiles ?? [])
         }
-        .fullScreenCover(item: $readerDocument) { ReaderPage(summary: $0) }
+        .fullScreenCover(item: $readerDocument, onDismiss: refreshHome) { ReaderPage(summary: $0) }
         .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation, nowPlaying: env.nowPlaying)
         .task {
             if RootPage.launchSeeds { await seedSamples() }
@@ -176,6 +176,15 @@ struct RootPager: View {
         }
         .onChange(of: env.deviceMonitor.deviceState, initial: true) { _, state in
             updatePrepareDeviceState(state)
+        }
+        // Home reads a snapshot (`LibraryModel.summaries`/`progress`), and listening moves the
+        // playhead in the store without touching it — so the row kept the chapter, the percent and
+        // the excerpt it was built with until the app was relaunched (owner, 2026-09-12). Refreshed
+        // where it comes back into view instead: swiping to Home, closing the Reader over it, and a
+        // chapter turning under a Home that is already on screen.
+        .onChange(of: page) { _, shown in if shown == .queue { refreshHome() } }
+        .onChange(of: env.player.chapterIndex) { _, _ in
+            if page == .queue, readerDocument == nil { refreshHome() }
         }
         .onChange(of: env.libraryModel.queue.map(\.id), initial: true) { _, ids in
             env.coordinator.queue = ids
@@ -316,6 +325,10 @@ struct RootPager: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .ignoresSafeArea(edges: .bottom)
         .allowsHitTesting(false)
+    }
+
+    private func refreshHome() {
+        Task { await env.libraryModel.refresh() }
     }
 
     /// A foreground pass is only a convenience while the app is awake and idle. The scheduler's

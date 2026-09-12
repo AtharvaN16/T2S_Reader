@@ -41,8 +41,10 @@ struct ChapterList: View {
 /// horizontal padding 12 pt short of the margin. `current` wears the ring, the chapters before it
 /// the check.
 ///
-/// One bookmark button in the header opens the stamps under every chapter that has any (2026-09-11
-/// spec §7) — one control rather than a per-row badge, so each row stays a single tap target.
+/// A chapter that holds bookmarks carries its own count pill, and tapping that opens just this
+/// chapter's bookmarks under it (owner, 2026-09-12). That reverses the one header button of the
+/// 2026-09-11 spec §7, whose worry was the row losing its single tap target: the pill is its own
+/// button beside the row's, so the words and the space after them still jump to the chapter.
 struct ChapterListView: View {
     var chapters: [ChapterEntry]
     var current: Int?
@@ -50,60 +52,73 @@ struct ChapterListView: View {
     /// The row to flash once, drawing the eye to where a scroll just landed (the book sheet's
     /// open, owner 2026-09-11) — nil the rest of the time.
     var pulsing: Int? = nil
-    /// Chapter index → its bookmarks. Empty hides the header button entirely.
+    /// Chapter index → its bookmarks. A chapter with no key shows no pill.
     var bookmarks: [Int: [BookmarkEntry]] = [:]
     var onSelect: (ChapterEntry) -> Void
     var onSelectBookmark: ((BookmarkEntry) -> Void)? = nil
 
-    @State private var showingStamps = false
+    @State private var expanded: Set<Int> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .center) {
-                Text("Chapters").typeRole(heading).foregroundStyle(Tokens.ink)
-                Spacer(minLength: 12)
-                if !bookmarks.isEmpty {
-                    Button {
-                        withAnimation(.spring(duration: 0.25)) { showingStamps.toggle() }
-                    } label: {
-                        CircleGlyph(systemName: showingStamps ? "bookmark.fill" : "bookmark")
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(showingStamps ? "Hide bookmark times" : "Show bookmark times")
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 24)
+            Text("Chapters").typeRole(heading).foregroundStyle(Tokens.ink)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 24)
             ForEach(chapters) { chapter in
-                ChapterRow(chapter: chapter, isCurrent: chapter.index == current,
-                           isHeard: current.map { chapter.index < $0 } ?? false,
-                           isPulsing: chapter.index == pulsing) { onSelect(chapter) }
-                if showingStamps, let stamps = bookmarks[chapter.index] {
-                    ForEach(stamps) { stamp in
-                        BookmarkStampRow(entry: stamp) { onSelectBookmark?(stamp) }
+                let stamps = bookmarks[chapter.index] ?? []
+                let isOpen = expanded.contains(chapter.index)
+                let isCurrent = chapter.index == current
+                // The open chapter and its bookmarks share one fill, so the bookmarks read as
+                // belonging to the chapter above them rather than floating under it (owner,
+                // 2026-09-12).
+                VStack(alignment: .leading, spacing: 6) {
+                    ChapterRow(chapter: chapter, isCurrent: isCurrent,
+                               isHeard: current.map { chapter.index < $0 } ?? false,
+                               bookmarkCount: stamps.count, isShowingBookmarks: isOpen,
+                               onToggleBookmarks: {
+                                   withAnimation(.spring(duration: 0.25)) {
+                                       if isOpen { expanded.remove(chapter.index) } else { expanded.insert(chapter.index) }
+                                   }
+                               }) { onSelect(chapter) }
+                    if isOpen {
+                        ForEach(stamps) { stamp in
+                            BookmarkStampRow(entry: stamp) { onSelectBookmark?(stamp) }
+                        }
                     }
                 }
+                .padding(.bottom, isOpen ? 6 : 0)                       // the last bookmark keeps off the fill's edge
+                .background(isCurrent || isOpen ? Tokens.surface : Tokens.surface.opacity(0),
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Tokens.accent.opacity(chapter.index == pulsing ? 0.3 : 0))
+                )
             }
         }
     }
 }
 
-/// One bookmark under its chapter row: an accent dot, the time, and one line of what it says.
+/// One bookmark inside its chapter's fill, in the order you read it: the accent dot, what it says,
+/// and the time it says it at, out at the end (owner, 2026-09-12). Its own row to tap — deeper than
+/// the chapter row above it, since a list of them is tapped at speed.
 struct BookmarkStampRow: View {
     var entry: BookmarkEntry
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
                 Circle().fill(Tokens.accent).frame(width: 7, height: 7)
-                Text(entry.timeText).typeRole(.mono).foregroundStyle(Tokens.ink2)
                 Text(entry.headline).typeRole(.meta).foregroundStyle(Tokens.ink).lineLimit(1)
-                Spacer(minLength: 0)
+                Spacer(minLength: 8)
+                // Inter, not the `.mono` role the stamp wore when the time led the row: out at the
+                // end it is read, not scanned down a column (owner, 2026-09-12).
+                Text(entry.timeText)
+                    .font(.custom("Inter-Medium", size: 13, relativeTo: .footnote))
+                    .foregroundStyle(Tokens.ink2)
             }
-            .padding(.leading, 24)
-            .padding(.trailing, 12)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 13)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -121,42 +136,61 @@ struct ChapterRow: View {
     var chapter: ChapterEntry
     var isCurrent: Bool
     var isHeard: Bool
-    /// One flash of `accent` over the row's own fill, then gone — `BookSheet` sets and clears it.
-    var isPulsing: Bool = false
+    /// How many bookmarks this chapter holds; 0 shows no pill.
+    var bookmarkCount: Int = 0
+    var isShowingBookmarks: Bool = false
+    var onToggleBookmarks: () -> Void = {}
     var action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(ChapterLabel.text(for: chapter.title, ordinal: chapter.index + 1))
-                        .typeRole(.settingsRow).foregroundStyle(Tokens.ink).lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    Text(DurationFormatter.remaining(chapter.durationSeconds, approximate: false))
-                        .typeRole(.pill).foregroundStyle(Tokens.ink2)
+        HStack(alignment: .center, spacing: 10) {
+            // The row's own button stops short of the pill, so the two never share a tap.
+            Button(action: action) {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(ChapterLabel.text(for: chapter.title, ordinal: chapter.index + 1))
+                            .typeRole(.settingsRow).foregroundStyle(Tokens.ink).lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                        Text(DurationFormatter.remaining(chapter.durationSeconds, approximate: false))
+                            .typeRole(.pill).foregroundStyle(Tokens.ink2)
+                    }
+                    Spacer(minLength: 12)
                 }
-                Spacer(minLength: 12)
-                if isCurrent {
-                    CircularProgress(fraction: chapter.fraction, lineWidth: 2, size: 18)
-                } else if isHeard {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 18))
-                        .foregroundStyle(Tokens.positive)
-                        .accessibilityLabel("Heard")
-                }
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(isCurrent ? Tokens.surface : Tokens.surface.opacity(0),
-                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Tokens.accent.opacity(isPulsing ? 0.3 : 0))
-            )
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(isCurrent ? .isSelected : [])
+            .accessibilityValue(isCurrent ? "\(Int((chapter.fraction * 100).rounded())) percent" : (isHeard ? "Heard" : ""))
+
+            if bookmarkCount > 0 {
+                Button(action: onToggleBookmarks) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "bookmark.fill").font(.system(size: 11, weight: .semibold))
+                        Text("\(bookmarkCount)").font(.custom("Inter-Medium", size: 13, relativeTo: .footnote))
+                    }
+                    // Grey, not the dots' accent (owner, 2026-09-12): it counts bookmarks, it is
+                    // not one. Open, it takes the app's selected chip — ink under `ground`.
+                    .foregroundStyle(isShowingBookmarks ? Tokens.ground : Tokens.ink)
+                    .padding(.horizontal, 9)
+                    .frame(height: 28)                                   // a target of its own, clear of the words
+                    .background(isShowingBookmarks ? Tokens.ink : Tokens.ink3, in: Capsule())
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(bookmarkCount == 1 ? "1 bookmark" : "\(bookmarkCount) bookmarks")
+                .accessibilityHint(isShowingBookmarks ? "Hides them" : "Shows them")
+            }
+
+            if isCurrent {
+                CircularProgress(fraction: chapter.fraction, lineWidth: 2, size: 18)
+            } else if isHeard {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(Tokens.positive)
+                    .accessibilityLabel("Heard")
+            }
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isCurrent ? .isSelected : [])
-        .accessibilityValue(isCurrent ? "\(Int((chapter.fraction * 100).rounded())) percent" : (isHeard ? "Heard" : ""))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 }

@@ -85,8 +85,10 @@ struct ReaderPage: View {
                     // The same pill while the playhead is still in the front matter (owner's ask,
                     // 2026-09-09): one tap past the title page, dedication and reviews to the
                     // first numbered chapter. Goes with the chrome, so a tap on the text dismisses it.
+                    // Blue, unlike its ink sibling above: this one moves you on through the book
+                    // rather than back to where you were (owner, 2026-09-12).
                     RaisedButton(label: skip.number.map { "Skip to Chapter \($0)" } ?? "Skip the front matter",
-                                 glyph: "forward.end.fill", tone: .ink, size: .compact) {
+                                 glyph: "forward.end.fill", tone: .blue, size: .compact) {
                         Task { await env.player.seek(toChapter: skip.index) }
                     }
                     .padding(.bottom, 32)

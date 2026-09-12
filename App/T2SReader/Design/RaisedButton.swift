@@ -9,9 +9,10 @@ import SwiftUI
 /// it scales down a little.
 ///
 /// Two tones. `.blue` is the reference's own (`Tokens.keyTop` → `keyBottom`): the empty shelf's
-/// one "do this first". `.ink` is the app's black button raised (owner, 2026-09-10: "replace the
-/// black buttons with skeuomorphic versions") — the bar at the foot of an Import step, the Voice
-/// page's confirm, the Reader's skip pill. In the dark the ink key is graphite, not white: see
+/// one "do this first", and the Reader's skip pill. `.ink` is the app's black button raised
+/// (owner, 2026-09-10: "replace the black buttons with skeuomorphic versions") — the bar at the
+/// foot of an Import step, the Voice page's confirm, the Reader's "Back to current" pill, which
+/// stays ink so the one key that moves you on reads first. In the dark ink is graphite, not white:
 /// `Tokens.keyInkTop`. Three sizes: `.bar` fills its width at 56 pt (what `BarButton` is),
 /// `.key` hugs its label at 56, `.compact` hugs it at 40 for a pill in the Reader.
 ///

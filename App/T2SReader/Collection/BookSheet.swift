@@ -74,15 +74,25 @@ struct BookSheet: View {
                         .frame(maxWidth: .infinity)
                     ChapterListView(chapters: chapters, current: resumeIndex, heading: .sectionHeader,
                                     pulsing: pulsingChapter,
-                                    bookmarks: isCurrent ? env.player.bookmarksByChapter : [:]) { chapter in
-                        Task {
-                            if !isCurrent { await env.player.load(live, play: false) }
-                            await env.player.seek(toChapter: chapter.index)
-                            if !env.player.isPlaying { await env.player.togglePlay() }
-                            dismiss()
-                            readerRoute.open(live)
-                        }
-                    }
+                                    bookmarks: isCurrent ? env.player.bookmarksByChapter : [:],
+                                    onSelect: { chapter in
+                                        Task {
+                                            if !isCurrent { await env.player.load(live, play: false) }
+                                            await env.player.seek(toChapter: chapter.index)
+                                            if !env.player.isPlaying { await env.player.togglePlay() }
+                                            dismiss()
+                                            readerRoute.open(live)
+                                        }
+                                    },
+                                    // The same jump the Bookmarks section below makes: under the
+                                    // chapter these are rows you can open now, not just marks.
+                                    onSelectBookmark: { entry in
+                                        Task {
+                                            await bookmarkModel().jump(to: entry, in: live)
+                                            dismiss()
+                                            readerRoute.open(live)
+                                        }
+                                    })
                     .padding(.horizontal, -12)                                 // the rows' fill runs into the margin, as in the Reader
                     if let bookmarks, !bookmarks.entries.isEmpty {
                         VStack(alignment: .leading, spacing: 20) {
@@ -177,9 +187,17 @@ struct BookSheet: View {
     private func reload() async {
         await env.libraryModel.refresh()
         await loadChapters()
-        let bookmarks = self.bookmarks ?? BookmarkListModel(library: env.library, player: env.player)
-        self.bookmarks = bookmarks
-        await bookmarks.load(live)
+        await bookmarkModel().load(live)
+    }
+
+    /// The sheet's one bookmark model, made on first ask: a chapter row's bookmarks can be tapped
+    /// before `reload` has run.
+    @discardableResult
+    private func bookmarkModel() -> BookmarkListModel {
+        if let bookmarks { return bookmarks }
+        let made = BookmarkListModel(library: env.library, player: env.player)
+        bookmarks = made
+        return made
     }
 
     private func loadChapters() async {

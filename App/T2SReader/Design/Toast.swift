@@ -21,7 +21,8 @@ struct ToastContent: Equatable, Identifiable {
 struct Toast: View {
     var content: ToastContent
     var onAction: () -> Void
-    var onDismiss: () -> Void
+    /// A tap anywhere but the action. Not merely a dismissal: the Reader takes it to the list.
+    var onTap: () -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
@@ -43,7 +44,7 @@ struct Toast: View {
         // the shape of a card (owner, 2026-09-12).
         .background(Tokens.ink, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .contentShape(Rectangle())
-        .onTapGesture(perform: onDismiss)
+        .onTapGesture(perform: onTap)
         .transition(.move(edge: .bottom).combined(with: .opacity))
         .accessibilityElement(children: .combine)
         .accessibilityLabel([content.title, content.detail].compactMap { $0 }.joined(separator: ", "))

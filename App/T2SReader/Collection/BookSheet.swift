@@ -72,7 +72,7 @@ struct BookSheet: View {
                     .frame(maxWidth: .infinity)
                     playPill
                         .frame(maxWidth: .infinity)
-                    ChapterListView(chapters: chapters, current: resumeIndex, heading: .sectionHeader,
+                    ChapterListView(chapters: chapters, current: resumeIndex, heading: .groupTitle,
                                     pulsing: pulsingChapter,
                                     bookmarks: isCurrent ? env.player.bookmarksByChapter : [:],
                                     onSelect: { chapter in
@@ -96,7 +96,7 @@ struct BookSheet: View {
                     .padding(.horizontal, -12)                                 // the rows' fill runs into the margin, as in the Reader
                     if let bookmarks, !bookmarks.entries.isEmpty {
                         VStack(alignment: .leading, spacing: 20) {
-                            Text("Bookmarks").typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
+                            Text("Bookmarks").typeRole(.groupTitle).foregroundStyle(Tokens.ink)
                             ForEach(bookmarks.entries) { entry in
                                 BookmarkRow(entry: entry, onJump: {
                                     Task {

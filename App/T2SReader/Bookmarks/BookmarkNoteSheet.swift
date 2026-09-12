@@ -52,7 +52,7 @@ struct BookmarkNoteSheet: View {
                 .focused($focused)
                 .overlay(alignment: .topLeading) {
                     if text.isEmpty {
-                        Text("Write a note")
+                        Text("Write your note here")
                             .typeRole(.rowTitle).foregroundStyle(Tokens.ink2)
                             .padding(.horizontal, 15).padding(.vertical, 18)
                             .allowsHitTesting(false)

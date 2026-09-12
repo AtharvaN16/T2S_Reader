@@ -29,14 +29,18 @@ struct BookmarksSheet: View {
                                         onJump: { Task { await model.jump(to: entry, in: summary); dismiss() } },
                                         onEditNote: { editing = entry },
                                         onDelete: { Task { await model.delete(entry) } })
-                            .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
+                            // Even air above and below, so the divider falls midway between two
+                            // bookmarks rather than hard under one of them (owner, 2026-09-12).
+                            .listRowInsets(EdgeInsets(top: 18, leading: Spacing.margin,
+                                                      bottom: 18, trailing: Spacing.margin))
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button { Task { await model.delete(entry) } } label: { Label("Delete bookmark", systemImage: "trash") }
                                     .tint(Tokens.destructive)
                             }
                         }
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Tokens.raised)
+                        .listRowSeparator(.visible)
+                        .listRowSeparatorTint(Tokens.ink3)
+                        .listRowBackground(Tokens.ground)
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
@@ -48,7 +52,9 @@ struct BookmarksSheet: View {
         }
         .padding(.top, Spacing.margin)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .presentationBackground(Tokens.raised)
+        // `ground`, not `raised`: the rows carry `surface` pills, and `surface` on `raised` is
+        // four points of grey apart in the dark — on `ground` they read as they do on Home.
+        .presentationBackground(Tokens.ground)
         .presentationDetents([.medium, .large])
         .presentationCornerRadius(Spacing.sheetCorner)
         .sheet(item: $editing) { entry in

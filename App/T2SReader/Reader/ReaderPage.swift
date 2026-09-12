@@ -271,7 +271,9 @@ struct ReaderPage: View {
             if let toast {
                 Toast(content: toast,
                       onAction: { openNoteEditor(); dismissToast() },
-                      onDismiss: dismissToast)
+                      // The body of it opens the list, rather than only getting out of the way:
+                      // "bookmark saved" invites you to go and look (owner, 2026-09-12).
+                      onTap: { dismissToast(); showBookmarks = true })
                     .padding(.horizontal, Spacing.margin)
                     // The toast's bottom sits on the block's top edge, 10 pt clear, so it floats
                     // over the text and never covers the chapter row, the scrubber or the transport.
@@ -349,25 +351,33 @@ struct ReaderPage: View {
         if chapters.count > 1, let index = player.chapterIndex, chapters.indices.contains(index) {
             HStack {
                 Button { showChapters = true } label: {
-                    // The arrow stands 8 pt off the title, centred on its height, in `ink` like
-                    // the title (owner's third cut, 2026-09-09).
+                    // The chevron stands 8 pt off the title, centred on its height, in `ink` like
+                    // the title (owner's third cut, 2026-09-09; outlined and pointing on rather
+                    // than a filled arrow, 2026-09-12).
                     HStack(alignment: .center, spacing: 8) {
                         Text(ChapterLabel.text(for: chapters[index].title, ordinal: index + 1))
                             .typeRole(.rowTitle)
                             .lineLimit(1)
-                        Image(systemName: "arrowtriangle.up.fill")
-                            .font(.system(size: 10, weight: .bold))
+                            // Scrubbing walks the chapters past; the name crossfades rather than
+                            // snapping from one to the next (owner, 2026-09-12).
+                            .contentTransition(.opacity)
+                            .id(index)
+                            .transition(.opacity)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
                     }
                     .foregroundStyle(Tokens.ink)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .animation(.easeInOut(duration: 0.22), value: index)
                 .accessibilityLabel("Chapter")
                 .accessibilityValue(chapters[index].title)
                 .accessibilityHint("Opens the chapter list")
                 Spacer(minLength: 12)
             }
             .frame(height: 36)
+            .padding(.top, 10)                                 // a touch lower off the text above
         }
     }
 

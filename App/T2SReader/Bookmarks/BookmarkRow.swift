@@ -33,13 +33,13 @@ struct BookmarkRow: View {
                     }
             }
             HStack(spacing: 8) {
-                // The Home row's grey play pill, the app's own (owner, 2026-09-12); writing the
-                // note is the dark one, since reading the row is what a tap now does. The hairline
-                // is for the dark: this sheet is `raised`, and `surface` on it is the same grey.
+                // Listen is Home's play pill exactly — the same filled grey, no outline of its own
+                // (owner, 2026-09-12). The note is the outlined one, so the two read apart without
+                // either shouting.
                 Pill(label: "Listen", glyph: "play.fill", style: .soft, action: onJump)
-                    .overlay(Capsule().strokeBorder(Tokens.ink3, lineWidth: 1).allowsHitTesting(false))
                 Pill(label: entry.hasNote ? "Edit note" : "Add a note", glyph: "square.and.pencil",
-                     style: .selected, action: onEditNote)
+                     style: .soft, action: onEditNote)
+                    .overlay(Capsule().strokeBorder(Tokens.ink3, lineWidth: 1).allowsHitTesting(false))
             }
             .padding(.top, 4)
         }

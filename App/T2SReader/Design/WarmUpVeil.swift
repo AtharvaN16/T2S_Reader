@@ -29,10 +29,12 @@ import UIKit
 /// `RootPager`'s ground show through (Settings' stack has its container background cleared for
 /// the same reason), and `ReaderTextView` draws on a clear background.
 ///
-/// **It goes when sound does.** Warming is only worth saying while nothing is speaking; a book
-/// already playing through a fallback voice with a pulse over it read as an alarm rather
-/// than a wait (owner). So the glow hides the moment audio is actually flowing, even if the Kokoro
-/// stages are still loading behind it.
+/// **It goes when the phone's own voice sounds.** A book already playing through the system
+/// voice with a pulse over it read as an alarm rather than a wait (owner, 2026-09-10), so the glow
+/// hides the moment that audio flows, even if the Kokoro stages are still loading behind it. The
+/// hosted voice is the exception (owner, 2026-09-12): Heart from the mirrors *is* the wait for
+/// Heart on the phone, and the reader wants to watch the download and the warm-up go by over it,
+/// so the glow stays until green while the hosted voice is the one speaking.
 struct WarmUpVeil: View {
     @Environment(AppEnvironment.self) private var env
 
@@ -62,7 +64,11 @@ struct WarmUpVeil: View {
     static func isShowing(_ env: AppEnvironment) -> Bool {
         guard env.kokoroStatus.status.isWarming || env.kokoroStatus.readyAt != nil else { return false }
         if isFaked { return true }
-        return !(env.player.isPlaying && !env.player.isCatchingUp)
+        // Sound from the phone's own voice means the wait is over. Sound from the hosted voice
+        // means the wait is under way — Heart from the mirrors while Heart installs — and the
+        // owner asked to watch it (cloud-first bootstrap, 2026-09-12), so the glow stays until green.
+        let hostedSpeaking = env.player.routedVoiceID?.hasPrefix("cloud:") == true
+        return hostedSpeaking || !(env.player.isPlaying && !env.player.isCatchingUp)
     }
 
     /// Whether the glow is on its last beat — ready, and green. The same gate as `isShowing`, so a

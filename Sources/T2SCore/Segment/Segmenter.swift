@@ -103,34 +103,13 @@ public struct Segmenter: Sendable {
         return out
     }
 
-    /// Splits `sentence` into pieces ≤ maxUtteranceLength at the last clause boundary before the limit,
-    /// falling back to the last whitespace, then to a hard cut that never divides a surrogate pair.
-    /// Offsets are UTF-16 into the block.
+    /// Splits `sentence` into pieces ≤ maxUtteranceLength by `ClauseSplitter`'s rule. Offsets are
+    /// UTF-16 into the block. A sentence that fits is returned as it came, untouched.
     private func split(_ sentence: String, at offset: Int) -> [(String, Int)] {
         let ns = sentence as NSString
         guard ns.length > maxUtteranceLength else { return [(sentence, offset)] }
-        var pieces: [(String, Int)] = []
-        var start = 0
-        let clause = CharacterSet(charactersIn: ";:,—–")
-        while ns.length - start > maxUtteranceLength {
-            let window = NSRange(location: start, length: maxUtteranceLength)
-            var cut = ns.rangeOfCharacter(from: clause, options: .backwards, range: window).location
-            if cut != NSNotFound && cut > start { cut += 1 }
-            if cut == NSNotFound || cut <= start {
-                cut = ns.rangeOfCharacter(from: .whitespacesAndNewlines, options: .backwards, range: window).location
-            }
-            if cut == NSNotFound || cut <= start {
-                cut = start + maxUtteranceLength
-                if cut - 1 > start && CFStringIsSurrogateHighCharacter(ns.character(at: cut - 1)) { cut -= 1 }
-            }
-            if let piece = Self.trimmed(ns.substring(with: NSRange(location: start, length: cut - start)), at: offset + start) {
-                pieces.append(piece)
-            }
-            start = cut
+        return ClauseSplitter.cuts(in: sentence, maxLength: maxUtteranceLength).compactMap { range in
+            Self.trimmed(ns.substring(with: range), at: offset + range.location)
         }
-        if let piece = Self.trimmed(ns.substring(from: start), at: offset + start) {
-            pieces.append(piece)
-        }
-        return pieces
     }
 }

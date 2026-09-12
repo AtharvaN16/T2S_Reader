@@ -48,9 +48,11 @@ public enum RenderEvent: Hashable, Sendable {
     case idle
 }
 
-/// Serial executor of `RenderRequest`s (spec §3.4). Knows nothing about timelines: the
-/// coordinator turns policy jobs into requests and applies the events.
+/// Executor of `RenderRequest`s, one batch at a time — a batch as wide as the engine allows, one
+/// for anything on the device (spec §3.4). Knows nothing about timelines: the coordinator turns
+/// policy jobs into requests and applies the events.
 public actor RenderScheduler {
+    public typealias Sleeper = @Sendable (TimeInterval) async -> Void
     public static let failureSilenceSeconds: TimeInterval = 0.2
 
     public nonisolated let events: AsyncStream<RenderEvent>
@@ -63,6 +65,11 @@ public actor RenderScheduler {
     /// Holds a background render until the process's CPU fits iOS's limit (``CPUBudget``); nil
     /// renders unpaced, which is what tests and the everyday build want.
     private let budget: CPUBudget?
+    /// Maximum generated-audio seconds per wall second for the non-urgent foreground fill. Nil
+    /// leaves that tier unpaced; the urgent play-ahead tier never waits here.
+    private let foregroundFillRate: Double?
+    private let foregroundFillSleeper: Sleeper
+    private var foregroundFillDelay: TimeInterval = 0
     /// What the last synthesis cost in CPU seconds — the estimate the budget is asked to fit next
     /// time. A render before the first is guessed at ``firstRenderCPUEstimate``.
     private var lastRenderCPUSeconds: TimeInterval?
@@ -81,13 +88,17 @@ public actor RenderScheduler {
     private var hasSkippedFirstSample = false
 
     public init(engine: any SynthesisEngine, store: any AudioStore, timeSource: any TimeSource,
-                rtfWindow: Int = 20, arbiter: RenderArbiter = RenderArbiter(), budget: CPUBudget? = nil) {
+                rtfWindow: Int = 20, arbiter: RenderArbiter = RenderArbiter(), budget: CPUBudget? = nil,
+                foregroundFillRate: Double? = nil,
+                foregroundFillSleeper: @escaping Sleeper = { seconds in try? await Task.sleep(for: .seconds(seconds)) }) {
         self.engine = engine
         self.store = store
         self.timeSource = timeSource
         self.rtfWindow = max(1, rtfWindow)
         self.arbiter = arbiter
         self.budget = budget
+        self.foregroundFillRate = foregroundFillRate.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+        self.foregroundFillSleeper = foregroundFillSleeper
         (events, continuation) = AsyncStream.makeStream(of: RenderEvent.self, bufferingPolicy: .unbounded)
     }
 
@@ -126,70 +137,151 @@ public actor RenderScheduler {
 
     private func run() async {
         while !isPausedForStorage, !pending.isEmpty {
-            let request = pending.removeFirst()
-            switch await render(request) {
-            case .events(let events):
-                events.forEach { continuation.yield($0) }
-            case .storeFull:
-                isPausedForStorage = true
-                pending.removeAll()
-                continuation.yield(.storeFull)
-                break
+            await paceForegroundFillIfNeeded()
+            guard !isPausedForStorage, !pending.isEmpty else { break }
+            let batch = takeBatch()
+            var paused = false
+            for outcome in await render(batch) {
+                switch outcome {
+                case .events(let events):
+                    events.forEach { continuation.yield($0) }
+                case .storeFull:
+                    guard !paused else { continue }               // one pause for the batch
+                    paused = true
+                    isPausedForStorage = true
+                    pending.removeAll()
+                    continuation.yield(.storeFull)
+                }
             }
         }
         running = false
         continuation.yield(.idle)
     }
 
-    /// The lease is intentionally scoped to one cache check / synthesis / store transaction. This
-    /// lets play-ahead preempt Prepare at the next utterance without allowing a second renderer.
-    private func render(_ request: RenderRequest) async -> RenderOutcome {
-        await arbiter.acquire(request.job.tier)
-        if isCancelled {
-            await arbiter.release()
-            return .events([])
+    /// Up to the engine's width for the first request's voice, from the front of `pending`, and
+    /// never across a tier or a voice: an urgent plan then waits behind at most one batch of its own
+    /// tier, and a hosted batch never shares a lease with an on-device one.
+    /// On-device engines answer 1, so their batch is the single request it always was.
+    private func takeBatch() -> [RenderRequest] {
+        let first = pending.removeFirst()
+        let width = max(1, engine.maxConcurrentRenders(for: first.voiceID))
+        var batch = [first]
+        while batch.count < width, let next = pending.first,
+              next.job.tier == first.job.tier, next.voiceID == first.voiceID {
+            batch.append(pending.removeFirst())
         }
-        let outcome = await renderWhileHoldingLease(request)
-        await arbiter.release()
-        return outcome
+        return batch
     }
 
-    private func renderWhileHoldingLease(_ request: RenderRequest) async -> RenderOutcome {
-        if await store.contains(request.key), let clip = try? await store.read(request.key) {
-            return .events([.rendered(RenderedUtterance(
-                documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, key: request.key,
-                duration: clip.duration, wordTimings: []))])
+    /// Rests between chapter-ahead calls. Quarter-second slices let a seek, an empty plan, or a new
+    /// urgent play-ahead request preempt the rest promptly; the lease is not held while sleeping.
+    private func paceForegroundFillIfNeeded() async {
+        guard pending.first?.job.tier == .chapterAhead else {
+            foregroundFillDelay = 0
+            return
         }
+        while foregroundFillDelay > 0, pending.first?.job.tier == .chapterAhead, !isCancelled {
+            let slice = min(0.25, foregroundFillDelay)
+            await foregroundFillSleeper(slice)
+            foregroundFillDelay -= slice
+        }
+        foregroundFillDelay = 0
+    }
 
-        var events: [RenderEvent] = []
-        // In the background, only when the trailing window has room for what a render costs: the
-        // lease is held meanwhile, so the other tier waits behind this one rather than pile on.
-        var waited: TimeInterval = 0
-        if let budget {
-            waited = await budget.waitForHeadroom(estimatedSeconds: lastRenderCPUSeconds ?? Self.firstRenderCPUEstimate)
+    /// The lease is held once for the batch, at the tier of its first request, and scoped to the
+    /// batch's cache checks, syntheses, and store writes. Preemption between tiers happens at
+    /// batch boundaries; for a width of 1 that is the utterance boundary it always was.
+    ///
+    /// The budget sees the batch as one render: one wait for headroom before it, one measurement
+    /// of the process's CPU across it. Charged per member, four hosted renders in flight each
+    /// counted the other three and the player's own work as their cost, and a locked phone waited
+    /// on a budget nothing had spent.
+    private func render(_ batch: [RenderRequest]) async -> [RenderOutcome] {
+        await arbiter.acquire(batch[0].job.tier)
+        if isCancelled {
+            await arbiter.release()
+            return batch.map { _ in .events([]) }
         }
+        var results = [RenderResult?](repeating: nil, count: batch.count)
+        var uncached: [(index: Int, request: RenderRequest)] = []
+        for (index, request) in batch.enumerated() {
+            if let hit = await cachedResult(request) { results[index] = hit } else { uncached.append((index, request)) }
+        }
+        if !uncached.isEmpty {
+            // The budget paces and measures only what renders on this device: a hosted render costs
+            // the phone nothing, and charged for the process's CPU anyway — a warm-up or a compile
+            // that happened to overlap it — its estimate held a locked phone until it was unlocked.
+            let budget = engine.rendersOnDevice(for: batch[0].voiceID) ? self.budget : nil
+            // In the background, only when the trailing window has room for what a batch costs: the
+            // lease is held meanwhile, so the other tier waits behind this one rather than pile on.
+            var waited: TimeInterval = 0
+            if let budget {
+                waited = await budget.waitForHeadroom(estimatedSeconds: lastRenderCPUSeconds ?? Self.firstRenderCPUEstimate)
+            }
+            let t0 = timeSource.now()
+            let cpu0 = budget.map { _ in CPUBudget.processCPUSeconds() }
+            if uncached.count == 1 {
+                results[uncached[0].index] = await synthesizeAndStore(uncached[0].request)
+            } else {
+                await withTaskGroup(of: (Int, RenderResult).self) { group in
+                    for (index, request) in uncached {
+                        group.addTask { (index, await self.synthesizeAndStore(request)) }
+                    }
+                    for await (index, result) in group { results[index] = result }
+                }
+            }
+            let wall = timeSource.now() - t0
+            if let cpu0 { lastRenderCPUSeconds = max(0, CPUBudget.processCPUSeconds() - cpu0) }
+            budget?.record()                                        // keeps the window's floor current
+            // Throughput, not one render's latency: the rate control asks what the route can keep
+            // fed, and four mirrors that each take ten seconds deliver forty seconds of audio in ten.
+            // A failed member took wall time and made no audio: that batch says nothing.
+            let synthesized = results.reduce(0) { $0 + ($1?.synthesizedSeconds ?? 0) }
+            let failed = results.contains { $0?.failed == true }
+            if synthesized > 0, !failed { record(rtf: wall / synthesized) }
+            // The budget's report sink is the timing log's only view of what a render actually cost
+            // and how long it waited to start — `CPUBudget`'s own pacing decisions live in `os_log`,
+            // which the phone does not hand over either. Only worth a line once a wait was even
+            // possible: in the foreground `waited` is always 0, so gate on the budget's state as the
+            // batch finishes — a batch that started in front and finished after a lock still reports.
+            if let budget, synthesized > 0, !budget.isForeground {
+                budget.report?("render cpu \(String(format: "%.1f", lastRenderCPUSeconds ?? 0)) s for \(String(format: "%.1f", synthesized)) s of audio (rtf \(String(format: "%.2f", wall / synthesized))), waited \(String(format: "%.1f", waited)) s")
+            }
+        }
+        await arbiter.release()
+        return results.map { $0?.outcome ?? .events([]) }
+    }
+
+    /// The store already holds the key: reported as rendered, with the clip's duration and no word
+    /// timings, and nothing is synthesized.
+    private func cachedResult(_ request: RenderRequest) async -> RenderResult? {
+        guard await store.contains(request.key), let clip = try? await store.read(request.key) else { return nil }
+        foregroundFillDelay = 0
+        return RenderResult(outcome: .events([.rendered(RenderedUtterance(
+            documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, key: request.key,
+            duration: clip.duration, wordTimings: []))]), synthesizedSeconds: 0)
+    }
+
+    private func synthesizeAndStore(_ request: RenderRequest) async -> RenderResult {
+        var events: [RenderEvent] = []
+        var synthesized: TimeInterval = 0
+        var failed = false
         let t0 = timeSource.now()
-        let cpu0 = budget.map { _ in CPUBudget.processCPUSeconds() }
         var result: SynthesisResult
         do {
             result = request.stream
                 ? try await streamed(request)
                 : try await engine.synthesize(SynthesisRequest(spoken: request.spoken, voiceID: request.voiceID))
             let synthSeconds = timeSource.now() - t0
-            let rtf: Double? = result.audio.duration > 0 ? synthSeconds / result.audio.duration : nil
-            if let rtf { record(rtf: rtf) }
-            if let cpu0 { lastRenderCPUSeconds = max(0, CPUBudget.processCPUSeconds() - cpu0) }
-            budget?.record()                                        // keeps the window's floor current
-            // The budget's report sink is the timing log's only view of what a render actually cost
-            // and how long it waited to start — `CPUBudget`'s own pacing decisions live in `os_log`,
-            // which the phone does not hand over either. Only worth a line once a wait was even
-            // possible: in the foreground `waited` is always 0 (the loop it comes from only runs
-            // while backgrounded), so gate on the budget's state as the render finishes — a render
-            // that started in front and finished after a lock still reports.
-            if let budget, let rtf, !budget.isForeground {
-                budget.report?("render cpu \(String(format: "%.1f", lastRenderCPUSeconds ?? 0)) s for \(String(format: "%.1f", result.audio.duration)) s of audio (rtf \(String(format: "%.2f", rtf))), waited \(String(format: "%.1f", waited)) s")
+            if request.job.tier == .chapterAhead, let foregroundFillRate {
+                foregroundFillDelay = max(0, result.audio.duration / foregroundFillRate - synthSeconds)
+            } else {
+                foregroundFillDelay = 0
             }
+            synthesized = result.audio.duration
         } catch {
+            foregroundFillDelay = 0
+            failed = true
             events.append(.failed(documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, message: "\(error)"))
             result = SynthesisResult(audio: .silence(seconds: Self.failureSilenceSeconds), wordTimings: [])
         }
@@ -197,7 +289,7 @@ public actor RenderScheduler {
         do {
             try await store.write(result.audio, for: request.key)
         } catch AudioStoreError.capacityExceeded, AudioStoreError.diskFull {
-            return .storeFull
+            return RenderResult(outcome: .storeFull, synthesizedSeconds: synthesized, failed: failed)
         } catch {
             // Encoding or I/O failed for this clip: log it and fall back to the failure silence so
             // the utterance still arrives (spec §6). Only if that write fails too is it bare failed.
@@ -206,16 +298,16 @@ public actor RenderScheduler {
             do {
                 try await store.write(result.audio, for: request.key)
             } catch AudioStoreError.capacityExceeded, AudioStoreError.diskFull {
-                return .storeFull
+                return RenderResult(outcome: .storeFull, synthesizedSeconds: synthesized, failed: failed)
             } catch {
-                return .events(events)
+                return RenderResult(outcome: .events(events), synthesizedSeconds: synthesized, failed: failed)
             }
         }
 
         events.append(.rendered(RenderedUtterance(
             documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, key: request.key,
             duration: result.audio.duration, wordTimings: result.wordTimings)))
-        return .events(events)
+        return RenderResult(outcome: .events(events), synthesizedSeconds: synthesized, failed: failed)
     }
 
     /// Renders in pieces, yielding each to the events stream the moment it arrives — the player is
@@ -258,5 +350,14 @@ public actor RenderScheduler {
     private enum RenderOutcome: Sendable {
         case events([RenderEvent])
         case storeFull
+    }
+
+    private struct RenderResult: Sendable {
+        var outcome: RenderOutcome
+        /// Audio seconds this render actually synthesized: 0 for a cache hit or a failure, which
+        /// therefore contribute nothing to the batch's RTF.
+        var synthesizedSeconds: TimeInterval
+        /// The synthesis threw: its wall time is not throughput, so the batch records no RTF.
+        var failed = false
     }
 }

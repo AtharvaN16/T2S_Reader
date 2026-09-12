@@ -28,6 +28,9 @@ actor GatedKokoroCoreMLEngine: SynthesisEngine {
     /// The compute units of the background set, on a phone whose main set is on the GPU; nil where
     /// the main set may render anywhere (`KokoroCoreMLEngine.Options.backgroundComputeUnits`).
     private let backgroundComputeUnits: KokoroComputeUnits?
+    /// False on GPU phones: their fallback CPU plans take minutes to build and can cross the
+    /// foreground boundary inside Core ML, where iOS terminates the sustained background CPU use.
+    private let loadsBackgroundSet: Bool
     /// Awaited before every stage's compute-plan build: the app's foreground gate.
     private let admission: @Sendable () async -> Void
     /// Where a render is, as the same gate sees it: the engine asks before every piece.
@@ -38,11 +41,13 @@ actor GatedKokoroCoreMLEngine: SynthesisEngine {
 
     init(availability: KokoroCoreMLAvailabilityModel, computeUnits: KokoroComputeUnits = .cpu,
          backgroundComputeUnits: KokoroComputeUnits? = nil,
+         loadsBackgroundSet: Bool = true,
          admission: @escaping @Sendable () async -> Void,
          placement: @escaping @Sendable () -> KokoroCoreMLEngine.RenderPlacement = { .foreground }) {
         self.availability = availability
         self.computeUnits = computeUnits
         self.backgroundComputeUnits = backgroundComputeUnits
+        self.loadsBackgroundSet = loadsBackgroundSet
         self.admission = admission
         self.placement = placement
     }
@@ -50,7 +55,7 @@ actor GatedKokoroCoreMLEngine: SynthesisEngine {
     /// Waits for the background set, where the options ask for one, and says whether the engine can
     /// render in the background now (`KokoroCoreMLEngine.awaitBackgroundSet`).
     func awaitBackgroundSet() async throws -> Bool {
-        await try engine().awaitBackgroundSet()
+        try await engine().awaitBackgroundSet()
     }
 
     /// Loads the stages now rather than on the first utterance. The launch warm-up calls this so the
@@ -109,6 +114,10 @@ actor GatedKokoroCoreMLEngine: SynthesisEngine {
         var options = KokoroCoreMLEngine.Options.default
         options.computeUnits = computeUnits
         options.backgroundComputeUnits = backgroundComputeUnits
+        options.loadsBackgroundSet = loadsBackgroundSet
+        // t256 is an optional optimization, but its device specialization occupies one core for
+        // 158–512 seconds and cannot be interrupted when the listener backgrounds the app.
+        options.loadsLaterDurationModels = false
         let engine = KokoroCoreMLEngine(resources: resources, options: options)
         await engine.setLoadAdmission(admission)
         await engine.setRenderPlacement(placement)

@@ -38,11 +38,8 @@ import T2SCore
 
     // MARK: Identity
 
-    /// The identity carries the model revision on purpose: it keys the render store, so moving the
-    /// pin invalidates every rendered utterance rather than letting audio from one set of weights be
-    /// replayed as if it came from another. This expectation is meant to fail when the pin moves.
     @Test func identityIsPinnedToTheRevisionAndRuntime() {
-        #expect(KokoroCoreMLEngine.identity == "kokoro-coreml-3ffe1347-misaki1.0.6")
+        #expect(KokoroCoreMLEngine.identity == "kokoro-coreml-2e878c6a-misaki1.0.6")
         #expect(KokoroCoreMLEngine.runtime == "coreml-cpu")
         #expect(Self.engineWithoutResources().engineID == KokoroCoreMLEngine.identity)
     }

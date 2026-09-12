@@ -201,14 +201,8 @@ struct KokoroComposition {
     let status: KokoroStatusModel
     /// What Settings → Storage shows and does for the downloaded model (`KokoroModelStore`).
     let modelStore: KokoroModelStore
-    /// How far ahead the live player renders, in every state (the window is one value; the
-    /// coordinator does not know the foreground from the background). Ten minutes on a phone whose
-    /// main set is on the GPU (30 s of GPU at RTF 0.05), because it cannot render while locked
-    /// until its CPU set has compiled — a first foreground session's work — and that set is slower.
-    /// Three minutes on the CPU path: locked, the budget renders ~70 s of audio and then sleeps
-    /// most of a minute (crashreport.md, Finding 2b), so a buffer the size of one cycle ran dry at
-    /// every cycle's end; two cycles' worth (31 s of A13 rendering at RTF 0.17 to fill) rides
-    /// through them.
+    /// The urgent, unpaced audio window. One minute on every phone keeps startup and seeks quick;
+    /// the foreground fill beyond it is paced separately, so neither the CPU nor GPU stays pinned.
     let playAheadWindowSeconds: TimeInterval?
     /// How far past the window the live player renders while the app is frontmost and the listener
     /// is listening: the rest of the current chapter, clamped to this range of audio seconds at 1x
@@ -216,10 +210,9 @@ struct KokoroComposition {
     /// the budget-paced background loop sustains ~0.9 audio-seconds per wall-second at 1x on the
     /// A13 (crashreport.md, Finding 2b) — it can hold a buffer, never grow one — so the buffer is
     /// built while the screen is on, at RTF 0.17 and no budget, and the loop then finds its window
-    /// already rendered. CPU path: 10–20 min, 2–11 min of A13 CPU per fill (RTF 0.17–0.56), 6–11 MB
-    /// of AAC; a 20-minute buffer drains in ~3 h locked at 1x, ~33 min at 1.5x (deficit 0.6 s/s).
-    /// GPU path: 20–60 min, 1–3 min of GPU at RTF 0.05, 34 MB at the most. Nil in the everyday
-    /// build. Not rate-scaled — a CPU and disk spend, not a time-to-dry.
+    /// already rendered. Five minutes on either compute path is the balanced policy: enough cached
+    /// audio for a short background interval without minutes of sustained foreground inference.
+    /// Nil in the everyday build. Not rate-scaled — a CPU and disk spend, not a time-to-dry.
     let foregroundFillSeconds: ClosedRange<TimeInterval>?
     /// The runtimes whose voices the picker lists, with the qualifier each row carries — asked every
     /// time the list is drawn, because the MLX probe answers seconds after the composition root has
@@ -286,7 +279,8 @@ struct KokoroComposition {
     /// builds wait on it, because a process that is not frontmost is killed for a minute of a
     /// core (the iPhone 17 Pro, 2026-09-09 15:14). A process launched for a background task never
     /// opens it, so neither ever starts there.
-    static func make(gate: ForegroundGate, defaults: UserDefaults = .standard) -> KokoroComposition {
+    static func make(gate: ForegroundGate, defaults: UserDefaults = .standard,
+                     standIn: @escaping @Sendable () -> String? = { nil }) -> KokoroComposition {
         let log = Logger(subsystem: "com.t2s.reader", category: "kokoro")
         #if KOKORO_ENGINE
         // Where the downloaded model lives: the app's own Application Support, at a path that
@@ -312,10 +306,10 @@ struct KokoroComposition {
         if computeUnits != policy {
             log.notice("Kokoro compute units overridden for this session: \(computeUnits.runtimeName, privacy: .public) (this phone's default is \(policy.runtimeName, privacy: .public))")
         }
-        // The fill's bound by path (Plan 18): 10–20 min on the CPU path, 20–60 on the GPU's; the
+        // Five minutes on either path, paced by the scheduler to at most 2x real time. The
         // developer default caps it or turns it off for the session. `double(forKey:)` reads a
         // launch argument's string as well as a stored number; the `object` test tells unset from 0.
-        let fillPolicy: ClosedRange<TimeInterval> = computeUnits == .cpu ? 600...1200 : 1200...3600
+        let fillPolicy: ClosedRange<TimeInterval> = 300...300
         let fillOverride: Double? = defaults.object(forKey: foregroundFillKey) == nil ? nil : defaults.double(forKey: foregroundFillKey)
         let fill = Self.foregroundFill(policy: fillPolicy, override: fillOverride)
         if let fill {
@@ -324,9 +318,10 @@ struct KokoroComposition {
             log.notice("render-ahead fill off for this session (\(foregroundFillKey, privacy: .public) = 0)")
         }
         // A main set on the GPU cannot render while the app is in the background — iOS refuses the
-        // work — so such a phone keeps a small CPU set for what the gate says is in the background
-        // (`KokoroCoreMLResources.backgroundBuckets`), loaded after the main one during the first
-        // foreground session; until it exists, a background render waits for the foreground.
+        // work. Keep the small CPU set configured so a background render follows the engine's safe
+        // wait-for-foreground path, but do not load it: one A19 CPU plan stayed inside Core ML for
+        // more than 48 seconds after the scene backgrounded and iOS killed the process. The cached
+        // five-minute foreground fill plays meanwhile; synthesis resumes when the scene is active.
         let backgroundComputeUnits: KokoroComputeUnits? = computeUnits == .cpu ? nil : .cpu
         // Placement reads its own flag (`sceneIsBackground`, set by `noteScene(isBackground:)` from
         // `ScenePlacement`), not the gate: `.inactive` closes the gate (plan builds must not run
@@ -343,6 +338,7 @@ struct KokoroComposition {
         let sceneIsBackground = OSAllocatedUnfairLock(initialState: true)
         let coreMLEngine = GatedKokoroCoreMLEngine(availability: coreML, computeUnits: computeUnits,
                                                    backgroundComputeUnits: backgroundComputeUnits,
+                                                   loadsBackgroundSet: false,
                                                    admission: { await gate.waitUntilForeground() },
                                                    placement: { sceneIsBackground.withLock { $0 } ? .background : .foreground })
         // The MLX route costs a 340 MB hash, so one probe per launch, started below and memoized —
@@ -384,7 +380,8 @@ struct KokoroComposition {
         // verdict — the files are there — and the warm-up may close it: a bundle whose stages will
         // never load must route documents *away* from Kokoro (spec §6, whole document) rather than
         // give a reader a book of 200 ms silences. Nothing reopens it before the next launch,
-        // except an install finishing, which opens it for the first time.
+        // except a warm-up finishing, which opens it: the route is open only while the engine can
+        // render at speed, and the hosted voice speaks for a cloud-first reader until then.
         let coreMLRouteOpen = OSAllocatedUnfairLock(initialState: false)
         // `UserDefaults.standard` by name: `UserDefaults` is not `Sendable` to Swift 6, so the
         // parameter cannot be captured here, and the app never passes anything else.
@@ -445,7 +442,6 @@ struct KokoroComposition {
 
         switch coreML.verdict {
         case .available(let decision, _):
-            coreMLRouteOpen.withLock { $0 = true }
             log.notice("Kokoro Core ML route available (\(computeUnits.runtimeName, privacy: .public); the A13 measured RTF \(decision.measuredRTF, format: .fixed(precision: 3), privacy: .public))")
             // Loading the stages takes seconds on a modern phone and minutes on an A13's first
             // launch, and the G2P's lexicons a few hundred milliseconds more. Pay them now, while the
@@ -506,11 +502,12 @@ struct KokoroComposition {
                 ],
                 // Spec §6: a reader who has never chosen a voice gets Kokoro Heart, not the system
                 // voice — but only while the route that renders it is available.
-                defaultVoice: KokoroVoiceID(engineID: KokoroCoreMLEngine.identity, voice: "af_heart").rawValue
+                defaultVoice: KokoroVoiceID(engineID: KokoroCoreMLEngine.identity, voice: "af_heart").rawValue,
+                standIn: standIn
             ),
             status: status,
             modelStore: modelStore,
-            playAheadWindowSeconds: computeUnits == .cpu ? 180 : 600,
+            playAheadWindowSeconds: 60,
             foregroundFillSeconds: fill,
             catalogEngines: catalogEngines(mlxListed: mlxListed),
             sceneIsBackground: sceneIsBackground
@@ -533,7 +530,8 @@ struct KokoroComposition {
                 if fake != "1" { status.update(.available(isDebugOverride: true)) }
             }
         }
-        return KokoroComposition(engines: [], voiceRouting: KokoroVoiceRouting.unavailable,
+        return KokoroComposition(engines: [],
+                                 voiceRouting: KokoroVoiceRouting(routes: [], defaultVoice: nil, standIn: standIn),
                                  status: status, modelStore: .unsupported,
                                  playAheadWindowSeconds: nil, foregroundFillSeconds: nil, catalogEngines: { [] },
                                  sceneIsBackground: OSAllocatedUnfairLock(initialState: true))
@@ -592,7 +590,6 @@ struct KokoroComposition {
             log.notice("Kokoro Core ML model installed in \(Double(elapsed.components.seconds), format: .fixed(precision: 0), privacy: .public) s")
             KokoroCoreMLEngine.timing("kokoro model installed in \(elapsed.components.seconds) s")
             availability.installed(located)
-            routeOpen.withLock { $0 = true }
             status.update(.preparing)
             await warmUp(engine, routeOpen: routeOpen, status: status, log: log, markWarmed: markWarmed)
         } catch is CancellationError {
@@ -639,6 +636,11 @@ struct KokoroComposition {
                 KokoroCoreMLEngine.timing("kokoro warm-up finished in \(KokoroCoreMLEngine.fixed(seconds, 1)) s")
                 linkDuplicateWeightsOnce()
                 status.recordWarmUp(seconds: seconds)
+                // The route opens here, and not when the engine loaded: open before the stages are
+                // warm, its first renders measure like a machine that cannot keep up, and a cloud-first
+                // reader who tapped play the moment it opened would have heard them instead of the
+                // hosted voice (cloud-first bootstrap spec). Open only when it can render at speed.
+                routeOpen.withLock { $0 = true }
                 // Never an override: the Core ML decision is measured, not a development escape hatch.
                 status.update(.available(isDebugOverride: false))
                 // "Warmed" is what a background Prepare launch checks before it renders: on a phone

@@ -75,6 +75,30 @@ import T2SCore
 }
 
 extension KokoroCoreMLLoadTests {
+    /// A GPU phone may deliberately remain foreground-only: building the fallback CPU set can hold
+    /// one core inside an uninterruptible `MLModel.load` for minutes, and iOS kills that work if the
+    /// listener backgrounds the app. Disabling the set must not even call the stage loader.
+    @Test func aDisabledBackgroundSetNeverStartsItsStageLoader() {
+        var options = KokoroCoreMLEngine.Options.default
+        options.backgroundComputeUnits = .cpu
+        options.loadsBackgroundSet = false
+        #expect(!options.shouldLoadBackgroundSet)
+
+        options.loadsBackgroundSet = true
+        #expect(options.shouldLoadBackgroundSet)
+    }
+
+    /// The optional t256 duration plan takes 158–512 seconds to specialize on the measured phones.
+    /// The shipping policy can omit it and keep cutting long pieces to the ready t128 model.
+    @Test func longDurationPlanLoadingCanBeDisabled() {
+        var options = KokoroCoreMLEngine.Options.default
+        options.loadsLaterDurationModels = false
+        #expect(options.laterDurationTokenLengths.isEmpty)
+
+        options.loadsLaterDurationModels = true
+        #expect(options.laterDurationTokenLengths == [256])
+    }
+
     /// A piece cut for the t256 duration model, rendered through a set whose largest is t128 — the
     /// background set — is split before any render, like a piece whose audio overflows its bucket.
     @Test func aPieceTooLongForTheSetIsSplitBeforeItRenders() throws {

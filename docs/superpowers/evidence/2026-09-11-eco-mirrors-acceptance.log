@@ -1,0 +1,68 @@
+# Eco voice mirrors — acceptance record (running; the final listen is appended when the owner reports it)
+# apps: kokoro-t2s, kokoro-t2s-m2, kokoro-t2s-m3, kokoro-t2s-m4 · Basic dynos since 2026-09-12 (Eco during the first probes)
+
+## mirrors.sh 2 — 2026-09-12T02:02:39Z
+kokoro-t2s       health=200 render=audio/pcm dyno=Eco addons=0  https://kokoro-t2s-a007171ff076.herokuapp.com/v1/audio/speech
+kokoro-t2s-m2    health=200 render=audio/pcm dyno=Eco addons=0  https://kokoro-t2s-m2-d13cbe083bd3.herokuapp.com/v1/audio/speech
+
+  mirror-1.pcm:  8.12 s of audio
+  mirror-2.pcm:  8.12 s of audio
+wall 23.1 s, audio 16.2 s, aggregate realtime 1.42x (below 1.0 keeps ahead of playback)
+## mirrors.sh 4 — 2026-09-12T02:05:01Z
+kokoro-t2s       health=200 render=audio/pcm dyno=Eco addons=0  https://kokoro-t2s-a007171ff076.herokuapp.com/v1/audio/speech
+kokoro-t2s-m2    health=200 render=audio/pcm dyno=Eco addons=0  https://kokoro-t2s-m2-d13cbe083bd3.herokuapp.com/v1/audio/speech
+kokoro-t2s-m3    health=200 render=audio/pcm dyno=Eco addons=0  https://kokoro-t2s-m3-71b4e3836076.herokuapp.com/v1/audio/speech
+kokoro-t2s-m4    health=200 render=audio/pcm dyno=Eco addons=0  https://kokoro-t2s-m4-b46b9e051494.herokuapp.com/v1/audio/speech
+
+  mirror-1.pcm:  8.12 s of audio
+  mirror-2.pcm:  8.12 s of audio
+  mirror-3.pcm:  8.12 s of audio
+  mirror-4.pcm:  8.12 s of audio
+wall 25.0 s, audio 32.5 s, aggregate realtime 0.77x (below 1.0 keeps ahead of playback)
+## mirror logs, baseline after deploy + probes — 2026-09-12T02:06:12Z
+== kokoro-t2s
+  errors R14/R15/H12: 8
+  peak: memory_rss=505.29MB
+  Eco dyno usage for this app: 0h 0m (0%)
+== kokoro-t2s-m2
+  errors R14/R15/H12: 1
+  peak: memory_rss=508.70MB
+  Eco dyno usage for this app: 0h 0m (0%)
+== kokoro-t2s-m3
+  errors R14/R15/H12: 0
+  peak: memory_rss=171.88MB
+  Eco dyno usage for this app: 0h 0m (0%)
+== kokoro-t2s-m4
+  errors R14/R15/H12: 0
+  peak: memory_rss=423.18MB
+  Eco dyno usage for this app: 0h 0m (0%)
+
+## cloud-first bootstrap: first phone run (2026-09-12T03:01Z), before the route-pool fix
+phone fwd=73.63.164.213 reached all four mirrors with nothing configured on the phone
+  kokoro-t2s: 200s=8 429s=1 H12=0 H27=1
+  kokoro-t2s-m2: 200s=3 429s=4 H12=1 H27=0
+  kokoro-t2s-m3: 200s=10 429s=2 H12=0 H27=0
+  kokoro-t2s-m4: 200s=9 429s=1 H12=0 H27=0
+  03:01:53-55Z one request walked m3 -> m4 -> primary -> m2, 429 from each: the 'rate limiting' banner. Fixed by the route pool (08ab4f7).
+  03:01:31Z H12 on m2: its first render on a cold dyno exceeded the router's 30 s. Owed: a warm-up render at dyno boot.
+
+## cloud-first bootstrap: fresh install, first run (2026-09-12T04:00-04:04Z), Basic mirrors, pool + budget + rate-floor fixes
+fresh install (app deleted, model absent): first sound from the mirrors with nothing typed; the reader reported it works
+48 renders across four mirrors, 0 x 429, 0 x H12, 0 x H27; per-render rtf 2.2-2.5x; mean utterance 3.7-5.0 s audio; slowest single renders 7.6-9.8 s
+reported slow after a chapter skip: the head rendered whole (up to ~10 s) behind the batch holding the mirrors. Fixed by the streaming head (eab515f).
+
+## mirrors five to seven, Basic — 2026-09-12T04:20Z
+kokoro-t2s-m5  render=audio/pcm dyno=Basic  https://kokoro-t2s-m5-aa90f85dde1c.herokuapp.com/v1/audio/speech
+kokoro-t2s-m6  render=audio/pcm dyno=Basic  https://kokoro-t2s-m6-00b5b70ab03d.herokuapp.com/v1/audio/speech
+kokoro-t2s-m7  render=audio/pcm dyno=Basic  https://kokoro-t2s-m7-e73d54cc01ec.herokuapp.com/v1/audio/speech
+
+## mirrors.sh 7 with the boot-time warm-up (5165c23) — 2026-09-12T04:35Z, deployed while the owner listened; nothing was heard
+kokoro-t2s       health=200 render=audio/pcm dyno=Basic addons=0  https://kokoro-t2s-a007171ff076.herokuapp.com/v1/audio/speech
+kokoro-t2s-m2    health=200 render=audio/pcm dyno=Basic addons=0  https://kokoro-t2s-m2-d13cbe083bd3.herokuapp.com/v1/audio/speech
+kokoro-t2s-m3    health=200 render=audio/pcm dyno=Basic addons=0  https://kokoro-t2s-m3-71b4e3836076.herokuapp.com/v1/audio/speech
+kokoro-t2s-m4    health=200 render=audio/pcm dyno=Basic addons=0  https://kokoro-t2s-m4-b46b9e051494.herokuapp.com/v1/audio/speech
+kokoro-t2s-m5    health=200 render=audio/pcm dyno=Basic addons=0  https://kokoro-t2s-m5-aa90f85dde1c.herokuapp.com/v1/audio/speech
+kokoro-t2s-m6    health=200 render=audio/pcm dyno=Basic addons=0  https://kokoro-t2s-m6-00b5b70ab03d.herokuapp.com/v1/audio/speech
+kokoro-t2s-m7    health=200 render=audio/pcm dyno=Basic addons=0  https://kokoro-t2s-m7-e73d54cc01ec.herokuapp.com/v1/audio/speech
+
+## owner's verdict, 2026-09-12: "it works great now" — hosted first, seven mirrors, no catching up, handoff seamless

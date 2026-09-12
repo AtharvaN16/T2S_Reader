@@ -44,7 +44,22 @@ public actor RoutedEngine: SynthesisEngine {
 
     public func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
         let routed = try await engine(for: request)
-        return try await routed.engine.synthesize(routed.request)
+        do {
+            return try await routed.engine.synthesize(routed.request)
+        } catch {
+            // The phone's own engine failed on this line: the mirrors say it instead, when the
+            // hosted route is configured with a key. A fallback for an actual failure, not a timer.
+            guard KokoroVoiceID(rawValue: request.voiceID) != nil,
+                  let hosted = try? await hostedFallback(for: request) else { throw error }
+            return try await hosted.engine.synthesize(hosted.request)
+        }
+    }
+
+    /// The same line on the hosted route, when one is configured with a key; nil otherwise.
+    private func hostedFallback(for request: SynthesisRequest) async throws -> (engine: any SynthesisEngine, request: SynthesisRequest)? {
+        guard let configuration = configuration(), let key = try await key(), !key.isEmpty else { return nil }
+        let voiceID = CloudVoiceID(configuration: configuration, voice: configuration.voice).rawValue
+        return try await engine(for: SynthesisRequest(spoken: request.spoken, voiceID: voiceID))
     }
 
     /// Streaming is routed exactly as synthesis is: the engine that owns the voice answers.
@@ -53,8 +68,20 @@ public actor RoutedEngine: SynthesisEngine {
             let task = Task {
                 do {
                     let routed = try await self.engine(for: request)
-                    for try await chunk in routed.engine.synthesizeStreaming(routed.request) {
-                        continuation.yield(chunk)
+                    var yielded = false
+                    do {
+                        for try await chunk in routed.engine.synthesizeStreaming(routed.request) {
+                            yielded = true
+                            continuation.yield(chunk)
+                        }
+                    } catch {
+                        // Nothing heard yet and the phone's own engine failed: the mirrors take the
+                        // line. Once a piece is out, the scheduler keeps what was heard instead.
+                        guard !yielded, KokoroVoiceID(rawValue: request.voiceID) != nil,
+                              let hosted = try? await self.hostedFallback(for: request) else { throw error }
+                        for try await chunk in hosted.engine.synthesizeStreaming(hosted.request) {
+                            continuation.yield(chunk)
+                        }
                     }
                     continuation.finish()
                 } catch {
@@ -63,6 +90,21 @@ public actor RoutedEngine: SynthesisEngine {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    /// A cloud voice renders as wide as its mirror list; everything on the device renders one at
+    /// a time. Reads only the configuration closure, so it needs no actor hop.
+    public nonisolated func maxConcurrentRenders(for voiceID: String) -> Int {
+        guard let cloudID = CloudVoiceID(rawValue: voiceID),
+              let configuration = configuration(),
+              configuration.fingerprint == cloudID.fingerprint
+        else { return 1 }
+        return max(1, configuration.endpoints.count)
+    }
+
+    /// A cloud voice renders on the mirrors; everything else renders here.
+    public nonisolated func rendersOnDevice(for voiceID: String) -> Bool {
+        CloudVoiceID(rawValue: voiceID) == nil
     }
 
     /// Resolves which engine owns `request`'s voice and the request to hand it — shared by
@@ -81,7 +123,10 @@ public actor RoutedEngine: SynthesisEngine {
                 throw HTTPVoiceError.notConfigured
             }
             try configuration.validate()
-            let cacheKey = "\(configuration.fingerprint)\u{1F}\(configuration.requestRatePerMinute)"
+            // The fingerprint ignores mirrors on purpose (cached audio survives a mirror edit), so
+            // the engine, which must know every mirror, is keyed on all of them.
+            let cacheKey = ([configuration.fingerprint, String(configuration.requestRatePerMinute)]
+                            + configuration.endpoints.map(\.absoluteString)).joined(separator: "\u{1F}")
             let engine: HTTPVoiceEngine
             if let existing = cloudEngines[cacheKey] {
                 engine = existing

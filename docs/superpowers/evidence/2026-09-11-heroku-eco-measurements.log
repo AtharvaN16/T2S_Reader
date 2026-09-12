@@ -1,0 +1,44 @@
+# Heroku Eco pilot — measured acceptance run
+# app: kokoro-t2s   stack: heroku-24   dyno: web=1:eco   quota: 512 MB
+# captured: 2026-09-12T00:51:12Z
+
+## Live request results
+  health            200  0.56 s
+  no auth           401
+  wrong token       401
+  404 chars         422  (input cap 400 enforced)
+   51 chars         200  7.7-9.0 s   2.77 s audio   ~2.8x realtime
+  100 chars         200  14.47 s     5.65 s audio   2.56x realtime
+  150 chars         200  23.43 s     8.34 s audio   2.81x realtime
+  200 chars         200  28.91 s    11.08 s audio   2.61x realtime
+  250 chars         503  H12 request timeout at 30 s
+  388 chars         503  H12 request timeout at 30 s + R14
+
+## Dyno runtime metrics and errors
+2026-09-12T00:45:33.614500+00:00 heroku[web.1]: Starting process with command `uvicorn voice_service.main:build_app --factory --host 0.0.0.0 --port 53632 --workers 1 --log-level info --no-access-log`
+2026-09-12T00:45:36.054430+00:00 heroku[web.1]: State changed from starting to up
+2026-09-12T00:45:47.921361+00:00 heroku[web.1]: State changed from up to down
+2026-09-12T00:45:48.888276+00:00 heroku[web.1]: Stopping all processes with SIGTERM
+2026-09-12T00:45:55.289096+00:00 heroku[web.1]: Starting process with command `uvicorn voice_service.main:build_app --factory --host 0.0.0.0 --port 52714 --workers 1 --log-level info --no-access-log`
+2026-09-12T00:45:57.733447+00:00 heroku[web.1]: State changed from starting to up
+2026-09-12T00:46:14.545172+00:00 heroku[web.1]: source=web.1 dyno=heroku.573743380.9335527a-fdc0-4a87-b64f-4d3ef5490c84 sample#memory_total=172.48MB sample#memory_rss=172.19MB sample#memory_cache=0.29MB sample#memory_swap=0.00MB sample#memory_pgpgin=0pages sample#memory_pgpgout=0pages sample#memory_quota=512.00MB
+2026-09-12T00:46:34.175770+00:00 heroku[web.1]: source=web.1 dyno=heroku.573743380.9335527a-fdc0-4a87-b64f-4d3ef5490c84 sample#memory_total=169.33MB sample#memory_rss=101.09MB sample#memory_cache=0.11MB sample#memory_swap=68.14MB sample#memory_pgpgin=828pages sample#memory_pgpgout=0pages sample#memory_quota=512.00MB
+2026-09-12T00:46:53.982742+00:00 heroku[web.1]: source=web.1 dyno=heroku.573743380.9335527a-fdc0-4a87-b64f-4d3ef5490c84 sample#memory_total=194.38MB sample#memory_rss=112.77MB sample#memory_cache=0.53MB sample#memory_swap=81.07MB sample#memory_pgpgin=19662pages sample#memory_pgpgout=0pages sample#memory_quota=512.00MB
+2026-09-12T00:47:14.701268+00:00 heroku[web.1]: source=web.1 dyno=heroku.573743380.9335527a-fdc0-4a87-b64f-4d3ef5490c84 sample#memory_total=194.66MB sample#memory_rss=113.07MB sample#memory_cache=0.53MB sample#memory_swap=81.07MB sample#memory_pgpgin=19662pages sample#memory_pgpgout=0pages sample#memory_quota=512.00MB
+2026-09-12T00:47:36.516241+00:00 heroku[web.1]: source=web.1 dyno=heroku.573743380.9335527a-fdc0-4a87-b64f-4d3ef5490c84 sample#memory_total=334.82MB sample#memory_rss=249.24MB sample#memory_cache=0.00MB sample#memory_swap=85.58MB sample#memory_pgpgin=36476pages sample#memory_pgpgout=0pages sample#memory_quota=512.00MB
+2026-09-12T00:47:53.149831+00:00 heroku[web.1]: source=web.1 dyno=heroku.573743380.9335527a-fdc0-4a87-b64f-4d3ef5490c84 sample#memory_total=778.93MB sample#memory_rss=505.29MB sample#memory_cache=0.03MB sample#memory_swap=273.61MB sample#memory_pgpgin=68376pages sample#memory_pgpgout=0pages sample#memory_quota=512.00MB
+2026-09-12T00:47:53.153756+00:00 heroku[web.1]: Error R14 (Memory quota exceeded)
+2026-09-12T00:47:54.444229+00:00 heroku[router]: at=error code=H12 desc="Request timeout" method=POST path="/v1/audio/speech" host=kokoro-t2s-a007171ff076.herokuapp.com request_id=da838800-f55a-191f-92ea-5d1365e89a3c fwd="73.63.164.213" dyno=web.1 connect=0ms service=30000ms status=503 bytes=567 protocol=http1.1 tls=false
+2026-09-12T00:48:16.013024+00:00 heroku[web.1]: source=web.1 dyno=heroku.573743380.9335527a-fdc0-4a87-b64f-4d3ef5490c84 sample#memory_total=254.32MB sample#memory_rss=156.64MB sample#memory_cache=0.03MB sample#memory_swap=97.65MB sample#memory_pgpgin=86334pages sample#memory_pgpgout=0pages sample#memory_quota=512.00MB
+2026-09-12T00:48:34.448799+00:00 heroku[web.1]: source=web.1 dyno=heroku.573743380.9335527a-fdc0-4a87-b64f-4d3ef5490c84 sample#memory_total=220.59MB sample#memory_rss=122.91MB sample#memory_cache=0.03MB sample#memory_swap=97.65MB sample#memory_pgpgin=86334pages sample#memory_pgpgout=0pages sample#memory_quota=512.00MB
+2026-09-12T00:48:54.158297+00:00 heroku[web.1]: source=web.1 dyno=heroku.573743380.9335527a-fdc0-4a87-b64f-4d3ef5490c84 sample#memory_total=313.15MB sample#memory_rss=214.42MB sample#memory_cache=0.56MB sample#memory_swap=98.17MB sample#memory_pgpgin=98911pages sample#memory_pgpgout=0pages sample#memory_quota=512.00MB
+2026-09-12T00:49:17.074278+00:00 heroku[web.1]: source=web.1 dyno=heroku.573743380.9335527a-fdc0-4a87-b64f-4d3ef5490c84 sample#memory_total=202.07MB sample#memory_rss=100.19MB sample#memory_cache=0.03MB sample#memory_swap=101.84MB sample#memory_pgpgin=129354pages sample#memory_pgpgout=0pages sample#memory_quota=512.00MB
+2026-09-12T00:49:35.658551+00:00 heroku[web.1]: source=web.1 dyno=heroku.573743380.9335527a-fdc0-4a87-b64f-4d3ef5490c84 sample#memory_total=731.39MB sample#memory_rss=504.09MB sample#memory_cache=0.00MB sample#memory_swap=227.31MB sample#memory_pgpgin=150691pages sample#memory_pgpgout=0pages sample#memory_quota=512.00MB
+2026-09-12T00:49:35.663561+00:00 heroku[web.1]: Error R14 (Memory quota exceeded)
+2026-09-12T00:49:54.710805+00:00 heroku[web.1]: source=web.1 dyno=heroku.573743380.9335527a-fdc0-4a87-b64f-4d3ef5490c84 sample#memory_total=524.16MB sample#memory_rss=417.89MB sample#memory_cache=0.53MB sample#memory_swap=105.74MB sample#memory_pgpgin=154449pages sample#memory_pgpgout=0pages sample#memory_quota=512.00MB
+2026-09-12T00:49:54.714584+00:00 heroku[web.1]: Error R14 (Memory quota exceeded)
+2026-09-12T00:50:16.769947+00:00 heroku[web.1]: source=web.1 dyno=heroku.573743380.9335527a-fdc0-4a87-b64f-4d3ef5490c84 sample#memory_total=489.80MB sample#memory_rss=383.48MB sample#memory_cache=0.03MB sample#memory_swap=106.29MB sample#memory_pgpgin=170839pages sample#memory_pgpgout=0pages sample#memory_quota=512.00MB
+2026-09-12T00:50:20.459602+00:00 heroku[router]: at=error code=H12 desc="Request timeout" method=POST path="/v1/audio/speech" host=kokoro-t2s-a007171ff076.herokuapp.com request_id=49c1576a-e7ce-568e-c00f-d7a57db301f8 fwd="73.63.164.213" dyno=web.1 connect=0ms service=30000ms status=503 bytes=567 protocol=http1.1 tls=false
+2026-09-12T00:50:35.739298+00:00 heroku[web.1]: source=web.1 dyno=heroku.573743380.9335527a-fdc0-4a87-b64f-4d3ef5490c84 sample#memory_total=203.07MB sample#memory_rss=84.20MB sample#memory_cache=0.00MB sample#memory_swap=118.86MB sample#memory_pgpgin=194344pages sample#memory_pgpgout=0pages sample#memory_quota=512.00MB
+2026-09-12T00:50:56.960285+00:00 heroku[web.1]: source=web.1 dyno=heroku.573743380.9335527a-fdc0-4a87-b64f-4d3ef5490c84 sample#memory_total=232.91MB sample#memory_rss=114.05MB sample#memory_cache=0.00MB sample#memory_swap=118.86MB sample#memory_pgpgin=194344pages sample#memory_pgpgout=0pages sample#memory_quota=512.00MB
+2026-09-12T00:51:13.255378+00:00 heroku[web.1]: source=web.1 dyno=heroku.573743380.9335527a-fdc0-4a87-b64f-4d3ef5490c84 sample#memory_total=232.91MB sample#memory_rss=114.05MB sample#memory_cache=0.00MB sample#memory_swap=118.86MB sample#memory_pgpgin=194344pages sample#memory_pgpgout=0pages sample#memory_quota=512.00MB

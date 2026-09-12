@@ -64,6 +64,9 @@ public final class CloudVoiceSettings {
         static let model = "cloudVoice.model"
         static let voice = "cloudVoice.voice"
         static let rate = "cloudVoice.requestRatePerMinute"
+        /// The endpoint text the app itself last wrote, so a later build can tell its own route
+        /// from the reader's edit.
+        static let shippedEndpoint = "cloudVoice.shippedEndpoint"
     }
 
     private let defaults: UserDefaults
@@ -92,8 +95,23 @@ public final class CloudVoiceSettings {
         }
     }
 
-    public init(defaults: UserDefaults = .standard) {
+    public init(defaults: UserDefaults = .standard, shipped: CloudVoiceDefaults? = nil) {
         self.defaults = defaults
+        if let shipped {
+            let stored = defaults.string(forKey: Key.endpoint)
+            let written = defaults.string(forKey: Key.shippedEndpoint)
+            // First launch, or a route still exactly as the app itself wrote it — by the marker, or
+            // by value for a build that kept none — takes the current shipped route. An edit, even
+            // to nothing, is the reader's and is never overwritten.
+            let untouched = stored == nil || stored == written || CloudVoiceDefaults.superseded.contains(stored ?? "")
+            if untouched, stored != shipped.endpointText {
+                defaults.set(shipped.endpointText, forKey: Key.endpoint)
+                defaults.set(shipped.model, forKey: Key.model)
+                defaults.set(shipped.voice, forKey: Key.voice)
+                defaults.set(shipped.requestRatePerMinute, forKey: Key.rate)
+            }
+            if untouched { defaults.set(shipped.endpointText, forKey: Key.shippedEndpoint) }
+        }
         let savedEndpoint = defaults.string(forKey: Key.endpoint) ?? ""
         let savedModel = defaults.string(forKey: Key.model) ?? ""
         let savedVoice = defaults.string(forKey: Key.voice) ?? ""
@@ -139,11 +157,17 @@ public final class CloudVoiceSettings {
         configurationStore.replace(with: nil)
     }
 
+    /// One endpoint per line, the first being the primary; blank lines are ignored. A single line
+    /// is what every existing install has stored, and it parses as before.
     private static func makeConfiguration(endpointText: String, model: String, voice: String, rate: Int) throws -> HTTPVoiceConfiguration {
-        guard let endpoint = URL(string: endpointText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-            throw HTTPVoiceError.invalidConfiguration
+        let endpoints = try endpointText.split(whereSeparator: \.isNewline).compactMap { line -> URL? in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return nil }
+            guard let url = URL(string: trimmed) else { throw HTTPVoiceError.invalidConfiguration }
+            return url
         }
-        let configuration = HTTPVoiceConfiguration(endpoint: endpoint, model: model, voice: voice, requestRatePerMinute: rate)
+        guard !endpoints.isEmpty else { throw HTTPVoiceError.invalidConfiguration }
+        let configuration = HTTPVoiceConfiguration(endpoints: endpoints, model: model, voice: voice, requestRatePerMinute: rate)
         try configuration.validate()
         return configuration
     }

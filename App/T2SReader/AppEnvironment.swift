@@ -112,6 +112,11 @@ final class AppEnvironment {
         // played now, prepared in the background, or described in Preferences (spec §6).
         player.voiceRouting = voiceRouting
         prepareRunner.voiceRouting = voiceRouting
+        // A charger never renders a library through the mirrors: prepare waits for the on-device voice.
+        // The routing alone is captured, not the environment: it is `Sendable`, and the runner
+        // must not retain everything through its gate.
+        let routing = voiceRouting
+        prepareRunner.isStandingIn = { await routing.effectiveVoiceID(VoiceOption.systemDefault.id).hasPrefix("cloud:") }
         // Spec §3.4.1 tier 2: a new document's first 30 s render now, on any power state, so its
         // first tap plays with no spin-up. One at a time, behind whatever the player is rendering —
         // the arbiter gives play-ahead the next utterance.
@@ -158,20 +163,34 @@ final class AppEnvironment {
         let shared = try SharedLibraryFactory.make(capacityBytes: capacity)
         let storedBudget = UserDefaults.standard.object(forKey: AppPaths.prepareBudgetKey) as? Double ?? 3 * 3600
         let prepareBudget = storedBudget.isFinite ? storedBudget : 365 * 24 * 3600
-        let cloudVoiceSettings = CloudVoiceSettings()
+        let cloudVoiceSettings = CloudVoiceSettings(shipped: .pilot)
         let cloudVoiceSecrets = KeychainSecretStore()
+        // The build's key into the Keychain, once (cloud-first bootstrap spec). A failure to store
+        // is not fatal: the route then waits for a key typed in Cloud voices, as before.
+        _ = try? CloudVoiceKeySeeder.seed(infoValue: Bundle.main.infoDictionary?["T2SCloudVoiceKey"] as? String,
+                                          into: cloudVoiceSecrets)
         let configurationStore = cloudVoiceSettings.configurationStore
         let systemEngine = SystemSpeechEngine()
         // Closed until the scene reports itself active; a process launched for a background task
         // never opens it, so nothing that needs the foreground ever starts there.
         let foregroundGate = ForegroundGate(isForeground: false)
-        let cpuBudget = CPUBudget(gate: foregroundGate)
+        // Forty percent of one core leaves headroom for audio and app work on the CPU-only phones;
+        // the previous 60% render allowance could keep an older phone hot throughout playback.
+        let cpuBudget = CPUBudget(gate: foregroundGate, budgetSeconds: 24)
         // The budget's pacing decisions otherwise live only in `os_log`, which the phone does not
         // hand over; the timing log is what a crash report can actually be read against.
         #if KOKORO_ENGINE
         cpuBudget.report = { KokoroCoreMLEngine.timing("kokoro budget: " + $0) }
         #endif
-        let kokoro = KokoroComposition.make(gate: foregroundGate)
+        // Hosted Heart stands in for the default wherever the on-device route is not yet open —
+        // while a route is configured and the Keychain holds its key.
+        let standIn: @Sendable () -> String? = {
+            guard let configuration = configurationStore.current(),
+                  let key = try? cloudVoiceSecrets.load(), !key.isEmpty
+            else { return nil }
+            return CloudVoiceID(configuration: configuration, voice: configuration.voice).rawValue
+        }
+        let kokoro = KokoroComposition.make(gate: foregroundGate, standIn: standIn)
         let cloudRouter = RoutedEngine(
             system: systemEngine,
             // Both on-device runtimes, keyed by identity: a `kokoro:` voice ID names which one
@@ -181,13 +200,13 @@ final class AppEnvironment {
             key: { try cloudVoiceSecrets.load() }
         )
         let renderArbiter = RenderArbiter()
-        // The Kokoro route's own play-ahead — ten minutes on a GPU phone, three on the CPU path — in
-        // every state; the window has no foreground/background split (`KokoroComposition.playAheadWindowSeconds`).
-        // The fill past it — the rest of the chapter — runs only while frontmost and listening
-        // (`foregroundFillSeconds`, Plan 18); nil in the everyday build leaves the coordinator as it was.
+        // Kokoro keeps one urgent minute unpaced. Its fill beyond that runs only while frontmost and
+        // listening, capped at five minutes and paced to 2x real time; nil in the everyday build leaves the
+        // coordinator as it was.
         var configuration = CoordinatorConfiguration(prepareBudgetSeconds: prepareBudget)
         if let window = kokoro.playAheadWindowSeconds { configuration.windowSeconds = window }
         configuration.foregroundFill = kokoro.foregroundFillSeconds
+        configuration.foregroundFillRate = kokoro.foregroundFillSeconds == nil ? nil : 2
         let coordinator = PlaybackCoordinator(engine: cloudRouter, store: shared.audioStore, player: try AudioPlayer(),
                                               playheadStore: shared.store, timeSource: SystemTimeSource(),
                                               configuration: configuration,

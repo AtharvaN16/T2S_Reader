@@ -55,6 +55,26 @@ import T2SCore
         #expect(defaults.object(forKey: StorageModel.lastPrepareRunKey) == nil)
     }
 
+    /// While the hosted voice stands in, a charger must not render a library through the mirrors.
+    @Test func aRunWhileTheHostedVoiceStandsInPlansNothing() async throws {
+        let fixtures = try AppFixtures()
+        let id = try await fixtures.importFake()
+        let engine = FakeEngine()
+        let runner = PrepareRunner(library: fixtures.library, store: fixtures.store, audioStore: fixtures.audio,
+                                   engine: engine, defaults: UserDefaults(suiteName: "prepare-\(UUID())")!, arbiter: RenderArbiter())
+        let charging = DeviceState(charging: true, thermalSerious: false, lowPowerMode: false, storeFull: false)
+
+        runner.isStandingIn = { true }
+        let waiting = await runner.run(lastPlayed: id, queue: [id], device: charging)
+        #expect(waiting.stopReason == .skipped(.waitingForVoice))
+        #expect(waiting.renderedUtterances == 0)
+        #expect(await engine.requests.isEmpty)
+
+        runner.isStandingIn = { false }
+        let later = await runner.run(lastPlayed: id, queue: [id], device: charging)
+        #expect(later.renderedUtterances > 0)
+    }
+
     @Test func anUnavailableKokoroVoicePreparesTheWholeDocumentWithTheSystemDefault() async throws {
         let kokoroVoiceID = "kokoro:kokoro-4e9ecdf0-mlx-misaki1.0.6:af_heart"
         let fixtures = try AppFixtures()

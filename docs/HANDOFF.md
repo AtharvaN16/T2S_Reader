@@ -19,8 +19,8 @@ sleep is accepted; do not add a pinger or upgrade the dyno without the owner's a
 **Mirrors (2026-09-11 → 12):** one Eco dyno measured 2.7x realtime and Standard-2X 1.96x, neither
 ahead of playback, so the route runs on four identical apps (`kokoro-t2s`, `-m2`, `-m3`, `-m4`;
 `Server/HerokuVoice/scripts/mirrors.sh`) and the scheduler holds one render in flight per mirror.
-They are Basic dynos ($28/mo, never asleep) since the owner asked for every mirror always warm and
-authorized up to $50. Design: `docs/superpowers/specs/2026-09-11-eco-voice-mirrors-design.md`;
+They are seven Basic dynos ($49/mo, never asleep; `kokoro-t2s`, `-m2` … `-m7`) since the owner asked
+for every mirror always warm and authorized up to $50, and four left the player catching up after seeks. Design: `docs/superpowers/specs/2026-09-11-eco-voice-mirrors-design.md`;
 measured: `docs/superpowers/evidence/2026-09-11-heroku-eco-measurements.log` and
 `…/2026-09-11-eco-mirrors-acceptance.log`. The key lives at `~/.t2s/heroku-voice-key` (0600) on
 the Mac and in the git-ignored `App/Local.xcconfig`. Found on the phone and fixed the same night:
@@ -30,9 +30,10 @@ the rate control played at 0.5x → no sample from a failed batch (`3b6629e`) an
 the automatic rate (`35eedeb`); four in-flight renders each charged the whole process's CPU to
 themselves and a locked phone paused on the budget → one wait and one measurement per batch
 (`fbe2e60`); the head rendered whole before the first sound → clause-sized pieces, urgent for the
-next free mirror (`eab515f`). Owed: the server's boot-time warm-up render (`5165c23`, committed,
-deploy with `mirrors.sh 4` when nobody is listening); per-reader tokens before any reader beyond
-the two phones.
+next free mirror (`eab515f`). The server renders one short line at
+boot so its first request is warm (`5165c23`, deployed to all seven on 2026-09-12 04:35Z); a mirror
+that is down is walked, so a deploy is invisible to a listener (`ff2200a`). Owed: per-reader tokens
+before any reader beyond the two phones.
 
 **Cloud-first bootstrap (2026-09-12):** the route and key ship with the app (`CloudVoiceDefaults.pilot`;
 `T2S_CLOUD_VOICE_KEY` in `App/Local.xcconfig` → Info.plist → Keychain, once); hosted Heart stands in

@@ -55,3 +55,14 @@ reported slow after a chapter skip: the head rendered whole (up to ~10 s) behind
 kokoro-t2s-m5  render=audio/pcm dyno=Basic  https://kokoro-t2s-m5-aa90f85dde1c.herokuapp.com/v1/audio/speech
 kokoro-t2s-m6  render=audio/pcm dyno=Basic  https://kokoro-t2s-m6-00b5b70ab03d.herokuapp.com/v1/audio/speech
 kokoro-t2s-m7  render=audio/pcm dyno=Basic  https://kokoro-t2s-m7-e73d54cc01ec.herokuapp.com/v1/audio/speech
+
+## mirrors.sh 7 with the boot-time warm-up (5165c23) — 2026-09-12T04:35Z, deployed while the owner listened; nothing was heard
+kokoro-t2s       health=200 render=audio/pcm dyno=Basic addons=0  https://kokoro-t2s-a007171ff076.herokuapp.com/v1/audio/speech
+kokoro-t2s-m2    health=200 render=audio/pcm dyno=Basic addons=0  https://kokoro-t2s-m2-d13cbe083bd3.herokuapp.com/v1/audio/speech
+kokoro-t2s-m3    health=200 render=audio/pcm dyno=Basic addons=0  https://kokoro-t2s-m3-71b4e3836076.herokuapp.com/v1/audio/speech
+kokoro-t2s-m4    health=200 render=audio/pcm dyno=Basic addons=0  https://kokoro-t2s-m4-b46b9e051494.herokuapp.com/v1/audio/speech
+kokoro-t2s-m5    health=200 render=audio/pcm dyno=Basic addons=0  https://kokoro-t2s-m5-aa90f85dde1c.herokuapp.com/v1/audio/speech
+kokoro-t2s-m6    health=200 render=audio/pcm dyno=Basic addons=0  https://kokoro-t2s-m6-00b5b70ab03d.herokuapp.com/v1/audio/speech
+kokoro-t2s-m7    health=200 render=audio/pcm dyno=Basic addons=0  https://kokoro-t2s-m7-e73d54cc01ec.herokuapp.com/v1/audio/speech
+
+## owner's verdict, 2026-09-12: "it works great now" — hosted first, seven mirrors, no catching up, handoff seamless

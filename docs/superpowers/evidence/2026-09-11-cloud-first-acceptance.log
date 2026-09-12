@@ -14,3 +14,5 @@ phone fwd=73.63.164.213 reached all four mirrors with nothing configured on the 
 fresh install (app deleted, model absent): first sound from the mirrors with nothing typed; the reader reported it works
 48 renders across four mirrors, 0 x 429, 0 x H12, 0 x H27; per-render rtf 2.2-2.5x; mean utterance 3.7-5.0 s audio; slowest single renders 7.6-9.8 s
 reported slow after a chapter skip: the head rendered whole (up to ~10 s) behind the batch holding the mirrors. Fixed by the streaming head (eab515f).
+
+## owner's verdict, 2026-09-12 (after 0cc933a, 6516547, ecea6f2, c100c70, ff2200a): "it works great now"; the switch-over to on-device Heart is seamless

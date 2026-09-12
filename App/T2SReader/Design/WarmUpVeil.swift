@@ -37,7 +37,7 @@ struct WarmUpVeil: View {
 
     var body: some View {
         if Self.isShowing(env) {
-            WarmRamp()
+            WarmRamp(includesBottom: true)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
@@ -115,6 +115,10 @@ struct WarmGround: View {
 struct WarmRamp: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The full-screen veil lights the bottom corners as well, so the phone is rimmed rather than
+    /// lit from the top alone (owner, 2026-09-12). A ground bar is a band at the top of the screen
+    /// and has no bottom edge to light, so it leaves this off.
+    var includesBottom: Bool = false
     static let height: CGFloat = 240
     /// One breath, in seconds.
     private static let period: Double = 3
@@ -146,6 +150,22 @@ struct WarmRamp: View {
                     }
                     .compositingGroup()                                    // the noise blends with the ramp, not the page
                     .frame(height: Self.height)
+                }
+                .overlay(alignment: .bottom) {
+                    if includesBottom {
+                        ZStack {
+                            Tokens.ground
+                            Self.wash(pulse: pulse, light: light)
+                            Self.bezel(pulse: pulse, light: light)
+                            Self.ditherTile
+                                .resizable(resizingMode: .tile)
+                                .blendMode(.overlay)
+                                .opacity(0.85)
+                        }
+                        .compositingGroup()
+                        .frame(height: Self.height)
+                        .scaleEffect(y: -1, anchor: .center)               // the same edge, turned to face the foot
+                    }
                 }
         }
     }

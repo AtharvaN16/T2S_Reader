@@ -31,6 +31,8 @@ struct ReaderTextView: UIViewRepresentable {
     var onSaveSelection: ((Range<Int>, String) -> Void)? = nil
     /// False clears the marked word a tap put up (the reader went on, or changed their mind).
     var isPreviewing: Bool = false
+    /// Where the marked word sits in the view, so the pill can stand beside it; nil when none is.
+    var onPreviewRect: ((CGRect?) -> Void)? = nil
 
     /// Room for the header and the bottom block. The page gives the view `.ignoresSafeArea(edges:
     /// .bottom)`, so the top is measured from the safe-area top and the bottom from the window's:
@@ -65,7 +67,9 @@ struct ReaderTextView: UIViewRepresentable {
         view.delegate = context.coordinator
         let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
         tap.delegate = context.coordinator
+        tap.cancelsTouchesInView = false
         view.addGestureRecognizer(tap)
+        context.coordinator.tap = tap
         _ = view.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak coordinator = context.coordinator] (_: UITextView, _: UITraitCollection) in
             coordinator?.restateFade()
         }
@@ -78,6 +82,8 @@ struct ReaderTextView: UIViewRepresentable {
         coordinator.onTap = onTap
         coordinator.onUserScroll = onUserScroll
         coordinator.onSaveSelection = onSaveSelection
+        coordinator.onPreviewRect = onPreviewRect
+        coordinator.claimSingleTap(on: view)
         if !isPreviewing { coordinator.clearPreview() }
         coordinator.setHighlightTheme(highlightTheme)
         coordinator.setText(text, scale: textScale, lineHeight: lineHeight, following: isFollowing)
@@ -105,6 +111,10 @@ struct ReaderTextView: UIViewRepresentable {
         var onTap: (Tap) -> Void
         var onUserScroll: () -> Void
         var onSaveSelection: ((Range<Int>, String) -> Void)?
+        var onPreviewRect: ((CGRect?) -> Void)?
+        /// Ours, kept so the text view's own single tap can be made to yield to it.
+        weak var tap: UITapGestureRecognizer?
+        private var claimedTap = false
         private weak var view: UITextView?
         private var text: ReaderText?
         private var styleKey: StyleKey?
@@ -118,10 +128,24 @@ struct ReaderTextView: UIViewRepresentable {
         private var readBoundary: Int?
         /// The word a tap has offered to continue from: brightened and underlined until taken up.
         private var previewRange: Range<Int>?
+        /// The marked word's box in content coordinates, kept so a scroll can re-report it.
+        private var previewBox: CGRect?
+        /// Under the glyphs, its bounds origin tracking the content offset — the underline is drawn
+        /// here because `setRenderingAttributes` carries colour, not `underlineStyle` (measured:
+        /// the attribute is accepted and never painted, 2026-09-12).
+        private let overlay = UIView()
+        private let underline = CAShapeLayer()
         /// The word crossing from unread to read, eased rather than snapped (owner, 2026-09-12).
         private var fade: (range: Range<Int>, from: UIColor, to: UIColor, start: CFTimeInterval)?
+        /// Words waiting their turn. Each takes the same `fadeSeconds`, whatever the speech is
+        /// doing, so the light travels at one speed instead of hurrying through short words and
+        /// dawdling over long ones (owner, 2026-09-12).
+        private var fadeQueue: [Range<Int>] = []
         private var fadeLink: CADisplayLink?
-        private static let fadeSeconds: CFTimeInterval = 0.26
+        private static let fadeSeconds: CFTimeInterval = 0.22
+        /// Past this the reader is ahead of us — a seek, or speech faster than the light. The
+        /// backlog lands at once rather than trailing further and further behind the voice.
+        private static let fadeBacklog = 3
         /// Centre the word without animation as soon as content exists: the initial build for a
         /// document, or a settings rebuild made while following. A settings rebuild made while
         /// following is suspended never sets this — the page stays where the reader left it.
@@ -139,6 +163,30 @@ struct ReaderTextView: UIViewRepresentable {
 
         func attach(_ view: UITextView) {
             self.view = view
+            overlay.isUserInteractionEnabled = false
+            overlay.backgroundColor = .clear
+            overlay.layer.addSublayer(underline)
+            view.insertSubview(overlay, at: 0)
+            syncOverlay()
+        }
+
+        /// A selectable `UITextView` installs its own single tap, and it was taking every one —
+        /// measured, our recogniser did not fire at all once `isSelectable` went on (2026-09-12), so
+        /// tapping a word did nothing. Its single tap is told to wait on ours failing; the press and
+        /// the double tap are left alone, so selecting still works as it does anywhere else.
+        func claimSingleTap(on view: UITextView) {
+            guard !claimedTap, let tap, let others = view.gestureRecognizers else { return }
+            let singles = others.compactMap { $0 as? UITapGestureRecognizer }
+                .filter { $0 !== tap && $0.numberOfTapsRequired == 1 }
+            guard !singles.isEmpty else { return }                       // not installed yet; try again next update
+            singles.forEach { $0.require(toFail: tap) }
+            claimedTap = true
+        }
+
+        private func syncOverlay() {
+            guard let view else { return }
+            overlay.frame = view.bounds
+            overlay.bounds = CGRect(origin: view.contentOffset, size: view.bounds.size)
         }
 
         // MARK: The read/unread boundary
@@ -180,7 +228,18 @@ struct ReaderTextView: UIViewRepresentable {
         /// the display's own clock, so the boundary flows rather than stepping (owner, 2026-09-12).
         /// A word arriving while the last is still easing lands it first, so nothing is left part-lit.
         private func beginFade(_ range: Range<Int>) {
-            endFade()
+            fadeQueue.append(range)
+            if fadeQueue.count > Self.fadeBacklog {
+                let overdue = fadeQueue.prefix(fadeQueue.count - Self.fadeBacklog)
+                overdue.forEach { markRead($0) }
+                fadeQueue.removeFirst(overdue.count)
+            }
+            startNextFade()
+        }
+
+        private func startNextFade() {
+            guard fade == nil, !fadeQueue.isEmpty else { return }
+            let range = fadeQueue.removeFirst()
             guard let traits = view?.traitCollection else { markRead(range); repaint(); return }
             fade = (range,
                     UIColor(Tokens.inkUnread).resolvedColor(with: traits),
@@ -194,17 +253,25 @@ struct ReaderTextView: UIViewRepresentable {
         }
 
         @objc private func stepFade() {
-            guard let fade else { endFade(); return }
-            let t = min(1, (CACurrentMediaTime() - fade.start) / Self.fadeSeconds)
-            guard t < 1 else { endFade(); return }
-            let eased = t * t * (3 - 2 * t)
-            paint(fade.from.mixed(with: fade.to, by: eased), over: fade.range)
+            guard let current = fade else { endFade(); return }
+            let t = min(1, (CACurrentMediaTime() - current.start) / Self.fadeSeconds)
+            if t >= 1 {
+                markRead(current.range)
+                fade = nil
+                startNextFade()
+                if fade == nil { endFade(); return }
+            } else {
+                let eased = t * t * (3 - 2 * t)
+                paint(current.from.mixed(with: current.to, by: eased), over: current.range)
+            }
             repaint()
         }
 
-        /// Lands the word at its final colour and stops the clock.
+        /// Lands everything outstanding at its final colour and stops the clock.
         private func endFade() {
             if let fade { markRead(fade.range) }
+            fadeQueue.forEach { markRead($0) }
+            fadeQueue.removeAll()
             fade = nil
             fadeLink?.invalidate()
             fadeLink = nil
@@ -216,17 +283,36 @@ struct ReaderTextView: UIViewRepresentable {
         private func markPreview(_ range: Range<Int>) {
             clearPreview()
             previewRange = range
-            guard let manager = view?.textLayoutManager, let textRange = textRange(range) else { return }
-            manager.setRenderingAttributes([.foregroundColor: UIColor(Tokens.ink),
-                                            .underlineStyle: NSUnderlineStyle.single.rawValue],
-                                           for: textRange)
+            paint(UIColor(Tokens.ink), over: range)
+            let boxes = rects(for: range)
+            guard let first = boxes.first else { repaint(); return }
+            let box = boxes.dropFirst().reduce(first) { $0.union($1) }
+            previewBox = box
+            let rule = UIBezierPath(roundedRect: CGRect(x: box.minX, y: box.maxY - 1,
+                                                        width: box.width, height: 2), cornerRadius: 1)
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            underline.fillColor = UIColor(Tokens.ink).resolvedColor(with: view?.traitCollection ?? .current).cgColor
+            underline.path = rule.cgPath
+            syncOverlay()
+            CATransaction.commit()
+            reportPreviewRect()
             repaint()
+        }
+
+        /// The marked word in view coordinates, for the pill that stands beside it.
+        private func reportPreviewRect() {
+            guard let view, let box = previewBox, previewRange != nil else { onPreviewRect?(nil); return }
+            onPreviewRect?(box.offsetBy(dx: 0, dy: -view.contentOffset.y))
         }
 
         /// Puts the word back on whichever side of the boundary it belongs to.
         func clearPreview() {
             guard let range = previewRange else { return }
             previewRange = nil
+            previewBox = nil
+            underline.path = nil
+            onPreviewRect?(nil)
             if let boundary = readBoundary, range.lowerBound >= boundary {
                 markUnread(range)
             } else {
@@ -454,6 +540,11 @@ struct ReaderTextView: UIViewRepresentable {
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
             onUserScroll()
+        }
+
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            syncOverlay()
+            if previewRange != nil { reportPreviewRect() }
         }
 
         // MARK: Selection

@@ -41,6 +41,8 @@ struct ReaderPage: View {
     /// The word a tap marked, waiting on "Continue from here". A tap used to jump on the spot,
     /// which made a mis-tap cost your place (owner, 2026-09-12).
     @State private var previewTap: (utteranceIndex: Int, sourceOffset: Int)?
+    /// Where that word sits on screen, so the pill can stand with it rather than up in the chrome.
+    @State private var previewRect: CGRect?
 
     var body: some View {
         let reader = env.readerModel
@@ -62,7 +64,8 @@ struct ReaderPage: View {
                     onTap: handleTap,
                     onUserScroll: { reader.suspendFollowing() },
                     onSaveSelection: saveSelection,
-                    isPreviewing: previewTap != nil
+                    isPreviewing: previewTap != nil,
+                    onPreviewRect: { previewRect = $0 }
                 )
                 .ignoresSafeArea(edges: .bottom)
             } else if let error {
@@ -80,19 +83,9 @@ struct ReaderPage: View {
                 topBar.opacity(chromeVisible ? 1 : 0)
                 // Both pills live under the header (owner, 2026-09-12): they are about where you
                 // are in the book, which belongs with the title, not down by the transport.
-                if let tap = previewTap {
-                    RaisedButton(label: "Continue from here", glyph: "play.fill", tone: .blue, size: .compact) {
-                        Task {
-                            _ = await reader.seek(toUtterance: tap.utteranceIndex, sourceOffset: tap.sourceOffset)
-                            previewTap = nil
-                        }
-                    }
-                    .padding(.top, 12)
-                    .zIndex(1)
-                    .accessibilityHint("Plays from the word you tapped")
-                } else if !reader.isFollowing {
+                if !reader.isFollowing {
                     RaisedButton(label: "Back to current", glyph: "text.line.first.and.arrowtriangle.forward",
-                                 tone: .ink, size: .compact) {
+                                 tone: .blue, size: .compact) {
                         reader.resumeFollowing()
                     }
                     .padding(.top, 12)
@@ -114,6 +107,25 @@ struct ReaderPage: View {
                 bottomBar.opacity(chromeVisible ? 1 : 0)
             }
             .animation(.easeInOut(duration: 0.2), value: chromeVisible)
+
+            // Beside the word it is about: above it where there is room, below it near the top of
+            // the page (owner, 2026-09-12).
+            GeometryReader { geo in
+                if let tap = previewTap, let rect = previewRect {
+                    let above = rect.minY > 150
+                    RaisedButton(label: "Continue from here", glyph: "play.fill", tone: .ink, size: .compact) {
+                        Task {
+                            _ = await reader.seek(toUtterance: tap.utteranceIndex, sourceOffset: tap.sourceOffset)
+                            previewTap = nil
+                        }
+                    }
+                    .position(x: min(max(rect.midX, 110), max(110, geo.size.width - 110)),
+                              y: above ? rect.minY - 28 : rect.maxY + 28)
+                    .transition(.opacity.combined(with: .scale(scale: 0.94)))
+                    .accessibilityHint("Plays from the word you tapped")
+                }
+            }
+            .animation(.snappy(duration: 0.2), value: previewRect)
         }
         .task(id: summary.id) { await open() }
         .task(id: env.player.current?.id) {

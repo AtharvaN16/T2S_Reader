@@ -79,6 +79,20 @@ section{padding-block:64px 0;display:flex;flex-direction:column;gap:28px}
   color-mix(in srgb,var(--app-ready) 9%,transparent) 0%,
   color-mix(in srgb,var(--app-ready) 3%,transparent) 10%,transparent 20%)}
 
+/* the amber states: Tokens.accent, the colour the app already owns — not a new one. Held
+   still and at two thirds, because a warning that breathes reads as something still working. */
+.phone{--app-accent:#FF7A1A}
+.phone.dark{--app-accent:#FF8C3A}
+.phone.warn .glowlayer{animation:none;opacity:.66}
+.phone.warn .halo{border-color:color-mix(in srgb,var(--app-accent) 34%,transparent)}
+.phone.warn .rim{border-color:color-mix(in srgb,var(--app-accent) 66%,transparent)}
+.phone.warn .wash{background:linear-gradient(to bottom,
+  color-mix(in srgb,var(--app-accent) 8%,transparent) 0%,
+  color-mix(in srgb,var(--app-accent) 3%,transparent) 10%,transparent 20%)}
+.phone.warn .wtitle{color:var(--app-accent)}
+.phone.warn .segs .seg>span{background:var(--app-accent)}
+.phone.hushed .glowlayer{display:none}
+
 .pagebody{position:absolute;left:0;right:0;top:132px;bottom:0;padding:0 26px;display:flex;flex-direction:column;gap:9px;opacity:.38}
 .pagebody i{display:block;height:9px;border-radius:5px;background:var(--app-ink3)}
 .pagebody i:nth-child(3){width:72%}
@@ -183,7 +197,7 @@ li::marker{color:var(--ink3)}
   <h1>The warm-up line</h1>
   <p class="lede">A weighted title, one faint row under it holding two slots &mdash; words on the left, whatever is counting on the right &mdash; and the bar. Handoff at the seam. The megabytes give way to the clock the moment the download ends, and when the voice is ready the middle row closes rather than leaving a gap.</p>
   <div class="meta">
-    <b>Settled</b> &nbsp;title / subtext / bar &middot; 88 &times; 5 &middot; handoff at the seam &middot; words left, number right &middot; two cycling sets &middot; MB only while downloading, clock only after<br>
+    <b>Settled</b> &nbsp;title / subtext / bar &middot; 88 &times; 5 &middot; handoff at the seam &middot; words left, number right &middot; two cycling sets &middot; MB only while downloading, clock only after &middot; amber and still for failures<br>
     <b>Open</b> &nbsp;title weight and size &middot; subtext size and opacity &middot; three segments or eight<br>
     <b>Component</b> &nbsp;WarmUpLine &mdash; App/T2SReader/Design/WarmUpVeil.swift:264<br>
     <b>Faces</b> &nbsp;the app bundles Inter Regular / Medium / SemiBold / Bold
@@ -244,7 +258,7 @@ li::marker{color:var(--ink3)}
     <tbody>
       <tr><td class="state">Checking</td><td class="str">Checking the voice</td><td class="dimc">&mdash;</td><td class="dimc">&mdash;</td><td>empty</td></tr>
       <tr><td class="state">Waiting for Wi-Fi</td><td class="str">Waiting for Wi-Fi</td><td class="str">one-time install</td><td class="dimc">&mdash;</td><td>empty, plain</td></tr>
-      <tr><td class="state">Downloading</td><td class="str">Downloading the voice</td><td class="str"><b>download set</b><br>one-time install<br>it might take time<br>almost done</td><td class="str">120 of 350 MB <span class="dimc">live</span></td><td>plain</td></tr>
+      <tr><td class="state">Downloading</td><td class="str">Downloading the voice</td><td class="str"><b>download set</b><br>one-time install<br>it might take some time<br>almost done</td><td class="str">120 of 350 MB <span class="dimc">live</span></td><td>plain</td></tr>
       <tr><td class="state">Retrying</td><td class="str">Download interrupted</td><td class="str">your place is kept</td><td class="str">6s <span class="dimc">ticking</span></td><td>plain, held</td></tr>
       <tr><td class="state">Preparing</td><td class="str">Preparing the voice</td><td class="str"><b>warm-up set</b><br>it might take some time<br>will be faster next time<br>almost done</td><td class="str">0:40</td><td><span class="tag rec">segments</span></td></tr>
       <tr><td class="state">Warming, first</td><td class="str">Warming up the voice</td><td class="str">warm-up set</td><td class="str">a few min</td><td>segments</td></tr>
@@ -269,7 +283,28 @@ li::marker{color:var(--ink3)}
 
 <section>
   <div class="shead">
-    <div class="snum">05 / THE SEAM</div>
+    <div class="snum">05 / EDGE CASES</div>
+    <h2>Everything that is not the happy path</h2>
+    <p>Nine states drawn at 1:1, including the three the app currently gets wrong. The rules they are all built on:</p>
+  </div>
+  <div class="note">
+    <div class="eyebrow">How a warm-up ends badly</div>
+    <p><b>Amber, and it stops breathing.</b> The failure colour is <code>Tokens.accent</code> &mdash; the orange the app already owns &mdash; not a new red. The glow holds still at two thirds: a warning that breathes reads as something still working on it, and nothing is still working on it.<br>
+    <b>The title carries the state; the subtext carries the consequence.</b> &ldquo;Voice unavailable&rdquo; on its own leaves a reader wondering whether the book still reads aloud. &ldquo;reading in the system voice instead&rdquo; answers that, which is the only thing they actually need.<br>
+    <b>No clock on a failure, ever.</b> Nothing is counting. The bar stays where the wait reached and does not fill.<br>
+    <b>A deleted model gets nothing at all.</b> No glow, no line, no beat. It is the one case where the reader already knows.</p>
+  </div>
+  <div class="rail" id="edges"></div>
+
+  <div class="flag">
+    <div class="eyebrow">What makes these three possible today</div>
+    <p><code>beginReadyBeat()</code> fires on any transition out of a warming state, and <code>.unavailable</code> and <code>.removed</code> are both non-warming &mdash; so all three failures currently end on the green light and the words &ldquo;Voice ready&rdquo;. The fix is one condition at <code>KokoroComposition.swift:154</code>: start the beat only when the wait actually succeeded, and give the other two exits their own ending.</p>
+  </div>
+</section>
+
+<section>
+  <div class="shead">
+    <div class="snum">06 / THE SEAM</div>
     <h2>Handoff, and the last open question</h2>
     <p>The seam is settled &mdash; the full-width download bar contracts to 46 pt and stays full while two 18 pt boxes grow out of the space it gave up. The download becomes step one of three rather than being replaced, which is what <code>warmUpProgressFloor</code> exists to protect. Deal, split, zipper and crossfade are retired.</p>
     <p>What is left is how many boxes. Three phases, or the eight stages the loader actually reports? Both below, running the same loop.</p>
@@ -279,7 +314,7 @@ li::marker{color:var(--ink3)}
 
 <section>
   <div class="shead">
-    <div class="snum">06 / METRICS</div>
+    <div class="snum">07 / METRICS</div>
     <h2>The numbers to build from</h2>
   </div>
   <div class="rail" id="metrics"></div>
@@ -307,7 +342,7 @@ li::marker{color:var(--ink3)}
 
 <section>
   <div class="shead">
-    <div class="snum">07 / INVENTORY A</div>
+    <div class="snum">08 / INVENTORY A</div>
     <h2>What it says today</h2>
     <p>Kept for reference &mdash; the eleven strings the line ships with, and the three places the copy is wrong rather than merely thin.</p>
   </div>
@@ -337,7 +372,7 @@ li::marker{color:var(--ink3)}
 
 <section>
   <div class="shead">
-    <div class="snum">08 / SCENARIOS</div>
+    <div class="snum">09 / SCENARIOS</div>
     <h2>The paths through it</h2>
   </div>
   <div class="tablewrap"><table>
@@ -365,7 +400,7 @@ li::marker{color:var(--ink3)}
 
 <section>
   <div class="shead">
-    <div class="snum">09 / TO DECIDE</div>
+    <div class="snum">10 / TO DECIDE</div>
     <h2>Three things, then I build it</h2>
   </div>
   <div class="col stack">
@@ -375,6 +410,7 @@ li::marker{color:var(--ink3)}
       <li><b>Three segments or eight</b> &mdash; &sect;05 shows both. Three is calmer; eight is what the code actually knows.</li>
     </ul>
     <hr>
+    <p class="spec">Ready to build, once those three land: the nine states in &sect;05 are the spec for everything off the happy path, and three of them are corrections rather than additions &mdash; a failed download, a failed warm-up and a deleted model all end on a green &ldquo;Voice ready&rdquo; today.</p>
     <p class="spec">Settled: handoff at the seam &middot; 88 &times; 5 centred and alone &middot; plain for the download &middot; words left, number right, never swapping &middot; two cycling sets, download and warm-up, both ending on &ldquo;almost done&rdquo; &middot; megabytes only while downloading, clock only after &middot; the row reserved mid-flow and collapsed at Ready. The three <span class="tag bug">fix</span> rows in &sect;04 land with the same change.</p>
   </div>
 </section>
@@ -568,7 +604,7 @@ li::marker{color:var(--ink3)}
 
   /* "one-time install" belongs to the download; the warm-up has its own set, and both end on
      the same beat so the cycle always lands somewhere true near the finish. */
-  var DOWN_COPY = ["one-time install", "it might take time", "almost done"];
+  var DOWN_COPY = ["one-time install", "it might take some time", "almost done"];
   var WARM_COPY = ["it might take some time", "will be faster next time", "almost done"];
 
   /* the full first-launch sequence */
@@ -736,7 +772,89 @@ li::marker{color:var(--ink3)}
     });
   })();
 
-  /* ===== 05 SEAM ===== */
+  /* ===== 05 EDGE CASES ===== */
+  (function(){
+    var host = document.getElementById("edges");
+
+    function edge(o){
+      var p = phone();
+      if (o.mood) p.classList.add(o.mood);
+      if (o.hushed) { p.classList.add("hushed"); return {phone: p, api: null}; }
+      var api = makeLine(p, {cls: "w500"});
+      api.title.textContent = o.title;
+      api.setWidths(o.widths || [W, 0, 0]);
+      api.setLead(o.lead == null ? null : o.lead);
+      api.setTrail(o.trail == null ? null : o.trail, o.trailKind);
+      api.setFill(o.fill == null ? 0 : o.fill);
+      if (o.collapse) api.collapse(true);
+      return {phone: p, api: api};
+    }
+
+    function add(o){
+      var e = edge(o);
+      host.appendChild(unit(o.name, o.note, o.spec, e.phone));
+      return e;
+    }
+
+    add({name: "Checking the voice",
+      title: "Checking the voice", lead: null, trail: null, fill: 0,
+      note: "The first half-second of every launch. Nothing to say and nothing to count, but something follows — so the subtext row keeps its height and stays blank rather than letting the bar sit high and then drop. Its own title, so a remembered estimate cannot leak in before the clock has started.",
+      spec: "blank row, reserved · empty bar · no clock"});
+
+    add({name: "Waiting for Wi-Fi",
+      title: "Waiting for Wi-Fi", lead: "one-time install", trail: null, fill: 0,
+      note: "Nothing is downloading yet, so the bar is empty and there is no clock — a crawling bar here would be a lie. This is the one state that arguably deserves a tap target, which would mean breaking allowsHitTesting(false) on the whole line.",
+      spec: "empty bar · no clock · the only state that may want a tap"});
+
+    var retry = add({name: "Download interrupted",
+      title: "Download interrupted", lead: "your place is kept", trail: "6s", trailKind: "clock", fill: 0.34,
+      note: "The bar holds exactly where the last byte left it and does not retreat. This is the only real countdown in the app — the retry delay is a scheduled duration, not a remembered guess — so it earns ticking digits, and it actually ticks.",
+      spec: "bar held at the floor · clock counts down for real · attempt in the log"});
+    (function(){
+      var n = 9;
+      setInterval(function(){
+        if (!playing) return;
+        n = n <= 1 ? 9 : n - 1;
+        retry.api.trailLive(n + "s");
+      }, 1000);
+    })();
+
+    add({name: "Download failed", mood: "warn",
+      title: "Download failed", lead: "it will try again next time", trail: null, fill: 0.34,
+      note: "Amber, and the glow stops breathing. The bar stays where the download reached rather than emptying or filling — it is a record of how far it got, not a claim about anything. The copy for this already exists in installFailed and simply never reaches the line.",
+      spec: "amber · steady glow · bar frozen · no clock"});
+
+    add({name: "Voice unavailable", mood: "warn",
+      title: "Voice unavailable", lead: "reading in the system voice instead", trail: null,
+      widths: [46, 18, 18], fill: 0.78,
+      note: "Two stage loads failed and the route closed. The title alone would leave a reader wondering whether the book still reads aloud at all; the subtext is the only part that answers the question they actually have. Today this shows a green “Voice ready”.",
+      spec: "amber · segments frozen mid-warm · the fix at KokoroComposition.swift:154"});
+
+    add({name: "Model removed", hushed: true,
+      note: "The reader deleted the voice in Settings › Storage. No glow, no line, no beat — the one case where they already know, and the last thing that should happen is a celebration. Today this also ends on green, because .removed leaves the warming state like any success.",
+      spec: "nothing drawn at all · suppress the ready beat entirely"});
+
+    add({name: "Still warming up",
+      title: "Still warming up", lead: "it might take some time", trail: null,
+      widths: [46, 18, 18], fill: 0.88,
+      note: "Past roughly twice the remembered estimate the clock has stopped being true, so it goes rather than counting into the negative or freezing on “almost there”. The title changes from “Warming up” to “Still warming up” — the one word that admits this is taking longer than it should.",
+      spec: "clock dropped past 2× the estimate · bar keeps climbing"});
+
+    add({name: "Reading in the cloud voice",
+      title: "Reading in the cloud voice", lead: "it might take some time", trail: "about 2 min", trailKind: "clock",
+      widths: [46, 18, 18], fill: 0.55,
+      note: "Hosted Heart is speaking while the phone's own copy installs behind it — the glow deliberately stays up through audio here, and this is the only line that explains why there is a pulsing light over a book that is already reading aloud.",
+      spec: "glow held through playback · hostedSpeaking in WarmUpVeil.isShowing"});
+
+    add({name: "Voice ready, still finishing",
+      title: "Voice ready", lead: "finishing up in the background", trail: null,
+      widths: [46, 18, 18], fill: 1,
+      note: "The one Ready state that keeps its row rather than collapsing. isBuildingBackgroundSet holds the screen awake for minutes on an A13 while the CPU set compiles, and today it is shown nowhere — so the phone stays lit with no explanation. Green, full, but honest that something is still running.",
+      spec: "green · row kept, not collapsed · isBuildingBackgroundSet"});
+    host.lastChild.querySelector(".phone").classList.add("ready");
+  })();
+
+  /* ===== 06 SEAM ===== */
   (function(){
     var host = document.getElementById("seam");
 

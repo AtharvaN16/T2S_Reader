@@ -28,9 +28,18 @@ enum Tokens {
     /// what the app marks *its own* things with (progress, the read-along, the one primary pill),
     /// and the glow is a state of the engine, not a mark on the page. Lighter in dark mode: the
     /// same blue on near-black reads as a dim navy.
-    static let glow = dynamic(light: 0x2F5BFF, dark: 0x5F84FF)
-    static let glowSoft = dynamic(light: 0x2F5BFF, dark: 0x5F84FF, lightAlpha: 0.18, darkAlpha: 0.24)
-    static let glowFaint = dynamic(light: 0x2F5BFF, dark: 0x5F84FF, lightAlpha: 0.08, darkAlpha: 0.14)
+    ///
+    /// The light value is royal blue proper since 2026-09-12 (owner: "in light mode it can be a bit
+    /// more royal blue saturated; in dark mode it looks good, don't change it"). Two moves, and
+    /// neither is brightness: the hue comes down from 228° to royal blue's 225°, off the violet
+    /// lean, and the gap between the low channels and the blue opens up — saturation 0.82 to 0.92.
+    /// Brightness is where the tempting fix would have gone and it does almost nothing here: this
+    /// light meets the page at alphas of 0.08 and 0.18, so the result is nine parts ground, and
+    /// what little colour there is to see comes from how far the channels are spread, not from how
+    /// bright the blue would be if you could see it neat. Dark's value is untouched.
+    static let glow = dynamic(light: 0x144FFF, dark: 0x5F84FF)
+    static let glowSoft = dynamic(light: 0x144FFF, dark: 0x5F84FF, lightAlpha: 0.18, darkAlpha: 0.24)
+    static let glowFaint = dynamic(light: 0x144FFF, dark: 0x5F84FF, lightAlpha: 0.08, darkAlpha: 0.14)
     /// The last beat of the warm-up, when the voice is ready (owner, 2026-09-10: "just as the model
     /// is ready, change the glow to green before ending the animation"): the same light, green — a
     /// deeper green than `positive`, which is a tick on a row, not a light on the screen's edge.

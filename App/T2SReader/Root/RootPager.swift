@@ -136,10 +136,19 @@ struct RootPager: View {
                 // foot — the Voice page's seam of 2026-09-10, and the cut the owner kept seeing here.
                 // The rim is the glow with no ground under it, so laid on top it needs nothing
                 // underneath to cooperate: one layer, uncuttable, and the line still rides over it.
-                TopFade(inset: geo.safeAreaInsets.top)
-                WarmRim(edge: .top)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .ignoresSafeArea(edges: .top)
+                //
+                // Both go with a pushed page, like the fill above: that page paints its own bar and
+                // its own rim, and this pair was drawing a second copy over them. Two opaque ramps
+                // did not show it — the top one simply won — but two rims are transparent and add,
+                // so the Voice page wore twice the glow below the bar's foot and a 30 pt ramp from
+                // one to two through its fade (owner, 2026-09-12: "there is a top fade messing with
+                // the glow"). The warm-up's line is not gated: it belongs wherever the reader is.
+                if !chrome.isSubpageOpen {
+                    TopFade(inset: geo.safeAreaInsets.top)
+                    WarmRim(edge: .top)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .ignoresSafeArea(edges: .top)
+                }
                 WarmUpLine(band: geo.safeAreaInsets.top)
 
                 if !chrome.isSubpageOpen {

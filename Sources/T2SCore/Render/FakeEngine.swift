@@ -7,6 +7,8 @@ public actor FakeEngine: SynthesisEngine {
     /// The whole render is cut into this many pieces when streamed. 1 by default, so a plain
     /// `FakeEngine` streams the way the protocol's default extension would.
     public let pieceCount: Int
+    /// What `maxConcurrentRenders(for:)` answers: the width a scheduler test wants to see.
+    public let concurrentRenders: Int
     /// When set, each call advances `timeSource` by `simulatedRTF × audio seconds`.
     public private(set) var simulatedRTF: Double?
     private let timeSource: ManualTimeSource?
@@ -21,11 +23,13 @@ public actor FakeEngine: SynthesisEngine {
     private var pieceReleases = 0
     public private(set) var requests: [SynthesisRequest] = []
 
-    public init(secondsPerCharacter: TimeInterval = 0.05, simulatedRTF: Double? = nil, timeSource: ManualTimeSource? = nil, pieceCount: Int = 1) {
+    public init(secondsPerCharacter: TimeInterval = 0.05, simulatedRTF: Double? = nil, timeSource: ManualTimeSource? = nil,
+                pieceCount: Int = 1, concurrentRenders: Int = 1) {
         self.secondsPerCharacter = secondsPerCharacter
         self.simulatedRTF = simulatedRTF
         self.timeSource = timeSource
         self.pieceCount = pieceCount
+        self.concurrentRenders = concurrentRenders
     }
 
     public func fail(on spoken: String) { failures.insert(spoken) }
@@ -52,6 +56,8 @@ public actor FakeEngine: SynthesisEngine {
     /// How many requests are parked in `hold()` — lets a test confirm a job has reached the engine
     /// (in flight, past the arbiter) before it changes the plan behind it.
     public var parkedCount: Int { parked.count }
+
+    public nonisolated func maxConcurrentRenders(for voiceID: String) -> Int { concurrentRenders }
 
     public func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
         while held { await withCheckedContinuation { parked.append($0) } }

@@ -13,36 +13,47 @@ import SwiftUI
 /// **`extra` is the warm-up's room** (owner, 2026-09-12). The page title used to hold its own
 /// clearance: `Spacing.titleTop` was 56 because the warm-up's three rows reach `inset + 54` and a
 /// title any higher would have sat in them. The clearance lives here instead — while the glow is
-/// up the root pager passes `warmBand` and the solid band grows to cover the rows and the title, so
-/// the bar reads against ground rather than against whatever row happens to be scrolled under it,
-/// and the fade below picks up where it always did. The title is 40 now and is simply covered for
-/// the length of the wait. Every other host passes nothing: the line is only ever drawn over the
-/// root pages, so a sheet or a Settings subpage has nothing to hold clear.
+/// up the root pager passes `warmSolid` and `warmFade`, so the ground carries the rows and then
+/// thins out across the title, which stays readable through it. Every other host passes nothing:
+/// the line is only ever drawn over the root pages, so a sheet or a Settings subpage has nothing
+/// to hold clear.
 struct TopFade: View {
     /// The safe-area top inset of the screen this covers; the caller reads it from a `GeometryReader`.
     var inset: CGFloat
     /// Solid ground below the inset, before the fade. Zero everywhere but the root pager mid-warm-up.
     var extra: CGFloat = 0
+    /// How far the ramp runs below the solid band. Longer while the warm-up is up, so the page
+    /// title dissolves under it rather than meeting an edge; see `warmFade`.
+    var fade: CGFloat = fadeHeight
     static let fadeHeight: CGFloat = 30
 
-    /// What the root pages hold solid while the warm-up is up. It has to clear two things, and the
-    /// first cut of this cleared only one: the line's own three rows reach `WarmUpLine.bandHeight`
-    /// (54), but the 34 pt page title now starts at `Spacing.titleTop` (40) and runs to about 81,
-    /// so a band that stopped at 54 cut "Home" in half and left its lower half ghosting through the
-    /// fade (owner's screenshot, 2026-09-12). Covered or clear; half-covered reads as broken. 84
-    /// puts the ground a few points past the title's descenders, and the fade below it falls on the
-    /// section header, which is what a fade is for.
-    static let warmBand: CGFloat = 84
+    /// The warm-up's ground, as a solid band and a fade over it, both passed by the root pager.
+    ///
+    /// The two numbers are the whole design, and both cuts before this one got them wrong in
+    /// opposite directions. Solid to 54 — the reach of the line's three rows — put the band's hard
+    /// edge through the middle of the 34 pt title that starts at `Spacing.titleTop`, and a page
+    /// title sliced across the glyphs reads as a rendering bug. Solid to 84 fixed the slice by
+    /// covering the title outright, which is not what a fade is for (owner, 2026-09-12: "the title
+    /// should be visible, the reason we are going with the faded look is so that some of the title
+    /// can be seen through").
+    ///
+    /// So the solid stops at 28 — above the title's top at 40, so no hard edge ever lands on a
+    /// letter — and the fade runs 76 from there, which is long enough to still be most of the way
+    /// opaque behind the bar at 44…49 and all but gone by the title's baseline at 81. "Home" comes
+    /// through veiled at the crown and nearly clear at the foot, and it is the ramp that crosses
+    /// it, never an edge.
+    static let warmSolid: CGFloat = 28
+    static let warmFade: CGFloat = 76
 
     var body: some View {
         let solid = inset + extra
-        let height = solid + Self.fadeHeight
+        let height = solid + fade
         // Ground, never the warm-up glow: a `warm` flag here used to make the bar paint the ramp
         // so bar and page were one surface, and that only held while every layer under the bar was
         // transparent. The glow is a `WarmRim` over this now (`RootPager`), which needs nothing of
         // the bar.
         Tokens.ground
-            .mask(Self.shape(solidThrough: solid, fade: Self.fadeHeight))
+            .mask(Self.shape(solidThrough: solid, fade: fade))
             .frame(height: height)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .ignoresSafeArea(edges: .top)

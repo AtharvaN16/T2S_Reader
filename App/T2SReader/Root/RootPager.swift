@@ -141,7 +141,8 @@ struct RootPager: View {
                     // snapping out from under a line that is still fading.
                     let warming = WarmUpVeil.isShowing(env)
                     TopFade(inset: geo.safeAreaInsets.top,
-                            extra: warming ? TopFade.warmBand : 0)
+                            extra: warming ? TopFade.warmSolid : 0,
+                            fade: warming ? TopFade.warmFade : TopFade.fadeHeight)
                         .animation(.easeInOut(duration: WarmUpVeil.fadeOut), value: warming)
                     WarmRim(edge: .top)
                     // The foot's rim is a sibling of the head's, not a passenger on `bottomFill`.

@@ -311,7 +311,7 @@ struct CollectionPage: View {
                     if isCurrent, !env.player.isPlaying { await env.player.togglePlay() }
                     readerRoute.open(book)
                 }
-            } label: { Label("Play", systemImage: "play.fill") }
+            } label: { Label(book.document.resumePosition != nil ? "Continue" : "Play", systemImage: "play.fill") }
         }
         Button { Task { await env.libraryModel.markFinished(book.id, !book.isFinished) } } label: {
             Label(book.isFinished ? "Mark as unfinished" : "Mark as finished", systemImage: "checkmark.circle")

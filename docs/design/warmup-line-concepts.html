@@ -113,9 +113,19 @@ section{padding-block:64px 0;display:flex;flex-direction:column;gap:28px}
 .segs .seg{position:relative;height:5px;border-radius:99px;overflow:hidden;
   background:color-mix(in srgb,var(--app-ink3) 60%,transparent);
   transition:width .55s cubic-bezier(.3,.85,.25,1),opacity .35s ease}
-.segs .seg>span{position:absolute;left:0;top:0;bottom:0;background:var(--app-ink);border-radius:99px}
+.segs .seg>span{position:absolute;left:0;top:0;bottom:0;background:var(--app-ink);border-radius:99px;
+  transition:width .32s cubic-bezier(.3,.85,.25,1)}
 
-.rot{display:inline-block;text-align:right}
+/* notches: for the seams that carve one bar rather than replacing it */
+.notches{position:absolute;left:0;top:0;bottom:0;right:0;pointer-events:none}
+.notches i{position:absolute;top:-1px;bottom:-1px;width:3px;background:var(--app-ground);
+  opacity:0;transition:opacity .32s ease}
+.notches i.on{opacity:1}
+
+/* the cycling half of the subtext row: centred, and its box glides to each new width
+   so the row re-centres smoothly instead of snapping */
+.rot{display:inline-block;text-align:center;overflow:hidden;white-space:nowrap;
+  transition:width .42s cubic-bezier(.3,.8,.25,1)}
 .rot .now{display:inline-block;animation:fadeRise .45s ease}
 @keyframes fadeRise{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
 
@@ -185,7 +195,7 @@ li::marker{color:var(--ink3)}
     <div class="snum">01 / THE LINE</div>
     <h2>Built, and running</h2>
     <p>The full first-launch sequence on a 24-second loop: waiting &rarr; downloading &rarr; the S3 handoff &rarr; preparing &rarr; warming &rarr; ready. The title states the phase and holds still. The subtext cycles beneath it, with the clock sitting after it on the same row &mdash; so the bar underneath is alone and perfectly centred. Megabytes appear only while the download is actually running.</p>
-    <p>One mechanic this needs: the cycling half of that row is measured once per phase to its widest string, so the separator and the clock beside it stay put while the copy changes. Without that the clock would slide left and right on every swap, which is the thing pinning it was meant to stop.</p>
+    <p>One mechanic this needs: the row stays centred, so when the copy changes width the whole row has to re-centre &mdash; and a re-centre that happens on one frame reads as a snap. Each string is measured, and the cycling box glides to its new width over 0.42 s on the same curve the crossfade uses. The text fades and the row slides to meet it in one movement, rather than jumping and then fading.</p>
   </div>
   <div class="toggles">
     <span>Phone theme</span>
@@ -251,8 +261,9 @@ li::marker{color:var(--ink3)}
 <section>
   <div class="shead">
     <div class="snum">05 / THE SEAM</div>
-    <h2>S3, on its own</h2>
-    <p>The chosen one, isolated and slowed so the handoff is watchable. The download bar shrinks in place until it is the first of three, still full &mdash; the download becomes step one rather than being replaced. Beside it, the open question: does the third segment subdivide again into the eight real warm-up stages, or stay one box?</p>
+    <h2>All five, start to finish</h2>
+    <p>Every seam animation running the complete sequence on a 30-second loop &mdash; waiting, downloading, the change, preparing, warming, ready &mdash; so each one can be judged in the flow it actually lives in rather than as an isolated moment. The last frame is the open question: does the warm-up subdivide into the eight stages the loader really reports, or stay one box?</p>
+    <p>Deal is worth a second look now that the fill sweeps back rather than restarting. Its objection in v2 was that the bar appeared to lose the download; with the sweep it keeps every point it earned and still gets the clean &ldquo;new phase&rdquo; beat that the handoff deliberately avoids.</p>
   </div>
   <div class="rail" id="seam"></div>
 </section>
@@ -270,7 +281,7 @@ li::marker{color:var(--ink3)}
       <tr><td class="state">Subtext</td><td>&mdash;</td><td class="str">Inter-Regular 9.5 @ 50%</td></tr>
       <tr><td class="state">Clock</td><td>&mdash;</td><td class="str">same row, after the subtext &middot; Inter-Medium 9.5, tabular</td></tr>
       <tr><td class="state">Separator</td><td>&mdash;</td><td class="str">&ldquo;&middot;&rdquo; with 3.5 pt either side, only when both sides exist</td></tr>
-      <tr><td class="state">Cycling box</td><td>&mdash;</td><td class="str">width = widest string of the phase, re-measured per phase</td></tr>
+      <tr><td class="state">Cycling box</td><td>&mdash;</td><td class="str">width = the current string, glided over 0.42 s so the row re-centres</td></tr>
       <tr><td class="state">Title &rarr; subtext</td><td>&mdash;</td><td class="str">2 pt</td></tr>
       <tr><td class="state">Subtext &rarr; bar</td><td>7 pt</td><td class="str">7 pt</td></tr>
       <tr><td class="state">Bar</td><td>120 &times; 3</td><td class="str">88 &times; 5, centred, nothing beside it</td></tr>
@@ -342,13 +353,14 @@ li::marker{color:var(--ink3)}
 <section>
   <div class="shead">
     <div class="snum">09 / TO DECIDE</div>
-    <h2>Three things, then I build it</h2>
+    <h2>Four things, then I build it</h2>
   </div>
   <div class="col stack">
     <ul>
       <li><b>Title weight</b> &mdash; Medium 11 or SemiBold 11. My read is Medium: SemiBold turns a transient status into a heading on a page someone is reading. &sect;02 has both at true scale.</li>
       <li><b>Subtext</b> &mdash; 9.5 pt at 50% is what &sect;01 runs. &sect;03 has 9 / 9.5 / 10 and 40 / 50 / 60% so you can pick the pair.</li>
       <li><b>Eight or three</b> &mdash; whether the warm-up segment subdivides into its eight real stages or stays a single box. &sect;05 shows both. Three is calmer; eight is what the code actually knows.</li>
+      <li><b>The seam</b> &mdash; handoff or deal. &sect;05 runs all five end to end. Deal now keeps its progress, so the choice is purely whether the phase change deserves a beat of its own (deal) or should pass unremarked (handoff).</li>
     </ul>
     <hr>
     <p class="spec">Everything else is settled: S3 at the seam &middot; 88 &times; 5, centred and alone &middot; plain for the download &middot; subtext is the only thing that cycles &middot; clock shares the subtext row &middot; megabytes only while downloading &middot; the subtext row keeps its height when empty. The three <span class="tag bug">fix</span> rows in &sect;04 land with the same change.</p>
@@ -367,7 +379,7 @@ li::marker{color:var(--ink3)}
   var THREE = [46, 18, 18];
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(function(){
-      for (var i = 0; i < lines.length; i++) lines[i].reserve();
+      for (var i = 0; i < lines.length; i++) lines[i].remeasure();
     });
   }
 
@@ -419,8 +431,8 @@ li::marker{color:var(--ink3)}
     sub.appendChild(rot);
     sub.appendChild(sep);
     sub.appendChild(clock);
-    // hidden ruler: the rotator's box is sized once per phase to its widest string, so the
-    // separator and the clock beside it never slide as the copy cycles.
+    // hidden ruler: each string is measured so the rotator's box can glide to its exact width,
+    // which keeps the whole row centred as the copy changes instead of snapping.
     var meas = el("span");
     meas.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;white-space:nowrap";
     sub.appendChild(meas);
@@ -439,6 +451,14 @@ li::marker{color:var(--ink3)}
       fills.push(f);
     }
     holder.appendChild(segsWrap);
+    var notches = el("div", "notches");
+    var BOUND = [THREE[0], THREE[0] + GAP + THREE[1]];
+    for (var q = 0; q < 2; q++) {
+      var nn = el("i");
+      nn.style.left = BOUND[q] + "px";
+      notches.appendChild(nn);
+    }
+    holder.appendChild(notches);
     row.appendChild(holder);
     line.appendChild(title);
     line.appendChild(sub);
@@ -446,12 +466,23 @@ li::marker{color:var(--ink3)}
     p.appendChild(line);
 
     var api = {
-      title: title, clock: clock, segs: segs, fills: fills,
-      setWidths: function(list){
+      title: title, clock: clock, segs: segs, fills: fills, wrap: segsWrap,
+      setWidths: function(list, instant){
         for (var k = 0; k < segs.length; k++) {
           var w = list[k] || 0;
+          if (instant) segs[k].style.transition = "none";
           segs[k].style.width = w + "px";
           segs[k].style.opacity = w > 0 ? 1 : 0;
+          if (instant) { void segs[k].offsetWidth; segs[k].style.transition = ""; }
+        }
+      },
+      /* the two seams that divide one bar rather than replacing it */
+      setNotches: function(on, stagger){
+        for (var k = 0; k < 2; k++) {
+          (function(k){
+            setTimeout(function(){ notches.children[k].classList.toggle("on", !!on); },
+                       (on && stagger) ? k * 190 : 0);
+          })(k);
         }
       },
       setFill: function(v){
@@ -470,26 +501,33 @@ li::marker{color:var(--ink3)}
         clock.textContent = txt || "";
         sep.hidden = !(txt && api.list.length);
       },
-      reserve: function(){
-        if (!api.list.length) { rot.style.width = ""; return; }
-        var max = 0;
+      widths: [],
+      cur: 0,
+      /* Inter loads after first paint, so every width is measured again once it arrives. */
+      remeasure: function(){
+        api.widths = [];
         for (var k = 0; k < api.list.length; k++) {
           meas.textContent = api.list[k];
-          max = Math.max(max, meas.getBoundingClientRect().width);
+          api.widths.push(meas.getBoundingClientRect().width);
         }
-        if (max > 0) rot.style.width = Math.ceil(max) + "px";
+        if (api.widths[api.cur] > 0) rot.style.width = Math.ceil(api.widths[api.cur]) + "px";
       },
       setSubs: function(list){
         clearInterval(api.timer);
         api.list = list || [];
-        if (!api.list.length) { rot.textContent = ""; rot.style.width = ""; sep.hidden = true; return; }
-        api.reserve();
+        api.cur = 0;
+        if (!api.list.length) { rot.textContent = ""; rot.style.width = "0px"; sep.hidden = true; return; }
+        api.remeasure();
         sep.hidden = !clock.textContent;
         var i = 0;
         function go(){
-          rot.textContent = "";
-          rot.appendChild(el("span", "now", api.list[i]));
+          api.cur = i;
           i = (i + 1) % api.list.length;
+          // the box glides to this string's own width; the row is centre-justified, so the
+          // separator and clock drift with it rather than the text sitting off-centre
+          if (api.widths[api.cur] > 0) rot.style.width = Math.ceil(api.widths[api.cur]) + "px";
+          rot.textContent = "";
+          rot.appendChild(el("span", "now", api.list[api.cur]));
         }
         go();
         if (!reduce && api.list.length > 1) api.timer = setInterval(function(){ if (playing) go(); }, 3200);
@@ -510,9 +548,41 @@ li::marker{color:var(--ink3)}
   function sequence(api, phone, opts){
     opts = opts || {};
     var eight = opts.eight;
-    var EIGHT = [];
-    var each = (W - 7 * GAP) / 8;
-    for (var q = 0; q < 8; q++) EIGHT.push(each);
+    var seam = opts.seam || "handoff";
+    var carves = (seam === "split" || seam === "zip");   // these divide the bar, never replace it
+
+    /* the seam itself: what happens the instant the download ends */
+    function divide(){
+      if (carves) {
+        api.setWidths([W, 0, 0]);
+        api.setNotches(true, seam === "zip");
+        return;
+      }
+      if (seam === "deal") {
+        // every box goes to nothing, then they deal out left to right. The fill is not lost —
+        // it sweeps back to what was already earned as soon as there is somewhere to put it.
+        api.setWidths([0, 0, 0], true);
+        setTimeout(function(){ api.setWidths([THREE[0], 0, 0]); }, 70);
+        setTimeout(function(){ api.setWidths([THREE[0], THREE[1], 0]); }, 210);
+        setTimeout(function(){ api.setWidths(THREE); }, 350);
+        return;
+      }
+      if (seam === "cross") {
+        api.wrap.style.transition = "opacity .26s ease";
+        api.wrap.style.opacity = 0;
+        setTimeout(function(){
+          api.setWidths(THREE, true);
+          api.wrap.style.opacity = 1;
+        }, 270);
+        return;
+      }
+      api.setWidths(THREE);                                        // handoff
+    }
+    function undivide(){
+      api.setNotches(false);
+      api.wrap.style.opacity = 1;
+      api.setWidths(eight ? [W, 0, 0, 0, 0, 0, 0, 0] : [W, 0, 0]);
+    }
 
     var COPY = {
       wait:  ["just this once", "it will start on its own"],
@@ -533,7 +603,7 @@ li::marker{color:var(--ink3)}
         if (stage !== "wait") {
           stage = "wait"; phone.classList.remove("ready");
           api.title.textContent = "Waiting for Wi-Fi";
-          api.setWidths(eight ? [W,0,0,0,0,0,0,0] : [W, 0, 0]);
+          undivide();
           api.setSubs(COPY.wait);
         }
         api.setFill(0); api.setClock("");
@@ -541,7 +611,7 @@ li::marker{color:var(--ink3)}
         if (stage !== "down") {
           stage = "down";
           api.title.textContent = "Downloading the voice";
-          api.setWidths(eight ? [W,0,0,0,0,0,0,0] : [W, 0, 0]);
+          undivide();
           api.setSubs(COPY.down);
         }
         var v = (s - A) / (B - A);
@@ -551,11 +621,12 @@ li::marker{color:var(--ink3)}
         if (stage !== "prep") {
           stage = "prep";
           api.title.textContent = "Preparing the voice";
-          api.setWidths(eight ? [W * 0.52, 0, 0, 0, 0, 0, 0, 0] : THREE);
           if (eight) {
             // the download keeps the first slot; the seven stage boxes grow beside it
             var rest = (W - (W * 0.52) - 7 * GAP) / 7;
             api.setWidths([W * 0.52, rest, rest, rest, rest, rest, rest, rest]);
+          } else {
+            divide();
           }
           api.setSubs(COPY.prep);
         }
@@ -660,19 +731,35 @@ li::marker{color:var(--ink3)}
   /* ===== 05 SEAM ===== */
   (function(){
     var host = document.getElementById("seam");
-
-    var p = phone();
-    var api = makeLine(p, {cls: "w500"});
-    sequence(api, p, {total: 30});
-    host.appendChild(unit("S3, three segments <span class='pick'>◆</span>",
-      "Slowed to a 30-second loop. Watch the moment the download ends: the full-width bar contracts to 46 pt and stays full while two 18 pt boxes grow out of the space it gave up. Nothing empties, nothing restarts — the download is now step one of three.",
-      "88 → 46 / 18 / 18 pt · gap 3 · 0.55 s cubic ease", p));
+    var SEAMS = [
+      ["handoff", "S3 — Handoff <span class='pick'>◆</span>",
+       "The full-width bar contracts to 46 pt and stays full while two 18 pt boxes grow out of the space it gave up. Nothing empties, nothing restarts — the download becomes step one of three. The only version where the progress narrative survives the change.",
+       "88 → 46 / 18 / 18 pt · one width transition · 0.55 s"],
+      ["deal", "S2 — Deal out",
+       "Every box goes to nothing, then they deal out left to right 140 ms apart. The clearest possible “this is a new phase”. I have kept the progress: the fill sweeps straight back to what was already earned as soon as there is somewhere to put it, so the bar never actually retreats — which is what §07's warmUpProgressFloor exists to guarantee.",
+       "widths → 0, then staggered 70 / 210 / 350 ms · fill sweeps back 0.32 s"],
+      ["split", "S1 — Split in place",
+       "The bar never changes size and the fill never pauses. Two 3 pt notches simply fade in where the boundaries belong, carving the same bar into parts. The least disruptive of the five — it says “same wait, now I can show you its shape”.",
+       "2 notches, opacity 0 → 1 together · 0.32 s · widths untouched"],
+      ["zip", "S5 — Zipper",
+       "Split, but the notches arrive 190 ms apart so the division reads as something happening rather than something that has happened. A small amount of character for very little money. Possibly one idea too many for a status line.",
+       "notches staggered 190 ms, left → right"],
+      ["cross", "S4 — Crossfade",
+       "Plain fades out, segmented fades in at the same proportion. Safe, and it has nothing to say — a reader sees a different bar and has to work out for themselves that it is the same wait.",
+       "opacity 1 → 0 → 1 · 0.26 s each way · widths swapped while hidden"]
+    ];
+    SEAMS.forEach(function(s){
+      var p = phone();
+      var api = makeLine(p, {cls: "w500"});
+      sequence(api, p, {total: 30, seam: s[0]});
+      host.appendChild(unit(s[1], s[2], s[3], p));
+    });
 
     var p2 = phone();
     var api2 = makeLine(p2, {cls: "w500", segments: 8});
     sequence(api2, p2, {total: 30, eight: true});
-    host.appendChild(unit("S3, eight segments",
-      "The same handoff, except the remaining space divides into the seven boxes the stage loader actually reports. More faithful to what the code knows, and visibly busier — eight 6 pt boxes under a 9.5 pt subtext is a lot of small parts in a 42 pt stack.",
+    host.appendChild(unit("Eight segments, handoff",
+      "The open question, on the handoff. The download keeps its slot and the remaining space divides into the seven boxes the stage loader actually reports. More faithful to what the code knows, and visibly busier — eight small boxes under a 9.5 pt subtext is a lot of parts in a 42 pt stack.",
       "88 → 46 pt + 7 × 6 pt · gap 3 · the real warmUpStages count", p2));
   })();
 

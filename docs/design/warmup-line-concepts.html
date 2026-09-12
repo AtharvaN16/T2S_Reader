@@ -72,7 +72,7 @@ section{padding-block:64px 0;display:flex;flex-direction:column;gap:28px}
   color-mix(in srgb,var(--app-glow) 9%,transparent) 0%,
   color-mix(in srgb,var(--app-glow) 3%,transparent) 10%,transparent 20%)}
 @keyframes breathe{0%{opacity:1}50%{opacity:.06}100%{opacity:1}}
-.phone.ready .glowlayer{animation:none;opacity:1;--app-glow:var(--app-ready)}
+.phone.ready .glowlayer{animation:none;opacity:1}
 .phone.ready .halo{border-color:color-mix(in srgb,var(--app-ready) 38%,transparent)}
 .phone.ready .rim{border-color:color-mix(in srgb,var(--app-ready) 78%,transparent)}
 .phone.ready .wash{background:linear-gradient(to bottom,
@@ -90,21 +90,25 @@ section{padding-block:64px 0;display:flex;flex-direction:column;gap:28px}
 .batt{display:inline-block;width:22px;height:11px;border:1px solid currentColor;border-radius:3px;position:relative;opacity:.8}
 .batt::after{content:"";position:absolute;top:1.5px;bottom:1.5px;left:1.5px;right:7px;background:currentColor;border-radius:1px}
 
-/* ---- the line: title / subtext / bar row ---- */
+/* ---- the line: title / subtext / bar ---- */
 .wline{position:absolute;left:0;right:0;top:62px;display:flex;flex-direction:column;align-items:center;
   font-family:var(--app-face);color:var(--app-ink);pointer-events:none}
 .wtitle{font-size:11px;font-weight:600;letter-spacing:-.11px;line-height:1.36;height:15px;white-space:nowrap}
-.wsub{font-size:9.5px;font-weight:400;line-height:1.36;height:13px;margin-top:2px;opacity:.5;white-space:nowrap;
-  display:flex;align-items:baseline;justify-content:center}
+.wsub{font-size:9.5px;font-weight:400;line-height:1.36;height:13px;margin-top:2px;opacity:.5;
+  display:flex;align-items:baseline;justify-content:center;overflow:hidden;
+  transition:height .34s cubic-bezier(.3,.8,.25,1),margin-top .34s cubic-bezier(.3,.8,.25,1),opacity .22s ease}
 .wsub .sep{padding:0 3.5px;opacity:.7}
 .wsub .sep[hidden]{display:none}
-.wsub .clock{font-variant-numeric:tabular-nums;font-weight:500;white-space:nowrap}
 .barrow{position:relative;display:flex;justify-content:center;margin-top:7px}
 
-/* today, for comparison */
-.wline.old .wtitle{font-size:11px;font-weight:400;letter-spacing:0}
-.wline.old .wsub{display:none}
-.wline.old .barrow{margin-top:7px}
+/* the two slots. Either can hold one fixed string or a cycling list; the box glides to the
+   width of whatever it is showing, and the row is centre-justified, so it re-centres smoothly. */
+.rot{display:inline-block;text-align:center;overflow:hidden;white-space:nowrap;
+  transition:width .42s cubic-bezier(.3,.8,.25,1)}
+.rot.tabular{font-variant-numeric:tabular-nums}
+.rot.clockish{font-variant-numeric:tabular-nums;font-weight:500}
+.rot .now{display:inline-block;animation:fadeRise .45s ease}
+@keyframes fadeRise{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
 
 .bar{position:relative;border-radius:99px;background:color-mix(in srgb,var(--app-ink3) 60%,transparent);overflow:hidden}
 .bar>.f{position:absolute;left:0;top:0;bottom:0;border-radius:99px;background:var(--app-ink)}
@@ -115,21 +119,13 @@ section{padding-block:64px 0;display:flex;flex-direction:column;gap:28px}
   transition:width .55s cubic-bezier(.3,.85,.25,1),opacity .35s ease}
 .segs .seg>span{position:absolute;left:0;top:0;bottom:0;background:var(--app-ink);border-radius:99px;
   transition:width .32s cubic-bezier(.3,.85,.25,1)}
+.phone.ready .segs .seg>span{background:var(--app-ready)}
 
-/* notches: for the seams that carve one bar rather than replacing it */
-.notches{position:absolute;left:0;top:0;bottom:0;right:0;pointer-events:none}
-.notches i{position:absolute;top:-1px;bottom:-1px;width:3px;background:var(--app-ground);
-  opacity:0;transition:opacity .32s ease}
-.notches i.on{opacity:1}
+/* today, for comparison */
+.wline.old .wtitle{font-weight:400;letter-spacing:0}
+.wline.old .wsub{display:none}
 
-/* the cycling half of the subtext row: centred, and its box glides to each new width
-   so the row re-centres smoothly instead of snapping */
-.rot{display:inline-block;text-align:center;overflow:hidden;white-space:nowrap;
-  transition:width .42s cubic-bezier(.3,.8,.25,1)}
-.rot .now{display:inline-block;animation:fadeRise .45s ease}
-@keyframes fadeRise{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
-
-/* weight swatches */
+/* weight and subtext swatches */
 .w500 .wtitle{font-weight:500}
 .w600 .wtitle{font-weight:600}
 .s12 .wtitle{font-size:12px;height:16px;letter-spacing:-.12px}
@@ -138,6 +134,10 @@ section{padding-block:64px 0;display:flex;flex-direction:column;gap:28px}
 .op40 .wsub{opacity:.4}
 .op60 .wsub{opacity:.6}
 
+/* Ready is terminal — nothing follows it but the fade — so the row closes rather than
+   leaving a gap under "Voice ready". Declared after the swatches so it beats their heights. */
+.wline.done .wsub{height:0;margin-top:0;opacity:0}
+
 .tablewrap{overflow-x:auto;border:1px solid var(--hair);border-radius:6px;background:var(--paper)}
 table{border-collapse:collapse;width:100%;min-width:720px;font-family:var(--mono);font-size:12.5px;line-height:1.55}
 th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--hair);vertical-align:top}
@@ -145,6 +145,7 @@ th{font-weight:700;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase
 tbody tr:last-child td{border-bottom:0}
 td.state{color:var(--ink2);white-space:nowrap}
 .str{color:var(--ink)}
+.dimc{color:var(--ink2)}
 .gone{color:var(--ink2);text-decoration:line-through}
 .tag{display:inline-block;font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.09em;
   text-transform:uppercase;padding:2px 6px;border-radius:3px;white-space:nowrap}
@@ -178,14 +179,14 @@ li::marker{color:var(--ink3)}
 
 <header>
 <div class="col">
-  <div class="eyebrow">t2s_reader &middot; branch warmup-indicator &middot; v3</div>
+  <div class="eyebrow">t2s_reader &middot; branch warmup-indicator &middot; v5</div>
   <h1>The warm-up line</h1>
-  <p class="lede">Three rows now: a weighted title, a faint line beneath it carrying the cycling detail and the clock together, and the bar alone underneath. S3 for the seam. What is left to settle is the type.</p>
+  <p class="lede">A weighted title, one faint row under it holding two slots, and the bar. Handoff at the seam. Megabytes hold still while the reassurance cycles; the clock waits until the download is done; and when the voice is ready the middle row closes rather than leaving a gap.</p>
   <div class="meta">
-    <b>Settled</b> &nbsp;title / subtext + clock / bar &middot; 88 &times; 5 bar &middot; S3 handoff at the seam &middot; megabytes only while downloading<br>
-    <b>Open</b> &nbsp;title weight and size &middot; subtext size and opacity &middot; whether the warm-up subdivides into eight<br>
+    <b>Settled</b> &nbsp;title / subtext / bar &middot; 88 &times; 5 &middot; handoff at the seam &middot; one cycling message per phase &middot; MB only while downloading &middot; clock only after it<br>
+    <b>Open</b> &nbsp;title weight and size &middot; subtext size and opacity &middot; three segments or eight<br>
     <b>Component</b> &nbsp;WarmUpLine &mdash; App/T2SReader/Design/WarmUpVeil.swift:264<br>
-    <b>Faces</b> &nbsp;the app bundles Inter Regular / Medium / SemiBold / Bold &mdash; so 500 and 600 are both available
+    <b>Faces</b> &nbsp;the app bundles Inter Regular / Medium / SemiBold / Bold
   </div>
 </div>
 </header>
@@ -194,8 +195,14 @@ li::marker{color:var(--ink3)}
   <div class="shead">
     <div class="snum">01 / THE LINE</div>
     <h2>Built, and running</h2>
-    <p>The full first-launch sequence on a 24-second loop: waiting &rarr; downloading &rarr; the S3 handoff &rarr; preparing &rarr; warming &rarr; ready. The title states the phase and holds still. The subtext cycles beneath it, with the clock sitting after it on the same row &mdash; so the bar underneath is alone and perfectly centred. Megabytes appear only while the download is actually running.</p>
-    <p>One mechanic this needs: the row stays centred, so when the copy changes width the whole row has to re-centre &mdash; and a re-centre that happens on one frame reads as a snap. Each string is measured, and the cycling box glides to its new width over 0.42 s on the same curve the crossfade uses. The text fades and the row slides to meet it in one movement, rather than jumping and then fading.</p>
+    <p>The full first-launch sequence on a 26-second loop. Four things to watch, in the order they happen:</p>
+  </div>
+  <div class="note">
+    <div class="eyebrow">What the loop shows</div>
+    <p><b>While downloading</b> &mdash; &ldquo;120 of 350 MB&rdquo; holds the left slot and counts up in place. The right slot cycles the reassurance. No clock: a download&rsquo;s remaining time is the least trustworthy number the app has, and the megabytes already say how far along it is.<br>
+    <b>At the seam</b> &mdash; the handoff. The 88 pt bar contracts to 46 and stays full while two 18 pt boxes grow beside it.<br>
+    <b>After the download</b> &mdash; the megabytes are done, so the reassurance moves left and the clock takes the right slot. This is the first moment a time appears, and it is backed by a real remembered duration.<br>
+    <b>At ready</b> &mdash; the subtext row closes over 0.34 s and the bar rises to meet &ldquo;Voice ready&rdquo;. Nothing follows it but the fade, so there is no gap to reserve.</p>
   </div>
   <div class="toggles">
     <span>Phone theme</span>
@@ -211,7 +218,7 @@ li::marker{color:var(--ink3)}
   <div class="shead">
     <div class="snum">02 / TITLE WEIGHT</div>
     <h2>How heavy is &ldquo;higher weight&rdquo;</h2>
-    <p>Four combinations of the two variables, frozen on the same moment so they can be compared directly. The thing to watch for: at 600 the title stops being a caption and starts being a heading, which is more presence than a transient status line may want on a page someone is reading. At 500 it separates from the subtext without asserting itself.</p>
+    <p>Four combinations of the two variables, frozen on the same moment so they can be compared directly. At 600 the title stops being a caption and starts being a heading, which is more presence than a transient status line may want over someone&rsquo;s book. At 500 it separates from the subtext without asserting itself.</p>
   </div>
   <div class="rail" id="weights"></div>
 </section>
@@ -220,7 +227,7 @@ li::marker{color:var(--ink3)}
   <div class="shead">
     <div class="snum">03 / SUBTEXT</div>
     <h2>How faint is faint</h2>
-    <p>Same title throughout, cycling live so you can judge the swap at each weight. Below about 40% the subtext stops being reliably legible on the bright ground under the glow&rsquo;s brightest breath &mdash; and this row now carries both the megabytes and the clock, which are the two things in it a reader might squint at. The clock is set a weight heavier than the copy beside it for the same reason.</p>
+    <p>All four running the download state, so you are judging the row at its busiest &mdash; live megabytes on the left, cycling copy on the right. Below about 40% the megabytes stop being reliably legible on the bright ground under the glow&rsquo;s brightest breath. The clock, when it appears, is set one weight heavier than the copy beside it for the same reason.</p>
   </div>
   <div class="rail" id="subs"></div>
 </section>
@@ -229,41 +236,43 @@ li::marker{color:var(--ink3)}
   <div class="shead">
     <div class="snum">04 / WHAT GOES WHERE</div>
     <h2>Every phase, in three slots</h2>
-    <p>The title names the phase. The subtext cycles through the details &mdash; and when there is only one detail, it simply sits there rather than rotating. The clock shares that row, after the subtext, and degrades into words and then into nothing rather than counting into the negative. Megabytes appear in one phase only.</p>
+    <p>One message per phase, drawn from a deliberately small vocabulary. Only the download cycles &mdash; everywhere else the line is said once and left alone. The clock appears only where there is a real remembered duration behind it, and degrades into words and then into nothing rather than counting into the negative.</p>
   </div>
   <div class="tablewrap"><table>
-    <thead><tr><th style="width:15%">Phase</th><th style="width:20%">Title <span style="font-weight:400;text-transform:none;letter-spacing:0">(fixed)</span></th><th style="width:34%">Subtext <span style="font-weight:400;text-transform:none;letter-spacing:0">(cycles)</span></th><th style="width:12%">Clock <span style="font-weight:400;text-transform:none;letter-spacing:0">(same row)</span></th><th>Bar</th></tr></thead>
+    <thead><tr><th style="width:16%">Phase</th><th style="width:21%">Title <span style="font-weight:400;text-transform:none;letter-spacing:0">(fixed)</span></th><th style="width:23%">Lead slot</th><th style="width:24%">Trail slot</th><th>Bar</th></tr></thead>
     <tbody>
-      <tr><td class="state">Checking</td><td class="str">Checking the voice</td><td class="str">&mdash;</td><td class="str">&mdash;</td><td>empty</td></tr>
-      <tr><td class="state">Waiting for Wi-Fi</td><td class="str">Waiting for Wi-Fi</td><td class="str">just this once &middot; it will start on its own</td><td class="str">&mdash;</td><td>empty, plain</td></tr>
-      <tr><td class="state">Downloading</td><td class="str">Downloading the voice</td><td class="str">120 of 350 MB &middot; only this once &middot; you can keep reading</td><td class="str">1:50</td><td>plain</td></tr>
-      <tr><td class="state">Retrying</td><td class="str">Download interrupted</td><td class="str">attempt 2 of 5 &middot; your place is kept</td><td class="str">6s <span class="dim">ticking</span></td><td>plain, held</td></tr>
-      <tr><td class="state">Preparing</td><td class="str">Preparing the voice</td><td class="str">step 3 of 8 &middot; this only happens once</td><td class="str">0:40</td><td><span class="tag rec">segments</span></td></tr>
-      <tr><td class="state">Warming, first</td><td class="str">Warming up the voice</td><td class="str">loading the speech stages &middot; only after an update &middot; you can keep reading</td><td class="str">a few min</td><td>segments</td></tr>
-      <tr><td class="state">Warming, normal</td><td class="str">Warming up the voice</td><td class="str">loading the speech stages <span class="dim">(no cycle under 12 s)</span></td><td class="str">15s</td><td>plain</td></tr>
-      <tr><td class="state">Warming, spent</td><td class="str">Warming up the voice</td><td class="str">almost there</td><td class="str">&mdash;</td><td>plain</td></tr>
-      <tr><td class="state">Warming, stalled</td><td class="str">Still warming up</td><td class="str">your phone is busy &middot; it won&rsquo;t need to do this again</td><td class="str">&mdash;</td><td>plain</td></tr>
-      <tr><td class="state">Cloud voice</td><td class="str">Reading in the cloud voice</td><td class="str">your phone&rsquo;s voice is warming up &middot; it will take over on its own</td><td class="str">about 2 min</td><td>segments</td></tr>
-      <tr><td class="state">Ready</td><td class="str">Voice ready</td><td class="str">&mdash;</td><td class="str">&mdash;</td><td>full, green</td></tr>
-      <tr><td class="state">Ready, set building</td><td class="str">Voice ready</td><td class="str">finishing up in the background</td><td class="str">&mdash;</td><td><span class="tag new">new</span> full, green</td></tr>
-      <tr><td class="state">Warm-up failed</td><td class="str">Voice unavailable</td><td class="str">reading in the system voice instead</td><td class="str">&mdash;</td><td><span class="tag bug">fix</span> amber, not green</td></tr>
-      <tr><td class="state">Download failed</td><td class="str">Download failed</td><td class="str">it will try again next time you open the app</td><td class="str">&mdash;</td><td><span class="tag bug">fix</span> amber</td></tr>
-      <tr><td class="state">Model removed</td><td class="str"><span class="gone">Voice ready</span></td><td class="str">nothing &mdash; suppress the beat</td><td class="str">&mdash;</td><td><span class="tag bug">fix</span> nothing</td></tr>
+      <tr><td class="state">Checking</td><td class="str">Checking the voice</td><td class="dimc">&mdash;</td><td class="dimc">&mdash;</td><td>empty</td></tr>
+      <tr><td class="state">Waiting for Wi-Fi</td><td class="str">Waiting for Wi-Fi</td><td class="str">just this once</td><td class="dimc">&mdash;</td><td>empty, plain</td></tr>
+      <tr><td class="state">Downloading</td><td class="str">Downloading the voice</td><td class="str">120 of 350 MB <span class="dimc">live</span></td><td class="str">only this once <span class="dimc">&harr;</span> you can keep reading</td><td>plain</td></tr>
+      <tr><td class="state">Retrying</td><td class="str">Download interrupted</td><td class="str">your place is kept</td><td class="str">6s <span class="dimc">ticking</span></td><td>plain, held</td></tr>
+      <tr><td class="state">Preparing</td><td class="str">Preparing the voice</td><td class="str">one-time install</td><td class="str">0:40</td><td><span class="tag rec">segments</span></td></tr>
+      <tr><td class="state">Warming, first</td><td class="str">Warming up the voice</td><td class="str">one-time install</td><td class="str">a few min</td><td>segments</td></tr>
+      <tr><td class="state">Warming, after update</td><td class="str">Warming up the voice</td><td class="str">after an update</td><td class="str">20s</td><td>plain</td></tr>
+      <tr><td class="state">Warming, normal</td><td class="str">Warming up the voice</td><td class="str">you can keep reading</td><td class="str">15s</td><td>plain</td></tr>
+      <tr><td class="state">Warming, spent</td><td class="str">Warming up the voice</td><td class="str">almost there</td><td class="dimc">&mdash;</td><td>plain</td></tr>
+      <tr><td class="state">Warming, stalled</td><td class="str">Still warming up</td><td class="str">it won&rsquo;t need to do this again</td><td class="dimc">&mdash;</td><td><span class="tag new">new</span> plain</td></tr>
+      <tr><td class="state">Cloud voice</td><td class="str">Reading in the cloud voice</td><td class="str">it will take over on its own</td><td class="str">about 2 min</td><td><span class="tag new">new</span> segments</td></tr>
+      <tr><td class="state">Ready</td><td class="str">Voice ready</td><td class="dimc">&mdash; row collapses &mdash;</td><td class="dimc">&mdash;</td><td>full, green</td></tr>
+      <tr><td class="state">Ready, set building</td><td class="str">Voice ready</td><td class="str">finishing up in the background</td><td class="dimc">&mdash;</td><td><span class="tag new">new</span> full, green</td></tr>
+      <tr><td class="state">Warm-up failed</td><td class="str">Voice unavailable</td><td class="str">reading in the system voice instead</td><td class="dimc">&mdash;</td><td><span class="tag bug">fix</span> amber, not green</td></tr>
+      <tr><td class="state">Download failed</td><td class="str">Download failed</td><td class="str">it will try again next time</td><td class="dimc">&mdash;</td><td><span class="tag bug">fix</span> amber</td></tr>
+      <tr><td class="state">Model removed</td><td class="str"><span class="gone">Voice ready</span></td><td class="dimc">nothing &mdash; suppress the beat</td><td class="dimc">&mdash;</td><td><span class="tag bug">fix</span> nothing</td></tr>
     </tbody>
   </table></div>
 
   <div class="note">
-    <div class="eyebrow">One rule the layout needs</div>
-    <p>The subtext row keeps its height even when it is empty. Otherwise a phase with nothing to say &mdash; &ldquo;Checking the voice&rdquo;, &ldquo;Voice ready&rdquo; &mdash; collapses the row and the bar jumps 13 pt up the screen, then back down at the next phase. Reserve the height always; leave it blank when there is nothing worth saying. The separator only exists when there is text on both sides of it.</p>
+    <div class="eyebrow">Two rules the layout needs</div>
+    <p><b>Reserve the row mid-flow, collapse it at the end.</b> &ldquo;Checking the voice&rdquo; has nothing to say, but something follows it &mdash; so the row keeps its height and stays blank, or the bar would jump 15 pt up and straight back down. &ldquo;Voice ready&rdquo; has nothing to say and nothing follows it but the fade, so the row closes and the bar rises to meet the title.<br>
+    <b>The separator only exists when both slots do.</b> One slot alone is centred on its own, with no orphaned dot beside it.</p>
   </div>
 </section>
 
 <section>
   <div class="shead">
     <div class="snum">05 / THE SEAM</div>
-    <h2>All five, start to finish</h2>
-    <p>Every seam animation running the complete sequence on a 30-second loop &mdash; waiting, downloading, the change, preparing, warming, ready &mdash; so each one can be judged in the flow it actually lives in rather than as an isolated moment. The last frame is the open question: does the warm-up subdivide into the eight stages the loader really reports, or stay one box?</p>
-    <p>Deal is worth a second look now that the fill sweeps back rather than restarting. Its objection in v2 was that the bar appeared to lose the download; with the sweep it keeps every point it earned and still gets the clean &ldquo;new phase&rdquo; beat that the handoff deliberately avoids.</p>
+    <h2>Handoff, and the last open question</h2>
+    <p>The seam is settled &mdash; the full-width download bar contracts to 46 pt and stays full while two 18 pt boxes grow out of the space it gave up. The download becomes step one of three rather than being replaced, which is what <code>warmUpProgressFloor</code> exists to protect. Deal, split, zipper and crossfade are retired.</p>
+    <p>What is left is how many boxes. Three phases, or the eight stages the loader actually reports? Both below, running the same loop.</p>
   </div>
   <div class="rail" id="seam"></div>
 </section>
@@ -274,20 +283,22 @@ li::marker{color:var(--ink3)}
     <h2>The numbers to build from</h2>
   </div>
   <div class="rail" id="metrics"></div>
-  <div class="tablewrap" style="max-width:760px"><table style="min-width:460px">
-    <thead><tr><th style="width:34%">Element</th><th style="width:33%">Today</th><th>Proposed</th></tr></thead>
+  <div class="tablewrap" style="max-width:800px"><table style="min-width:520px">
+    <thead><tr><th style="width:30%">Element</th><th style="width:26%">Today</th><th>Proposed</th></tr></thead>
     <tbody>
       <tr><td class="state">Title</td><td>Inter-Regular 11</td><td class="str">Inter-Medium 11, tracking &minus;0.01 em</td></tr>
-      <tr><td class="state">Subtext</td><td>&mdash;</td><td class="str">Inter-Regular 9.5 @ 50%</td></tr>
-      <tr><td class="state">Clock</td><td>&mdash;</td><td class="str">same row, after the subtext &middot; Inter-Medium 9.5, tabular</td></tr>
-      <tr><td class="state">Separator</td><td>&mdash;</td><td class="str">&ldquo;&middot;&rdquo; with 3.5 pt either side, only when both sides exist</td></tr>
-      <tr><td class="state">Cycling box</td><td>&mdash;</td><td class="str">width = the current string, glided over 0.42 s so the row re-centres</td></tr>
-      <tr><td class="state">Title &rarr; subtext</td><td>&mdash;</td><td class="str">2 pt</td></tr>
+      <tr><td class="state">Subtext row</td><td>&mdash;</td><td class="str">two slots: lead &middot; trail &middot; Inter-Regular 9.5 @ 50%</td></tr>
+      <tr><td class="state">Lead slot</td><td>&mdash;</td><td class="str">megabytes while downloading (tabular), otherwise the message</td></tr>
+      <tr><td class="state">Trail slot</td><td>&mdash;</td><td class="str">cycling copy while downloading, otherwise the clock (Medium, tabular)</td></tr>
+      <tr><td class="state">Separator</td><td>&mdash;</td><td class="str">&ldquo;&middot;&rdquo; with 3.5 pt either side, only when both slots are filled</td></tr>
+      <tr><td class="state">Slot width</td><td>&mdash;</td><td class="str">the current string, glided over 0.42 s so the row re-centres</td></tr>
+      <tr><td class="state">Cycle dwell</td><td>&mdash;</td><td class="str">3.2 s &middot; download only &middot; held on Reduce Motion</td></tr>
+      <tr><td class="state">Title &rarr; subtext</td><td>&mdash;</td><td class="str">2 pt &mdash; both animate to 0 on the ready beat</td></tr>
       <tr><td class="state">Subtext &rarr; bar</td><td>7 pt</td><td class="str">7 pt</td></tr>
       <tr><td class="state">Bar</td><td>120 &times; 3</td><td class="str">88 &times; 5, centred, nothing beside it</td></tr>
-      <tr><td class="state">Segments</td><td>&mdash;</td><td class="str">46 / 18 / 18 pt, gap 3</td></tr>
-      <tr><td class="state">Total height</td><td>25 pt</td><td class="str">42 pt</td></tr>
-      <tr><td class="state">Top offset</td><td>safe area + 8</td><td class="str">safe area + 8 <span class="dim">(unchanged)</span></td></tr>
+      <tr><td class="state">Segments</td><td>&mdash;</td><td class="str">46 / 18 / 18 pt, gap 3 &middot; handoff 0.55 s</td></tr>
+      <tr><td class="state">Height, warming</td><td>25 pt</td><td class="str">42 pt</td></tr>
+      <tr><td class="state">Height, ready</td><td>25 pt</td><td class="str">27 pt <span class="dimc">(row collapsed)</span></td></tr>
     </tbody>
   </table></div>
 </section>
@@ -330,21 +341,21 @@ li::marker{color:var(--ink3)}
   <div class="tablewrap"><table>
     <thead><tr><th style="width:4%">#</th><th style="width:29%">Scenario</th><th style="width:31%">Today</th><th>Needs</th></tr></thead>
     <tbody>
-      <tr><td class="state">1</td><td>First launch on Wi-Fi: download &rarr; compile &rarr; warm</td><td>Three anchors, no through-line</td><td>The S3 handoff, so it reads as one wait in parts</td></tr>
+      <tr><td class="state">1</td><td>First launch on Wi-Fi: download &rarr; compile &rarr; warm</td><td>Three anchors, no through-line</td><td>The handoff, so it reads as one wait in parts</td></tr>
       <tr><td class="state">2</td><td>First launch, cellular only</td><td>&ldquo;Waiting for Wi-Fi&hellip;&rdquo;</td><td>Empty bar, no clock &mdash; nothing is counting</td></tr>
       <tr><td class="state">3</td><td>Download drops, retries</td><td><span class="tag bug">frozen countdown</span></td><td>A real tick, and &ldquo;your place is kept&rdquo;</td></tr>
       <tr><td class="state">4</td><td>Download fails after 5 attempts</td><td><span class="tag bug">green &ldquo;Voice ready&rdquo;</span></td><td>Amber &ldquo;Download failed&rdquo;</td></tr>
-      <tr><td class="state">5</td><td>Everyday launch, 6&ndash;15 s</td><td>Fine</td><td>Plain bar, static subtext, clock only</td></tr>
+      <tr><td class="state">5</td><td>Everyday launch, 6&ndash;15 s</td><td>Fine</td><td>Plain bar, one static message, clock</td></tr>
       <tr><td class="state">6</td><td>Estimate spent, still going</td><td>&ldquo;almost there&rdquo;, indefinitely</td><td>A stalled state past twice the estimate</td></tr>
       <tr><td class="state">7</td><td>Stage load fails once, retries silently</td><td>Bar holds at the floor, line unchanged</td><td>With segments this becomes visible &mdash; filled boxes must not empty</td></tr>
       <tr><td class="state">8</td><td>Stage load fails twice &rarr; unavailable</td><td><span class="tag bug">green &ldquo;Voice ready&rdquo;</span></td><td>Amber &ldquo;Voice unavailable&rdquo;</td></tr>
       <tr><td class="state">9</td><td>Model removed in Settings &rsaquo; Storage</td><td><span class="tag bug">green &ldquo;Voice ready&rdquo;</span></td><td>Suppress the beat</td></tr>
       <tr><td class="state">10</td><td>Cloud-first: hosted Heart speaking through the wait</td><td>Warm-up copy, as if silent</td><td><span class="tag rec">Its own title</span></td></tr>
-      <tr><td class="state">11</td><td>Play tapped mid-warm-up (catching up)</td><td>Glow stays, generic copy</td><td>&ldquo;it&rsquo;ll start speaking when this finishes&rdquo; in the subtext</td></tr>
+      <tr><td class="state">11</td><td>Play tapped mid-warm-up (catching up)</td><td>Glow stays, generic copy</td><td>&ldquo;you can keep reading&rdquo; covers it</td></tr>
       <tr><td class="state">12</td><td>System voice starts speaking</td><td>Glow leaves immediately</td><td><span class="tag keep">correct</span></td></tr>
-      <tr><td class="state">13</td><td>Ready, CPU background set still compiling</td><td>Nothing, and the screen is held awake</td><td>&ldquo;finishing up in the background&rdquo;</td></tr>
-      <tr><td class="state">14</td><td>Reduce Motion on</td><td>Breath held at full</td><td>Subtext holds on one string; clock still live</td></tr>
-      <tr><td class="state">15</td><td>Second warm-up in one session</td><td>Floor resets, beat re-arms</td><td><span class="tag keep">correct</span></td></tr>
+      <tr><td class="state">13</td><td>Ready, CPU background set still compiling</td><td>Nothing, and the screen is held awake</td><td>&ldquo;finishing up in the background&rdquo; &mdash; the one Ready state that keeps its row</td></tr>
+      <tr><td class="state">14</td><td>Reduce Motion on</td><td>Breath held at full</td><td>The download holds one string; everything else already static</td></tr>
+      <tr><td class="state">15</td><td>Second warm-up in one session</td><td>Floor resets, beat re-arms</td><td>The collapsed row must re-open</td></tr>
       <tr><td class="state">16</td><td>Backgrounded mid-warm-up, then returned</td><td>Estimate keeps running against wall time</td><td>It probably should not count time spent backgrounded</td></tr>
     </tbody>
   </table></div>
@@ -353,17 +364,16 @@ li::marker{color:var(--ink3)}
 <section>
   <div class="shead">
     <div class="snum">09 / TO DECIDE</div>
-    <h2>Four things, then I build it</h2>
+    <h2>Three things, then I build it</h2>
   </div>
   <div class="col stack">
     <ul>
       <li><b>Title weight</b> &mdash; Medium 11 or SemiBold 11. My read is Medium: SemiBold turns a transient status into a heading on a page someone is reading. &sect;02 has both at true scale.</li>
-      <li><b>Subtext</b> &mdash; 9.5 pt at 50% is what &sect;01 runs. &sect;03 has 9 / 9.5 / 10 and 40 / 50 / 60% so you can pick the pair.</li>
-      <li><b>Eight or three</b> &mdash; whether the warm-up segment subdivides into its eight real stages or stays a single box. &sect;05 shows both. Three is calmer; eight is what the code actually knows.</li>
-      <li><b>The seam</b> &mdash; handoff or deal. &sect;05 runs all five end to end. Deal now keeps its progress, so the choice is purely whether the phase change deserves a beat of its own (deal) or should pass unremarked (handoff).</li>
+      <li><b>Subtext</b> &mdash; 9.5 pt at 50% is what &sect;01 runs. &sect;03 has 9 / 9.5 / 10 and 40 / 50 / 60% so you can pick the pair, judged at the row&rsquo;s busiest.</li>
+      <li><b>Three segments or eight</b> &mdash; &sect;05 shows both. Three is calmer; eight is what the code actually knows.</li>
     </ul>
     <hr>
-    <p class="spec">Everything else is settled: S3 at the seam &middot; 88 &times; 5, centred and alone &middot; plain for the download &middot; subtext is the only thing that cycles &middot; clock shares the subtext row &middot; megabytes only while downloading &middot; the subtext row keeps its height when empty. The three <span class="tag bug">fix</span> rows in &sect;04 land with the same change.</p>
+    <p class="spec">Settled: handoff at the seam &middot; 88 &times; 5 centred and alone &middot; plain for the download &middot; one message per phase, cycling only while downloading &middot; megabytes persistent in the lead slot &middot; clock only after the download &middot; the row reserved mid-flow and collapsed at Ready. The three <span class="tag bug">fix</span> rows in &sect;04 land with the same change.</p>
   </div>
 </section>
 
@@ -374,19 +384,14 @@ li::marker{color:var(--ink3)}
   "use strict";
   var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var theme = "light", playing = !reduce;
-  var subs = [], lines = [];
-  var W = 88, H = 5, GAP = 3;
+  var ramps = [], slots = [];
+  var W = 88, GAP = 3;
   var THREE = [46, 18, 18];
-  if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(function(){
-      for (var i = 0; i < lines.length; i++) lines[i].remeasure();
-    });
-  }
 
   function el(tag, cls, txt){ var n = document.createElement(tag); if(cls) n.className = cls; if(txt != null) n.textContent = txt; return n; }
 
-  function phone(extraCls){
-    var p = el("div", "phone " + theme + (extraCls ? " " + extraCls : ""));
+  function phone(){
+    var p = el("div", "phone " + theme);
     p.setAttribute("data-phone", "1");
     var g = el("div", "glowlayer");
     g.appendChild(el("div", "wash"));
@@ -418,24 +423,69 @@ li::marker{color:var(--ink3)}
     return f;
   }
 
-  /* the three-row line, as a component */
+  /* one slot of the subtext row: holds a fixed string, a live-updating string, or a cycling
+     list. Its box glides to the width of whatever it currently shows. */
+  function makeSlot(parent, ruler){
+    var box = el("span", "rot");
+    parent.appendChild(box);
+    var slot = {
+      box: box, list: [], cur: 0, widths: [], timer: null,
+      width: function(s){ ruler.textContent = s; return ruler.getBoundingClientRect().width; },
+      remeasure: function(){
+        slot.widths = [];
+        for (var k = 0; k < slot.list.length; k++) slot.widths.push(slot.width(slot.list[k]));
+        if (slot.widths[slot.cur] > 0) box.style.width = Math.ceil(slot.widths[slot.cur]) + "px";
+      },
+      empty: function(){ return !slot.list.length; },
+      set: function(v){
+        clearInterval(slot.timer);
+        slot.list = v == null ? [] : (typeof v === "string" ? [v] : v);
+        slot.cur = 0;
+        if (!slot.list.length) { box.textContent = ""; box.style.width = "0px"; return; }
+        slot.remeasure();
+        var i = 0;
+        function go(){
+          slot.cur = i;
+          i = (i + 1) % slot.list.length;
+          if (slot.widths[slot.cur] > 0) box.style.width = Math.ceil(slot.widths[slot.cur]) + "px";
+          box.textContent = "";
+          box.appendChild(el("span", "now", slot.list[slot.cur]));
+        }
+        go();
+        if (!reduce && slot.list.length > 1) slot.timer = setInterval(function(){ if (playing) go(); }, 3200);
+      },
+      /* megabytes and the clock: the value changes every tick, so no crossfade — the digits
+         would blink once a second. Text swapped in place, box re-sized only when it must. */
+      live: function(txt){
+        clearInterval(slot.timer);
+        if (slot.list.length === 1 && slot.list[0] === txt) return;
+        slot.list = txt ? [txt] : [];
+        slot.cur = 0;
+        if (!txt) { box.textContent = ""; box.style.width = "0px"; return; }
+        var w = slot.width(txt);
+        if (w > 0) box.style.width = Math.ceil(w) + "px";
+        box.textContent = txt;
+      }
+    };
+    slots.push(slot);
+    return slot;
+  }
+
+  /* the three-row line */
   function makeLine(p, opts){
     opts = opts || {};
     var line = el("div", "wline" + (opts.cls ? " " + opts.cls : ""));
     var title = el("div", "wtitle", "");
     var sub = el("div", "wsub");
-    var rot = el("span", "rot");
+    var ruler = el("span");
+    ruler.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;white-space:nowrap";
+    sub.appendChild(ruler);
+    var lead = makeSlot(sub, ruler);
     var sep = el("span", "sep", "·");
-    var clock = el("span", "clock", "");
     sep.hidden = true;
-    sub.appendChild(rot);
     sub.appendChild(sep);
-    sub.appendChild(clock);
-    // hidden ruler: each string is measured so the rotator's box can glide to its exact width,
-    // which keeps the whole row centred as the copy changes instead of snapping.
-    var meas = el("span");
-    meas.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;white-space:nowrap";
-    sub.appendChild(meas);
+    var trail = makeSlot(sub, ruler);
+
     var row = el("div", "barrow");
     var holder = el("div");
     holder.style.cssText = "position:relative;display:flex;align-items:center";
@@ -451,38 +501,26 @@ li::marker{color:var(--ink3)}
       fills.push(f);
     }
     holder.appendChild(segsWrap);
-    var notches = el("div", "notches");
-    var BOUND = [THREE[0], THREE[0] + GAP + THREE[1]];
-    for (var q = 0; q < 2; q++) {
-      var nn = el("i");
-      nn.style.left = BOUND[q] + "px";
-      notches.appendChild(nn);
-    }
-    holder.appendChild(notches);
     row.appendChild(holder);
     line.appendChild(title);
     line.appendChild(sub);
     line.appendChild(row);
     p.appendChild(line);
 
+    function syncSep(){ sep.hidden = lead.empty() || trail.empty(); }
+
     var api = {
-      title: title, clock: clock, segs: segs, fills: fills, wrap: segsWrap,
-      setWidths: function(list, instant){
+      title: title, segs: segs, fills: fills, lead: lead, trail: trail,
+      setLead:  function(v, tabular){ lead.set(v);  lead.box.classList.toggle("tabular", !!tabular); syncSep(); },
+      setTrail: function(v, asClock){ trail.set(v); trail.box.classList.toggle("clockish", !!asClock); syncSep(); },
+      leadLive:  function(t){ lead.live(t);  syncSep(); },
+      trailLive: function(t){ trail.live(t); syncSep(); },
+      collapse: function(on){ line.classList.toggle("done", !!on); },
+      setWidths: function(list){
         for (var k = 0; k < segs.length; k++) {
           var w = list[k] || 0;
-          if (instant) segs[k].style.transition = "none";
           segs[k].style.width = w + "px";
           segs[k].style.opacity = w > 0 ? 1 : 0;
-          if (instant) { void segs[k].offsetWidth; segs[k].style.transition = ""; }
-        }
-      },
-      /* the two seams that divide one bar rather than replacing it */
-      setNotches: function(on, stagger){
-        for (var k = 0; k < 2; k++) {
-          (function(k){
-            setTimeout(function(){ notches.children[k].classList.toggle("on", !!on); },
-                       (on && stagger) ? k * 190 : 0);
-          })(k);
         }
       },
       setFill: function(v){
@@ -493,167 +531,106 @@ li::marker{color:var(--ink3)}
           fills[j].style.width = Math.min(parts[j], Math.max(0, done - acc)) + "px";
           acc += parts[j];
         }
-      },
-      timer: null,
-      list: [],
-      /* the clock now lives on the subtext row; the separator only exists when both sides do */
-      setClock: function(txt){
-        clock.textContent = txt || "";
-        sep.hidden = !(txt && api.list.length);
-      },
-      widths: [],
-      cur: 0,
-      /* Inter loads after first paint, so every width is measured again once it arrives. */
-      remeasure: function(){
-        api.widths = [];
-        for (var k = 0; k < api.list.length; k++) {
-          meas.textContent = api.list[k];
-          api.widths.push(meas.getBoundingClientRect().width);
-        }
-        if (api.widths[api.cur] > 0) rot.style.width = Math.ceil(api.widths[api.cur]) + "px";
-      },
-      setSubs: function(list){
-        clearInterval(api.timer);
-        api.list = list || [];
-        api.cur = 0;
-        if (!api.list.length) { rot.textContent = ""; rot.style.width = "0px"; sep.hidden = true; return; }
-        api.remeasure();
-        sep.hidden = !clock.textContent;
-        var i = 0;
-        function go(){
-          api.cur = i;
-          i = (i + 1) % api.list.length;
-          // the box glides to this string's own width; the row is centre-justified, so the
-          // separator and clock drift with it rather than the text sitting off-centre
-          if (api.widths[api.cur] > 0) rot.style.width = Math.ceil(api.widths[api.cur]) + "px";
-          rot.textContent = "";
-          rot.appendChild(el("span", "now", api.list[api.cur]));
-        }
-        go();
-        if (!reduce && api.list.length > 1) api.timer = setInterval(function(){ if (playing) go(); }, 3200);
       }
     };
-    // Inter arrives after first paint, so the first measurement is against the fallback face.
-    lines.push(api);
     api.setWidths([W, 0, 0].slice(0, n));
     return api;
+  }
+
+  /* Inter arrives after first paint, so every width is measured again once it has. */
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function(){
+      for (var i = 0; i < slots.length; i++) slots[i].remeasure();
+    });
   }
 
   function mmss(sec){
     sec = Math.max(0, Math.round(sec));
     return Math.floor(sec / 60) + ":" + ("0" + (sec % 60)).slice(-2);
   }
+  function mb(v){ return Math.round(12 + v * 338) + " of 350 MB"; }
 
-  /* full first-launch sequence, reusable */
-  function sequence(api, phone, opts){
+  /* the full first-launch sequence */
+  function sequence(api, phoneEl, opts){
     opts = opts || {};
     var eight = opts.eight;
-    var seam = opts.seam || "handoff";
-    var carves = (seam === "split" || seam === "zip");   // these divide the bar, never replace it
-
-    /* the seam itself: what happens the instant the download ends */
-    function divide(){
-      if (carves) {
-        api.setWidths([W, 0, 0]);
-        api.setNotches(true, seam === "zip");
-        return;
-      }
-      if (seam === "deal") {
-        // every box goes to nothing, then they deal out left to right. The fill is not lost —
-        // it sweeps back to what was already earned as soon as there is somewhere to put it.
-        api.setWidths([0, 0, 0], true);
-        setTimeout(function(){ api.setWidths([THREE[0], 0, 0]); }, 70);
-        setTimeout(function(){ api.setWidths([THREE[0], THREE[1], 0]); }, 210);
-        setTimeout(function(){ api.setWidths(THREE); }, 350);
-        return;
-      }
-      if (seam === "cross") {
-        api.wrap.style.transition = "opacity .26s ease";
-        api.wrap.style.opacity = 0;
-        setTimeout(function(){
-          api.setWidths(THREE, true);
-          api.wrap.style.opacity = 1;
-        }, 270);
-        return;
-      }
-      api.setWidths(THREE);                                        // handoff
-    }
-    function undivide(){
-      api.setNotches(false);
-      api.wrap.style.opacity = 1;
-      api.setWidths(eight ? [W, 0, 0, 0, 0, 0, 0, 0] : [W, 0, 0]);
-    }
-
-    var COPY = {
-      wait:  ["just this once", "it will start on its own"],
-      down:  ["120 of 350 MB", "only this once", "you can keep reading"],
-      prep:  ["step 3 of 8", "this only happens once"],
-      warm:  ["loading the speech stages", "only after an update"],
-      ready: []
-    };
+    var TOTAL = opts.total || 26;
     var stage = "";
     var t0 = Date.now();
-    var TOTAL = opts.total || 24;
+
+    function plainWidths(){ return eight ? [W, 0, 0, 0, 0, 0, 0, 0] : [W, 0, 0]; }
+    function dividedWidths(){
+      if (!eight) return THREE;
+      var first = W * 0.52;
+      var rest = (W - first - 7 * GAP) / 7;
+      return [first, rest, rest, rest, rest, rest, rest, rest];
+    }
 
     setInterval(function(){
       if (!playing) return;
       var s = ((Date.now() - t0) / 1000) % TOTAL;
-      var A = TOTAL * 0.11, B = TOTAL * 0.42, C = TOTAL * 0.64, D = TOTAL * 0.88;
+      var A = TOTAL * 0.10, B = TOTAL * 0.44, C = TOTAL * 0.66, D = TOTAL * 0.87;
+
       if (s < A) {
         if (stage !== "wait") {
-          stage = "wait"; phone.classList.remove("ready");
+          stage = "wait";
+          phoneEl.classList.remove("ready");
+          api.collapse(false);
           api.title.textContent = "Waiting for Wi-Fi";
-          undivide();
-          api.setSubs(COPY.wait);
+          api.setWidths(plainWidths());
+          api.setLead("just this once");
+          api.setTrail(null);
         }
-        api.setFill(0); api.setClock("");
+        api.setFill(0);
       } else if (s < B) {
         if (stage !== "down") {
           stage = "down";
           api.title.textContent = "Downloading the voice";
-          undivide();
-          api.setSubs(COPY.down);
+          api.setWidths(plainWidths());
+          // the megabytes hold the left slot; only the reassurance cycles, and no clock yet
+          api.setTrail(["only this once", "you can keep reading"]);
+          api.lead.box.classList.add("tabular");
+          api.trail.box.classList.remove("clockish");
         }
         var v = (s - A) / (B - A);
         api.setFill(v);
-        api.setClock(mmss(110 * (1 - v)));
+        api.leadLive(mb(v));
       } else if (s < C) {
         if (stage !== "prep") {
           stage = "prep";
           api.title.textContent = "Preparing the voice";
-          if (eight) {
-            // the download keeps the first slot; the seven stage boxes grow beside it
-            var rest = (W - (W * 0.52) - 7 * GAP) / 7;
-            api.setWidths([W * 0.52, rest, rest, rest, rest, rest, rest, rest]);
-          } else {
-            divide();
-          }
-          api.setSubs(COPY.prep);
+          api.setWidths(dividedWidths());                    // the handoff
+          // download done: the message moves left, the clock takes the right slot
+          api.setLead("one-time install");
+          api.setTrail(null, true);
         }
         var f = eight ? 0.52 : THREE[0] / (THREE[0] + THREE[1] + THREE[2]);
-        var v2 = f + (1 - f) * 0.42 * ((s - B) / (C - B));
-        api.setFill(v2);
-        api.setClock(mmss(46 * (1 - (s - B) / (C - B))));
+        api.setFill(f + (1 - f) * 0.42 * ((s - B) / (C - B)));
+        api.trailLive(mmss(46 * (1 - (s - B) / (C - B))));
       } else if (s < D) {
-        if (stage !== "warm") { stage = "warm"; api.title.textContent = "Warming up the voice"; api.setSubs(COPY.warm); }
+        if (stage !== "warm") {
+          stage = "warm";
+          api.title.textContent = "Warming up the voice";
+          api.setLead("you can keep reading");
+        }
         var base = eight ? 0.52 + 0.48 * 0.42 : 0.72;
-        var v3 = base + (1 - base) * ((s - C) / (D - C));
-        api.setFill(v3);
-        api.setClock(Math.max(1, Math.ceil(24 * (1 - (s - C) / (D - C)))) + "s");
+        api.setFill(base + (1 - base) * ((s - C) / (D - C)));
+        api.trailLive(Math.max(1, Math.ceil(26 * (1 - (s - C) / (D - C)))) + "s");
       } else {
         if (stage !== "ready") {
           stage = "ready";
           api.title.textContent = "Voice ready";
-          api.setSubs(COPY.ready);
-          phone.classList.add("ready");
+          api.setLead(null);
+          api.setTrail(null);
+          api.collapse(true);                                 // the row closes; the bar rises
+          phoneEl.classList.add("ready");
         }
         api.setFill(1);
-        api.setClock("");
       }
     }, 100);
   }
 
-  /* ===== 01 HERO ===== */
+  /* ===== 01 THE LINE ===== */
   (function(){
     var host = document.getElementById("hero");
 
@@ -661,14 +638,12 @@ li::marker{color:var(--ink3)}
     var api = makeLine(p, {cls: "w500"});
     sequence(api, p);
     host.appendChild(unit("The line, running &nbsp;<span class='pick'>◆</span>",
-      "Title in Medium 11 holding the phase. Subtext at 9.5 pt / 50% cycling beneath it with the clock after it on the same row — megabytes only while downloading, the clock gone entirely when nothing is counting. Bar 88 × 5 alone underneath, plain through the download, handing off into three at the seam. 24-second loop.",
-      "Inter-Medium 11 · Inter-Regular 9.5 @ 50% · clock inline · 88 × 5 · S3 · dwell 3.2 s", p));
+      "Title in Medium 11 naming the phase. Under it one faint row of two slots — megabytes counting up on the left while the reassurance cycles on the right, then the message on the left and the clock on the right once the download is done. Bar 88 × 5, handing off into three at the seam, and the row closing at Ready. 26-second loop.",
+      "Inter-Medium 11 · Inter-Regular 9.5 @ 50% · 88 × 5 · handoff · dwell 3.2 s", p));
 
-    // today, for scale
     var p2 = phone();
     var line = el("div", "wline old");
     var t = el("div", "wtitle", "Warming up the voice · about 15 s");
-    var sub2 = el("div", "wsub");
     var row = el("div", "barrow");
     var b = el("div", "bar");
     b.style.width = "120px";
@@ -677,32 +652,39 @@ li::marker{color:var(--ink3)}
     b.appendChild(f);
     row.appendChild(b);
     line.appendChild(t);
-    line.appendChild(sub2);
+    line.appendChild(el("div", "wsub"));
     line.appendChild(row);
     p2.appendChild(line);
-    subs.push(function(v){ f.style.width = (120 * v) + "px"; });
+    ramps.push(function(v){ f.style.width = (120 * v) + "px"; });
     host.appendChild(unit("Today, for scale",
-      "The same frame with what ships now: one Regular 11 line carrying everything, and a 120 × 3 hairline. The proposal is 17 pt taller — worth seeing against the status bar and the first line of the page before committing to it.",
-      "Inter-Regular 11 · 120 × 3 · total height 25 pt vs 42 pt", p2));
+      "The same frame with what ships now: one Regular 11 line carrying everything, and a 120 × 3 hairline. Worth seeing the height difference against the status bar and the first line of the page before committing to it.",
+      "Inter-Regular 11 · 120 × 3 · 25 pt tall against 42 pt warming, 27 pt ready", p2));
   })();
 
   /* ===== 02 WEIGHTS ===== */
   (function(){
     var host = document.getElementById("weights");
-    var opts = [
-      ["w500", "Medium 11 <span class='pick'>◆</span>", "Separates cleanly from the 9.5 pt subtext without stepping up into heading territory. At a glance the group reads as one object with a clear top line, which is what the layout is for.", "Inter-Medium 11 · tracking −0.11 pt"],
-      ["w600", "SemiBold 11", "More assertive. Reads well when the phone is genuinely busy for minutes; on a six-second launch it announces a wait that was over before you looked up.", "Inter-SemiBold 11 · tracking −0.11 pt"],
-      ["w500 s12", "Medium 12", "A point larger as well as heavier. The extra size does more work than the extra weight — but 12 pt over 9.5 pt is a wide gap, and the subtext starts to look like a footnote rather than a second line.", "Inter-Medium 12 · tracking −0.12 pt"],
-      ["w600 s12", "SemiBold 12", "Both dials up. Unmistakably a heading. Probably the right answer if this ever becomes a full first-run screen, and too much for a line that lives over someone's book.", "Inter-SemiBold 12 · tracking −0.12 pt"]
-    ];
-    opts.forEach(function(o){
+    [
+      ["w500", "Medium 11 <span class='pick'>◆</span>",
+       "Separates cleanly from the 9.5 pt subtext without stepping up into heading territory. The group reads as one object with a clear top line, which is what the layout is for.",
+       "Inter-Medium 11 · tracking −0.11 pt"],
+      ["w600", "SemiBold 11",
+       "More assertive. Reads well when the phone is genuinely busy for minutes; on a six-second launch it announces a wait that was over before you looked up.",
+       "Inter-SemiBold 11 · tracking −0.11 pt"],
+      ["w500 s12", "Medium 12",
+       "A point larger as well as heavier. The extra size does more work than the extra weight — but 12 over 9.5 is a wide gap, and the subtext starts to look like a footnote rather than a second line.",
+       "Inter-Medium 12 · tracking −0.12 pt"],
+      ["w600 s12", "SemiBold 12",
+       "Both dials up. Unmistakably a heading — the right answer if this ever becomes a full first-run screen, and too much for a line that lives over someone's book.",
+       "Inter-SemiBold 12 · tracking −0.12 pt"]
+    ].forEach(function(o){
       var p = phone();
       var api = makeLine(p, {cls: o[0]});
       api.title.textContent = "Downloading the voice";
       api.setWidths([W, 0, 0]);
-      api.setSubs(["120 of 350 MB"]);
-      api.setClock("1:50");
-      subs.push(function(v){ api.setFill(0.34 + v * 0.02); });
+      api.setLead("120 of 350 MB", true);
+      api.setTrail("only this once");
+      ramps.push(function(v){ api.setFill(0.34 + v * 0.03); });
       host.appendChild(unit(o[1], o[2], o[3], p));
     });
   })();
@@ -710,20 +692,27 @@ li::marker{color:var(--ink3)}
   /* ===== 03 SUBTEXT ===== */
   (function(){
     var host = document.getElementById("subs");
-    var opts = [
-      ["w500 sub9 op60", "9 pt at 60%", "Smallest and most present. The contrast holds even under the glow's brightest breath, and the size keeps it clearly subordinate. Megabytes stay readable.", "Inter-Regular 9 @ 60%"],
-      ["w500 op40", "9.5 pt at 40%", "The faintest of the set. Genuinely recessive — and on the light ground at the top of the pulse it is close to the point where a reader has to look twice at “120 of 350 MB”.", "Inter-Regular 9.5 @ 40%"],
-      ["w500", "9.5 pt at 50% <span class='pick'>◆</span>", "What §01 runs. Quiet without being work to read, and a clear step down from the Medium title above it. My pick of the three.", "Inter-Regular 9.5 @ 50%"],
-      ["w500 sub10 op40", "10 pt at 40%", "Bigger and fainter — the opposite trade. It occupies more room while saying less clearly, which is the wrong way round for a line whose whole job is to be secondary.", "Inter-Regular 10 @ 40%"]
-    ];
-    opts.forEach(function(o){
+    [
+      ["w500 sub9 op60", "9 pt at 60%",
+       "Smallest and most present. Contrast holds even at the top of the glow's breath, and the size keeps it clearly subordinate. Megabytes stay readable.",
+       "Inter-Regular 9 @ 60%"],
+      ["w500 op40", "9.5 pt at 40%",
+       "The faintest of the set. Genuinely recessive — and on the light ground at the top of the pulse it is close to the point where a reader has to look twice at the megabytes.",
+       "Inter-Regular 9.5 @ 40%"],
+      ["w500", "9.5 pt at 50% <span class='pick'>◆</span>",
+       "What §01 runs. Quiet without being work to read, and a clear step down from the Medium title above it. My pick of the four.",
+       "Inter-Regular 9.5 @ 50%"],
+      ["w500 sub10 op40", "10 pt at 40%",
+       "Bigger and fainter — the opposite trade. It occupies more room while saying less clearly, which is the wrong way round for a row whose whole job is to be secondary.",
+       "Inter-Regular 10 @ 40%"]
+    ].forEach(function(o){
       var p = phone();
       var api = makeLine(p, {cls: o[0]});
       api.title.textContent = "Downloading the voice";
       api.setWidths([W, 0, 0]);
-      api.setSubs(["120 of 350 MB", "only this once", "you can keep reading"]);
-      api.setClock("1:50");
-      subs.push(function(v){ api.setFill(0.34 + v * 0.02); });
+      api.setTrail(["only this once", "you can keep reading"]);
+      api.lead.box.classList.add("tabular");
+      ramps.push(function(v){ api.setFill(v * 0.9); api.leadLive(mb(v * 0.9)); });
       host.appendChild(unit(o[1], o[2], o[3], p));
     });
   })();
@@ -731,74 +720,66 @@ li::marker{color:var(--ink3)}
   /* ===== 05 SEAM ===== */
   (function(){
     var host = document.getElementById("seam");
-    var SEAMS = [
-      ["handoff", "S3 — Handoff <span class='pick'>◆</span>",
-       "The full-width bar contracts to 46 pt and stays full while two 18 pt boxes grow out of the space it gave up. Nothing empties, nothing restarts — the download becomes step one of three. The only version where the progress narrative survives the change.",
-       "88 → 46 / 18 / 18 pt · one width transition · 0.55 s"],
-      ["deal", "S2 — Deal out",
-       "Every box goes to nothing, then they deal out left to right 140 ms apart. The clearest possible “this is a new phase”. I have kept the progress: the fill sweeps straight back to what was already earned as soon as there is somewhere to put it, so the bar never actually retreats — which is what §07's warmUpProgressFloor exists to guarantee.",
-       "widths → 0, then staggered 70 / 210 / 350 ms · fill sweeps back 0.32 s"],
-      ["split", "S1 — Split in place",
-       "The bar never changes size and the fill never pauses. Two 3 pt notches simply fade in where the boundaries belong, carving the same bar into parts. The least disruptive of the five — it says “same wait, now I can show you its shape”.",
-       "2 notches, opacity 0 → 1 together · 0.32 s · widths untouched"],
-      ["zip", "S5 — Zipper",
-       "Split, but the notches arrive 190 ms apart so the division reads as something happening rather than something that has happened. A small amount of character for very little money. Possibly one idea too many for a status line.",
-       "notches staggered 190 ms, left → right"],
-      ["cross", "S4 — Crossfade",
-       "Plain fades out, segmented fades in at the same proportion. Safe, and it has nothing to say — a reader sees a different bar and has to work out for themselves that it is the same wait.",
-       "opacity 1 → 0 → 1 · 0.26 s each way · widths swapped while hidden"]
-    ];
-    SEAMS.forEach(function(s){
-      var p = phone();
-      var api = makeLine(p, {cls: "w500"});
-      sequence(api, p, {total: 30, seam: s[0]});
-      host.appendChild(unit(s[1], s[2], s[3], p));
-    });
+
+    var p = phone();
+    var api = makeLine(p, {cls: "w500"});
+    sequence(api, p, {total: 30});
+    host.appendChild(unit("Three segments <span class='pick'>◆</span>",
+      "Download, prepare, warm — proportioned to how long each really takes. Slowed to 30 seconds so the handoff is watchable: the 88 pt bar contracts to 46 and stays full while two 18 pt boxes grow beside it.",
+      "88 → 46 / 18 / 18 pt · gap 3 · 0.55 s cubic ease", p));
 
     var p2 = phone();
     var api2 = makeLine(p2, {cls: "w500", segments: 8});
     sequence(api2, p2, {total: 30, eight: true});
-    host.appendChild(unit("Eight segments, handoff",
-      "The open question, on the handoff. The download keeps its slot and the remaining space divides into the seven boxes the stage loader actually reports. More faithful to what the code knows, and visibly busier — eight small boxes under a 9.5 pt subtext is a lot of parts in a 42 pt stack.",
+    host.appendChild(unit("Eight segments",
+      "The same handoff, except the space the download gives up divides into the seven boxes the stage loader actually reports. Faithful to what the code knows, and visibly busier — eight small boxes under a 9.5 pt row is a lot of parts in a 42 pt stack.",
       "88 → 46 pt + 7 × 6 pt · gap 3 · the real warmUpStages count", p2));
   })();
 
   /* ===== 06 METRICS ===== */
   (function(){
     var host = document.getElementById("metrics");
+
     var p = phone();
     var api = makeLine(p, {cls: "w500"});
     api.title.textContent = "Preparing the voice";
     api.setWidths(THREE);
-    api.setSubs(["step 3 of 8", "this only happens once"]);
-    api.setClock("0:40");
+    api.setLead("one-time install");
+    api.setTrail("0:40", true);
     api.setFill(0.62);
-
-    // measurement overlay
     var over = el("div");
     over.style.cssText = "position:absolute;left:0;right:0;top:62px;height:44px;pointer-events:none";
-    var marks = [
-      [0, 15, "11 pt title", "rgba(0,102,255,.14)"],
-      [17, 13, "9.5 pt subtext", "rgba(0,102,255,.09)"],
-      [37, 5, "5 pt bar", "rgba(0,102,255,.14)"]
-    ];
-    marks.forEach(function(m){
+    [[0, 15, "rgba(0,102,255,.15)"], [17, 13, "rgba(0,102,255,.09)"], [37, 5, "rgba(0,102,255,.15)"]].forEach(function(m){
       var d = el("div");
-      d.style.cssText = "position:absolute;left:130px;right:130px;top:" + m[0] + "px;height:" + m[1] + "px;background:" + m[3] + ";border-radius:2px";
+      d.style.cssText = "position:absolute;left:126px;right:126px;top:" + m[0] + "px;height:" + m[1] + "px;background:" + m[2] + ";border-radius:2px";
       over.appendChild(d);
     });
     p.appendChild(over);
-    host.appendChild(unit("The stack, measured",
-      "42 pt from the top of the title to the foot of the bar, against 25 pt today. Moving the clock onto the subtext row costs nothing — it fills space that row already occupied — so the whole stack is three rows, not four. Same safe-area + 8 offset, so the extra 17 pt pushes down into the page rather than up under the status bar.",
-      "15 + 2 + 13 + 7 + 5 = 42 pt · top at safe area + 8", p));
+    host.appendChild(unit("Warming — 42 pt",
+      "Title, subtext row, bar. Tinted bands mark the three. It starts at the same safe-area + 8 offset as today, so the extra 17 pt pushes down into the page rather than up under the status bar.",
+      "15 + 2 + 13 + 7 + 5 = 42 pt", p));
+
+    var p2 = phone();
+    var api2 = makeLine(p2, {cls: "w500"});
+    api2.title.textContent = "Voice ready";
+    api2.setWidths(THREE);
+    api2.setLead(null);
+    api2.setTrail(null);
+    api2.setFill(1);
+    api2.collapse(true);
+    p2.classList.add("ready");
+    host.appendChild(unit("Ready — 27 pt",
+      "The same line with the middle row closed. The 13 pt row and its 2 pt gap animate to zero over 0.34 s and the bar rises to sit 7 pt under the title, so the green beat has no dead space in it. Two points taller than today's line, at the only moment anyone photographs.",
+      "15 + 0 + 0 + 7 + 5 = 27 pt · closes over 0.34 s", p2));
   })();
 
-  /* shared slow ramp for the static frames */
+  /* one slow ramp drives every static frame */
   var tR = Date.now();
   setInterval(function(){
     if (!playing) return;
     var s = ((Date.now() - tR) / 1000) % 14;
-    for (var i = 0; i < subs.length; i++) subs[i](Math.min(1, s / 12));
+    var v = Math.min(1, s / 12);
+    for (var i = 0; i < ramps.length; i++) ramps[i](v);
   }, 120);
 
   /* controls */

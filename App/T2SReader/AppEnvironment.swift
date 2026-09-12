@@ -106,6 +106,11 @@ final class AppEnvironment {
         // played now, prepared in the background, or described in Preferences (spec §6).
         player.voiceRouting = voiceRouting
         prepareRunner.voiceRouting = voiceRouting
+        // A charger never renders a library through the mirrors: prepare waits for the on-device voice.
+        // The routing alone is captured, not the environment: it is `Sendable`, and the runner
+        // must not retain everything through its gate.
+        let routing = voiceRouting
+        prepareRunner.isStandingIn = { await routing.effectiveVoiceID(VoiceOption.systemDefault.id).hasPrefix("cloud:") }
         // Spec §3.4.1 tier 2: a new document's first 30 s render now, on any power state, so its
         // first tap plays with no spin-up. One at a time, behind whatever the player is rendering —
         // the arbiter gives play-ahead the next utterance.
@@ -152,8 +157,12 @@ final class AppEnvironment {
         let shared = try SharedLibraryFactory.make(capacityBytes: capacity)
         let storedBudget = UserDefaults.standard.object(forKey: AppPaths.prepareBudgetKey) as? Double ?? 3 * 3600
         let prepareBudget = storedBudget.isFinite ? storedBudget : 365 * 24 * 3600
-        let cloudVoiceSettings = CloudVoiceSettings()
+        let cloudVoiceSettings = CloudVoiceSettings(shipped: .pilot)
         let cloudVoiceSecrets = KeychainSecretStore()
+        // The build's key into the Keychain, once (cloud-first bootstrap spec). A failure to store
+        // is not fatal: the route then waits for a key typed in Cloud voices, as before.
+        _ = try? CloudVoiceKeySeeder.seed(infoValue: Bundle.main.infoDictionary?["T2SCloudVoiceKey"] as? String,
+                                          into: cloudVoiceSecrets)
         let configurationStore = cloudVoiceSettings.configurationStore
         let systemEngine = SystemSpeechEngine()
         // Closed until the scene reports itself active; a process launched for a background task
@@ -167,7 +176,15 @@ final class AppEnvironment {
         #if KOKORO_ENGINE
         cpuBudget.report = { KokoroCoreMLEngine.timing("kokoro budget: " + $0) }
         #endif
-        let kokoro = KokoroComposition.make(gate: foregroundGate)
+        // Hosted Heart stands in for the default wherever the on-device route is not yet open —
+        // while a route is configured and the Keychain holds its key.
+        let standIn: @Sendable () -> String? = {
+            guard let configuration = configurationStore.current(),
+                  let key = try? cloudVoiceSecrets.load(), !key.isEmpty
+            else { return nil }
+            return CloudVoiceID(configuration: configuration, voice: configuration.voice).rawValue
+        }
+        let kokoro = KokoroComposition.make(gate: foregroundGate, standIn: standIn)
         let cloudRouter = RoutedEngine(
             system: systemEngine,
             // Both on-device runtimes, keyed by identity: a `kokoro:` voice ID names which one

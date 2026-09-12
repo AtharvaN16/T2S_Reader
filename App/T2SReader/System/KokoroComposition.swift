@@ -263,7 +263,8 @@ struct KokoroComposition {
     /// builds wait on it, because a process that is not frontmost is killed for a minute of a
     /// core (the iPhone 17 Pro, 2026-09-09 15:14). A process launched for a background task never
     /// opens it, so neither ever starts there.
-    static func make(gate: ForegroundGate, defaults: UserDefaults = .standard) -> KokoroComposition {
+    static func make(gate: ForegroundGate, defaults: UserDefaults = .standard,
+                     standIn: @escaping @Sendable () -> String? = { nil }) -> KokoroComposition {
         let log = Logger(subsystem: "com.t2s.reader", category: "kokoro")
         #if KOKORO_ENGINE
         // Where the downloaded model lives: the app's own Application Support, at a path that
@@ -422,7 +423,8 @@ struct KokoroComposition {
                 ],
                 // Spec §6: a reader who has never chosen a voice gets Kokoro Heart, not the system
                 // voice — but only while the route that renders it is available.
-                defaultVoice: KokoroVoiceID(engineID: KokoroCoreMLEngine.identity, voice: "af_heart").rawValue
+                defaultVoice: KokoroVoiceID(engineID: KokoroCoreMLEngine.identity, voice: "af_heart").rawValue,
+                standIn: standIn
             ),
             status: status,
             playAheadWindowSeconds: 60,
@@ -448,7 +450,7 @@ struct KokoroComposition {
                 if fake != "1" { status.update(.available(isDebugOverride: true)) }
             }
         }
-        return KokoroComposition(engines: [], voiceRouting: KokoroVoiceRouting.unavailable,
+        return KokoroComposition(engines: [], voiceRouting: KokoroVoiceRouting(routes: [], defaultVoice: nil, standIn: standIn),
                                  status: status, playAheadWindowSeconds: nil, foregroundFillSeconds: nil, catalogEngines: { [] },
                                  sceneIsBackground: OSAllocatedUnfairLock(initialState: true))
         #endif

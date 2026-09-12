@@ -52,7 +52,8 @@ the same commit. Recompile the stages on the Mac before the next package change.
 
 **PR #17** (2026-09-12) carried all of the above from `dev` to `main`, over the bookmarks-and-notes
 work already there, and was merged the same night with every check green:
-https://github.com/AtharvaN16/T2S_Reader/pull/17. `dev` was fast-forwarded to `main` after the merge.
+https://github.com/AtharvaN16/T2S_Reader/pull/17. `dev` merged `main` afterwards (two handoff
+commits had landed on `dev` after the merge, so it could not fast-forward); they ride in the next PR.
 
 ## Resume here (2026-09-11, morning) — for Harsh: where things stand, the crash fixes, what's next
 

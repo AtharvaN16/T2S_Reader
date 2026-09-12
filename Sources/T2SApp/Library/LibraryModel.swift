@@ -48,6 +48,11 @@ public final class LibraryModel {
     public private(set) var progress: [UUID: DocumentProgress] = [:]
     public var queueView: QueueView = .queue
     public private(set) var lastError: String?
+    /// Whether the store has answered at least once. `summaries` starts empty before that, which
+    /// reads the same as a shelf with nothing on it — a launch briefly showed "Your shelf is empty"
+    /// over a library that had books, before the first `refresh()` landed (owner, 2026-09-12). The
+    /// empty state is for this being true and the list still empty, not for the gap before it.
+    public private(set) var hasLoaded = false
 
     private let library: Library
     /// Progress per document, keyed on the summary fields that can change it (see `progressKey`),
@@ -144,6 +149,7 @@ public final class LibraryModel {
         } catch {
             lastError = "\(error)"
         }
+        hasLoaded = true                                                    // an error answers too: nothing left to wait for
     }
 
     /// Where the reader is inside the resume chapter — a few lines of its text from the resume

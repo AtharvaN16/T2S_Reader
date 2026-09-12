@@ -21,7 +21,13 @@ struct QueuePage: View {
             Section {
                 header
                     .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
-                if rows.isEmpty {
+                if rows.isEmpty, !env.libraryModel.hasLoaded {
+                    // The first `refresh()` (`RootPager`'s launch `.task`) has not answered yet, so
+                    // an empty `rows` does not yet mean an empty queue — see `CollectionPage`, which
+                    // waits on the same flag so a real queue does not flash this empty state.
+                    EmptyView()
+                        .listRowInsets(EdgeInsets())
+                } else if rows.isEmpty {
                     EmptyShelf(title: "Nothing playing yet",
                                line: "Import a book, PDF or article and it plays right away.",
                                button: "Import") { showAdd = true }

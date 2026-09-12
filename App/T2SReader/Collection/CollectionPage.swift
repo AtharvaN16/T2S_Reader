@@ -88,7 +88,12 @@ struct CollectionPage: View {
                             .background(Tokens.surface, in: Capsule())
                     }
                 }
-                if all.isEmpty {
+                if all.isEmpty, !env.libraryModel.hasLoaded {
+                    // Nothing yet, not nothing to show: the first `refresh()` is still in flight
+                    // (`RootPager`'s launch `.task`), and `all` reads the same as an empty shelf
+                    // until it lands. Waiting here rather than showing the empty state and
+                    // swapping it out a frame later is what keeps a real shelf from flashing empty.
+                } else if all.isEmpty {
                     EmptyShelf(title: "Your shelf is empty",
                                line: "Books, PDFs, links and text you import live here.",
                                button: "Import") { showAdd = true }

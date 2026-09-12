@@ -29,13 +29,27 @@ public final class VoiceChangeModel {
 
     /// Evicts the audio, persists the override (nil = back to the default voice), reloads the
     /// document if it is the one playing. True on success.
-    public func apply(voiceID: String?, to summary: DocumentSummary) async -> Bool {
-        guard summary.document.voiceID != voiceID else {
+    ///
+    /// `resumingPlayback` carries the listener's place through the reload — the Reader's sheet
+    /// changes the voice under a playing document and expects to hear the new one, not silence.
+    ///
+    /// `force` runs the eviction and reload even when the stored override is already what is being
+    /// written. That is not a no-op for one caller: "Make default" moves the *default* and then
+    /// clears the document's override, so a document that was already following the default keeps
+    /// `voiceID == nil` on both sides of a change that nevertheless swaps the voice it speaks in.
+    /// Without this the audio rendered in the old default's voice would survive and keep playing.
+    public func apply(
+        voiceID: String?,
+        to summary: DocumentSummary,
+        resumingPlayback: Bool = false,
+        force: Bool = false
+    ) async -> Bool {
+        guard force || summary.document.voiceID != voiceID else {
             lastError = nil
             return true
         }
 
-        let changed = await player.performDestructiveChange(for: summary.id) {
+        let changed = await player.performDestructiveChange(for: summary.id, resumingPlayback: resumingPlayback) {
             try await library.evictAudio(for: summary.id)
             var document = summary.document
             document.voiceID = voiceID

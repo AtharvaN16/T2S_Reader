@@ -183,6 +183,28 @@ import T2SCore
         #expect(MirrorTransport.hosts == ["one.example", "one.example", "two.example"])
     }
 
+    /// The phone's own engine failing on a line is what the hosted route is for: with a route and
+    /// a key, that line renders on the mirrors; without a key, the failure is the reader's.
+    @Test func anOnDeviceFailureFallsBackToTheMirrorsForThatLine() async throws {
+        let identity = "kokoro-coreml-2e878c6a-misaki1.0.6"
+        let local = KokoroVoiceID(engineID: identity, voice: "af_heart").rawValue
+        let configuration = HTTPVoiceConfiguration(endpoint: try #require(URL(string: "https://one.example/v1/audio/speech")),
+                                                   model: "kokoro", voice: "af_heart", requestRatePerMinute: 120)
+        let session = MirrorTransport.session()
+        let routed = RoutedEngine(system: RecordingEngine(), kokoro: [FailingEngine(engineID: identity)],
+                                  configuration: { configuration }, key: { "test-key" }, session: session)
+
+        let result = try await routed.synthesize(.init(spoken: "A line the phone could not say.", voiceID: local))
+        #expect(result.audio.samples.count == 1)
+        #expect(MirrorTransport.hosts == ["one.example"])
+
+        let keyless = RoutedEngine(system: RecordingEngine(), kokoro: [FailingEngine(engineID: identity)],
+                                   configuration: { configuration }, key: { nil }, session: session)
+        await #expect(throws: SynthesisError.failed("local")) {
+            try await keyless.synthesize(.init(spoken: "A line the phone could not say.", voiceID: local))
+        }
+    }
+
 }
 
 private actor RecordingEngine: SynthesisEngine {
@@ -243,4 +265,11 @@ private final class MirrorTransport: URLProtocol, @unchecked Sendable {
     }
 
     override func stopLoading() {}
+}
+
+
+private actor FailingEngine: SynthesisEngine {
+    nonisolated let engineID: String
+    init(engineID: String) { self.engineID = engineID }
+    func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult { throw SynthesisError.failed("local") }
 }

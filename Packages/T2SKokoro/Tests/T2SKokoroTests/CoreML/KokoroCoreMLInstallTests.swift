@@ -72,7 +72,7 @@ import Testing
     @Test func theManifestIsCompleteAndConsistent() {
         let files = KokoroCoreMLManifest.files
         #expect(files.count == 72)
-        #expect(KokoroCoreMLManifest.totalByteCount == 354_636_158)
+        #expect(KokoroCoreMLManifest.totalByteCount == 619_234_624)
         let everyHashIsHex = files.allSatisfy { $0.sha256.count == 64 && $0.sha256.allSatisfy(\.isHexDigit) }
         #expect(everyHashIsHex)
         let everySizeIsPositive = files.allSatisfy { $0.byteCount > 0 }
@@ -88,11 +88,9 @@ import Testing
         #expect(files.map(\.path).contains("runtime/hnsf_weights.json"))
         let heart = files.first { $0.path == "voices/af_heart.bin" }!
         #expect(heart.url.absoluteString
-                == "https://huggingface.co/anayak16/kokoro-coreml-int8/resolve/\(KokoroCoreMLResources.modelRevision)/voices/af_heart.bin")
-        // Our repository lays every file out the way the staging does, where upstream kept 7 voices
-        // under `voices/` and the other 21 under `kokoro.js/voices/`. So no row overrides its path,
-        // and a row that ever needs to is a sign the published layout has drifted from this table.
-        #expect(files.allSatisfy { $0.repositoryPath == $0.path })
+                == "https://huggingface.co/mattmireles/kokoro-coreml/resolve/\(KokoroCoreMLResources.modelRevision)/voices/af_heart.bin")
+        let alloy = files.first { $0.path == "voices/af_alloy.bin" }!
+        #expect(alloy.repositoryPath == "kokoro.js/voices/af_alloy.bin")
     }
 
     /// A fresh root: every file downloaded, every stage compiled, the sources removed, the layout locatable.

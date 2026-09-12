@@ -64,6 +64,12 @@ public final class PlayerModel {
     /// Decides, once per load, which voice the whole document actually renders with when its stored
     /// route is unavailable on this device (spec §6). The stored voice is never rewritten.
     public var voiceRouting: any VoiceRouteResolving = PassthroughVoiceRouting()
+    /// The voice `load` asked the routing about — the stored or default choice — kept so a chapter
+    /// change can ask again (cloud-first bootstrap spec).
+    private var requestedVoiceID: String?
+    /// The chapter the last `tick` saw the playhead in; a change is the handoff's moment.
+    private var lastChapter: Int?
+    private var handoffCheck: Task<Void, Never>?
     public private(set) var current: DocumentSummary?
     /// The voice `current` actually plays with — the stored or default choice as the route resolved
     /// it on this device (spec §6), without the delivery the render carries — so it matches a
@@ -259,6 +265,8 @@ public final class PlayerModel {
             coordinator.load(document, timeline: timeline)
             current = summary
             routedVoiceID = routed
+            self.requestedVoiceID = requestedVoiceID
+            lastChapter = chapterIndex
             pendingChapters = []
             localError = nil
             await refreshBookmarks()
@@ -275,6 +283,10 @@ public final class PlayerModel {
         coordinator.unload()
         current = nil
         routedVoiceID = nil
+        requestedVoiceID = nil
+        lastChapter = nil
+        handoffCheck?.cancel()
+        handoffCheck = nil
         pendingChapters = []
         bookmarks = []
         localError = nil
@@ -370,8 +382,33 @@ public final class PlayerModel {
     /// Drive from a 10 Hz timer while playing (spec §3: the coordinator polls the player clock).
     public func tick() {
         coordinator.tick()
+        handOffIfChapterChanged()
         persistIfDue()
     }
+
+    /// The on-device engine takes over at the first chapter boundary after it is ready (cloud-first
+    /// bootstrap spec): on a chapter change while the book plays through the hosted voice, the route
+    /// is asked again, and a `kokoro:` answer hands the rest of the book to it. One question at a
+    /// time; a boundary crossed while one is in flight is caught by the next.
+    private func handOffIfChapterChanged() {
+        let chapter = chapterIndex
+        guard chapter != lastChapter else { return }
+        lastChapter = chapter
+        guard let chapter, current != nil, handoffCheck == nil,
+              let requested = requestedVoiceID, routedVoiceID?.hasPrefix("cloud:") == true
+        else { return }
+        handoffCheck = Task { [weak self] in
+            guard let self else { return }
+            let routed = await self.voiceRouting.effectiveVoiceID(requested)
+            self.handoffCheck = nil
+            guard KokoroVoiceID(rawValue: routed) != nil else { return }
+            self.routedVoiceID = routed
+            self.coordinator.handOff(to: Delivery.applied(to: routed), fromChapter: chapter)
+        }
+    }
+
+    /// Awaits the handoff question in flight, if any — for tests that tick by hand.
+    func settleHandoff() async { await handoffCheck?.value }
 
     /// Starts a write of the changed chapters once `persistInterval` has passed since the last
     /// write of any kind and there is something to write — O(1) at 10 Hz otherwise. The write runs

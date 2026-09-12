@@ -60,6 +60,22 @@ import Testing
         #expect(timings.count == 1)
     }
 
+    /// An engine that says nothing about width renders one at a time.
+    @Test func theProtocolDefaultWidthIsOne() {
+        struct Minimal: SynthesisEngine {
+            let engineID = "minimal"
+            func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
+                SynthesisResult(audio: .silence(seconds: 0.1), wordTimings: [])
+            }
+        }
+        #expect(Minimal().maxConcurrentRenders(for: "anything") == 1)
+    }
+
+    @Test func aFakeReportsTheWidthItWasBuiltWith() {
+        #expect(FakeEngine().maxConcurrentRenders(for: "v") == 1)
+        #expect(FakeEngine(concurrentRenders: 4).maxConcurrentRenders(for: "v") == 4)
+    }
+
     /// A fake that streams in pieces, holding between them so a test can watch the player start
     /// after the first: the pieces concatenate to exactly the whole render.
     @Test func streamsInPiecesThatConcatenateToTheWhole() async throws {

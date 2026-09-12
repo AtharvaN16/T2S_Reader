@@ -20,3 +20,8 @@
 // says "Needs an iCloud-enabled build".
 // T2S_ICLOUD_CONTAINER = iCloud.com.antarlabs.t2sreader
 // T2S_ENTITLEMENTS = T2SReader/T2SReader.iCloud.entitlements
+//
+// The hosted voice's bearer key (cloud-first bootstrap spec). Seeded into the Keychain on the first
+// launch, so a fresh install speaks from the mirrors with nothing typed. The value is in
+// ~/.t2s/heroku-voice-key on the owner's Mac; leave the line commented to ship without it.
+// T2S_CLOUD_VOICE_KEY =

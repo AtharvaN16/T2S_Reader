@@ -98,10 +98,22 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
         /// set is on the GPU, which iOS forbids to a backgrounded app; the set loads after the main
         /// one, one stage at a time and only while the phone is cool.
         public var backgroundComputeUnits: KokoroComputeUnits?
+        /// Whether the secondary set is allowed to load. A GPU phone can keep the set configured but
+        /// disable its load: background pieces then wait for the foreground instead of attempting
+        /// either forbidden GPU work or a minutes-long CPU plan build.
+        public var loadsBackgroundSet: Bool
+        var shouldLoadBackgroundSet: Bool { loadsBackgroundSet && backgroundComputeUnits != nil }
+        /// Whether the optional duration models after readiness load. The engine remains complete
+        /// without them by splitting long pieces to the ready t128 model.
+        public var loadsLaterDurationModels: Bool
+        var laterDurationTokenLengths: [Int] {
+            loadsLaterDurationModels ? KokoroCoreMLResources.laterDurationTokenLengths : []
+        }
 
         public init(punctuationSuppression: PunctuationSuppression = .allPunctuation, crossfadePieces: Bool = false,
                     removeTailClick: Bool = false, trimSeams: Bool = false, f0Spread: Float = 1,
-                    computeUnits: KokoroComputeUnits = .cpu, backgroundComputeUnits: KokoroComputeUnits? = nil) {
+                    computeUnits: KokoroComputeUnits = .cpu, backgroundComputeUnits: KokoroComputeUnits? = nil,
+                    loadsBackgroundSet: Bool = true, loadsLaterDurationModels: Bool = true) {
             self.punctuationSuppression = punctuationSuppression
             self.crossfadePieces = crossfadePieces
             self.removeTailClick = removeTailClick
@@ -109,6 +121,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             self.f0Spread = f0Spread
             self.computeUnits = computeUnits
             self.backgroundComputeUnits = backgroundComputeUnits
+            self.loadsBackgroundSet = loadsBackgroundSet
+            self.loadsLaterDurationModels = loadsLaterDurationModels
         }
 
         /// What the app ships with — not this initializer's own defaults, which are upstream's. See
@@ -507,6 +521,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     private func loadLaterBuckets(compiled: [String: URL]) {
         guard laterBucketsTask == nil else { return }
         let report = stageReporter(), admission = loadAdmission, computeUnits = options.computeUnits
+        let laterDurationTokenLengths = options.laterDurationTokenLengths
         laterBucketsTask = Task { [weak self] in
             for bucket in KokoroCoreMLResources.laterBuckets {
                 try Task.checkCancellation()
@@ -525,7 +540,7 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
             }
             // The t256 duration model last: the buckets cost seconds on the A13, this plan minutes,
             // and until it lands a long piece is cut at what t128 can time.
-            for tokens in KokoroCoreMLResources.laterDurationTokenLengths {
+            for tokens in laterDurationTokenLengths {
                 try Task.checkCancellation()
                 let names = KokoroCoreMLResources.stageNames(buckets: [], durationTokenLengths: [tokens])
                 do {
@@ -625,7 +640,8 @@ public actor KokoroCoreMLEngine: SynthesisEngine {
     /// background render waits for the foreground rather than fail, and the session gets another
     /// attempt rather than none (the review of 2026-09-11, §3 R6).
     private func startBackgroundSetLoad(compiled: [String: URL]) {
-        guard let units = options.backgroundComputeUnits, backgroundLoadTask == nil, backgroundLoaded == nil else { return }
+        guard options.shouldLoadBackgroundSet, let units = options.backgroundComputeUnits,
+              backgroundLoadTask == nil, backgroundLoaded == nil else { return }
         compiledStageURLs = compiled
         let admission = loadAdmission
         let stageLoader = stageLoader

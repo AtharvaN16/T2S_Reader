@@ -22,6 +22,72 @@ import T2SCore
         return (c, player, engine, store, saves, doc, timeline)
     }
 
+    /// Two chapters of two sentences each, 0.1 s per character, so a 60 s window renders the whole book.
+    func twoChapterFixture() -> (PlaybackCoordinator, FakeEngine, Document, Timeline) {
+        let one = SourceBlock(text: "Alpha one. Beta two.", position: Position(resourceHref: "a.xhtml", progression: 0, charOffset: 0))
+        let two = SourceBlock(text: "Gamma three. Delta four.", position: Position(resourceHref: "b.xhtml", progression: 0, charOffset: 0))
+        let timeline = TimelineBuilder.build(chapters: [ChapterInput(title: "One", position: one.position, blocks: [one]),
+                                                        ChapterInput(title: "Two", position: two.position, blocks: [two])],
+                                             segmenter: Segmenter(normalizer: TextNormalizer()))
+        let engine = FakeEngine(secondsPerCharacter: 0.1)
+        let c = PlaybackCoordinator(engine: engine, store: InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000),
+                                    player: FakePlayer(), playheadStore: MemoryPlayheadStore(), timeSource: ManualTimeSource(),
+                                    configuration: CoordinatorConfiguration(windowSeconds: 60, primeSeconds: 30, prepareBudgetSeconds: 300, queuedSegments: 2))
+        return (c, engine, Document(title: "T", sourceType: .article), timeline)
+    }
+
+    /// From the boundary on, requests carry the new voice; before it, the old keys stand, and a
+    /// seek back is a cache hit, not a render.
+    @Test func aHandoffRendersFromItsChapterOnAndKeepsWhatCameBefore() async throws {
+        let (c, engine, doc, timeline) = twoChapterFixture()
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        let before = await engine.requests
+        #expect(Set(before.map(\.voiceID)) == ["default"])
+        #expect(before.count == timeline.utteranceCount)
+        let chapterOne = timeline.utteranceRange(ofChapter: 0)
+        let chapterTwo = timeline.utteranceRange(ofChapter: 1)
+        let oldRefsOne = chapterOne.map { c.timeline?[utterance: $0].audioRef }
+        let oldRefsTwo = chapterTwo.map { c.timeline?[utterance: $0].audioRef }
+
+        c.handOff(to: "kokoro:local:af_heart", fromChapter: 1)
+        await c.waitForRenderIdle()
+
+        let after = Array((await engine.requests).dropFirst(before.count))
+        #expect(!after.isEmpty && after.allSatisfy { $0.voiceID == "kokoro:local:af_heart" })
+        #expect(Set(after.map(\.spoken)) == Set(chapterTwo.map { timeline[utterance: $0].spoken }))
+        for (i, old) in zip(chapterOne, oldRefsOne) { #expect(c.timeline?[utterance: i].audioRef == old) }
+        for (i, old) in zip(chapterTwo, oldRefsTwo) { #expect(c.timeline?[utterance: i].audioRef != old) }
+
+        let renders = (await engine.requests).count
+        await c.seek(to: Playhead(utteranceIndex: 0))
+        await c.waitForRenderIdle()
+        #expect((await engine.requests).count == renders)                           // both chapters: cache hits
+    }
+
+    /// With nothing queued, the head and the two after it render in pieces: a route that turns five
+    /// seconds of speech into audio in ten would otherwise leave the player dry behind a head that
+    /// landed in three. The rest of the window renders whole.
+    @Test func theFirstThreeUtterancesAfterASeekRenderInPieces() async throws {
+        let (c, engine, doc, timeline) = twoChapterFixture()
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        let streamed = await engine.streamedRequests.map(\.spoken)
+        #expect(streamed == (0..<3).map { timeline[utterance: $0].spoken })
+        #expect(await engine.requests.count == timeline.utteranceCount)
+    }
+
+    @Test func aLoadClearsTheHandoffAndNothingHandsOffWithoutADocument() {
+        let (c, _, doc, timeline) = twoChapterFixture()
+        c.handOff(to: "kokoro:local:af_heart", fromChapter: 0)
+        #expect(c.voiceHandoff == nil)
+        c.load(doc, timeline: timeline)
+        c.handOff(to: "kokoro:local:af_heart", fromChapter: 1)
+        #expect(c.voiceHandoff == VoiceHandoff(fromChapter: 1, voiceID: "kokoro:local:af_heart"))
+        c.load(doc, timeline: timeline)
+        #expect(c.voiceHandoff == nil)
+    }
+
     @Test func loadResolvesResumePositionAndPlansFromThere() async throws {
         let (c, player, _, _, _, doc, timeline) = fixture()
         var d = doc

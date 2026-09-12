@@ -18,15 +18,31 @@ public struct CoordinatorConfiguration: Sendable {
     /// seconds at 1x (Plan 18). Nil — the default, the everyday build, every test that does not
     /// ask — renders only the window.
     public var foregroundFill: ClosedRange<TimeInterval>?
+    /// Maximum generated-audio seconds per wall second for `foregroundFill`. Nil leaves it unpaced.
+    public var foregroundFillRate: Double?
 
     public init(windowSeconds: TimeInterval = 60, primeSeconds: TimeInterval = 30,
                 prepareBudgetSeconds: TimeInterval = 3 * 3600, queuedSegments: Int = 2,
-                foregroundFill: ClosedRange<TimeInterval>? = nil) {
+                foregroundFill: ClosedRange<TimeInterval>? = nil, foregroundFillRate: Double? = nil) {
         self.windowSeconds = windowSeconds
         self.primeSeconds = primeSeconds
         self.prepareBudgetSeconds = prepareBudgetSeconds
         self.queuedSegments = max(1, queuedSegments)
         self.foregroundFill = foregroundFill
+        self.foregroundFillRate = foregroundFillRate
+    }
+}
+
+/// A voice the document renders with from a chapter on — the on-device engine taking over from the
+/// hosted one mid-session (cloud-first bootstrap spec). Chapters before it keep the voice they were
+/// rendered with, so nothing already heard is thrown away or rendered twice.
+public struct VoiceHandoff: Hashable, Sendable {
+    public var fromChapter: Int
+    public var voiceID: String
+
+    public init(fromChapter: Int, voiceID: String) {
+        self.fromChapter = fromChapter
+        self.voiceID = voiceID
     }
 }
 
@@ -47,6 +63,8 @@ public final class PlaybackCoordinator {
     /// Set from the most recent `.failed` render event; cleared on `load`.
     public private(set) var lastRenderError: String?
     public private(set) var document: Document?
+    /// Set by `handOff(to:fromChapter:)`; cleared by `load` and `unload`.
+    public private(set) var voiceHandoff: VoiceHandoff?
     public private(set) var timeline: Timeline? { didSet { timelineRevision &+= 1 } }
     /// Bumped on every write to `timeline` — a load, and every `.rendered` event that swaps an
     /// estimate for an actual. Anything O(timeline) a view derives can be cached against it
@@ -90,6 +108,8 @@ public final class PlaybackCoordinator {
     /// ceiling `refreshRates` raises back towards as the measured RTF recovers; a load leaves it,
     /// since the listener's choice of speed outlives the book.
     private var requestedRate: Double = 1
+    /// How many utterances from the head render in pieces when nothing is queued.
+    static let urgentUtterances = 3
     private var lastPlayed: UUID?
     /// Index of the segment at the head of the player and the player's consumed time when that
     /// segment started (negative right after a seek into the middle of an utterance). Index-anchored
@@ -126,7 +146,10 @@ public final class PlaybackCoordinator {
         self.player = player
         self.playheadStore = playheadStore
         self.configuration = configuration
-        self.scheduler = RenderScheduler(engine: engine, store: store, timeSource: timeSource, arbiter: arbiter, budget: budget)
+        self.scheduler = RenderScheduler(
+            engine: engine, store: store, timeSource: timeSource, arbiter: arbiter, budget: budget,
+            foregroundFillRate: configuration.foregroundFillRate
+        )
         player.onSegmentFinished = { [weak self] tag in self?.segmentFinished(tag) }
         eventTask = Task { [weak self, scheduler] in
             for await event in scheduler.events {
@@ -139,6 +162,7 @@ public final class PlaybackCoordinator {
     // MARK: Loading
 
     public func load(_ document: Document, timeline: Timeline) {
+        voiceHandoff = nil
         self.document = document
         self.timeline = timeline
         timeIndex = TimeIndex(timeline)
@@ -184,6 +208,7 @@ public final class PlaybackCoordinator {
     public func unload() {
         player.reset()
         document = nil
+        voiceHandoff = nil
         timeline = nil
         timeIndex = TimeIndex(Timeline(chapters: []))
         rendered = []
@@ -471,14 +496,18 @@ public final class PlaybackCoordinator {
             }
         }
         // Nothing queued: the next `fill()` will wait on the head, so the head renders in pieces and
-        // the first sound needs one short piece, not the whole utterance (audit #2, Plan 14).
-        let streamIndex = queuedCount == 0 && streaming == nil ? headIndex : nil
+        // the first sound needs one short piece, not the whole utterance (audit #2, Plan 14). The
+        // two after it render in pieces too: a route that turns five seconds of speech into audio
+        // in ten — the mirrors — would otherwise leave the player dry behind a head that landed in
+        // three, and pieces keep landing every few seconds while the buffer fills. Only the head's
+        // pieces reach the player; the others' are stored whole, sooner.
+        let urgent: Range<Int>? = queuedCount == 0 && streaming == nil ? headIndex ..< headIndex + Self.urgentUtterances : nil
         let requests = RenderPolicy.plan(input).map { job in
             RenderRequest(job: job,
                           key: renderKey(for: document, timeline: timeline, utteranceIndex: job.utteranceIndex),
                           spoken: timeline[utterance: job.utteranceIndex].spoken,
-                          voiceID: document.voiceID ?? "default",
-                          stream: job.utteranceIndex == streamIndex && job.tier == .playAhead)
+                          voiceID: voiceID(forUtterance: job.utteranceIndex, in: timeline, document: document),
+                          stream: urgent?.contains(job.utteranceIndex) == true && job.tier == .playAhead)
         }
         submitsInFlight += 1
         let scheduler = self.scheduler
@@ -612,9 +641,39 @@ public final class PlaybackCoordinator {
     }
 
     private func renderKey(for document: Document, timeline: Timeline, utteranceIndex: Int) -> RenderKey {
-        RenderKey(documentID: document.id, utteranceIndex: utteranceIndex, voiceID: document.voiceID ?? "default",
+        RenderKey(documentID: document.id, utteranceIndex: utteranceIndex,
+                  voiceID: voiceID(forUtterance: utteranceIndex, in: timeline, document: document),
                   engineID: engine.engineID, normalizerVersion: timeline.normalizerVersion,
                   segmenterVersion: timeline.segmenterVersion)
+    }
+
+    /// The voice utterance `index` renders with: the handoff's from its chapter on, the document's
+    /// before it.
+    private func voiceID(forUtterance index: Int, in timeline: Timeline, document: Document) -> String {
+        if let handoff = voiceHandoff, let chapter = timeline.chapterIndex(forUtterance: index), chapter >= handoff.fromChapter {
+            return handoff.voiceID
+        }
+        return document.voiceID ?? "default"
+    }
+
+    /// From `chapter` on, render with `voiceID`. Chapters before it keep their keys and play as they
+    /// are. What the boundary chapter and later already hold was rendered under the old voice's
+    /// keys, so it is marked unrendered and its stale refs dropped — exactly what a load does for a
+    /// whole book — and the plan this triggers renders it again; a render still in flight lands
+    /// under its old key and is superseded the same way. Nothing without a document.
+    public func handOff(to voiceID: String, fromChapter chapter: Int) {
+        guard let document, let timeline else { return }
+        voiceHandoff = VoiceHandoff(fromChapter: chapter, voiceID: voiceID)
+        for i in 0..<timeline.utteranceCount where (timeline.chapterIndex(forUtterance: i) ?? 0) >= chapter {
+            let expected = renderKey(for: document, timeline: timeline, utteranceIndex: i)
+            guard timeline[utterance: i].audioRef != expected.rawValue else { continue }
+            rendered[i] = false
+            if timeline[utterance: i].audioRef != nil {
+                self.timeline?[utterance: i].audioRef = nil
+                changedChapters.insert(timeline.chapterIndex(forUtterance: i) ?? 0)
+            }
+        }
+        replan()
     }
 
     /// Returns the chapters changed since the last call and forgets them. Exactly one caller may own

@@ -88,6 +88,7 @@ targetTemplates:
         CFBundleDisplayName: t2s
         T2SAppGroupIdentifier: $(T2S_APP_GROUP)
         T2SICloudContainer: $(T2S_ICLOUD_CONTAINER)
+        T2SCloudVoiceKey: $(T2S_CLOUD_VOICE_KEY)
         UILaunchScreen: {}
         UIBackgroundModes: [audio, processing]
         BGTaskSchedulerPermittedIdentifiers: [com.t2s.reader.prepare]

@@ -20,7 +20,7 @@ struct CloudVoicesPage: View {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 PageTitle(text: "Cloud voices", subtitle: "Use your own provider and API key.")
                 section("Provider contract") {
-                    Text("OpenAI's speech endpoint, or any that speaks its contract: https://api.openai.com/v1/audio/speech with a model such as gpt-4o-mini-tts and a voice such as alloy. The app asks for raw PCM at 24 kHz; a proxy may answer with JSON that adds word timings.")
+                    Text("OpenAI's speech endpoint, or any that speaks its contract: https://api.openai.com/v1/audio/speech with a model such as gpt-4o-mini-tts and a voice such as alloy. The app asks for raw PCM at 24 kHz; a proxy may answer with JSON that adds word timings. More than one endpoint, one per line, are identical mirrors of the first; the app spreads requests across them.")
                         .typeRole(.meta)
                         .foregroundStyle(Tokens.ink2)
                     Text("Requests and charges go directly to your provider.")
@@ -28,7 +28,7 @@ struct CloudVoicesPage: View {
                         .foregroundStyle(Tokens.ink2)
                 }
                 section("Configuration") {
-                    field("HTTPS endpoint", text: $settings.endpointText, contentType: .URL)
+                    field("HTTPS endpoint, one per line", text: $settings.endpointText, contentType: .URL, axis: .vertical)
                     field("Model", text: $settings.model)
                     field("Provider voice", text: $settings.voice)
                     HStack {
@@ -103,8 +103,9 @@ struct CloudVoicesPage: View {
         return keyIsStored ? "Cloud route active: \(route.prefix(24))…" : "Cloud route is configured; add an API key to use it."
     }
 
-    private func field(_ title: String, text: Binding<String>, contentType: UITextContentType? = nil) -> some View {
-        TextField(title, text: text)
+    private func field(_ title: String, text: Binding<String>, contentType: UITextContentType? = nil, axis: Axis = .horizontal) -> some View {
+        TextField(title, text: text, axis: axis)
+            .lineLimit(axis == .vertical ? 4 : nil)
             .textContentType(contentType)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()

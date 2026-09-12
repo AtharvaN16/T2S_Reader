@@ -43,11 +43,15 @@ public struct KokoroVoiceRouting: VoiceRouteResolving {
     private let routes: [String: Route]
     /// A full Kokoro voice ID, or nil to leave `"default"` meaning the system voice.
     private let defaultVoice: String?
+    /// The hosted voice that stands in wherever the on-device default is not available: the cloud
+    /// route's ID while one is configured with a key, else nil (cloud-first bootstrap spec).
+    private let standIn: @Sendable () -> String?
 
-    public init(routes: [Route], defaultVoice: String?) {
+    public init(routes: [Route], defaultVoice: String?, standIn: @escaping @Sendable () -> String? = { nil }) {
         // First wins, matching `RoutedEngine`: one identity is one runtime.
         self.routes = Dictionary(routes.map { ($0.engineIdentity, $0) }, uniquingKeysWith: { first, _ in first })
         self.defaultVoice = defaultVoice
+        self.standIn = standIn
     }
 
     /// The single-route form, from before the app linked more than one runtime.
@@ -63,10 +67,12 @@ public struct KokoroVoiceRouting: VoiceRouteResolving {
         if let kokoroID = KokoroVoiceID(rawValue: requested) {
             // Identity first: an unrouted engine identity is refused without waking a probe.
             guard await isAvailable(kokoroID.engineID) else {
-                // Not the system voice: whatever "default" means on this device, which is the
-                // Kokoro default voice wherever its route is open. Exactly one level of recursion —
+                // The hosted voice first — Heart from the mirrors while Heart installs — else
+                // whatever "default" means on this device, which is the Kokoro default voice
+                // wherever its route is open. Exactly one level of recursion —
                 // `VoiceOption.systemDefault.id` is not a `kokoro:` ID, so it takes the branch
                 // below, which never comes back here.
+                if let hosted = standIn() { return hosted }
                 return await effectiveVoiceID(VoiceOption.systemDefault.id)
             }
             return requested
@@ -75,7 +81,13 @@ public struct KokoroVoiceRouting: VoiceRouteResolving {
               let defaultVoice,
               let defaultID = KokoroVoiceID(rawValue: defaultVoice),
               await isAvailable(defaultID.engineID)
-        else { return requested }
+        else {
+            // The default's route is not open, or there is no default voice: the hosted voice
+            // stands in for the default and for nothing else — a system or cloud voice named
+            // outright is what it was.
+            if requested == VoiceOption.systemDefault.id, let hosted = standIn() { return hosted }
+            return requested
+        }
         return defaultVoice
     }
 

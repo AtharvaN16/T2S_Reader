@@ -46,6 +46,55 @@ import Testing
         )
     }
 
+    // MARK: The hosted voice standing in
+
+    private let hostedVoiceID = "cloud:fingerprint:af_heart"
+
+    private func routing(coreML: Bool, mlx: Bool, defaultVoice: String?, standIn: String?) -> KokoroVoiceRouting {
+        KokoroVoiceRouting(
+            routes: [
+                .init(engineIdentity: coreMLIdentity, isAvailable: { coreML }),
+                .init(engineIdentity: identity, isAvailable: { mlx }),
+            ],
+            defaultVoice: defaultVoice,
+            standIn: { standIn }
+        )
+    }
+
+    @Test func theHostedVoiceStandsInForTheDefaultWhileItsRouteIsNotAvailable() async {
+        let installing = routing(coreML: false, mlx: false, defaultVoice: coreMLVoiceID, standIn: hostedVoiceID)
+        #expect(await installing.effectiveVoiceID("default") == hostedVoiceID)
+        #expect(await installing.effectiveVoiceID(VoiceOption.systemDefault.id) == hostedVoiceID)
+        // Only for the default: an explicit system voice, or a cloud voice, is what it was.
+        #expect(await installing.effectiveVoiceID("system:com.example.voice") == "system:com.example.voice")
+        #expect(await installing.effectiveVoiceID("cloud:other:v") == "cloud:other:v")
+    }
+
+    @Test func theHostedVoiceStandsInForAKokoroVoiceWhoseRuntimeIsNotAvailable() async {
+        let installing = routing(coreML: false, mlx: false, defaultVoice: coreMLVoiceID, standIn: hostedVoiceID)
+        #expect(await installing.effectiveVoiceID(coreMLVoiceID) == hostedVoiceID)
+        #expect(await installing.effectiveVoiceID(kokoroVoiceID) == hostedVoiceID)
+    }
+
+    @Test func anAvailableDefaultIgnoresTheStandIn() async {
+        let ready = routing(coreML: true, mlx: false, defaultVoice: coreMLVoiceID, standIn: hostedVoiceID)
+        #expect(await ready.effectiveVoiceID("default") == coreMLVoiceID)
+        #expect(await ready.effectiveVoiceID(coreMLVoiceID) == coreMLVoiceID)
+    }
+
+    @Test func withoutAStandInTheFallbacksAreWhatTheyWere() async {
+        let installing = routing(coreML: false, mlx: false, defaultVoice: coreMLVoiceID, standIn: nil)
+        #expect(await installing.effectiveVoiceID("default") == VoiceOption.systemDefault.id)
+        #expect(await installing.effectiveVoiceID(coreMLVoiceID) == VoiceOption.systemDefault.id)
+    }
+
+    /// The everyday build has no on-device route at all, so its default is the hosted voice.
+    @Test func aBuildWithoutKokoroStandsInForTheDefaultToo() async {
+        let everyday = KokoroVoiceRouting(routes: [], defaultVoice: nil, standIn: { "cloud:fingerprint:af_heart" })
+        #expect(await everyday.effectiveVoiceID("default") == "cloud:fingerprint:af_heart")
+        #expect(await everyday.effectiveVoiceID("system:com.example.voice") == "system:com.example.voice")
+    }
+
     @Test func theSystemDefaultBecomesTheKokoroDefaultVoiceWhenItsRouteIsAvailable() async {
         let routing = routing(coreML: true, mlx: false, defaultVoice: coreMLVoiceID)
         #expect(await routing.effectiveVoiceID("default") == coreMLVoiceID)

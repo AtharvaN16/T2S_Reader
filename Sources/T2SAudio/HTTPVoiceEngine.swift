@@ -11,47 +11,62 @@ public struct HTTPVoiceConfiguration: Hashable, Sendable {
     /// so it never rendered anything outside the tests.
     public static let formatVersion = "pcm-v2"
 
-    public let endpoint: URL
+    /// The primary first, then its mirrors: identical deployments that serve the same audio for
+    /// the same request. Never empty.
+    public let endpoints: [URL]
     public let model: String
     public let voice: String
+    /// Applies to each endpoint separately.
     public let requestRatePerMinute: Int
 
-    public init(endpoint: URL, model: String, voice: String, requestRatePerMinute: Int) {
-        self.endpoint = endpoint
+    public init(endpoints: [URL], model: String, voice: String, requestRatePerMinute: Int) {
+        precondition(!endpoints.isEmpty, "a cloud route needs at least one endpoint")
+        self.endpoints = endpoints
         self.model = model.trimmed
         self.voice = voice.trimmed
         self.requestRatePerMinute = requestRatePerMinute
     }
 
+    public init(endpoint: URL, model: String, voice: String, requestRatePerMinute: Int) {
+        self.init(endpoints: [endpoint], model: model, voice: voice, requestRatePerMinute: requestRatePerMinute)
+    }
+
+    /// The primary. Its identity is the route's; a mirror is interchangeable with it.
+    public var endpoint: URL { endpoints[0] }
+
     /// A non-secret identity for rendered audio. Rate limiting is intentionally excluded: changing
-    /// it does not change a provider's PCM output, while endpoint/model/voice/format do.
+    /// it does not change a provider's PCM output, while endpoint/model/voice/format do. Mirrors
+    /// are excluded for the same reason: they serve the primary's output.
     public var fingerprint: String {
-        let material = [Self.formatVersion, canonicalEndpoint, model.trimmed, voice.trimmed].joined(separator: "\u{1F}")
+        let material = [Self.formatVersion, Self.canonical(endpoint), model.trimmed, voice.trimmed].joined(separator: "\u{1F}")
         return SHA256.hash(data: Data(material.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     public func validate() throws {
+        guard !model.isEmpty, !voice.isEmpty, (1...120).contains(requestRatePerMinute) else { throw HTTPVoiceError.invalidConfiguration }
+        for endpoint in endpoints { try Self.validate(endpoint: endpoint) }
+        guard Set(endpoints.map(Self.canonical)).count == endpoints.count else { throw HTTPVoiceError.invalidConfiguration }
+    }
+
+    private static func validate(endpoint: URL) throws {
         guard let components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false),
               components.scheme?.lowercased() == "https",
               components.host?.isEmpty == false,
               components.user == nil,
               components.password == nil,
               components.query == nil,
-              components.fragment == nil,
-              !model.isEmpty,
-              !voice.isEmpty,
-              (1...120).contains(requestRatePerMinute)
+              components.fragment == nil
         else { throw HTTPVoiceError.invalidConfiguration }
     }
 
-    private var canonicalEndpoint: String {
-        guard var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
-            return endpoint.absoluteString
+    private static func canonical(_ url: URL) -> String {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url.absoluteString
         }
         components.scheme = components.scheme?.lowercased()
         components.host = components.host?.lowercased()
         components.fragment = nil
-        return components.string ?? endpoint.absoluteString
+        return components.string ?? url.absoluteString
     }
 
     public static let example = HTTPVoiceConfiguration(
@@ -179,34 +194,187 @@ public actor RequestRateLimiter {
 /// It neither guesses other media formats nor retains keys.
 public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
     public let engineID = "http-voice-v2"
+    /// The longest text sent in one request. Eco's 30 s router timeout was measured at about 210
+    /// characters (`docs/superpowers/evidence/2026-09-11-heroku-eco-measurements.log`); anything
+    /// longer is cut at clause boundaries and the pieces sent at once.
+    static let maxRequestCharacters = 180
 
     private let configuration: HTTPVoiceConfiguration
     private let key: @Sendable () async throws -> String?
     private let session: URLSession
-    private let limiter: RequestRateLimiter
+    /// One per endpoint, in the configuration's order: each mirror is rate-limited on its own.
+    private let routes: [Route]
+    private let pool: RoutePool
 
+    private struct Route: Sendable {
+        let endpoint: URL
+        let limiter: RequestRateLimiter
+    }
+
+    /// The routes free of this engine's own requests. A request takes a free route and waits for
+    /// one when every mirror is busy, so this engine never sends a mirror a second request while
+    /// its first is in flight — a batch, a long utterance's pieces, a preview and a prime queue
+    /// here rather than collide and draw the mirror's 429. The walk in `synthesizePiece` covers
+    /// contention from other clients of the same mirrors. Released routes go to the back, so
+    /// requests rotate through every mirror.
+    actor RoutePool {
+        private var free: [Int]
+        private var waiters: [CheckedContinuation<Int, Never>] = []
+
+        init(count: Int) { free = Array((0..<count).reversed()) }
+
+        /// `urgent` — a head piece the player is waiting on — is served before requests already
+        /// waiting: the next free mirror goes to the sound the reader is waiting for.
+        func acquire(urgent: Bool = false) async -> Int {
+            if let index = free.popLast() { return index }
+            return await withCheckedContinuation { continuation in
+                if urgent { waiters.insert(continuation, at: 0) } else { waiters.append(continuation) }
+            }
+        }
+
+        func release(_ index: Int) {
+            if waiters.isEmpty { free.insert(index, at: 0) } else { waiters.removeFirst().resume(returning: index) }
+        }
+
+        var waitingCount: Int { waiters.count }
+    }
+
+    /// `limiterSleeper` replaces every route's limiter sleep — a test's no-op, so pieces sent at
+    /// once to one endpoint do not wait a real second apart.
     public init(configuration: HTTPVoiceConfiguration, key: @escaping @Sendable () async throws -> String?,
-                session: URLSession = .shared, limiter: RequestRateLimiter? = nil) {
+                session: URLSession = .shared, limiterSleeper: RequestRateLimiter.Sleeper? = nil) {
         self.configuration = configuration
         self.key = key
         self.session = session
-        self.limiter = limiter ?? RequestRateLimiter(requestsPerMinute: configuration.requestRatePerMinute)
+        routes = configuration.endpoints.map { endpoint in
+            let limiter = limiterSleeper.map { RequestRateLimiter(requestsPerMinute: configuration.requestRatePerMinute, sleeper: $0) }
+                ?? RequestRateLimiter(requestsPerMinute: configuration.requestRatePerMinute)
+            return Route(endpoint: endpoint, limiter: limiter)
+        }
+        pool = RoutePool(count: configuration.endpoints.count)
+    }
+
+    public func maxConcurrentRenders(for voiceID: String) -> Int { routes.count }
+
+    public func rendersOnDevice(for voiceID: String) -> Bool { false }
+
+    /// The longest piece of a streaming head. Small, so the first sound after a tap or a seek
+    /// waits for one short render rather than the whole utterance; the pieces render at once
+    /// across the mirrors and are handed to the player in order as they land.
+    static let headPieceCharacters = 80
+    /// The pause between a head's pieces, matching what the server puts between its own chunks.
+    static let headPieceGap: TimeInterval = 0.08
+    /// How long a mirror that could not be reached, or answered a server error, is left alone.
+    static let downMirrorPause: TimeInterval = 30
+
+    /// The head utterance the player is waiting on (Plan 14): cut at clauses into short pieces,
+    /// rendered at once, each urgent for the next free mirror, and yielded in order the moment
+    /// it and everything before it has landed. A head that fits one piece streams as the whole.
+    public func synthesizeStreaming(_ request: SynthesisRequest) -> AsyncThrowingStream<SynthesisChunk, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    try configuration.validate()
+                    let providerVoice = CloudVoiceID(rawValue: request.voiceID)?.voice ?? configuration.voice
+                    let pieces = ClauseSplitter.pieces(of: request.spoken, maxLength: Self.headPieceCharacters)
+                    guard pieces.count > 1 else {
+                        let whole = try await synthesizePiece(request.spoken, voice: providerVoice, urgent: true)
+                        continuation.yield(.piece(whole.audio, ordinal: 0, isLast: true))
+                        continuation.yield(.finished(wordTimings: []))
+                        continuation.finish()
+                        return
+                    }
+                    try await withThrowingTaskGroup(of: (Int, SynthesisResult).self) { group in
+                        for (index, piece) in pieces.enumerated() {
+                            group.addTask { (index, try await self.synthesizePiece(piece, voice: providerVoice, urgent: true)) }
+                        }
+                        var landed: [Int: SynthesisResult] = [:]
+                        var next = 0
+                        for try await (index, result) in group {
+                            landed[index] = result
+                            while let ready = landed.removeValue(forKey: next) {
+                                var audio = ready.audio
+                                if next > 0 { audio.samples.insert(contentsOf: PCMAudio.silence(seconds: Self.headPieceGap).samples, at: 0) }
+                                continuation.yield(.piece(audio, ordinal: next, isLast: next == pieces.count - 1))
+                                next += 1
+                            }
+                        }
+                    }
+                    continuation.yield(.finished(wordTimings: []))
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
     }
 
     public func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
         try configuration.validate()
-        await limiter.wait()
-        guard let key = try await key()?.trimmed, !key.isEmpty else { throw HTTPVoiceError.missingKey }
+        let providerVoice = CloudVoiceID(rawValue: request.voiceID)?.voice ?? configuration.voice
+        let pieces = ClauseSplitter.pieces(of: request.spoken, maxLength: Self.maxRequestCharacters)
+        guard pieces.count > 1 else {
+            return try await synthesizePiece(request.spoken, voice: providerVoice)
+        }
+        let results = try await withThrowingTaskGroup(of: (Int, SynthesisResult).self) { group in
+            for (index, piece) in pieces.enumerated() {
+                group.addTask { (index, try await self.synthesizePiece(piece, voice: providerVoice)) }
+            }
+            var ordered = [SynthesisResult?](repeating: nil, count: pieces.count)
+            for try await (index, result) in group { ordered[index] = result }
+            return ordered.compactMap { $0 }
+        }
+        // Pieces rendered apart carry no timings over the whole; the pilot server sends none anyway.
+        return SynthesisResult(audio: PCMAudio(sampleRate: 24_000, samples: results.flatMap(\.audio.samples)), wordTimings: [])
+    }
 
-        var urlRequest = URLRequest(url: configuration.endpoint)
+    /// One request, on a mirror free of this engine's other requests — waiting for one if every
+    /// mirror is busy. A mirror that answers 429 anyway (another client's render) has its limiter
+    /// deferred and the request walks on; each mirror is tried at most once, and only when all
+    /// have refused does the request fail as rate limited.
+    private func synthesizePiece(_ text: String, voice: String, urgent: Bool = false) async throws -> SynthesisResult {
+        guard let key = try await key()?.trimmed, !key.isEmpty else { throw HTTPVoiceError.missingKey }
+        let start = await pool.acquire(urgent: urgent)
+        do {
+            let result = try await walk(text, voice: voice, key: key, from: start)
+            await pool.release(start)
+            return result
+        } catch {
+            await pool.release(start)
+            throw error
+        }
+    }
+
+    private func walk(_ text: String, voice: String, key: String, from start: Int) async throws -> SynthesisResult {
+        var refused: HTTPVoiceError?
+        for attempt in 0 ..< routes.count {
+            let route = routes[(start + attempt) % routes.count]
+            await route.limiter.wait()
+            do {
+                return try await post(text: text, voice: voice, key: key, to: route.endpoint)
+            } catch HTTPVoiceError.rateLimited(let retryAfter) {
+                await route.limiter.deferUntil(seconds: retryAfter)
+                refused = .rateLimited(retryAfter: retryAfter)
+            } catch let error as HTTPVoiceError where error.isMirrorDown {
+                // Unreachable, or a server error — a dyno mid-restart: the next mirror takes the
+                // line, and this one is left alone for about as long as a dyno takes to come back.
+                await route.limiter.deferUntil(seconds: Self.downMirrorPause)
+                refused = error
+            }
+        }
+        throw refused ?? HTTPVoiceError.transport("no mirror answered")
+    }
+
+    private func post(text: String, voice: String, key: String, to endpoint: URL) async throws -> SynthesisResult {
+        var urlRequest = URLRequest(url: endpoint)
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        let providerVoice = CloudVoiceID(rawValue: request.voiceID)?.voice ?? configuration.voice
         urlRequest.httpBody = try JSONEncoder().encode(WireRequest(
             model: configuration.model,
-            input: request.spoken,
-            voice: providerVoice,
+            input: text,
+            voice: voice,
             responseFormat: "pcm"
         ))
 
@@ -224,9 +392,7 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
                 throw HTTPVoiceError.transport("no HTTP response")
             }
             if http.statusCode == 429 {
-                let seconds = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
-                await limiter.deferUntil(seconds: seconds)
-                throw HTTPVoiceError.rateLimited(retryAfter: seconds)
+                throw HTTPVoiceError.rateLimited(retryAfter: http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init))
             }
             guard (200...299).contains(http.statusCode) else {
                 throw HTTPVoiceError.server(status: http.statusCode, message: Self.safeServerMessage(status: http.statusCode))
@@ -261,7 +427,7 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
             let duration = Double(samples.count) / 24_000
             return SynthesisResult(
                 audio: PCMAudio(sampleRate: 24_000, samples: samples),
-                wordTimings: try Self.timings(wire.wordTimings, text: request.spoken, duration: duration)
+                wordTimings: try Self.timings(wire.wordTimings, text: text, duration: duration)
             )
         } catch let error as HTTPVoiceError {
             throw error
@@ -358,5 +524,18 @@ private struct WireTiming: Decodable {
         case start, end
         case startUTF16 = "start_utf16"
         case endUTF16 = "end_utf16"
+    }
+}
+
+
+private extension HTTPVoiceError {
+    /// A mirror that is down, as opposed to one that refused the request: unreachable, or a 5xx.
+    /// A rejected key or a rejected request would only repeat on the next mirror.
+    var isMirrorDown: Bool {
+        switch self {
+        case .transport: true
+        case .server(let status, _): (500...599).contains(status)
+        default: false
+        }
     }
 }

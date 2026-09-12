@@ -42,6 +42,14 @@ public protocol SynthesisEngine: Sendable {
     /// piece, not the whole utterance (audit §3.1). Engines that cannot stream yield the whole
     /// render as one piece — the default below.
     func synthesizeStreaming(_ request: SynthesisRequest) -> AsyncThrowingStream<SynthesisChunk, Error>
+
+    /// How many renders the scheduler may hold in flight at once for `voiceID`'s route. Every
+    /// engine that renders on the device answers 1; a hosted route answers with its mirror count.
+    func maxConcurrentRenders(for voiceID: String) -> Int
+
+    /// Whether a render for `voiceID` runs on this device. The scheduler's CPU budget paces and
+    /// measures only renders that do; a hosted render costs the phone nothing and is never held.
+    func rendersOnDevice(for voiceID: String) -> Bool
 }
 
 public extension SynthesisEngine {
@@ -60,4 +68,8 @@ public extension SynthesisEngine {
             continuation.onTermination = { _ in task.cancel() }
         }
     }
+
+    func maxConcurrentRenders(for voiceID: String) -> Int { 1 }
+
+    func rendersOnDevice(for voiceID: String) -> Bool { true }
 }

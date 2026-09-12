@@ -214,13 +214,159 @@ import Testing
         #expect(abs(r.duration - 0.3) < 1e-9 && r.wordTimings.isEmpty)
         #expect(try await store.read(key(0))?.duration == 0.3)
     }
+
+    /// With a width of four, four requests reach the engine before any finishes, and only the
+    /// batch is taken from the plan. (`setPlanFlushesPendingWork` shows the default width takes
+    /// one.)
+    @Test func widthFourHoldsFourRendersInFlight() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let engine = FakeEngine(concurrentRenders: 4)
+        await engine.hold()
+        let s = RenderScheduler(engine: engine, store: store, timeSource: ManualTimeSource())
+        async let events = collect(s)
+        await s.setPlan((0..<6).map { request($0, "utterance \($0)") })
+        var spins = 0
+        while await engine.parkedCount != 4, spins < 10_000 { await Task.yield(); spins += 1 }
+        #expect(await engine.parkedCount == 4)                            // the whole batch is in the engine
+        #expect(await s.pending.count == 2)                               // and only the batch was taken
+        await engine.release()
+        let got = await events
+        let rendered = got.compactMap { if case .rendered(let r) = $0 { return r.utteranceIndex } else { return nil } }
+        #expect(rendered == [0, 1, 2, 3, 4, 5])                           // applied in submission order
+    }
+
+    /// A batch stops at a tier boundary: play-ahead and prepare never share one, so an urgent
+    /// plan waits behind at most one batch of its own tier.
+    @Test func aBatchNeverSpansTiers() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let engine = FakeEngine(concurrentRenders: 4)
+        await engine.hold()
+        let s = RenderScheduler(engine: engine, store: store, timeSource: ManualTimeSource())
+        async let events = collect(s)
+        func req(_ i: Int, _ tier: RenderTier) -> RenderRequest {
+            RenderRequest(job: RenderJob(documentID: doc, utteranceIndex: i, tier: tier), key: key(i), spoken: "x\(i)", voiceID: "v")
+        }
+        await s.setPlan([req(0, .playAhead), req(1, .playAhead), req(2, .prepare), req(3, .prepare)])
+        var spins = 0
+        while await engine.parkedCount != 2, spins < 10_000 { await Task.yield(); spins += 1 }
+        #expect(await engine.parkedCount == 2)                            // only the two play-ahead
+        #expect(await s.pending.count == 2)
+        await engine.release()
+        _ = await events
+    }
+
+    /// A batch stops at a change of voice as it stops at a change of tier: a hosted batch (width
+    /// four) and an on-device one (width one) never share a lease.
+    @Test func aBatchNeverSpansVoices() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let engine = FakeEngine(concurrentRenders: 4)
+        await engine.hold()
+        let s = RenderScheduler(engine: engine, store: store, timeSource: ManualTimeSource())
+        async let events = collect(s)
+        func req(_ i: Int, _ voice: String) -> RenderRequest {
+            RenderRequest(job: RenderJob(documentID: doc, utteranceIndex: i, tier: .playAhead), key: key(i), spoken: "x\(i)", voiceID: voice)
+        }
+        await s.setPlan([req(0, "cloud:a:v"), req(1, "cloud:a:v"), req(2, "kokoro:b:v"), req(3, "kokoro:b:v")])
+        var spins = 0
+        while await engine.parkedCount != 2, spins < 10_000 { await Task.yield(); spins += 1 }
+        #expect(await engine.parkedCount == 2)                            // only the two hosted
+        #expect(await s.pending.count == 2)
+        await engine.release()
+        _ = await events
+    }
+
+    /// Four renders that all fail to store pause the scheduler once, not four times.
+    @Test func storeFullInsideABatchPausesOnce() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 100)   // nothing fits
+        let s = RenderScheduler(engine: FakeEngine(secondsPerCharacter: 0.1, concurrentRenders: 4), store: store, timeSource: ManualTimeSource())
+        async let events = collect(s)
+        await s.setPlan([request(0, "abc"), request(1, "def"), request(2, "ghi"), request(3, "jkl")])
+        let got = await events
+        #expect(got == [.storeFull, .idle])
+        #expect(await s.isPausedForStorage)
+        #expect(await s.pending.isEmpty)
+    }
+
+    /// The rate control sees the batch's throughput, not one mirror's latency: four renders that
+    /// each span the batch's ten seconds, for twenty seconds of audio, measure 0.5. The window is
+    /// one sample so the batch's own figure is what is read — a per-render scheduler would record
+    /// 2.0 for the parked render and 0 for the three that follow it unparked.
+    @Test func rtfIsRecordedPerBatch() async throws {
+        let clock = ManualTimeSource()
+        let engine = FakeEngine(secondsPerCharacter: 1, concurrentRenders: 4)
+        let s = RenderScheduler(engine: engine, store: InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000), timeSource: clock, rtfWindow: 1)
+        // The first sample is the warm-up's and is dropped, so spend it on a batch of one.
+        async let warmUp = collect(s)
+        await s.setPlan([request(9, "warm")])
+        _ = await warmUp
+        #expect(await s.measuredRTF == nil)
+
+        await engine.hold()
+        async let events = collect(s)
+        await s.setPlan([request(0, "aaaaa"), request(1, "bbbbb"), request(2, "ccccc"), request(3, "ddddd")])   // 5 s of audio each
+        var spins = 0
+        while await engine.parkedCount != 4, spins < 10_000 { await Task.yield(); spins += 1 }
+        clock.advance(by: 10)                                             // the whole batch took ten seconds
+        await engine.release()
+        _ = await events
+        #expect(abs((await s.measuredRTF ?? 0) - 0.5) < 1e-9)             // 10 s / 20 s, not 10 s / 5 s
+    }
+
+    /// A render that failed took its wall time and produced no audio: the batch says nothing about
+    /// throughput, so it records no RTF — one cold mirror's timeout must not halve the playback rate.
+    @Test func aBatchWithAFailureRecordsNoRTF() async throws {
+        let clock = ManualTimeSource()
+        let engine = FakeEngine(secondsPerCharacter: 1, concurrentRenders: 2)
+        await engine.fail(on: "boom")
+        let s = RenderScheduler(engine: engine, store: InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000), timeSource: clock, rtfWindow: 1)
+        async let warmUp = collect(s)
+        await s.setPlan([request(9, "warm")])
+        _ = await warmUp
+
+        await engine.hold()
+        async let events = collect(s)
+        await s.setPlan([request(0, "aaaaa"), request(1, "boom")])
+        var spins = 0
+        while await engine.parkedCount != 2, spins < 10_000 { await Task.yield(); spins += 1 }
+        clock.advance(by: 30)                                             // the failed one timed out
+        await engine.release()
+        _ = await events
+        #expect(await s.measuredRTF == nil)                                // nothing learned from that batch
+    }
 }
 
 @Suite struct RenderSchedulerPacingTests {
     let doc = UUID()
-    func request(_ i: Int) -> RenderRequest {
+    func request(_ i: Int, tier: RenderTier = .prepare) -> RenderRequest {
         let key = RenderKey(documentID: doc, utteranceIndex: i, voiceID: "v", engineID: "fake", normalizerVersion: 1, segmenterVersion: 1)
-        return RenderRequest(job: RenderJob(documentID: doc, utteranceIndex: i, tier: .prepare), key: key, spoken: "hello there", voiceID: "v")
+        return RenderRequest(job: RenderJob(documentID: doc, utteranceIndex: i, tier: tier), key: key, spoken: "hello there", voiceID: "v")
+    }
+
+    /// The urgent window runs immediately, but chapter-ahead work rests between calls so generated
+    /// audio advances at no more than the configured multiple of wall time.
+    @Test func chapterAheadIsPacedToTwoTimesWhilePlayAheadIsNot() async throws {
+        let clock = ManualTimeSource()
+        let engine = FakeEngine(secondsPerCharacter: 0.1, simulatedRTF: 0.1, timeSource: clock)
+        let sleeps = OSAllocatedUnfairLockBox<[TimeInterval]>([])
+        let scheduler = RenderScheduler(
+            engine: engine,
+            store: InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000),
+            timeSource: clock,
+            foregroundFillRate: 2,
+            foregroundFillSleeper: { seconds in
+                sleeps.value.append(seconds)
+                clock.advance(by: seconds)
+            }
+        )
+
+        await scheduler.setPlan([request(0, tier: .chapterAhead), request(1, tier: .chapterAhead)])
+        for await event in scheduler.events { if event == .idle { break } }
+        let pacedSleep = sleeps.value.reduce(0, +)
+        #expect(abs(pacedSleep - 0.44) < 0.001) // 1.1 s audio / 2 − 0.11 s render
+
+        await scheduler.setPlan([request(2, tier: .playAhead)])
+        for await event in scheduler.events { if event == .idle { break } }
+        #expect(abs(sleeps.value.reduce(0, +) - pacedSleep) < 0.001)
     }
 
     /// A background render behind a full CPU window waits on the budget before it synthesizes;
@@ -293,6 +439,57 @@ import Testing
         #expect(sleeps.value.isEmpty)                               // no wait: the window is clear
         let requests = await engine.requests
         #expect(requests.count == 2)                                // both rendered
+    }
+
+    /// Four hosted renders in flight are one batch to the budget: one wait and one report — not
+    /// four, each charging the whole process's CPU to itself, which is what stalled a locked phone.
+    @Test func aBatchWaitsOnTheBudgetOnce() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let gate = ForegroundGate(isForeground: false)
+        let clock = ManualTimeSource(0)
+        let cpu = OSAllocatedUnfairLockBox<TimeInterval>(0)
+        let sleeps = OSAllocatedUnfairLockBox<[TimeInterval]>([])
+        let budget = CPUBudget(gate: gate, windowSeconds: 60, budgetSeconds: 36,
+                               clock: { clock.now() }, cpuTime: { cpu.value },
+                               sleeper: { seconds in sleeps.value.append(seconds); clock.advance(by: seconds) })
+        clock.set(50)
+        cpu.value = 40
+        let reported = OSAllocatedUnfairLockBox<[String]>([])
+        budget.report = { reported.value.append($0) }
+        let engine = FakeEngine(secondsPerCharacter: 0.1, concurrentRenders: 4)
+        let scheduler = RenderScheduler(engine: engine, store: store, timeSource: clock, budget: budget)
+        await scheduler.setPlan([request(0), request(1), request(2), request(3)])
+        for await event in scheduler.events { if event == .idle { break } }
+
+        #expect(await engine.requests.count == 4)
+        #expect(reported.value.filter { $0.contains("paced in the background:") }.count == 1)
+        #expect(reported.value.filter { $0.contains("waited") }.count == 1)
+    }
+
+    /// A hosted render costs the phone nothing, so the CPU budget never paces it and never measures
+    /// it: in the background, behind a full window, it renders at once — a locked phone kept
+    /// waiting on a budget nothing had spent, until the reader unlocked it.
+    @Test func aHostedRenderIsNeverPacedByTheBudget() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let gate = ForegroundGate(isForeground: false)
+        let clock = ManualTimeSource(0)
+        let cpu = OSAllocatedUnfairLockBox<TimeInterval>(0)
+        let sleeps = OSAllocatedUnfairLockBox<[TimeInterval]>([])
+        let budget = CPUBudget(gate: gate, windowSeconds: 60, budgetSeconds: 36,
+                               clock: { clock.now() }, cpuTime: { cpu.value },
+                               sleeper: { seconds in sleeps.value.append(seconds); clock.advance(by: seconds) })
+        clock.set(50)
+        cpu.value = 40                                              // the window is full
+        let reported = OSAllocatedUnfairLockBox<[String]>([])
+        budget.report = { reported.value.append($0) }
+        let engine = FakeEngine(secondsPerCharacter: 0.1, concurrentRenders: 4, rendersOnDevice: false)
+        let scheduler = RenderScheduler(engine: engine, store: store, timeSource: clock, budget: budget)
+        await scheduler.setPlan([request(0), request(1)])
+        for await event in scheduler.events { if event == .idle { break } }
+
+        #expect(await engine.requests.count == 2)
+        #expect(sleeps.value.isEmpty)                                // no wait
+        #expect(reported.value.isEmpty)                              // nothing to report: it was never paced
     }
 
     @Test func aCacheHitNeverWaits() async throws {

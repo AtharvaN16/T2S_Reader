@@ -90,7 +90,6 @@ struct ReaderTextView: UIViewRepresentable {
         coordinator.onUserScroll = onUserScroll
         coordinator.onSaveSelection = onSaveSelection
         coordinator.onPreviewRect = onPreviewRect
-        coordinator.claimSingleTap(on: view)
         if !isPreviewing { coordinator.clearPreview() }
         coordinator.setHighlightTheme(highlightTheme)
         coordinator.setText(text, scale: textScale, lineHeight: lineHeight, following: isFollowing)
@@ -121,7 +120,6 @@ struct ReaderTextView: UIViewRepresentable {
         var onPreviewRect: ((CGRect?) -> Void)?
         /// Ours, kept so the text view's own single tap can be made to yield to it.
         weak var tap: UITapGestureRecognizer?
-        private var claimedTap = false
         private weak var view: UITextView?
         private var text: ReaderText?
         private var styleKey: StyleKey?
@@ -173,21 +171,8 @@ struct ReaderTextView: UIViewRepresentable {
             overlay.isUserInteractionEnabled = false
             overlay.backgroundColor = .clear
             overlay.layer.addSublayer(underline)
-            view.insertSubview(overlay, at: 0)
+            view.addSubview(overlay)                                   // over the glyphs, not behind them
             syncOverlay()
-        }
-
-        /// A selectable `UITextView` installs its own single tap, and it was taking every one —
-        /// measured, our recogniser did not fire at all once `isSelectable` went on (2026-09-12), so
-        /// tapping a word did nothing. Its single tap is told to wait on ours failing; the press and
-        /// the double tap are left alone, so selecting still works as it does anywhere else.
-        func claimSingleTap(on view: UITextView) {
-            guard !claimedTap, let tap, let others = view.gestureRecognizers else { return }
-            let singles = others.compactMap { $0 as? UITapGestureRecognizer }
-                .filter { $0 !== tap && $0.numberOfTapsRequired == 1 }
-            guard !singles.isEmpty else { return }                       // not installed yet; try again next update
-            singles.forEach { $0.require(toFail: tap) }
-            claimedTap = true
         }
 
         private func syncOverlay() {
@@ -224,7 +209,8 @@ struct ReaderTextView: UIViewRepresentable {
         /// arrived a sentence at a time instead of a word (owner, 2026-09-12). Laying the viewport
         /// out again paints it now — the viewport only, which is the work a scroll already does.
         private func repaint() {
-            view?.textLayoutManager?.textViewportLayoutController.layoutViewport()
+            guard let view, !view.isDragging, !view.isDecelerating else { return }
+            view.textLayoutManager?.textViewportLayoutController.layoutViewport()
         }
 
         /// States both sides from scratch. Also the light/dark path: the dimmed colour is resolved
@@ -254,6 +240,7 @@ struct ReaderTextView: UIViewRepresentable {
                     CACurrentMediaTime())
             if fadeLink == nil {
                 let link = CADisplayLink(target: self, selector: #selector(stepFade))
+                link.preferredFrameRateRange = CAFrameRateRange(minimum: 20, maximum: 30, preferred: 30)
                 link.add(to: .main, forMode: .common)
                 fadeLink = link
             }
@@ -622,6 +609,16 @@ struct ReaderTextView: UIViewRepresentable {
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
             true
+        }
+
+        /// Every other single tap waits on ours failing, so tapping a word reaches us first. Asked
+        /// this way round rather than by reaching into `view.gestureRecognizers`: a selectable
+        /// `UITextView` keeps its text-interaction recognisers on a private subview, so that list
+        /// never held them and our tap simply never fired (measured, 2026-09-12).
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+            guard gestureRecognizer === tap, let other = other as? UITapGestureRecognizer else { return false }
+            return other.numberOfTapsRequired == 1
         }
 
         /// Keeps the two gestures apart: while a selection is up, a tap is the system's to handle —

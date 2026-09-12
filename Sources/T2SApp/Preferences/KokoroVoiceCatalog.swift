@@ -79,7 +79,7 @@ public struct KokoroVoiceCatalog: VoiceCatalog {
     /// `af_heart` → `Heart`: the prefix encodes accent and gender, which the row carries separately —
     /// the accent as the sub-section it sits in (`language(for:)`), the gender as the avatar's tint
     /// (`gender(for:)`).
-    private static func displayName(for name: String) -> String {
+    static func displayName(for name: String) -> String {
         let stem = name.split(separator: "_").last.map(String.init) ?? name
         return stem.prefix(1).uppercased() + stem.dropFirst()
     }

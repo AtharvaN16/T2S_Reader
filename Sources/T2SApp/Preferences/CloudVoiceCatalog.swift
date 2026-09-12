@@ -15,8 +15,13 @@ public struct CloudVoiceCatalog: VoiceCatalog {
         var voices = base.voices()
         guard let configuration = configurationStore.current() else { return voices }
         let id = CloudVoiceID(configuration: configuration, voice: configuration.voice).rawValue
-        voices.append(VoiceOption(id: id, name: "\(configuration.voice) · Cloud", language: "Cloud",
-                                  group: .cloud))
+        // The hosted Heart is the same voice as the on-device one: same name, same character,
+        // only the suffix says where it renders. Another provider's voice keeps its own name.
+        let isKokoro = configuration.model.lowercased() == "kokoro"
+        let name = isKokoro ? KokoroVoiceCatalog.displayName(for: configuration.voice) : configuration.voice
+        voices.append(VoiceOption(id: id, name: "\(name) · Cloud",
+                                  detail: isKokoro ? KokoroVoiceCatalog.personalities[configuration.voice] : nil,
+                                  language: "Cloud", group: .cloud))
         return voices
     }
 }

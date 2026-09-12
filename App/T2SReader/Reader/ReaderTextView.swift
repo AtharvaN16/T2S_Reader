@@ -29,6 +29,8 @@ struct ReaderTextView: UIViewRepresentable {
     let onUserScroll: () -> Void
     /// A passage the reader picked out by hand, to keep: its flattened range and its words.
     var onSaveSelection: ((Range<Int>, String) -> Void)? = nil
+    /// False clears the marked word a tap put up (the reader went on, or changed their mind).
+    var isPreviewing: Bool = false
 
     /// Room for the header and the bottom block. The page gives the view `.ignoresSafeArea(edges:
     /// .bottom)`, so the top is measured from the safe-area top and the bottom from the window's:
@@ -54,6 +56,10 @@ struct ReaderTextView: UIViewRepresentable {
         // The default before any text arrives; the typeset string then carries `ink` per run, since
         // `textColor` applies to the whole string and would flatten the byline's `ink2`.
         view.textColor = UIColor(Tokens.ink)
+        // The selection wears the colour the read-along used to paint (owner, 2026-09-12), set
+        // here as well as in `setHighlightTheme` — that one only fires on a *change*, so a reader
+        // who never touches the Appearance sheet would have kept the system blue.
+        view.tintColor = UIColor(Tokens.highlightWord(highlightTheme))
         view.contentInsetAdjustmentBehavior = .never
         view.verticalScrollIndicatorInsets = UIEdgeInsets(top: Self.insets.top, left: 0, bottom: Self.insets.bottom, right: 0)
         view.delegate = context.coordinator
@@ -72,6 +78,7 @@ struct ReaderTextView: UIViewRepresentable {
         coordinator.onTap = onTap
         coordinator.onUserScroll = onUserScroll
         coordinator.onSaveSelection = onSaveSelection
+        if !isPreviewing { coordinator.clearPreview() }
         coordinator.setHighlightTheme(highlightTheme)
         coordinator.setText(text, scale: textScale, lineHeight: lineHeight, following: isFollowing)
         coordinator.setHighlight(highlight, following: isFollowing)
@@ -109,6 +116,12 @@ struct ReaderTextView: UIViewRepresentable {
         /// Flattened offset of the word being spoken: everything before it has been read. Nil before
         /// the first word lands, when the whole document is still "coming".
         private var readBoundary: Int?
+        /// The word a tap has offered to continue from: brightened and underlined until taken up.
+        private var previewRange: Range<Int>?
+        /// The word crossing from unread to read, eased rather than snapped (owner, 2026-09-12).
+        private var fade: (range: Range<Int>, from: UIColor, to: UIColor, start: CFTimeInterval)?
+        private var fadeLink: CADisplayLink?
+        private static let fadeSeconds: CFTimeInterval = 0.26
         /// Centre the word without animation as soon as content exists: the initial build for a
         /// document, or a settings rebuild made while following. A settings rebuild made while
         /// following is suspended never sets this — the page stays where the reader left it.
@@ -143,11 +156,12 @@ struct ReaderTextView: UIViewRepresentable {
             readBoundary = new
             guard old != new else { return }
             if let old, let new, old < new {
-                markRead(old..<new)
+                beginFade(old..<new)
             } else {
+                endFade()
                 restateFade()
+                repaint()
             }
-            repaint()
         }
 
         /// Setting rendering attributes marks them but does not redraw what is already on screen:
@@ -160,6 +174,67 @@ struct ReaderTextView: UIViewRepresentable {
 
         /// States both sides from scratch. Also the light/dark path: the dimmed colour is resolved
         /// when it is set, so a theme change has to set it again.
+        // MARK: One word easing across
+
+        /// The word just spoken lifts from `inkUnread` to its own colour over a quarter-second, on
+        /// the display's own clock, so the boundary flows rather than stepping (owner, 2026-09-12).
+        /// A word arriving while the last is still easing lands it first, so nothing is left part-lit.
+        private func beginFade(_ range: Range<Int>) {
+            endFade()
+            guard let traits = view?.traitCollection else { markRead(range); repaint(); return }
+            fade = (range,
+                    UIColor(Tokens.inkUnread).resolvedColor(with: traits),
+                    storageColour(at: range.lowerBound).resolvedColor(with: traits),
+                    CACurrentMediaTime())
+            if fadeLink == nil {
+                let link = CADisplayLink(target: self, selector: #selector(stepFade))
+                link.add(to: .main, forMode: .common)
+                fadeLink = link
+            }
+        }
+
+        @objc private func stepFade() {
+            guard let fade else { endFade(); return }
+            let t = min(1, (CACurrentMediaTime() - fade.start) / Self.fadeSeconds)
+            guard t < 1 else { endFade(); return }
+            let eased = t * t * (3 - 2 * t)
+            paint(fade.from.mixed(with: fade.to, by: eased), over: fade.range)
+            repaint()
+        }
+
+        /// Lands the word at its final colour and stops the clock.
+        private func endFade() {
+            if let fade { markRead(fade.range) }
+            fade = nil
+            fadeLink?.invalidate()
+            fadeLink = nil
+            repaint()
+        }
+
+        // MARK: The word a tap offers
+
+        private func markPreview(_ range: Range<Int>) {
+            clearPreview()
+            previewRange = range
+            guard let manager = view?.textLayoutManager, let textRange = textRange(range) else { return }
+            manager.setRenderingAttributes([.foregroundColor: UIColor(Tokens.ink),
+                                            .underlineStyle: NSUnderlineStyle.single.rawValue],
+                                           for: textRange)
+            repaint()
+        }
+
+        /// Puts the word back on whichever side of the boundary it belongs to.
+        func clearPreview() {
+            guard let range = previewRange else { return }
+            previewRange = nil
+            if let boundary = readBoundary, range.lowerBound >= boundary {
+                markUnread(range)
+            } else {
+                markRead(range)
+            }
+            repaint()
+        }
+
         func restateFade() {
             guard let text else { return }
             guard let boundary = readBoundary else {
@@ -187,6 +262,22 @@ struct ReaderTextView: UIViewRepresentable {
                 manager.setRenderingAttributes([.foregroundColor: (value as? UIColor) ?? UIColor(Tokens.ink)],
                                                for: textRange)
             }
+        }
+
+        /// One colour over a range, with no underline — which also wipes a preview's.
+        private func paint(_ colour: UIColor, over range: Range<Int>) {
+            guard let manager = view?.textLayoutManager, let textRange = textRange(range) else { return }
+            manager.setRenderingAttributes([.foregroundColor: colour,
+                                            .underlineStyle: NSUnderlineStyle().rawValue], for: textRange)
+        }
+
+        /// What the run at `offset` was typeset in — `ink`, or the byline's `ink2`.
+        private func storageColour(at offset: Int) -> UIColor {
+            guard let content = view?.textLayoutManager?.textContentManager as? NSTextContentStorage,
+                  let storage = content.textStorage, offset >= 0, offset < storage.length,
+                  let colour = storage.attribute(.foregroundColor, at: offset, effectiveRange: nil) as? UIColor
+            else { return UIColor(Tokens.ink) }
+            return colour
         }
 
         private func markUnread(_ range: Range<Int>) {
@@ -334,11 +425,29 @@ struct ReaderTextView: UIViewRepresentable {
             let elementStart = contentManager.offset(from: contentManager.documentRange.location, to: elementRange.location)
             let index = line.characterIndex(for: CGPoint(x: local.x - line.typographicBounds.minX, y: local.y - line.typographicBounds.minY))
             let clamped = min(max(index, line.characterRange.location), line.characterRange.location + max(0, line.characterRange.length - 1))
-            if let hit = text.hit(at: elementStart + clamped) {
+            let offset = elementStart + clamped
+            if let hit = text.hit(at: offset) {
+                markPreview(wordBounds(around: offset))
                 onTap(.word(utteranceIndex: hit.utteranceIndex, sourceOffset: hit.sourceOffset))
             } else {
+                clearPreview()
                 onTap(.elsewhere)
             }
+        }
+
+        /// The run of non-space around `offset` in the flattened string: the word under the finger.
+        private func wordBounds(around offset: Int) -> Range<Int> {
+            guard let content = view?.textLayoutManager?.textContentManager as? NSTextContentStorage,
+                  let storage = content.textStorage, offset >= 0, offset < storage.length
+            else { return offset..<(offset + 1) }
+            let string = storage.string as NSString
+            let spaces = CharacterSet.whitespacesAndNewlines
+            var lower = offset, upper = offset
+            while lower > 0, let scalar = Unicode.Scalar(string.character(at: lower - 1)),
+                  !spaces.contains(scalar) { lower -= 1 }
+            while upper < string.length, let scalar = Unicode.Scalar(string.character(at: upper)),
+                  !spaces.contains(scalar) { upper += 1 }
+            return lower..<max(upper, lower + 1)
         }
 
         // MARK: UIScrollViewDelegate
@@ -373,7 +482,21 @@ struct ReaderTextView: UIViewRepresentable {
                 onSaveSelection(range.location ..< range.location + range.length, passage)
                 textView.selectedRange = NSRange(location: range.location, length: 0)
             }
-            return UIMenu(children: [save] + suggestedActions)
+            // Copy stays where the hand expects it, first; keeping a passage sits with Look Up,
+            // Translate and Share, which are the other things you do with words (owner, 2026-09-12).
+            return UIMenu(children: suggestedActions + [save])
         }
+    }
+}
+
+private extension UIColor {
+    /// Straight interpolation between two already-resolved colours, for the word easing across.
+    func mixed(with other: UIColor, by t: CGFloat) -> UIColor {
+        var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+        var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+        getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+        other.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+        return UIColor(red: r1 + (r2 - r1) * t, green: g1 + (g2 - g1) * t,
+                       blue: b1 + (b2 - b1) * t, alpha: a1 + (a2 - a1) * t)
     }
 }

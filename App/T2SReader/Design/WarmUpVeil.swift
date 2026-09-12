@@ -58,6 +58,17 @@ struct WarmUpVeil: View {
     /// warm-up that was never on screen (a book already speaking) does not flash green at the end.
     static func isReady(_ env: AppEnvironment) -> Bool { env.kokoroStatus.readyAt != nil }
 
+    /// How far into the green, 0…1, eased on the same curve the breath uses. The blue takes a second
+    /// and a half to breathe in; the green takes the same to arrive, rather than cutting in over a
+    /// quarter-second and reading as a flash (owner, 2026-09-12).
+    static let readyEase: Double = 1.4
+
+    static func readySettle(_ env: AppEnvironment, now: Date) -> Double {
+        guard let readyAt = env.kokoroStatus.readyAt else { return 0 }
+        let t = min(1, max(0, now.timeIntervalSince(readyAt) / readyEase))
+        return t * t * (3 - 2 * t)                                   // smoothstep, as the cosine is at its ends
+    }
+
     /// `T2S_WARMUP=1` fakes a warm-up in the everyday build (`KokoroComposition`). A faked one has
     /// to show even while the fixture book plays, or there is nothing to screenshot, and it holds
     /// the pulse still, so two screenshots are comparable.
@@ -110,10 +121,13 @@ struct WarmRamp: View {
 
     var body: some View {
         TimelineView(.animation) { context in
-            // Ready: the breath stops at full and the light turns green for the last beat.
+            // Ready: the breath eases up to full and the light crosses to green over the same
+            // second and a half, both driven from `readySettle` so they move together.
             let ready = WarmUpVeil.isReady(env)
-            let pulse = ready || reduceMotion || WarmUpVeil.isFaked ? 1 : Self.pulse(at: context.date)
-            let light = ready ? Tokens.glowReady : Tokens.glow
+            let settle = ready ? WarmUpVeil.readySettle(env, now: context.date) : 0
+            let breath = reduceMotion || WarmUpVeil.isFaked ? 1 : Self.pulse(at: context.date)
+            let pulse = breath + (1 - breath) * settle
+            let light = Tokens.glow.mix(with: Tokens.glowReady, by: settle)
             // Ground the size of whatever frame this is given, and the glow laid over its top as
             // an overlay — which takes no part in layout. As a child it did: a fixed height inside
             // a 90 pt bar made the stack that tall, the bar's frame then *centred* it, and the bar
@@ -132,7 +146,6 @@ struct WarmRamp: View {
                     }
                     .compositingGroup()                                    // the noise blends with the ramp, not the page
                     .frame(height: Self.height)
-                    .animation(.easeInOut(duration: 0.28), value: ready)    // blue into green, not a cut
                 }
         }
     }

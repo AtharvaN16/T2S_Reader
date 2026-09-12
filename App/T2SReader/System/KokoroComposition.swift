@@ -83,7 +83,10 @@ final class KokoroStatusModel {
     /// copy of `WarmRamp` on screen — the veil, each ground bar — turns green on the same frame.
     private(set) var readyAt: Date?
     /// How long the green is held before the glow fades. Short: it is a confirmation, not a step.
-    static let readyBeat: Double = 0.55
+    /// Long enough for the green to arrive on the blue's own rhythm rather than flashing: the
+    /// ramp eases the breath up to full and the colour across over `readyEase`, and this holds it
+    /// there a moment before the glow goes (owner, 2026-09-12).
+    static let readyBeat: Double = 2.0
     private var readyBeatTask: Task<Void, Never>?
     /// `T2S_WARMUP=green` holds the beat instead of ending it, so it can be photographed.
     private static let holdsReadyBeat = ProcessInfo.processInfo.environment["T2S_WARMUP"] == "green"

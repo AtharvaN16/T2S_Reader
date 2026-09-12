@@ -38,6 +38,9 @@ struct ReaderPage: View {
     /// The chapter under the finger while the scrubber is dragged, so the picker names where the
     /// release would land rather than where playback still is (owner, 2026-09-12).
     @State private var scrubChapter: Int?
+    /// The word a tap marked, waiting on "Continue from here". A tap used to jump on the spot,
+    /// which made a mis-tap cost your place (owner, 2026-09-12).
+    @State private var previewTap: (utteranceIndex: Int, sourceOffset: Int)?
 
     var body: some View {
         let reader = env.readerModel
@@ -58,7 +61,8 @@ struct ReaderPage: View {
                     isFollowing: reader.isFollowing,
                     onTap: handleTap,
                     onUserScroll: { reader.suspendFollowing() },
-                    onSaveSelection: saveSelection
+                    onSaveSelection: saveSelection,
+                    isPreviewing: previewTap != nil
                 )
                 .ignoresSafeArea(edges: .bottom)
             } else if let error {
@@ -74,9 +78,26 @@ struct ReaderPage: View {
 
             VStack(spacing: 0) {
                 topBar.opacity(chromeVisible ? 1 : 0)
-                // Under the header rather than down by the transport (owner, 2026-09-12): it is
-                // about where the book starts, which is a thing you settle on the way in.
-                if let skip = skipTarget, chromeVisible {
+                // Both pills live under the header (owner, 2026-09-12): they are about where you
+                // are in the book, which belongs with the title, not down by the transport.
+                if let tap = previewTap {
+                    RaisedButton(label: "Continue from here", glyph: "play.fill", tone: .blue, size: .compact) {
+                        Task {
+                            _ = await reader.seek(toUtterance: tap.utteranceIndex, sourceOffset: tap.sourceOffset)
+                            previewTap = nil
+                        }
+                    }
+                    .padding(.top, 12)
+                    .zIndex(1)
+                    .accessibilityHint("Plays from the word you tapped")
+                } else if !reader.isFollowing {
+                    RaisedButton(label: "Back to current", glyph: "text.line.first.and.arrowtriangle.forward",
+                                 tone: .ink, size: .compact) {
+                        reader.resumeFollowing()
+                    }
+                    .padding(.top, 12)
+                    .zIndex(1)
+                } else if let skip = skipTarget, chromeVisible {
                     // One tap past the title page, dedication and reviews to the first numbered
                     // chapter (owner's ask, 2026-09-09). Goes with the chrome, so a tap on the text
                     // dismisses it. Blue, unlike the ink "Back to current": this one moves you on
@@ -90,17 +111,6 @@ struct ReaderPage: View {
                     .accessibilityHint("Skips the front matter")
                 }
                 Spacer()
-                if !reader.isFollowing {
-                    // Above the bottom block's fade in both senses: 32 pt up from it, and drawn
-                    // over the fade the block hangs above itself (a later sibling would otherwise
-                    // paint that fade across the pill).
-                    RaisedButton(label: "Back to current", glyph: "text.line.first.and.arrowtriangle.forward",
-                                 tone: .ink, size: .compact) {
-                        reader.resumeFollowing()
-                    }
-                    .padding(.bottom, 32)
-                    .zIndex(1)
-                }
                 bottomBar.opacity(chromeVisible ? 1 : 0)
             }
             .animation(.easeInOut(duration: 0.2), value: chromeVisible)
@@ -476,12 +486,17 @@ struct ReaderPage: View {
         }
     }
 
+    /// A tap marks the word and offers it; the pill is what actually moves the playhead.
     private func handleTap(_ tap: ReaderTextView.Tap) {
-        Task {
-            if case .word(let index, let offset) = tap, await env.readerModel.seek(toUtterance: index, sourceOffset: offset) {
-                return
+        if case .word(let index, let offset) = tap {
+            withAnimation(.snappy) {
+                previewTap = (index, offset)
+                chromeVisible = true
             }
-            withAnimation { chromeVisible.toggle() }
+            return
+        }
+        withAnimation {
+            if previewTap != nil { previewTap = nil } else { chromeVisible.toggle() }
         }
     }
 

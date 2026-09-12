@@ -146,6 +146,43 @@ import T2SCore
         #expect(ordinals == [0, 1])
         #expect(await system.requests.map(\.voiceID) == ["v"])
     }
+    @Test func reportsTheMirrorCountForACloudVoiceAndOneForEverythingElse() throws {
+        let configuration = HTTPVoiceConfiguration(
+            endpoints: [
+                try #require(URL(string: "https://one.example/v1/audio/speech")),
+                try #require(URL(string: "https://two.example/v1/audio/speech")),
+                try #require(URL(string: "https://three.example/v1/audio/speech")),
+            ],
+            model: "m", voice: "v", requestRatePerMinute: 60)
+        let routed = RoutedEngine(system: RecordingEngine(), configuration: { configuration }, key: { nil })
+        let cloud = CloudVoiceID(configuration: configuration, voice: "v").rawValue
+
+        #expect(routed.maxConcurrentRenders(for: cloud) == 3)
+        #expect(routed.maxConcurrentRenders(for: "cloud:stale:v") == 1)
+        #expect(routed.maxConcurrentRenders(for: "system:com.example.voice") == 1)
+        #expect(routed.maxConcurrentRenders(for: KokoroVoiceID(engineID: "kokoro-x", voice: "af_heart").rawValue) == 1)
+    }
+
+    /// The fingerprint ignores mirrors, so the engine cache cannot key on it alone: a changed
+    /// mirror list builds a new engine, seen here as the new mirror taking its turn. The transport
+    /// is this file's own: `TestURLProtocol`'s state is process-wide, and the HTTP engine's suite
+    /// runs alongside this one.
+    @Test func aChangedMirrorListRebuildsTheCloudEngine() async throws {
+        let one = try #require(URL(string: "https://one.example/v1/audio/speech"))
+        let two = try #require(URL(string: "https://two.example/v1/audio/speech"))
+        let session = MirrorTransport.session()
+        let box = ConfigurationBox(HTTPVoiceConfiguration(endpoints: [one], model: "m", voice: "v", requestRatePerMinute: 120))
+        let routed = RoutedEngine(system: RecordingEngine(), configuration: { box.value }, key: { "test-key" }, session: session)
+        let voiceID = CloudVoiceID(configuration: try #require(box.value), voice: "v").rawValue
+
+        _ = try await routed.synthesize(.init(spoken: "a", voiceID: voiceID))
+        box.value = HTTPVoiceConfiguration(endpoints: [one, two], model: "m", voice: "v", requestRatePerMinute: 120)
+        _ = try await routed.synthesize(.init(spoken: "b", voiceID: voiceID))      // same fingerprint, new engine: its cursor starts at one
+        _ = try await routed.synthesize(.init(spoken: "c", voiceID: voiceID))      // then two
+
+        #expect(MirrorTransport.hosts == ["one.example", "one.example", "two.example"])
+    }
+
 }
 
 private actor RecordingEngine: SynthesisEngine {
@@ -158,4 +195,52 @@ private actor RecordingEngine: SynthesisEngine {
         requests.append(request)
         return SynthesisResult(audio: PCMAudio(sampleRate: 24_000, samples: []), wordTimings: [])
     }
+}
+
+private final class ConfigurationBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: HTTPVoiceConfiguration?
+    init(_ value: HTTPVoiceConfiguration?) { stored = value }
+    var value: HTTPVoiceConfiguration? {
+        get { lock.lock(); defer { lock.unlock() }; return stored }
+        set { lock.lock(); stored = newValue; lock.unlock() }
+    }
+}
+
+/// A transport of this file's own, so it never shares state with `TestURLProtocol` in a suite
+/// running alongside: answers one PCM sample to any host and records the hosts in order.
+private final class MirrorTransport: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var hostsSeen: [String] = []
+
+    static var hosts: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return hostsSeen
+    }
+
+    static func session() -> URLSession {
+        lock.lock()
+        hostsSeen = []
+        lock.unlock()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MirrorTransport.self]
+        return URLSession(configuration: configuration)
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        Self.lock.lock()
+        Self.hostsSeen.append(request.url?.host ?? "")
+        Self.lock.unlock()
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+                                       headerFields: ["Content-Type": "audio/pcm"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data([0, 0]))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }

@@ -65,6 +65,16 @@ public actor RoutedEngine: SynthesisEngine {
         }
     }
 
+    /// A cloud voice renders as wide as its mirror list; everything on the device renders one at
+    /// a time. Reads only the configuration closure, so it needs no actor hop.
+    public nonisolated func maxConcurrentRenders(for voiceID: String) -> Int {
+        guard let cloudID = CloudVoiceID(rawValue: voiceID),
+              let configuration = configuration(),
+              configuration.fingerprint == cloudID.fingerprint
+        else { return 1 }
+        return max(1, configuration.endpoints.count)
+    }
+
     /// Resolves which engine owns `request`'s voice and the request to hand it — shared by
     /// `synthesize` and `synthesizeStreaming` so the routing rules live in exactly one place.
     private func engine(for request: SynthesisRequest) async throws -> (engine: any SynthesisEngine, request: SynthesisRequest) {
@@ -81,7 +91,10 @@ public actor RoutedEngine: SynthesisEngine {
                 throw HTTPVoiceError.notConfigured
             }
             try configuration.validate()
-            let cacheKey = "\(configuration.fingerprint)\u{1F}\(configuration.requestRatePerMinute)"
+            // The fingerprint ignores mirrors on purpose (cached audio survives a mirror edit), so
+            // the engine, which must know every mirror, is keyed on all of them.
+            let cacheKey = ([configuration.fingerprint, String(configuration.requestRatePerMinute)]
+                            + configuration.endpoints.map(\.absoluteString)).joined(separator: "\u{1F}")
             let engine: HTTPVoiceEngine
             if let existing = cloudEngines[cacheKey] {
                 engine = existing

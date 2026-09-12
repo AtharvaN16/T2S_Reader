@@ -365,11 +365,13 @@ Add to the `RenderSchedulerTests` suite in `Tests/T2SCoreTests/Render/RenderSche
     }
 
     /// The rate control sees the batch's throughput, not one mirror's latency: four renders that
-    /// each span the batch's ten seconds, for twenty seconds of audio, measure 0.5.
+    /// each span the batch's ten seconds, for twenty seconds of audio, measure 0.5. The window is
+    /// one sample so the batch's own figure is what is read — a per-render scheduler would record
+    /// 2.0 for the parked render and 0 for the three that follow it unparked.
     @Test func rtfIsRecordedPerBatch() async throws {
         let clock = ManualTimeSource()
         let engine = FakeEngine(secondsPerCharacter: 1, concurrentRenders: 4)
-        let s = RenderScheduler(engine: engine, store: InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000), timeSource: clock)
+        let s = RenderScheduler(engine: engine, store: InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000), timeSource: clock, rtfWindow: 1)
         // The first sample is the warm-up's and is dropped, so spend it on a batch of one.
         async let warmUp = collect(s)
         await s.setPlan([request(9, "warm")])
@@ -391,7 +393,7 @@ Add to the `RenderSchedulerTests` suite in `Tests/T2SCoreTests/Render/RenderSche
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `swift test --filter RenderSchedulerTests`
-Expected: `widthFourHoldsFourRendersInFlight` fails (`parkedCount` stays 1), `aBatchNeverSpansTiers` fails (1, not 2), `storeFullInsideABatchPausesOnce` passes by accident (width 1 also pauses once — keep it, it guards the batch path), `rtfIsRecordedPerBatch` fails (records 2.0). Every pre-existing test still passes.
+Expected: `widthFourHoldsFourRendersInFlight` fails (`parkedCount` stays 1), `aBatchNeverSpansTiers` fails (1, not 2), `storeFullInsideABatchPausesOnce` passes by accident (width 1 also pauses once — keep it, it guards the batch path), `rtfIsRecordedPerBatch` fails (the one-sample window reads the last unparked render's 0.0). Every pre-existing test still passes.
 
 - [ ] **Step 3: Restructure the loop around a batch**
 

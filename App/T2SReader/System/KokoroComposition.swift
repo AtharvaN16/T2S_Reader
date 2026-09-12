@@ -78,10 +78,24 @@ final class KokoroStatusModel {
     private(set) var warmUpStages: (loaded: Int, total: Int)?
     private(set) var warmUpStarted: Date?
     private(set) var expectedWarmUpSeconds: Double?
-    /// Set the moment a warm-up ends, cleared ``readyBeat`` seconds later: the last beat of the
-    /// glow, which turns green before it goes (owner, 2026-09-10). One date in one model, so every
-    /// copy of `WarmRamp` on screen — the veil, each ground bar — turns green on the same frame.
+    /// When this warm-up ended: the last beat of the glow, which turns green before it goes (owner,
+    /// 2026-09-10). One date in one model, so every copy of `WarmRamp` on screen — the veil, each
+    /// ground bar — turns green on the same frame.
+    ///
+    /// The beat ending does not clear it — ``readyBeatEnded`` says that instead — because this date
+    /// is also what holds the light green, the line on "Voice ready" and the bar full. Clearing it
+    /// to take the glow off screen set all of that back on the same frame the 1.5 s fade began, and
+    /// the fade is long enough to watch: the light turned blue and picked the breath back up, the
+    /// line went back to an estimate, and the bar slid backwards out of full over 0.6 s (owner,
+    /// 2026-09-12: "I saw the warmup bar move backwards again"). The last thing the reader sees of
+    /// a warm-up is now the end of it, held, going.
     private(set) var readyAt: Date?
+    /// Whether the beat has been held — which is what asks the glow to go, in place of clearing
+    /// ``readyAt``. Both are put back when a fresh warm-up begins.
+    private(set) var readyBeatEnded = false
+    /// Warming is over and the green is still owed its beat: with ``KokoroStatus/isWarming``, what
+    /// puts the glow on screen (`WarmUpVeil.isShowing`).
+    var isHoldingReadyBeat: Bool { readyAt != nil && !readyBeatEnded }
     /// How long the green is held before the glow fades. Short: it is a confirmation, not a step.
     /// Long enough for the green to arrive on the blue's own rhythm rather than flashing: the
     /// ramp eases the breath up to full and the colour across over `readyEase`, and this holds it
@@ -128,23 +142,31 @@ final class KokoroStatusModel {
         }
         // A fresh warm-up, not the install-to-stages seam within one already under way (both keep
         // `isWarming` true, so this does not fire between them): the floor starts over so a second
-        // wait later in the same launch is not shown already full.
-        if !wasWarming, status.isWarming { warmUpProgressFloor = 0 }
+        // wait later in the same launch is not shown already full, and the last one's ending goes
+        // with it — `readyAt` outlives its own beat now, and a stale one would open this warm-up on
+        // a full bar and a green light.
+        if !wasWarming, status.isWarming {
+            warmUpProgressFloor = 0
+            readyBeatTask?.cancel()
+            readyAt = nil
+            readyBeatEnded = false
+        }
         if wasWarming, !status.isWarming { beginReadyBeat() }
         if case .installing = status {} else { installProgress = nil }
     }
 
-    /// The green beat: `readyAt` now, cleared once it has been held, which is what takes the glow
-    /// off the screen. Cancelling any beat already running keeps a second warm-up in the same
-    /// launch (an install, then the stages) from cutting the first one's beat short.
+    /// The green beat: `readyAt` now, ``readyBeatEnded`` once it has been held, which is what takes
+    /// the glow off the screen. Cancelling any beat already running keeps a second warm-up in the
+    /// same launch (an install, then the stages) from cutting the first one's beat short.
     private func beginReadyBeat() {
         readyBeatTask?.cancel()
         readyAt = Date()
+        readyBeatEnded = false
         guard !Self.holdsReadyBeat else { return }
         readyBeatTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(Self.readyBeat))
             guard !Task.isCancelled else { return }
-            self?.readyAt = nil
+            self?.readyBeatEnded = true
         }
     }
 

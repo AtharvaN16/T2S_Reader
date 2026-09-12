@@ -14,8 +14,10 @@ import UIKit
 /// are in, the breath eases up to full and the light crosses to green over `readyEase`, holds
 /// (`KokoroStatusModel.readyBeat`), and then fades over `fadeOut` — all three on the blue's own
 /// timing, so the green arrives and leaves the way the blue moved rather than flashing. The beat is one date on the status model
-/// (`readyAt`), so the veil and every ground bar turn on the same frame; the model clearing it is
-/// what takes the glow off the screen.
+/// (`readyAt`), so the veil and every ground bar turn on the same frame; the model marking that
+/// date's beat over (`readyBeatEnded`) is what takes the glow off the screen. The date itself
+/// stays, and that is the point: every "we are done" the screen shows — the green, "Voice ready",
+/// the filled bar — is read from it, so it has to outlast the fade it starts.
 ///
 /// **One surface.** The glow is `WarmRamp`, and everything that shows it draws that same view:
 /// this veil at the back of a host's stack, under the text; and every ground bar across the top
@@ -39,9 +41,9 @@ struct WarmUpVeil: View {
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
-        // The `.transition` had nothing driving it: the model clears `readyAt` outside an
-        // animation, so the green did not fade — it was simply gone on the next frame (owner,
-        // 2026-09-12). The going takes as long as a breath, so the light leaves the way it moved.
+        // The `.transition` had nothing driving it: the model ends the beat outside an animation,
+        // so the green did not fade — it was simply gone on the next frame (owner, 2026-09-12).
+        // The going takes as long as a breath, so the light leaves the way it moved.
         let showing = Self.isShowing(env)
         ZStack {
             if showing {
@@ -62,7 +64,7 @@ struct WarmUpVeil: View {
     /// Warming, and nothing audible yet. `isCatchingUp` is the stall before the first sound, so a
     /// tapped Play that is still waiting keeps the glow; a book actually speaking loses it.
     static func isShowing(_ env: AppEnvironment) -> Bool {
-        guard env.kokoroStatus.status.isWarming || env.kokoroStatus.readyAt != nil else { return false }
+        guard env.kokoroStatus.status.isWarming || env.kokoroStatus.isHoldingReadyBeat else { return false }
         if isFaked { return true }
         // Sound from the phone's own voice means the wait is over. Sound from the hosted voice
         // means the wait is under way — Heart from the mirrors while Heart installs — and the
@@ -71,8 +73,10 @@ struct WarmUpVeil: View {
         return hostedSpeaking || !(env.player.isPlaying && !env.player.isCatchingUp)
     }
 
-    /// Whether the glow is on its last beat — ready, and green. The same gate as `isShowing`, so a
-    /// warm-up that was never on screen (a book already speaking) does not flash green at the end.
+    /// Whether this warm-up has ended — the glow's last beat, green. Deliberately *not* the same
+    /// gate as `isShowing`: it stays true right through the fade that `isShowing` going false
+    /// starts, so the green, "Voice ready" and the full bar are what leaves the screen. The two
+    /// parted company when the beat's end stopped clearing `readyAt` (`KokoroStatusModel`).
     static func isReady(_ env: AppEnvironment) -> Bool { env.kokoroStatus.readyAt != nil }
 
     /// How far into the green, 0…1, eased on the same curve the breath uses. The blue takes a second

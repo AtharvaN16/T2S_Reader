@@ -373,8 +373,11 @@ private struct CollectionTile: View {
     }
 }
 
-/// One list row: a smaller book, the title in the row face with the author and length under it,
-/// and the Home row's `⋯` circle for the same menu the grid gives on a long press.
+/// One list row: a smaller book, the title in the row face with the author under it, and the Home
+/// row's `⋯` circle for the same menu the grid gives on a long press. No chapter count and no
+/// length (owner, 2026-09-12): the Collection is the shelf, and a row here now says what a tile
+/// says — what the thing is and who wrote it. Both numbers are still a tap away in Details, and
+/// the Queue is where a book's progress belongs.
 private struct CollectionRow<Items: View>: View {
     @Environment(AppEnvironment.self) private var env
     var summary: DocumentSummary
@@ -395,7 +398,6 @@ private struct CollectionRow<Items: View>: View {
                         if summary.document.isPlaceholder {
                             Text("On \(summary.remoteDeviceName ?? "another device") · tap to add here").typeRole(.meta).foregroundStyle(Tokens.ink3)
                         }
-                        Text(CollectionText.lengthLine(for: summary)).typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(1)
                     }
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -447,12 +449,6 @@ private struct ShelfArt: View {
 
 /// The words a tile and a row share.
 private enum CollectionText {
-    /// "12 chapters · ~5h 10m", in the book sheet's words.
-    static func lengthLine(for summary: DocumentSummary) -> String {
-        let chapters = summary.chapterCount == 1 ? "1 chapter" : "\(summary.chapterCount) chapters"
-        return "\(chapters) · \(DurationFormatter.long(summary.totalSeconds, approximate: !summary.isFullyRendered))"
-    }
-
     /// "Title, by Author, PDF" (or "link", "text"): what VoiceOver reads for a tile or a row.
     static func accessibilityLabel(for summary: DocumentSummary) -> String {
         var parts = [summary.document.title]

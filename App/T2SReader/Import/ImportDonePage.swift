@@ -60,13 +60,18 @@ struct ImportDonePage: View {
                           title: document.title, author: document.displayAuthor, isPDF: document.sourceType == .pdf)
                     .shelved
             }
-            VStack(alignment: .leading, spacing: 6) {
-                Text(document.title).typeRole(.rowTitle).foregroundStyle(Tokens.ink).lineLimit(3)
-                Text(detail(summary)).typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(2)
+            // 18 between the words and the pill, and the words grouped tight above it: `QueueRow`'s
+            // own measure, so a book that has just come in stands the way the same book stands on
+            // Home (owner, 2026-09-12). At 6 the pill sat with the author line as if it were a
+            // third line of the text, rather than a tap target the reading had stopped for.
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(document.title).typeRole(.rowTitle).foregroundStyle(Tokens.ink).lineLimit(3)
+                    Text(detail(summary)).typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(2)
+                }
                 // Under the title, like Home's Continue Listening: the whole book's length rides in
                 // the pill rather than sitting in the line above it, so one tap is the sentence.
                 Pill(label: "Play", detail: length(summary), glyph: "play.fill", style: .soft) { play(summary) }
-                    .padding(.top, 2)
                     .accessibilityHint("Plays and opens the reader")
             }
             .padding(.top, 4)

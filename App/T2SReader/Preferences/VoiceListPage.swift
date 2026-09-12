@@ -7,17 +7,23 @@ import T2SApp
 /// name carries a ♀ / ♂ mark and, on the voice that plays by default, a "Default" tag; the old
 /// "Default" pointer row is gone with it. Three marks at the end of every row, each its own verb:
 /// a waveform (hear), a heart (keep), a radio (choose). Choosing moves the radio and slides a bar
-/// up from the foot — "Make default" here, "Change voice" for a document — so nothing applies
-/// until that bar is pressed and nothing needs a mode. Sections by accent under no group title.
+/// up from the foot — one key, "Make default", in Settings; two, "Make default" and "Done", for a
+/// document — so nothing applies until a key is pressed and nothing needs a mode. Sections by
+/// accent under no group title.
 struct VoiceListPage: View {
     @Environment(AppEnvironment.self) private var env
     /// The id in effect before anything is chosen: the document's voice, or the default.
     var current: String?
-    /// The bar's word — "Make default" / "Change voice" — and its line above, per choice.
+    /// The bar's word — "Make default" / "Done" — and its line above, per choice.
     var confirmLabel: String
     var note: (VoiceOption) -> String? = { _ in nil }
     /// Applies the choice; true dismisses the bar. Async so a document's audio can be discarded.
     var onConfirm: (VoiceOption) async -> Bool
+    /// A second, quieter key beside the first, when the caller has two answers to offer. The
+    /// Reader's sheet has both: "Done" changes this book's voice, "Make default" changes every
+    /// book's (owner, 2026-09-12). Settings, whose only answer *is* the default, leaves it nil.
+    var secondaryLabel: String? = nil
+    var onSecondary: ((VoiceOption) async -> Bool)? = nil
     /// The heart per row. Off in the Reader's sheet (owner, 2026-09-10): there it is hear and
     /// choose only; keeping favorites is Settings' job.
     var showsFavorites: Bool = true
@@ -28,7 +34,10 @@ struct VoiceListPage: View {
     @State private var filter: VoiceFilter = .all
     /// The radio's choice, not yet applied.
     @State private var pending: VoiceOption?
-    @State private var isApplying = false
+    /// Which key is spinning, so only the pressed one wears "Applying…" while both are disabled.
+    @State private var applying: Applying?
+
+    private enum Applying { case primary, secondary }
 
     /// The default voice's id: the Settings pick, else the device's own.
     private var defaultID: String? { env.preferences.defaultVoiceID ?? resolvedDefault }
@@ -84,7 +93,22 @@ struct VoiceListPage: View {
                     if let line = note(pending) {
                         Text(line).typeRole(.meta).foregroundStyle(Tokens.ink2).multilineTextAlignment(.center)
                     }
-                    BarButton(label: confirmLabel, busyLabel: isApplying ? "Applying…" : nil) { apply(pending) }
+                    // The quiet key first, reading order matching weight: the wider-reaching answer
+                    // is the one you have to go past to reach the everyday one.
+                    HStack(spacing: 10) {
+                        if let secondaryLabel, let onSecondary {
+                            BarButton(label: secondaryLabel, tone: .quiet,
+                                      busyLabel: applying == .secondary ? "Applying…" : nil,
+                                      isEnabled: applying == nil) {
+                                apply(pending, as: .secondary, using: onSecondary)
+                            }
+                        }
+                        BarButton(label: confirmLabel,
+                                  busyLabel: applying == .primary ? "Applying…" : nil,
+                                  isEnabled: applying == nil) {
+                            apply(pending, as: .primary, using: onConfirm)
+                        }
+                    }
                 }
                 .padding(.horizontal, Spacing.margin)
                 .padding(.top, 12)
@@ -100,11 +124,11 @@ struct VoiceListPage: View {
         }
     }
 
-    private func apply(_ option: VoiceOption) {
-        isApplying = true
+    private func apply(_ option: VoiceOption, as key: Applying, using action: @escaping (VoiceOption) async -> Bool) {
+        applying = key
         Task {
-            if await onConfirm(option) { pending = nil }
-            isApplying = false
+            if await action(option) { pending = nil }
+            applying = nil
         }
     }
 

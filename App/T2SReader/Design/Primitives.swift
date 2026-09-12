@@ -122,12 +122,14 @@ extension PageTitle where Menu == EmptyView {
 /// so it rides above the keyboard.
 struct BarButton: View {
     var label: String
+    /// `ink` is the confirm key everywhere; `quiet` is its flat partner when a bar carries two.
+    var tone: RaisedButton.Tone = .ink
     var busyLabel: String? = nil
     var isEnabled: Bool = true
     var action: () -> Void
 
     var body: some View {
-        RaisedButton(label: label, tone: .ink, size: .bar, busyLabel: busyLabel, isEnabled: isEnabled, action: action)
+        RaisedButton(label: label, tone: tone, size: .bar, busyLabel: busyLabel, isEnabled: isEnabled, action: action)
     }
 }
 

@@ -361,6 +361,27 @@ public final class PlayerModel {
         }
     }
 
+    /// Saves a passage the reader picked out by hand (owner, 2026-09-12) rather than the utterance
+    /// under the playhead. Two selections inside one paragraph are two bookmarks, so this dedupes on
+    /// the words kept, where `saveBookmark()` dedupes on the utterance.
+    public func saveBookmark(at position: Position, passageText: String) async -> BookmarkSaveResult {
+        guard let current else { return .failed }
+        let passage = passageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !passage.isEmpty else { return .failed }
+        if let existing = bookmarks.first(where: { $0.passageText == passage }) {
+            return .alreadyBookmarked(existing)
+        }
+        let bookmark = Bookmark(documentID: current.id, position: position, passageText: passage)
+        do {
+            try await library.store.add(bookmark)
+            await refreshBookmarks()
+            return .saved(bookmark)
+        } catch {
+            localError = "\(error)"
+            return .failed
+        }
+    }
+
     /// Re-reads the loaded document's bookmarks. Cheap: a document has a handful.
     public func refreshBookmarks() async {
         guard let current else { bookmarks = []; return }

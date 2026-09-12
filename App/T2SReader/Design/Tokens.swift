@@ -7,7 +7,9 @@ import UIKit
 /// through a dynamic UIColor so the whole app follows the system or the user's theme.
 enum Tokens {
     static let ground = dynamic(light: 0xF8F8F7, dark: 0x101010)
-    static let surface = dynamic(light: 0xEEEEEC, dark: 0x1E1E1E)
+    // Dark's grey is lifted well clear of `ground` and `raised` (owner, 2026-09-12): a filled
+    // control has to read as a fill, without an outline drawn round it to rescue it.
+    static let surface = dynamic(light: 0xEEEEEC, dark: 0x2F2F2F)
     static let raised = dynamic(light: 0xFFFFFF, dark: 0x1A1A1A)
     static let ink = dynamic(light: 0x111111, dark: 0xF2F2F2)
     /// The Reader's text that has not been read out yet (owner, 2026-09-12): `ink`, dimmed, so the

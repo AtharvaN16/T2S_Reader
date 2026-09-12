@@ -35,6 +35,9 @@ struct ReaderPage: View {
     @State private var toastBookmark: Bookmark?
     @State private var noteTarget: BookmarkEntry?
     @State private var toastTask: Task<Void, Never>?
+    /// The chapter under the finger while the scrubber is dragged, so the picker names where the
+    /// release would land rather than where playback still is (owner, 2026-09-12).
+    @State private var scrubChapter: Int?
 
     var body: some View {
         let reader = env.readerModel
@@ -54,7 +57,8 @@ struct ReaderPage: View {
                     highlightTheme: env.preferences.highlightTheme,
                     isFollowing: reader.isFollowing,
                     onTap: handleTap,
-                    onUserScroll: { reader.suspendFollowing() }
+                    onUserScroll: { reader.suspendFollowing() },
+                    onSaveSelection: saveSelection
                 )
                 .ignoresSafeArea(edges: .bottom)
             } else if let error {
@@ -70,6 +74,21 @@ struct ReaderPage: View {
 
             VStack(spacing: 0) {
                 topBar.opacity(chromeVisible ? 1 : 0)
+                // Under the header rather than down by the transport (owner, 2026-09-12): it is
+                // about where the book starts, which is a thing you settle on the way in.
+                if let skip = skipTarget, chromeVisible {
+                    // One tap past the title page, dedication and reviews to the first numbered
+                    // chapter (owner's ask, 2026-09-09). Goes with the chrome, so a tap on the text
+                    // dismisses it. Blue, unlike the ink "Back to current": this one moves you on
+                    // through the book rather than back to where you were (owner, 2026-09-12).
+                    RaisedButton(label: skip.number.map { "Skip to Chapter \($0)" } ?? "Skip the front matter",
+                                 glyph: "forward.end.fill", tone: .blue, size: .compact) {
+                        Task { await env.player.seek(toChapter: skip.index) }
+                    }
+                    .padding(.top, 12)
+                    .zIndex(1)
+                    .accessibilityHint("Skips the front matter")
+                }
                 Spacer()
                 if !reader.isFollowing {
                     // Above the bottom block's fade in both senses: 32 pt up from it, and drawn
@@ -81,19 +100,6 @@ struct ReaderPage: View {
                     }
                     .padding(.bottom, 32)
                     .zIndex(1)
-                } else if let skip = skipTarget, chromeVisible {
-                    // The same pill while the playhead is still in the front matter (owner's ask,
-                    // 2026-09-09): one tap past the title page, dedication and reviews to the
-                    // first numbered chapter. Goes with the chrome, so a tap on the text dismisses it.
-                    // Blue, unlike its ink sibling above: this one moves you on through the book
-                    // rather than back to where you were (owner, 2026-09-12).
-                    RaisedButton(label: skip.number.map { "Skip to Chapter \($0)" } ?? "Skip the front matter",
-                                 glyph: "forward.end.fill", tone: .blue, size: .compact) {
-                        Task { await env.player.seek(toChapter: skip.index) }
-                    }
-                    .padding(.bottom, 32)
-                    .zIndex(1)
-                    .accessibilityHint("Skips the front matter")
                 }
                 bottomBar.opacity(chromeVisible ? 1 : 0)
             }
@@ -225,9 +231,9 @@ struct ReaderPage: View {
                 .padding(.bottom, 2)
             VStack(spacing: 2) {
                 ThinScrubber(model: player.scrubber, segments: chapterSegments,
-                             bookmarkFractions: player.bookmarkFractions) { fraction in
-                    Task { await player.seek(fraction: fraction) }
-                }
+                             bookmarkFractions: player.bookmarkFractions,
+                             onSeek: { fraction in Task { await player.seek(fraction: fraction) } },
+                             onScrub: { scrubChapter = $0 })
                 // Elapsed on the left, time left on the right (Apple Music's "-1:02:33"), in the
                 // app's own face with tabular digits rather than the system monospace.
                 HStack {
@@ -355,7 +361,7 @@ struct ReaderPage: View {
     @ViewBuilder private var chapterRow: some View {
         let player = env.player
         let chapters = player.chapters
-        if chapters.count > 1, let index = player.chapterIndex, chapters.indices.contains(index) {
+        if chapters.count > 1, let index = scrubChapter ?? player.chapterIndex, chapters.indices.contains(index) {
             HStack {
                 Button { showChapters = true } label: {
                     // The chevron stands 8 pt off the title, centred on its height, in `ink` like
@@ -439,6 +445,35 @@ struct ReaderPage: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+    }
+
+    /// A passage picked out by hand becomes a bookmark at its first word, keeping the words as
+    /// selected rather than the utterance they sit in (owner, 2026-09-12).
+    private func saveSelection(_ range: Range<Int>, passage: String) {
+        guard let text, let timeline = env.player.coordinator.timeline else { return }
+        // A selection can open in text that is never spoken — a drawn chapter title — so the anchor
+        // is the first offset in it that belongs to an utterance.
+        let anchor = range.indices.first { text.hit(at: $0) != nil } ?? range.lowerBound
+        guard let hit = text.hit(at: anchor),
+              let playhead = ReaderModel.playhead(utteranceIndex: hit.utteranceIndex,
+                                                  sourceOffset: hit.sourceOffset, in: timeline)
+        else { return }
+        let position = PositionResolver.position(for: playhead, in: timeline)
+        Task {
+            let result = await env.player.saveBookmark(at: position, passageText: passage)
+            let stamp = DurationFormatter.clock(env.player.coordinator.timeIndex.time(at: playhead))
+            switch result {
+            case .saved(let bookmark):
+                toastBookmark = bookmark
+                show(ToastContent(title: "Bookmark saved", detail: stamp, actionLabel: "Add a note"))
+            case .alreadyBookmarked(let bookmark):
+                toastBookmark = bookmark
+                show(ToastContent(title: "Already bookmarked", detail: stamp, actionLabel: "Edit note"))
+            case .failed:
+                toastBookmark = nil
+                show(ToastContent(title: "Could not save a bookmark", detail: nil, actionLabel: nil))
+            }
+        }
     }
 
     private func handleTap(_ tap: ReaderTextView.Tap) {

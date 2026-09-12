@@ -27,6 +27,8 @@ struct ReaderTextView: UIViewRepresentable {
     let isFollowing: Bool
     let onTap: (Tap) -> Void
     let onUserScroll: () -> Void
+    /// A passage the reader picked out by hand, to keep: its flattened range and its words.
+    var onSaveSelection: ((Range<Int>, String) -> Void)? = nil
 
     /// Room for the header and the bottom block. The page gives the view `.ignoresSafeArea(edges:
     /// .bottom)`, so the top is measured from the safe-area top and the bottom from the window's:
@@ -40,7 +42,10 @@ struct ReaderTextView: UIViewRepresentable {
     func makeUIView(context: Context) -> UITextView {
         let view = UITextView(usingTextLayoutManager: true)
         view.isEditable = false
-        view.isSelectable = false
+        // Selectable so a press picks out a passage — the highlight is the reader's now, not the
+        // read-along's (owner, 2026-09-12). UIKit's own press and double-tap install alongside our
+        // tap-to-seek, which is why the coordinator is that recogniser's delegate.
+        view.isSelectable = true
         view.isScrollEnabled = true
         view.alwaysBounceVertical = true
         view.backgroundColor = .clear
@@ -52,7 +57,9 @@ struct ReaderTextView: UIViewRepresentable {
         view.contentInsetAdjustmentBehavior = .never
         view.verticalScrollIndicatorInsets = UIEdgeInsets(top: Self.insets.top, left: 0, bottom: Self.insets.bottom, right: 0)
         view.delegate = context.coordinator
-        view.addGestureRecognizer(UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:))))
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        tap.delegate = context.coordinator
+        view.addGestureRecognizer(tap)
         _ = view.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak coordinator = context.coordinator] (_: UITextView, _: UITraitCollection) in
             coordinator?.restateFade()
         }
@@ -64,6 +71,7 @@ struct ReaderTextView: UIViewRepresentable {
         let coordinator = context.coordinator
         coordinator.onTap = onTap
         coordinator.onUserScroll = onUserScroll
+        coordinator.onSaveSelection = onSaveSelection
         coordinator.setHighlightTheme(highlightTheme)
         coordinator.setText(text, scale: textScale, lineHeight: lineHeight, following: isFollowing)
         coordinator.setHighlight(highlight, following: isFollowing)
@@ -86,9 +94,10 @@ struct ReaderTextView: UIViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, UITextViewDelegate {
+    final class Coordinator: NSObject, UITextViewDelegate, UIGestureRecognizerDelegate {
         var onTap: (Tap) -> Void
         var onUserScroll: () -> Void
+        var onSaveSelection: ((Range<Int>, String) -> Void)?
         private weak var view: UITextView?
         private var text: ReaderText?
         private var styleKey: StyleKey?
@@ -138,6 +147,15 @@ struct ReaderTextView: UIViewRepresentable {
             } else {
                 restateFade()
             }
+            repaint()
+        }
+
+        /// Setting rendering attributes marks them but does not redraw what is already on screen:
+        /// measured, the page repainted twice in three and a half seconds of speech, so the boundary
+        /// arrived a sentence at a time instead of a word (owner, 2026-09-12). Laying the viewport
+        /// out again paints it now — the viewport only, which is the work a scroll already does.
+        private func repaint() {
+            view?.textLayoutManager?.textViewportLayoutController.layoutViewport()
         }
 
         /// States both sides from scratch. Also the light/dark path: the dimmed colour is resolved
@@ -327,6 +345,35 @@ struct ReaderTextView: UIViewRepresentable {
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
             onUserScroll()
+        }
+
+        // MARK: Selection
+
+        /// Our tap-to-seek sits beside UIKit's own press and double-tap rather than fighting them:
+        /// without this the selection recognisers swallow the tap and the page stops seeking.
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            true
+        }
+
+        /// Following would scroll the page out from under the selection handles.
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            guard textView.selectedRange.length > 0 else { return }
+            onUserScroll()
+        }
+
+        /// "Save as bookmark" in front of Look Up, Translate and the rest, which UIKit supplies.
+        func textView(_ textView: UITextView, editMenuForTextIn range: NSRange,
+                      suggestedActions: [UIMenuElement]) -> UIMenu? {
+            guard range.length > 0, let onSaveSelection,
+                  let passage = textView.attributedText?.attributedSubstring(from: range).string,
+                  !passage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return nil }
+            let save = UIAction(title: "Save as bookmark", image: UIImage(systemName: "bookmark")) { _ in
+                onSaveSelection(range.location ..< range.location + range.length, passage)
+                textView.selectedRange = NSRange(location: range.location, length: 0)
+            }
+            return UIMenu(children: [save] + suggestedActions)
         }
     }
 }

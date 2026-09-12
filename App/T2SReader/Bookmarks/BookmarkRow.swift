@@ -33,13 +33,11 @@ struct BookmarkRow: View {
                     }
             }
             HStack(spacing: 8) {
-                // Listen is Home's play pill exactly — the same filled grey, no outline of its own
-                // (owner, 2026-09-12). The note is the outlined one, so the two read apart without
-                // either shouting.
+                // Both are Home's filled grey pill; `surface` carries them on its own now that
+                // dark's grey is lifted, so neither wears an outline (owner, 2026-09-12).
                 Pill(label: "Listen", glyph: "play.fill", style: .soft, action: onJump)
                 Pill(label: entry.hasNote ? "Edit note" : "Add a note", glyph: "square.and.pencil",
                      style: .soft, action: onEditNote)
-                    .overlay(Capsule().strokeBorder(Tokens.ink3, lineWidth: 1).allowsHitTesting(false))
             }
             .padding(.top, 4)
         }

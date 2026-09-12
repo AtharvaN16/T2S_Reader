@@ -42,13 +42,7 @@ struct BookmarkNoteSheet: View {
                 .scrollContentBackground(.hidden)
                 .padding(10)
                 .frame(minHeight: 120)
-                // A hairline as well as the fill: on `raised` in the dark, `surface` alone is all
-                // but the same grey and the field had no edge at all (owner, 2026-09-12).
                 .background(Tokens.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Tokens.ink3, lineWidth: 1)
-                )
                 .focused($focused)
                 .overlay(alignment: .topLeading) {
                     if text.isEmpty {

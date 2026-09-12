@@ -19,6 +19,9 @@ struct ThinScrubber: View {
     /// already carries the render frontier, and a dulled 11 pt-wide chapter would show a smear.
     var bookmarkFractions: [Double] = []
     var onSeek: (Double) -> Void
+    /// The chapter under the finger while scrubbing, so the picker above can name where you are
+    /// about to land; nil the moment the finger lifts (owner, 2026-09-12).
+    var onScrub: ((Int?) -> Void)? = nil
     @State private var dragFraction: Double?
     /// The chapter under the finger while pressed; the layout widens it.
     @State private var activeIndex: Int?
@@ -62,6 +65,7 @@ struct ThinScrubber: View {
                         if let f = dragFraction { onSeek(f) }
                         dragFraction = nil
                         activeIndex = nil
+                        onScrub?(nil)
                     }
             )
         }
@@ -94,7 +98,10 @@ struct ThinScrubber: View {
     private func scrub(to rawX: CGFloat, width: CGFloat) {
         let x = min(width, max(0, rawX))
         let under = layout(width: width).firstIndex { $0.contains(x) } ?? spans.count - 1
-        if activeIndex != under { activeIndex = under }
+        if activeIndex != under {
+            activeIndex = under
+            onScrub?(under)
+        }
         let r = layout(width: width)[under]                                 // after the switch, so the widened bar
         let local = Double(min(1, max(0, (x - r.lowerBound) / max(1, r.upperBound - r.lowerBound))))
         let span = spans[under]

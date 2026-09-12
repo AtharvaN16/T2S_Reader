@@ -50,8 +50,9 @@ the one failure `KokoroCoreMLLoadTests.rendersBeforeTheLaterBucketsLandAndHoldsE
 because this Mac's ANE compiler failed on the `10s` decoder bucket; CI's `kokoro-macos` is green at
 the same commit. Recompile the stages on the Mac before the next package change.
 
-**PR #17** (2026-09-12) opens `dev` against `main` with all of the above, merged over the
-bookmarks-and-notes work that was already on `main`: https://github.com/AtharvaN16/T2S_Reader/pull/17.
+**PR #17** (2026-09-12) carried all of the above from `dev` to `main`, over the bookmarks-and-notes
+work already there, and was merged the same night with every check green:
+https://github.com/AtharvaN16/T2S_Reader/pull/17. `dev` was fast-forwarded to `main` after the merge.
 
 ## Resume here (2026-09-11, morning) — for Harsh: where things stand, the crash fixes, what's next
 

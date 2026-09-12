@@ -226,12 +226,19 @@ struct WarmRim: View {
                 // noise blends against the real backdrop instead, and is masked by the glow's own
                 // alpha so it lands only where there is light to dither and never as grain over a
                 // bare page.
+                //
+                // A third of the ramp's strength, not all of it. The ramp's tile sits on an opaque
+                // ground whose average `.overlay` leaves alone, so 0.85 there only nudged the
+                // steps; masked to the glow's own alpha the average goes with it, and at full
+                // strength grey noise lands *on* the blue and greys it — visible as speckle, and
+                // half of why the light read dull (owner's screenshot, 2026-09-12). Enough to
+                // break a band, not enough to take the colour out.
                 glow
                     .overlay {
                         WarmRamp.ditherTile
                             .resizable(resizingMode: .tile)
                             .blendMode(.overlay)
-                            .opacity(0.85)
+                            .opacity(0.3)
                             .mask(glow)
                     }
                     .frame(height: WarmRamp.height)

@@ -49,10 +49,25 @@ struct SettingsSubpage: ViewModifier {
                 GeometryReader { geo in
                     let top = geo.frame(in: .global).minY
                     TopFade(inset: top).offset(y: -top)
+                    // `ignoresSafeArea` as well as the shift, and it is not decoration: the shift
+                    // puts the lit edge on the window's top edge, and this is what lets it paint
+                    // there at all. `TopFade` carries its own and so reached through the status
+                    // bar; the rim had none, was held to the content's bounds, and lit the top of
+                    // the list instead of the top of the screen — the glow cut off under the clock
+                    // (owner, 2026-09-12, the Voice page).
                     WarmRim(edge: .top)
                         .frame(width: geo.size.width, alignment: .top)
                         .offset(y: -top)
+                        .ignoresSafeArea()
                 }
+            }
+            // And the foot, which a pushed page never had: the root pager's bottom glow rides on
+            // `bottomFill`, and that goes when a subpage takes the screen, so the light simply
+            // stopped at the top of the page (owner, 2026-09-12: "there is no glow in the bottom").
+            .overlay {
+                WarmRim(edge: .bottom)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .ignoresSafeArea(edges: .bottom)
             }
     }
 }

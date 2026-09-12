@@ -208,9 +208,11 @@ struct ReaderTextView: UIViewRepresentable {
         /// measured, the page repainted twice in three and a half seconds of speech, so the boundary
         /// arrived a sentence at a time instead of a word (owner, 2026-09-12). Laying the viewport
         /// out again paints it now — the viewport only, which is the work a scroll already does.
-        private func repaint() {
-            guard let view, !view.isDragging, !view.isDecelerating else { return }
+        private func repaint(force: Bool = false) {
+            guard let view else { return }
+            guard force || (!view.isDragging && !view.isDecelerating) else { return }
             view.textLayoutManager?.textViewportLayoutController.layoutViewport()
+            if previewRange != nil { view.bringSubviewToFront(overlay) }   // laying out re-stacks the canvas
         }
 
         /// States both sides from scratch. Also the light/dark path: the dimmed colour is resolved
@@ -250,8 +252,8 @@ struct ReaderTextView: UIViewRepresentable {
             guard let current = fade else { endFade(); return }
             let t = min(1, (CACurrentMediaTime() - current.start) / Self.fadeSeconds)
             if t >= 1 {
-                markRead(current.range)
                 fade = nil
+                collapseRead()
                 startNextFade()
                 if fade == nil { endFade(); return }
             } else {
@@ -261,12 +263,20 @@ struct ReaderTextView: UIViewRepresentable {
             repaint()
         }
 
+        /// Everything read, stated as one run. A word was being given a run of its own as it
+        /// landed, and those piled up for the whole session — TextKit consults that map for every
+        /// fragment it lays out, so scrolling back over text already read grew slower the longer
+        /// the book had been playing (owner, 2026-09-12). Restating the span collapses them.
+        private func collapseRead() {
+            guard let boundary = readBoundary else { return }
+            markRead(0..<boundary)
+        }
+
         /// Lands everything outstanding at its final colour and stops the clock.
         private func endFade() {
-            if let fade { markRead(fade.range) }
-            fadeQueue.forEach { markRead($0) }
-            fadeQueue.removeAll()
             fade = nil
+            fadeQueue.removeAll()
+            collapseRead()
             fadeLink?.invalidate()
             fadeLink = nil
             repaint()
@@ -291,7 +301,7 @@ struct ReaderTextView: UIViewRepresentable {
             syncOverlay()
             CATransaction.commit()
             reportPreviewRect()
-            repaint()
+            repaint(force: true)               // a tap during a glide must still show its mark
         }
 
         /// The marked word in view coordinates, for the pill that stands beside it.

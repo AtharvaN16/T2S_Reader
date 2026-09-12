@@ -3,8 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import onnxruntime as ort
 
-from voice_service.synthesizer import KokoroSynthesizer
+from voice_service.synthesizer import (
+    KokoroSynthesizer,
+    low_memory_session_options,
+    split_text,
+)
 
 
 class FakeKokoro:
@@ -77,3 +82,54 @@ def test_synthesizer_fails_before_loading_when_an_asset_is_missing(tmp_path) -> 
         raise AssertionError("missing model was accepted")
 
     assert not factory_called
+
+
+def test_split_text_bounds_every_inference_without_losing_words() -> None:
+    text = " ".join(["abcdefghij"] * 30)
+
+    chunks = split_text(text, max_characters=120)
+
+    assert len(chunks) == 3
+    assert all(1 <= len(chunk) <= 120 for chunk in chunks)
+    assert " ".join(chunks) == text
+
+
+def test_split_text_bounds_a_single_unbroken_token() -> None:
+    text = "x" * 251
+
+    chunks = split_text(text, max_characters=120)
+
+    assert [len(chunk) for chunk in chunks] == [120, 120, 11]
+    assert "".join(chunks) == text
+
+
+def test_synthesizer_renders_long_input_as_bounded_calls(tmp_path) -> None:
+    model = tmp_path / "model.onnx"
+    voices = tmp_path / "voices.bin"
+    model.write_bytes(b"model")
+    voices.write_bytes(b"voices")
+    fake = FakeKokoro()
+    synthesizer = KokoroSynthesizer(
+        model,
+        voices,
+        kokoro_factory=lambda _model, _voices: fake,
+    )
+    text = " ".join(["abcdefghij"] * 30)
+
+    samples, rate = synthesizer.synthesize(text, "af_heart")
+
+    assert rate == 24_000
+    assert len(fake.calls) == 5
+    assert all(len(str(call["text"])) <= 80 for call in fake.calls)
+    assert " ".join(str(call["text"]) for call in fake.calls) == text
+    assert len(samples) > sum(2 for _ in fake.calls)
+
+
+def test_eco_session_uses_one_thread_without_retained_cpu_arenas() -> None:
+    options = low_memory_session_options()
+
+    assert options.intra_op_num_threads == 1
+    assert options.inter_op_num_threads == 1
+    assert options.execution_mode == ort.ExecutionMode.ORT_SEQUENTIAL
+    assert options.enable_cpu_mem_arena is False
+    assert options.enable_mem_pattern is False

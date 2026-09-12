@@ -58,6 +58,37 @@ def test_speech_rejects_missing_or_wrong_bearer_token(authorization: str | None)
     assert engine.calls == []
 
 
+def test_speech_checks_authentication_before_parsing_the_body() -> None:
+    client, engine = make_client()
+
+    response = client.post(
+        "/v1/audio/speech",
+        headers={"Content-Type": "application/json"},
+        content=b'{"input":',
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Unauthorized"}
+    assert engine.calls == []
+
+
+def test_speech_rejects_an_oversized_body_before_json_parsing() -> None:
+    client, engine = make_client()
+
+    response = client.post(
+        "/v1/audio/speech",
+        headers={
+            "Authorization": "Bearer pilot-secret",
+            "Content-Type": "application/json",
+        },
+        content=b"{" + (b"x" * 4096) + b"}",
+    )
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "Request too large"}
+    assert engine.calls == []
+
+
 def test_speech_returns_exact_little_endian_pcm_contract() -> None:
     client, engine = make_client()
 
@@ -81,7 +112,7 @@ def test_speech_returns_exact_little_endian_pcm_contract() -> None:
         ("response_format", "wav"),
         ("input", ""),
         ("input", " \n\t "),
-        ("input", "x" * 1001),
+        ("input", "x" * 401),
     ],
 )
 def test_speech_rejects_values_outside_the_pilot_contract(field: str, value: str) -> None:

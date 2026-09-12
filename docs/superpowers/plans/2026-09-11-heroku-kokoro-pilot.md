@@ -39,7 +39,7 @@
 
 - [ ] **Step 2: Verify the tests fail for missing production modules**
 
-  Run: `python3.12 -m pytest Server/HerokuVoice/tests/test_web.py -q`
+  Run: `cd Server/HerokuVoice && PYTHONPATH=. python3.12 -m pytest tests/test_web.py -q`
 
   Expected: collection fails because `voice_service.web` does not exist.
 
@@ -49,16 +49,16 @@
 
   ```python
   model: Literal["kokoro"]
-  input: str = Field(min_length=1, max_length=1000)
+  input: str = Field(min_length=1, max_length=400)
   voice: Literal["af_heart"]
   response_format: Literal["pcm"]
   ```
 
-  Authenticate with `secrets.compare_digest`, acquire a nonblocking `threading.Lock`, call the injected synthesizer, require rate `24000`, and return `Response(..., media_type="audio/pcm")`. PCM conversion clips to `[-1, 1]`, maps to signed 16-bit values, and explicitly emits little-endian bytes.
+  Authenticate and cap the body at 4 KiB in ASGI middleware before FastAPI parses JSON. Then acquire a nonblocking `threading.Lock`, split synthesis into at most 80-character inference calls, require rate `24000`, and return `Response(..., media_type="audio/pcm")`. PCM conversion clips to `[-1, 1]`, maps to signed 16-bit values, and explicitly emits little-endian bytes.
 
 - [ ] **Step 4: Verify the endpoint tests pass**
 
-  Run: `python3.12 -m pytest Server/HerokuVoice/tests/test_web.py -q`
+  Run: `cd Server/HerokuVoice && PYTHONPATH=. python3.12 -m pytest tests/test_web.py -q`
 
   Expected: all endpoint tests pass.
 
@@ -87,7 +87,7 @@
 
 - [ ] **Step 2: Verify the new tests fail**
 
-  Run: `python3.12 -m pytest Server/HerokuVoice/tests/test_assets.py Server/HerokuVoice/tests/test_synthesizer.py -q`
+  Run: `cd Server/HerokuVoice && PYTHONPATH=. python3.12 -m pytest tests/test_assets.py tests/test_synthesizer.py -q`
 
   Expected: collection fails because the runtime modules do not exist.
 
@@ -106,7 +106,7 @@
 
 - [ ] **Step 4: Verify all service tests pass**
 
-  Run: `python3.12 -m pytest Server/HerokuVoice/tests -q`
+  Run: `cd Server/HerokuVoice && PYTHONPATH=. python3.12 -m pytest tests -q`
 
   Expected: all service tests pass.
 

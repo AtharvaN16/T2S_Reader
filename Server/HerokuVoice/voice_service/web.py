@@ -7,8 +7,13 @@ from typing import Annotated, Literal, Protocol
 import numpy as np
 from fastapi import Depends, FastAPI, Header, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .pcm import float32_to_pcm16
+
+
+MAX_REQUEST_BYTES = 4096
 
 
 class Synthesizer(Protocol):
@@ -19,7 +24,7 @@ class SpeechRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model: Literal["kokoro"]
-    input: str = Field(min_length=1, max_length=1000)
+    input: str = Field(min_length=1, max_length=400)
     voice: Literal["af_heart"]
     response_format: Literal["pcm"]
 
@@ -42,6 +47,55 @@ class SynthesisGate:
         self._lock.release()
 
 
+class SpeechRequestGuard:
+    def __init__(self, app: ASGIApp, api_key: str, maximum_bytes: int = MAX_REQUEST_BYTES) -> None:
+        self._app = app
+        self._authorization = f"Bearer {api_key}".encode()
+        self._maximum_bytes = maximum_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["path"] != "/v1/audio/speech":
+            await self._app(scope, receive, send)
+            return
+
+        headers = {name.lower(): value for name, value in scope["headers"]}
+        authorization = headers.get(b"authorization")
+        if authorization is None or not secrets.compare_digest(authorization, self._authorization):
+            await JSONResponse(
+                {"detail": "Unauthorized"},
+                status_code=status.HTTP_401_UNAUTHORIZED,
+            )(scope, receive, send)
+            return
+
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            if message["type"] != "http.request":
+                continue
+            body.extend(message.get("body", b""))
+            if len(body) > self._maximum_bytes:
+                await JSONResponse(
+                    {"detail": "Request too large"},
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                )(scope, receive, send)
+                return
+            if not message.get("more_body", False):
+                break
+
+        replayed = False
+
+        async def replay_body() -> dict[str, object]:
+            nonlocal replayed
+            if replayed:
+                return {"type": "http.request", "body": b"", "more_body": False}
+            replayed = True
+            return {"type": "http.request", "body": bytes(body), "more_body": False}
+
+        await self._app(scope, replay_body, send)
+
+
 def create_app(
     synthesizer: Synthesizer,
     api_key: str,
@@ -57,6 +111,7 @@ def create_app(
         redoc_url=None,
         openapi_url=None,
     )
+    app.add_middleware(SpeechRequestGuard, api_key=api_key)
 
     def authorize(authorization: Annotated[str | None, Header()] = None) -> None:
         expected = f"Bearer {api_key}"

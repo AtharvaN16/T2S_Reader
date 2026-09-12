@@ -17,6 +17,17 @@ public struct CloudVoiceDefaults: Hashable, Sendable {
         self.requestRatePerMinute = requestRatePerMinute
     }
 
+    /// Endpoint texts earlier builds shipped, so a route stored by one of them — before the app
+    /// kept a marker of what it wrote — is still recognised as the app's own and upgraded.
+    public static let superseded: [String] = [
+        """
+        https://kokoro-t2s-a007171ff076.herokuapp.com/v1/audio/speech
+        https://kokoro-t2s-m2-d13cbe083bd3.herokuapp.com/v1/audio/speech
+        https://kokoro-t2s-m3-71b4e3836076.herokuapp.com/v1/audio/speech
+        https://kokoro-t2s-m4-b46b9e051494.herokuapp.com/v1/audio/speech
+        """,
+    ]
+
     /// The seven Basic mirrors (`Server/HerokuVoice/scripts/mirrors.sh`), primary first.
     public static let pilot = CloudVoiceDefaults(
         endpointText: """

@@ -64,6 +64,9 @@ public final class CloudVoiceSettings {
         static let model = "cloudVoice.model"
         static let voice = "cloudVoice.voice"
         static let rate = "cloudVoice.requestRatePerMinute"
+        /// The endpoint text the app itself last wrote, so a later build can tell its own route
+        /// from the reader's edit.
+        static let shippedEndpoint = "cloudVoice.shippedEndpoint"
     }
 
     private let defaults: UserDefaults
@@ -94,13 +97,20 @@ public final class CloudVoiceSettings {
 
     public init(defaults: UserDefaults = .standard, shipped: CloudVoiceDefaults? = nil) {
         self.defaults = defaults
-        if let shipped, defaults.string(forKey: Key.endpoint) == nil {
-            // First launch: the shipped route becomes the stored one, once. An edit later — even
-            // to nothing — is never overwritten.
-            defaults.set(shipped.endpointText, forKey: Key.endpoint)
-            defaults.set(shipped.model, forKey: Key.model)
-            defaults.set(shipped.voice, forKey: Key.voice)
-            defaults.set(shipped.requestRatePerMinute, forKey: Key.rate)
+        if let shipped {
+            let stored = defaults.string(forKey: Key.endpoint)
+            let written = defaults.string(forKey: Key.shippedEndpoint)
+            // First launch, or a route still exactly as the app itself wrote it — by the marker, or
+            // by value for a build that kept none — takes the current shipped route. An edit, even
+            // to nothing, is the reader's and is never overwritten.
+            let untouched = stored == nil || stored == written || CloudVoiceDefaults.superseded.contains(stored ?? "")
+            if untouched, stored != shipped.endpointText {
+                defaults.set(shipped.endpointText, forKey: Key.endpoint)
+                defaults.set(shipped.model, forKey: Key.model)
+                defaults.set(shipped.voice, forKey: Key.voice)
+                defaults.set(shipped.requestRatePerMinute, forKey: Key.rate)
+            }
+            if untouched { defaults.set(shipped.endpointText, forKey: Key.shippedEndpoint) }
         }
         let savedEndpoint = defaults.string(forKey: Key.endpoint) ?? ""
         let savedModel = defaults.string(forKey: Key.model) ?? ""

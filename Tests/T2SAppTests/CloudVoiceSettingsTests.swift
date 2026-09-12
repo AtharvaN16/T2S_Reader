@@ -106,6 +106,38 @@ import T2SAudio
         #expect(settings.endpointText == "" && settings.configurationStore.current() == nil)
     }
 
+    /// A route the app wrote itself, untouched, follows the build: a phone first launched with the
+    /// four-mirror route takes the seven-mirror one on the next launch.
+    @Test func anUneditedShippedRouteFollowsTheBuild() throws {
+        let defaults = freshDefaults()
+        let earlier = CloudVoiceDefaults(endpointText: CloudVoiceDefaults.superseded[0], model: "kokoro", voice: "af_heart", requestRatePerMinute: 20)
+        _ = CloudVoiceSettings(defaults: defaults, shipped: earlier)
+        let upgraded = CloudVoiceSettings(defaults: defaults, shipped: .pilot)
+        #expect(upgraded.endpointText == CloudVoiceDefaults.pilot.endpointText)
+        #expect(try #require(upgraded.configurationStore.current()).endpoints.count == 7)
+    }
+
+    /// The four-URL route this phone's first launch stored predates the marker, so it is known by
+    /// value: it is upgraded too.
+    @Test func theRouteAnEarlierBuildStoredWithoutAMarkerIsUpgradedByValue() throws {
+        let defaults = freshDefaults()
+        defaults.set(CloudVoiceDefaults.superseded[0], forKey: "cloudVoice.endpoint")
+        defaults.set("kokoro", forKey: "cloudVoice.model")
+        defaults.set("af_heart", forKey: "cloudVoice.voice")
+        let upgraded = CloudVoiceSettings(defaults: defaults, shipped: .pilot)
+        #expect(try #require(upgraded.configurationStore.current()).endpoints.count == 7)
+    }
+
+    /// An edit is the reader's: a route that differs from anything the app shipped is left alone.
+    @Test func anEditedRouteIsNeverUpgraded() {
+        let defaults = freshDefaults()
+        _ = CloudVoiceSettings(defaults: defaults, shipped: .pilot)
+        let edited = CloudVoiceSettings(defaults: defaults)
+        edited.endpointText = "https://mine.example/v1/audio/speech"
+        let later = CloudVoiceSettings(defaults: defaults, shipped: .pilot)
+        #expect(later.endpointText == "https://mine.example/v1/audio/speech")
+    }
+
     private func freshDefaults() -> UserDefaults {
         let suite = "t2s-cloud-voice-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

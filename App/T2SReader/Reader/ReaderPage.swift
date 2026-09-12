@@ -43,11 +43,6 @@ struct ReaderPage: View {
         let reader = env.readerModel
         ZStack {
             Tokens.ground.ignoresSafeArea()
-            // Over the ground and under the text (`ReaderTextView` draws on a clear background),
-            // so the page is lit from behind rather than washed over (owner, 2026-09-10). The
-            // header's ground paints the same glow while it shows (`WarmGround`), so there is no
-            // join between the bar and the page.
-            WarmUpVeil()
             if let text {
                 ReaderTextView(
                     text: text,
@@ -101,6 +96,17 @@ struct ReaderPage: View {
             }
             .animation(.easeInOut(duration: 0.2), value: chromeVisible)
 
+            // The glow over the header rather than painted into it, as on the root pager: one
+            // layer on top, so nothing between it and the page can cut it. It used to be a
+            // `WarmUpVeil` behind `ReaderTextView` with the header painting a matching copy, which
+            // held only for as long as the text view stayed transparent — a `UIViewRepresentable`
+            // is the last layer to bet that on. Outside the chrome's fade, too: a warm-up is the
+            // app's state, not the bar's, and tapping the text away should not take the light with
+            // it (it never looked as though it did, because the veil underneath carried the same
+            // pixels — the bar going was invisible only by luck).
+            WarmRim(edge: .top)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .ignoresSafeArea(edges: .top)
         }
         .task(id: summary.id) { await open() }
         .task(id: env.player.current?.id) {
@@ -190,15 +196,15 @@ struct ReaderPage: View {
         .padding(.top, 2 * Spacing.grid)
         .padding(.bottom, 2 * Spacing.grid)                                  // a taller band, at the owner's ask
         .background(alignment: .top) {
-            WarmGround()
+            Tokens.ground                                                  // plain: the glow is the rim over this, not this
                 .mask(Self.groundShape(solidAtTop: true, span: 0.5))
                 .padding(.bottom, -48)                                     // hangs below the bar, over the text
                 .ignoresSafeArea(edges: .top)
         }
     }
 
-    /// The shape of a ground bar, as a mask over whatever it paints (`ground`, or the warm-up glow
-    /// through `WarmGround`): easing between solid and clear with zero slope at both ends, so
+    /// The shape of a ground bar, as a mask over the ground it paints: easing between solid and
+    /// clear with zero slope at both ends, so
     /// neither edge of a fade reads as a line across the text (the Home bar's lesson).
     /// `solidAtTop`: solid from the top, easing to clear over the bottom `span` of the height.
     /// Otherwise clear at the top, easing to solid over the top `span`, then solid to the bottom.

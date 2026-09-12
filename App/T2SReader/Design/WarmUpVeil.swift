@@ -19,17 +19,20 @@ import UIKit
 /// stays, and that is the point: every "we are done" the screen shows — the green, "Voice ready",
 /// the filled bar — is read from it, so it has to outlast the fade it starts.
 ///
-/// **One surface.** The glow is `WarmRamp`, and everything that shows it draws that same view:
-/// this veil at the back of a host's stack, under the text; and every ground bar across the top
-/// of a page — `TopFade` on the root, the Reader's header — through `WarmGround`, which is the
-/// bar's ground normally and the ramp while warming. Two earlier cuts drew a second, translucent
-/// strip over the bars to cover them, and the owner saw the join: two layers at opacity *p* stacked
-/// do not make one layer at *p*, so the band under the status bar was always a shade stronger
-/// than the page below it. The ramp is opaque and its pulse is a colour mix, not an alpha, so a
-/// bar painting it over the veil shows exactly the pixels the veil would have — there is nothing
-/// to line up. The pages under it are transparent so it can reach them: the root pages let
-/// `RootPager`'s ground show through (Settings' stack has its container background cleared for
-/// the same reason), and `ReaderTextView` draws on a clear background.
+/// **One layer, on top.** The glow is `WarmRim` — the wash and the lit bezel with no ground under
+/// them — laid over whatever the screen has already painted: over `TopFade` on the root, over the
+/// Reader's header, over a Settings subpage's ground. Nothing underneath has to cooperate.
+///
+/// It was the other way round until 2026-09-12, and the way it failed is worth keeping. An opaque
+/// `WarmRamp` sat at the back of each stack and every ground bar painted that same ramp into
+/// itself, so bar and page were one surface with nothing to line up — the ramp being opaque, and
+/// its pulse a colour mix rather than an alpha, meant a bar's copy was pixel-for-pixel the veil's.
+/// That holds only while every layer between the two is transparent. Where one is not, the veil
+/// never reaches the screen below the bar and all that survives is the bar's own slice: the glow
+/// cut off at the bar's foot, with nothing in the code to say why. It cost the Voice page a seam
+/// on 2026-09-10 and the owner the same cut twice more before the arrangement itself was the
+/// suspect. Drawing the light over the page instead is a shade less pure — the wash falls on the
+/// top of the content rather than behind it — and cannot break this way.
 ///
 /// **It goes when the phone's own voice sounds.** A book already playing through the system
 /// voice with a pulse over it read as an alarm rather than a wait (owner, 2026-09-10), so the glow
@@ -37,27 +40,8 @@ import UIKit
 /// hosted voice is the exception (owner, 2026-09-12): Heart from the mirrors *is* the wait for
 /// Heart on the phone, and the reader wants to watch the download and the warm-up go by over it,
 /// so the glow stays until green while the hosted voice is the one speaking.
-struct WarmUpVeil: View {
-    @Environment(AppEnvironment.self) private var env
-
-    var body: some View {
-        // The `.transition` had nothing driving it: the model ends the beat outside an animation,
-        // so the green did not fade — it was simply gone on the next frame (owner, 2026-09-12).
-        // The going takes as long as a breath, so the light leaves the way it moved.
-        let showing = Self.isShowing(env)
-        ZStack {
-            if showing {
-                WarmRamp()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .transition(.opacity)
-                    .accessibilityHidden(true)
-            }
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
-        .animation(.easeInOut(duration: WarmUpVeil.fadeOut), value: showing)
-    }
-
+@MainActor
+enum WarmUpVeil {
     /// How long the light takes to go, matched to half a breath so it leaves at the pace it moved.
     static let fadeOut: Double = 1.5
 
@@ -96,21 +80,6 @@ struct WarmUpVeil: View {
     static let isFaked = ProcessInfo.processInfo.environment["T2S_WARMUP"] != nil
 }
 
-/// What a ground bar paints: `ground`, or the ramp while the warm-up shows, crossfading between
-/// them so a bar does not snap from a lit edge to grey when the voice comes ready.
-struct WarmGround: View {
-    @Environment(AppEnvironment.self) private var env
-
-    var body: some View {
-        let showing = WarmUpVeil.isShowing(env)
-        ZStack(alignment: .top) {
-            Tokens.ground
-            if showing { WarmRamp().transition(.opacity) }
-        }
-        .animation(.easeInOut(duration: WarmUpVeil.fadeOut), value: showing)
-    }
-}
-
 /// The glow: `height` points from the top of whatever frame it is given, ground below that, so it
 /// fills any host and lines up with every other copy of itself as long as the host's frame begins
 /// at the top of the screen (they all do — `ignoresSafeArea` on the veil, on `TopFade`, on the
@@ -133,43 +102,10 @@ struct WarmGround: View {
 /// line (measured on a screenshot: flat runs of up to 23 px). A tile of noise a few levels wide,
 /// blended over the ramp at one cell per device pixel, scatters each step's edge into a pattern
 /// too fine to see — measured after: no run longer than 3 px.
-struct WarmRamp: View {
-    @Environment(AppEnvironment.self) private var env
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+enum WarmRamp {
     static let height: CGFloat = 240
     /// One breath, in seconds.
     private static let period: Double = 3
-
-    var body: some View {
-        TimelineView(.animation) { context in
-            // Ready: the breath eases up to full and the light crosses to green over the same
-            // second and a half, both driven from `readySettle` so they move together.
-            let ready = WarmUpVeil.isReady(env)
-            let settle = ready ? WarmUpVeil.readySettle(env, now: context.date) : 0
-            let breath = reduceMotion || WarmUpVeil.isFaked ? 1 : Self.pulse(at: context.date)
-            let pulse = breath + (1 - breath) * settle
-            let light = Tokens.glow.mix(with: Tokens.glowReady, by: settle)
-            // Ground the size of whatever frame this is given, and the glow laid over its top as
-            // an overlay — which takes no part in layout. As a child it did: a fixed height inside
-            // a 90 pt bar made the stack that tall, the bar's frame then *centred* it, and the bar
-            // showed a paler slice from part-way down the ramp — the band the owner saw across
-            // the top of Home and Settings, while the Reader's taller header hid most of it.
-            Tokens.ground
-                .overlay(alignment: .top) {
-                    ZStack {
-                        Tokens.ground                                          // inside the group, so the noise has something opaque to blend with
-                        Self.wash(pulse: pulse, light: light)
-                        Self.bezel(pulse: pulse, light: light)
-                        Self.ditherTile
-                            .resizable(resizingMode: .tile)
-                            .blendMode(.overlay)
-                            .opacity(0.85)
-                    }
-                    .compositingGroup()                                    // the noise blends with the ramp, not the page
-                    .frame(height: Self.height)
-                }
-        }
-    }
 
     /// 0.05 … 1 and back, once every ``period``, read from the wall clock so every copy of the
     /// ramp on screen is at the same point of the breath. The low end is all but gone (owner:
@@ -227,7 +163,7 @@ struct WarmRamp: View {
     /// nudges either side of it, so the average is unchanged and only the step edges move. Scale 3
     /// so each cell is one device pixel on a 3x phone (1.5 on a 2x one): drawn point-for-point it
     /// was a 3 × 3 px speckle that read as grain.
-    private static let ditherTile: Image = {
+    static let ditherTile: Image = {
         let side = 96
         let bytes = side * side * 4
         var pixels = [UInt8](repeating: 255, count: bytes)
@@ -279,12 +215,27 @@ struct WarmRim: View {
                 let breath = reduceMotion || WarmUpVeil.isFaked ? 1 : WarmRamp.pulse(at: context.date)
                 let pulse = breath + (1 - breath) * settle
                 let light = Tokens.glow.mix(with: Tokens.glowReady, by: settle)
-                ZStack {
+                let glow = ZStack {
                     WarmRamp.wash(pulse: pulse, light: light)
                     WarmRamp.bezel(pulse: pulse, light: light)
                 }
-                .frame(height: WarmRamp.height)
-                .scaleEffect(y: edge == .bottom ? -1 : 1, anchor: .center)
+                // Dithered like the ramp, and for the same reason: these are the same shallow
+                // gradients, and 8 bits cannot hold them without stepping into lines. The ramp can
+                // scatter the steps inside a `compositingGroup` because it has its own opaque
+                // ground in there to blend with. This has none — it is the glow alone — so the
+                // noise blends against the real backdrop instead, and is masked by the glow's own
+                // alpha so it lands only where there is light to dither and never as grain over a
+                // bare page.
+                glow
+                    .overlay {
+                        WarmRamp.ditherTile
+                            .resizable(resizingMode: .tile)
+                            .blendMode(.overlay)
+                            .opacity(0.85)
+                            .mask(glow)
+                    }
+                    .frame(height: WarmRamp.height)
+                    .scaleEffect(y: edge == .bottom ? -1 : 1, anchor: .center)
             }
                 .frame(height: WarmRamp.height)
                 .transition(.opacity)

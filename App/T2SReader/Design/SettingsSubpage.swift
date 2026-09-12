@@ -7,10 +7,12 @@ import UIKit
 /// page's title sits (`Spacing.titleTop` below the safe area, not that plus a navigation bar). The
 /// system bar is hidden for that; the swipe from the left edge still pops, see below.
 ///
-/// Its ground is `WarmGround`, not `ground`: a pushed page is opaque (the root would show through
-/// the push otherwise), and a plain ground here hid the warm-up glow behind it, so on the Voice
-/// page only the root bar's slice of the glow showed, cut off at the bar's foot (owner,
-/// 2026-09-10). Painting the same ramp the bars and the veil paint makes it one surface again.
+/// Its ground is plain and opaque — a pushed page has to be, or the root shows through the push —
+/// and the warm-up glow is a `WarmRim` laid over the whole thing, as on the root pager. It used to
+/// paint the ramp into both the page ground and the bar, because a plain ground here hid the glow
+/// and left only the bar's slice of it, cut off at the bar's foot (owner, 2026-09-10). Two copies
+/// of the ramp meant two things to keep lined up, and both of them slipped at least once. One copy,
+/// on top, has nothing to line up with.
 struct SettingsSubpage: ViewModifier {
     @Environment(\.dismiss) private var dismiss
     @Environment(Chrome.self) private var chrome
@@ -23,7 +25,7 @@ struct SettingsSubpage: ViewModifier {
                 // the ramp disagreed with the root bar's and a seam showed under the status bar.
                 GeometryReader { geo in
                     let top = geo.frame(in: .global).minY
-                    WarmGround()
+                    Tokens.ground
                         .frame(width: geo.size.width, height: geo.size.height + top + 120)   // past the foot too
                         .offset(y: -top)
                 }
@@ -38,17 +40,18 @@ struct SettingsSubpage: ViewModifier {
                     .padding(.leading, Spacing.margin)
                     .padding(.top, 12)
             }
-            // Warm like the root's bar: the page under it is the warm ground now, so a plain bar
-            // fading over it would lighten the fade zone a shade (measured, 2026-09-10). Anchored
-            // like the background, by measurement: an overlay's reader sits inside the safe area
-            // and reports its inset as zero, so `TopFade(inset:)` from it was a 30 pt bar at the
-            // status bar's foot — a copy of the ramp one inset low, fading over the right one —
-            // and the band it left there was the seam on the Voice page (measured, 2026-09-10).
-            // The content's top in the window is the inset the bar must hold through.
+            // The bar plain, the glow over it. Both are anchored by measurement: an overlay's
+            // reader sits inside the safe area and reports its inset as zero, so `TopFade(inset:)`
+            // from it was a 30 pt bar at the status bar's foot rather than one that holds through
+            // it. The content's top in the window is the inset the bar must cover, and the same
+            // shift puts the rim's lit edge on the window's top edge instead of the content's.
             .overlay {
                 GeometryReader { geo in
                     let top = geo.frame(in: .global).minY
-                    TopFade(inset: top, warm: true).offset(y: -top)
+                    TopFade(inset: top).offset(y: -top)
+                    WarmRim(edge: .top)
+                        .frame(width: geo.size.width, alignment: .top)
+                        .offset(y: -top)
                 }
             }
     }

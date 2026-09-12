@@ -12,23 +12,21 @@ import SwiftUI
 struct TopFade: View {
     /// The safe-area top inset of the screen this covers; the caller reads it from a `GeometryReader`.
     var inset: CGFloat
-    /// Paint the warm-up glow instead of ground while it shows (`WarmGround`). Only for a host
-    /// whose page is transparent to the glow underneath — the root pager — so bar and page are one
-    /// surface; a bar glowing over a plain page would be the seam this exists to remove.
-    var warm = false
     static let fadeHeight: CGFloat = 30
 
     var body: some View {
         let height = inset + Self.fadeHeight
-        Group {
-            if warm { WarmGround() } else { Tokens.ground }
-        }
-        .mask(Self.shape(solidThrough: inset, fade: Self.fadeHeight))
-        .frame(height: height)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .ignoresSafeArea(edges: .top)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        // Ground, never the warm-up glow: a `warm` flag here used to make the bar paint the ramp
+        // so bar and page were one surface, and that only held while every layer under the bar was
+        // transparent. The glow is a `WarmRim` over this now (`RootPager`), which needs nothing of
+        // the bar.
+        Tokens.ground
+            .mask(Self.shape(solidThrough: inset, fade: Self.fadeHeight))
+            .frame(height: height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 
     /// The bar's shape, as a mask: solid through `solidThrough`, then an eased ramp to clear over

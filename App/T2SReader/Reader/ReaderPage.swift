@@ -320,6 +320,9 @@ struct ReaderPage: View {
                 .mask(Self.groundShape(solidAtTop: false, span: 0.25))
                 .padding(.top, -64)                                        // hangs above the block, over the text
                 .ignoresSafeArea(edges: .bottom)
+                // The rim over this ground, as the pager's foot does it: opaque ground at the
+                // screen's edge would otherwise paint the foot of the glow out.
+                .overlay(alignment: .bottom) { WarmRim().ignoresSafeArea(edges: .bottom) }
         }
     }
 

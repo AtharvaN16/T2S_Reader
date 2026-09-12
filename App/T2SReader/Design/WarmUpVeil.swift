@@ -9,10 +9,11 @@ import UIKit
 /// until the stages are loaded, and one short line with how long it usually takes on this phone
 /// over a hairline of progress (`WarmUpLine`).
 ///
-/// **It ends on green.** The last half-second belongs to `Tokens.glowReady` (owner, 2026-09-10:
-/// "just as the model is ready, change the glow to green before ending the animation"): the moment
-/// the stages are in, the light stops breathing, turns green, holds
-/// (`KokoroStatusModel.readyBeat`), and only then fades. The beat is one date on the status model
+/// **It ends on green.** The last beat belongs to `Tokens.glowReady` (owner, 2026-09-10: "just as
+/// the model is ready, change the glow to green before ending the animation"): the moment the stages
+/// are in, the breath eases up to full and the light crosses to green over `readyEase`, holds
+/// (`KokoroStatusModel.readyBeat`), and then fades over `fadeOut` — all three on the blue's own
+/// timing, so the green arrives and leaves the way the blue moved rather than flashing. The beat is one date on the status model
 /// (`readyAt`), so the veil and every ground bar turn on the same frame; the model clearing it is
 /// what takes the glow off the screen.
 ///
@@ -36,15 +37,25 @@ struct WarmUpVeil: View {
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
-        if Self.isShowing(env) {
-            WarmRamp(includesBottom: true)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-                .transition(.opacity)
-                .accessibilityHidden(true)
+        // The `.transition` had nothing driving it: the model clears `readyAt` outside an
+        // animation, so the green did not fade — it was simply gone on the next frame (owner,
+        // 2026-09-12). The going takes as long as a breath, so the light leaves the way it moved.
+        let showing = Self.isShowing(env)
+        ZStack {
+            if showing {
+                WarmRamp()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .transition(.opacity)
+                    .accessibilityHidden(true)
+            }
         }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .animation(.easeInOut(duration: WarmUpVeil.fadeOut), value: showing)
     }
+
+    /// How long the light takes to go, matched to half a breath so it leaves at the pace it moved.
+    static let fadeOut: Double = 1.5
 
     /// Warming, and nothing audible yet. `isCatchingUp` is the stall before the first sound, so a
     /// tapped Play that is still waiting keeps the glow; a book actually speaking loses it.
@@ -86,7 +97,7 @@ struct WarmGround: View {
             Tokens.ground
             if showing { WarmRamp().transition(.opacity) }
         }
-        .animation(.easeOut(duration: 0.6), value: showing)
+        .animation(.easeInOut(duration: WarmUpVeil.fadeOut), value: showing)
     }
 }
 
@@ -115,10 +126,6 @@ struct WarmGround: View {
 struct WarmRamp: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// The full-screen veil lights the bottom corners as well, so the phone is rimmed rather than
-    /// lit from the top alone (owner, 2026-09-12). A ground bar is a band at the top of the screen
-    /// and has no bottom edge to light, so it leaves this off.
-    var includesBottom: Bool = false
     static let height: CGFloat = 240
     /// One breath, in seconds.
     private static let period: Double = 3
@@ -151,29 +158,13 @@ struct WarmRamp: View {
                     .compositingGroup()                                    // the noise blends with the ramp, not the page
                     .frame(height: Self.height)
                 }
-                .overlay(alignment: .bottom) {
-                    if includesBottom {
-                        ZStack {
-                            Tokens.ground
-                            Self.wash(pulse: pulse, light: light)
-                            Self.bezel(pulse: pulse, light: light)
-                            Self.ditherTile
-                                .resizable(resizingMode: .tile)
-                                .blendMode(.overlay)
-                                .opacity(0.85)
-                        }
-                        .compositingGroup()
-                        .frame(height: Self.height)
-                        .scaleEffect(y: -1, anchor: .center)               // the same edge, turned to face the foot
-                    }
-                }
         }
     }
 
     /// 0.05 … 1 and back, once every ``period``, read from the wall clock so every copy of the
     /// ramp on screen is at the same point of the breath. The low end is all but gone (owner:
     /// "the pulse out almost completely not visible").
-    private static func pulse(at date: Date) -> Double {
+    static func pulse(at date: Date) -> Double {
         let phase = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
         return 0.05 + 0.95 * (0.5 + 0.5 * cos(2 * .pi * phase))
     }
@@ -188,7 +179,7 @@ struct WarmRamp: View {
     /// fifth of the height, so the rim does not end in a hard line against the page. Kept low
     /// (owner, 2026-09-10: "reduce intensity so that the glow is mostly confined to the bezel
     /// edges") — a first cut at 0.26 reaching a third of the way down lit the whole top of the page.
-    private static func wash(pulse: Double, light: Color) -> LinearGradient {
+    static func wash(pulse: Double, light: Color) -> LinearGradient {
         LinearGradient(stops: [
             .init(color: light.opacity(0.08 * pulse), location: 0),
             .init(color: light.opacity(0.03 * pulse), location: 0.10),
@@ -202,7 +193,7 @@ struct WarmRamp: View {
     /// stroke is the same the whole way round, so the top and the corners are one lit edge. A
     /// vertical mask lets the sides fade from a third of the height and be gone before the ramp
     /// ends, so nothing of the halo reaches the ramp's foot.
-    private static func bezel(pulse: Double, light: Color) -> some View {
+    static func bezel(pulse: Double, light: Color) -> some View {
         let shape = RoundedRectangle(cornerRadius: bezelRadius, style: .continuous)
         return ZStack {
             // The halo reaches about 30 pt in (half its width plus the blur); wider and softer,
@@ -250,6 +241,41 @@ struct WarmRamp: View {
     }()
 }
 
+/// The glow with no ground under it: the wash and the lit bezel alone, transparent everywhere else,
+/// so it can be laid over something that has already painted (owner, 2026-09-12 — the bottom of the
+/// pager is an opaque `ground` fill drawn over the veil, and it was covering the foot of the glow).
+/// Flipped for the bottom, so the same lit edge faces the foot of the screen.
+struct WarmRim: View {
+    @Environment(AppEnvironment.self) private var env
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let showing = WarmUpVeil.isShowing(env)
+        ZStack {
+            if showing {
+            TimelineView(.animation) { context in
+                let settle = WarmUpVeil.isReady(env) ? WarmUpVeil.readySettle(env, now: context.date) : 0
+                let breath = reduceMotion || WarmUpVeil.isFaked ? 1 : WarmRamp.pulse(at: context.date)
+                let pulse = breath + (1 - breath) * settle
+                let light = Tokens.glow.mix(with: Tokens.glowReady, by: settle)
+                ZStack {
+                    WarmRamp.wash(pulse: pulse, light: light)
+                    WarmRamp.bezel(pulse: pulse, light: light)
+                }
+                .frame(height: WarmRamp.height)
+                .scaleEffect(y: -1, anchor: .center)
+            }
+                .frame(height: WarmRamp.height)
+                .transition(.opacity)
+            }
+        }
+        .frame(height: WarmRamp.height)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .animation(.easeInOut(duration: WarmUpVeil.fadeOut), value: showing)
+    }
+}
+
 /// The warm-up's one line and its hairline of progress, under the status bar, over the bar there.
 /// What it knows: the stage count as each compute plan finishes (`KokoroStatusModel.warmUpStages`,
 /// eight stages), and the last warm-up's length on this phone (`expectedWarmUpSeconds`). The bar is
@@ -263,17 +289,21 @@ struct WarmUpLine: View {
     var band: CGFloat
 
     var body: some View {
-        if WarmUpVeil.isShowing(env) {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                message(env.kokoroStatus, now: context.date)
+        let showing = WarmUpVeil.isShowing(env)
+        ZStack {
+            if showing {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    message(env.kokoroStatus, now: context.date)
+                }
+                .padding(.top, band + 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .transition(.opacity)
+                .accessibilityElement(children: .combine)
             }
-            .padding(.top, band + 8)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
-            .transition(.opacity)
-            .accessibilityElement(children: .combine)
         }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .animation(.easeInOut(duration: WarmUpVeil.fadeOut), value: showing)
     }
 
     private func message(_ status: KokoroStatusModel, now: Date) -> some View {

@@ -345,7 +345,10 @@ struct RootPager: View {
             return .init(color: Tokens.ground.opacity(eased), location: fadeEnd * t)
         }
         stops.append(.init(color: Tokens.ground, location: 1))
+        // The rim over the fill, not under it: this ground is opaque where the glow is brightest,
+        // and was painting the foot of it out (owner, 2026-09-12).
         return LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
+            .overlay(alignment: .bottom) { WarmRim() }
         .frame(height: height)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .ignoresSafeArea(edges: .bottom)

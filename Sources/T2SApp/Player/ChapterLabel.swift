@@ -17,6 +17,17 @@ public enum ChapterLabel {
         return trimmed.isEmpty ? "Chapter \(ordinal)" : trimmed
     }
 
+    /// The leading chapter number alone, when the title states one — "7", "7. A Precarious
+    /// Position" and "12: The Siege" all yield 7/12. Nil for anything the title doesn't lead with a
+    /// digit for ("Introduction", "Chapter Seven", "Front Matter"), since those aren't a counted
+    /// chapter to strip a name from.
+    public static func number(for title: String) -> Int? {
+        let numbered = /^(\d+)\s*[.:)\-–—]?\s*(.*)$/
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let match = trimmed.wholeMatch(of: numbered) else { return nil }
+        return Int(match.1)
+    }
+
     /// Where the book proper starts (owner's ask, 2026-09-09; widened 2026-09-10 after a book whose
     /// chapters carry no numbers at all showed no pill). Two readings, in order:
     ///

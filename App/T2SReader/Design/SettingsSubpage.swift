@@ -49,17 +49,19 @@ struct SettingsSubpage: ViewModifier {
                 GeometryReader { geo in
                     let top = geo.frame(in: .global).minY
                     TopFade(inset: top).offset(y: -top)
-                    // `ignoresSafeArea` as well as the shift, and it is not decoration: the shift
-                    // puts the lit edge on the window's top edge, and this is what lets it paint
-                    // there at all. `TopFade` carries its own and so reached through the status
-                    // bar; the rim had none, was held to the content's bounds, and lit the top of
-                    // the list instead of the top of the screen — the glow cut off under the clock
-                    // (owner, 2026-09-12, the Voice page).
-                    WarmRim(edge: .top)
-                        .frame(width: geo.size.width, alignment: .top)
-                        .offset(y: -top)
-                        .ignoresSafeArea()
                 }
+            }
+            // The rim is anchored the way the foot's is — fill the region, pin to its edge, and let
+            // `ignoresSafeArea` be the thing that reaches the window — and *not* by the measured
+            // shift its neighbour above uses. Both together was one shift too many: `ignoresSafeArea`
+            // already takes the region's origin up to the window's top edge, so the offset took the
+            // lit edge another status bar past it, off the screen, leaving the sides lit and the top
+            // of the glow gone (owner, 2026-09-12, twice on the Voice page — cut at the content's
+            // top without this, hoisted off the top with both).
+            .overlay {
+                WarmRim(edge: .top)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .ignoresSafeArea(edges: .top)
             }
             // And the foot, which a pushed page never had: the root pager's bottom glow rides on
             // `bottomFill`, and that goes when a subpage takes the screen, so the light simply

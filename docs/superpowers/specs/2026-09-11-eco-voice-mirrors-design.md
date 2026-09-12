@@ -147,7 +147,10 @@ endpoints go to the back, so requests rotate through every mirror.
   request on to the next mirror; each mirror is tried at most once per
   request. Only when every mirror has answered `429` does the request
   fail with `rateLimited`, which the scheduler turns into the failure
-  silence as before.
+  silence as before. A mirror that cannot be reached, or answers a server
+  error — a dyno mid-restart — is passed over the same way and left alone
+  for 30 s, so a deploy is invisible to a listener; a rejected key or a
+  rejected request is not walked, since the next mirror would only repeat it.
 - Text longer than `maxRequestCharacters` (180) is split at clause
   boundaries, then whitespace, then a hard cut, using the same rule the
   segmenter applies; that rule moves to a small public helper in

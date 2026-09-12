@@ -203,8 +203,10 @@ public actor RenderScheduler {
         await arbiter.release()
         // Throughput, not one render's latency: the rate control asks what the route can keep
         // fed, and four mirrors that each take ten seconds deliver forty seconds of audio in ten.
+        // A failed member took its wall time and made no audio: that batch says nothing about
+        // throughput, and one cold mirror's timeout must not drag the playback rate down.
         let synthesized = results.reduce(0) { $0 + $1.synthesizedSeconds }
-        if synthesized > 0 { record(rtf: wall / synthesized) }
+        if synthesized > 0, !results.contains(where: \.failed) { record(rtf: wall / synthesized) }
         return results.map(\.outcome)
     }
 
@@ -232,6 +234,7 @@ public actor RenderScheduler {
 
         var events: [RenderEvent] = []
         var synthesized: TimeInterval = 0
+        var failed = false
         // In the background, only when the trailing window has room for what a render costs: the
         // lease is held meanwhile, so the other tier waits behind this one rather than pile on.
         var waited: TimeInterval = 0
@@ -266,6 +269,7 @@ public actor RenderScheduler {
             }
         } catch {
             foregroundFillDelay = 0
+            failed = true
             events.append(.failed(documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, message: "\(error)"))
             result = SynthesisResult(audio: .silence(seconds: Self.failureSilenceSeconds), wordTimings: [])
         }
@@ -273,7 +277,7 @@ public actor RenderScheduler {
         do {
             try await store.write(result.audio, for: request.key)
         } catch AudioStoreError.capacityExceeded, AudioStoreError.diskFull {
-            return RenderResult(outcome: .storeFull, synthesizedSeconds: synthesized)
+            return RenderResult(outcome: .storeFull, synthesizedSeconds: synthesized, failed: failed)
         } catch {
             // Encoding or I/O failed for this clip: log it and fall back to the failure silence so
             // the utterance still arrives (spec §6). Only if that write fails too is it bare failed.
@@ -282,16 +286,16 @@ public actor RenderScheduler {
             do {
                 try await store.write(result.audio, for: request.key)
             } catch AudioStoreError.capacityExceeded, AudioStoreError.diskFull {
-                return RenderResult(outcome: .storeFull, synthesizedSeconds: synthesized)
+                return RenderResult(outcome: .storeFull, synthesizedSeconds: synthesized, failed: failed)
             } catch {
-                return RenderResult(outcome: .events(events), synthesizedSeconds: synthesized)
+                return RenderResult(outcome: .events(events), synthesizedSeconds: synthesized, failed: failed)
             }
         }
 
         events.append(.rendered(RenderedUtterance(
             documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, key: request.key,
             duration: result.audio.duration, wordTimings: result.wordTimings)))
-        return RenderResult(outcome: .events(events), synthesizedSeconds: synthesized)
+        return RenderResult(outcome: .events(events), synthesizedSeconds: synthesized, failed: failed)
     }
 
     /// Renders in pieces, yielding each to the events stream the moment it arrives — the player is
@@ -341,5 +345,7 @@ public actor RenderScheduler {
         /// Audio seconds this render actually synthesized: 0 for a cache hit or a failure, which
         /// therefore contribute nothing to the batch's RTF.
         var synthesizedSeconds: TimeInterval
+        /// The synthesis threw: its wall time is not throughput, so the batch records no RTF.
+        var failed = false
     }
 }

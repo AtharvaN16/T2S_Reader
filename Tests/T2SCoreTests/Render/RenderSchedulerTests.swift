@@ -311,6 +311,28 @@ import Testing
         _ = await events
         #expect(abs((await s.measuredRTF ?? 0) - 0.5) < 1e-9)             // 10 s / 20 s, not 10 s / 5 s
     }
+
+    /// A render that failed took its wall time and produced no audio: the batch says nothing about
+    /// throughput, so it records no RTF — one cold mirror's timeout must not halve the playback rate.
+    @Test func aBatchWithAFailureRecordsNoRTF() async throws {
+        let clock = ManualTimeSource()
+        let engine = FakeEngine(secondsPerCharacter: 1, concurrentRenders: 2)
+        await engine.fail(on: "boom")
+        let s = RenderScheduler(engine: engine, store: InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000), timeSource: clock, rtfWindow: 1)
+        async let warmUp = collect(s)
+        await s.setPlan([request(9, "warm")])
+        _ = await warmUp
+
+        await engine.hold()
+        async let events = collect(s)
+        await s.setPlan([request(0, "aaaaa"), request(1, "boom")])
+        var spins = 0
+        while await engine.parkedCount != 2, spins < 10_000 { await Task.yield(); spins += 1 }
+        clock.advance(by: 30)                                             // the failed one timed out
+        await engine.release()
+        _ = await events
+        #expect(await s.measuredRTF == nil)                                // nothing learned from that batch
+    }
 }
 
 @Suite struct RenderSchedulerPacingTests {

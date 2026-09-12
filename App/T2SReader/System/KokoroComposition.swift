@@ -357,7 +357,8 @@ struct KokoroComposition {
         // verdict — the files are there — and the warm-up may close it: a bundle whose stages will
         // never load must route documents *away* from Kokoro (spec §6, whole document) rather than
         // give a reader a book of 200 ms silences. Nothing reopens it before the next launch,
-        // except an install finishing, which opens it for the first time.
+        // except a warm-up finishing, which opens it: the route is open only while the engine can
+        // render at speed, and the hosted voice speaks for a cloud-first reader until then.
         let coreMLRouteOpen = OSAllocatedUnfairLock(initialState: false)
         // `UserDefaults.standard` by name: `UserDefaults` is not `Sendable` to Swift 6, so the
         // parameter cannot be captured here, and the app never passes anything else.
@@ -368,7 +369,6 @@ struct KokoroComposition {
 
         switch coreML.verdict {
         case .available(let decision, _):
-            coreMLRouteOpen.withLock { $0 = true }
             log.notice("Kokoro Core ML route available (\(computeUnits.runtimeName, privacy: .public); the A13 measured RTF \(decision.measuredRTF, format: .fixed(precision: 3), privacy: .public))")
             // Loading the stages takes seconds on a modern phone and minutes on an A13's first
             // launch, and the G2P's lexicons a few hundred milliseconds more. Pay them now, while the
@@ -508,7 +508,6 @@ struct KokoroComposition {
             log.notice("Kokoro Core ML model installed in \(Double(elapsed.components.seconds), format: .fixed(precision: 0), privacy: .public) s")
             KokoroCoreMLEngine.timing("kokoro model installed in \(elapsed.components.seconds) s")
             availability.installed(located)
-            routeOpen.withLock { $0 = true }
             status.update(.preparing)
             await warmUp(engine, routeOpen: routeOpen, status: status, log: log, markWarmed: markWarmed)
         } catch is CancellationError {
@@ -555,6 +554,11 @@ struct KokoroComposition {
                 KokoroCoreMLEngine.timing("kokoro warm-up finished in \(KokoroCoreMLEngine.fixed(seconds, 1)) s")
                 linkDuplicateWeightsOnce()
                 status.recordWarmUp(seconds: seconds)
+                // The route opens here, and not when the engine loaded: open before the stages are
+                // warm, its first renders measure like a machine that cannot keep up, and a cloud-first
+                // reader who tapped play the moment it opened would have heard them instead of the
+                // hosted voice (cloud-first bootstrap spec). Open only when it can render at speed.
+                routeOpen.withLock { $0 = true }
                 // Never an override: the Core ML decision is measured, not a development escape hatch.
                 status.update(.available(isDebugOverride: false))
                 // "Warmed" is what a background Prepare launch checks before it renders: on a phone

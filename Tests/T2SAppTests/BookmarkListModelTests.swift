@@ -19,6 +19,8 @@ import T2SStore
     }
 
     @Test func listsBookmarksNewestFirstWithChapterSnippetAndTime() async throws {
+        // `sort` defaults to what was last chosen on this device, so a test that cares about the
+        // order says which one it means rather than inheriting a stored preference.
         let f = try AppFixtures()
         let id = try await f.importFake()
         let summary = try #require(try await f.store.summary(id: id))
@@ -29,6 +31,7 @@ import T2SStore
         #expect(await player.saveBookmark() != .failed)     // chapter 2, "Sentence number 2 here."
 
         let model = BookmarkListModel(library: f.library, player: player)
+        model.sort = .recent
         await model.load(summary)
         #expect(model.error == nil)
         #expect(model.entries.count == 2)
@@ -58,6 +61,9 @@ import T2SStore
         try await f.store.add(Bookmark(documentID: id, position: midWord, passageText: nil, createdAt: Date(timeIntervalSince1970: 1)))
 
         let model = BookmarkListModel(library: f.library, player: player)
+        // Both sit at one position, so book order ties them and breaks it on `createdAt` the other
+        // way about; this test is about which text a row shows, not which row comes first.
+        model.sort = .recent
         await model.load(summary)
         #expect(model.entries.count == 2)
         #expect(model.entries[0].passage == "First sentence.")               // the saved block
@@ -188,5 +194,74 @@ import T2SStore
         await model.setNote("   ", on: after)
         #expect(model.entries.first?.headline == "First sentence.")
         #expect(model.entries.first?.quote == nil)
+    }
+
+    /// Book order is the order the book goes in, not the order the bookmarks were written — which
+    /// for anyone listening straight through is the same list backwards (owner, 2026-09-12). Saved
+    /// saved in the order a listener would save them — chapter 1, then chapter 2 — which is the
+    /// arrangement where the two orders disagree and one list is the other backwards.
+    @Test func ordersByPlaceInTheBookAndByWhenSavedOnAsk() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let summary = try #require(try await f.store.summary(id: id))
+        let (player, _) = try await makePlayer(f)
+        await player.load(summary, play: false)
+        #expect(await player.saveBookmark() != .failed)                  // chapter 1, saved first
+        await player.seek(toChapter: 1)
+        #expect(await player.saveBookmark() != .failed)                  // chapter 2, saved second
+
+        let model = BookmarkListModel(library: f.library, player: player)
+        model.sort = .book
+        await model.load(summary)
+        #expect(model.entries.map(\.chapterTitle) == ["Chapter 1", "Chapter 2"])
+        #expect(model.entries[0].timeSeconds < model.entries[1].timeSeconds)
+
+        // Reordering is done on what is already loaded — no reload — so the control answers at once.
+        model.sort = .recent
+        #expect(model.entries.map(\.chapterTitle) == ["Chapter 2", "Chapter 1"])
+        #expect(model.entries[0].createdAt >= model.entries[1].createdAt)
+
+        // And the choice outlives the model that made it.
+        #expect(BookmarkSort.remembered == .recent)
+        model.sort = .book
+        #expect(BookmarkSort.remembered == .book)
+    }
+
+    /// A note has no length limit anywhere — not in the store, not on `BookmarkEntry` — so a long
+    /// one has to survive whole; only a row clips it, and only for as long as it is a row
+    /// (`BookmarkDetail` prints the rest). The book's passage is the opposite case: `BookmarkSnippet`
+    /// caps it at 90 UTF-16 units for the row, while `fullPassage` keeps what was saved. Asked for
+    /// after the owner asked whether long ones had been tested (2026-09-12): they had not.
+    @Test func aLongNoteAndALongPassageBothSurviveWhole() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let summary = try #require(try await f.store.summary(id: id))
+        let (player, _) = try await makePlayer(f)
+        await player.load(summary, play: false)
+        let timeline = try #require(player.coordinator.timeline)
+        let first = timeline[utterance: 0]
+        let longPassage = String(repeating: "the passage runs on and on ", count: 60)   // ~1,600 units
+        try await f.store.add(Bookmark(documentID: id, position: first.position,
+                                       passageText: longPassage, createdAt: Date(timeIntervalSince1970: 1)))
+
+        let model = BookmarkListModel(library: f.library, player: player)
+        await model.load(summary)
+        var entry = try #require(model.entries.first)
+        // Trimmed for the row, kept for the screen that has room.
+        #expect(entry.passage.utf16.count <= BookmarkSnippet.maxLength)
+        #expect(entry.passage.hasSuffix("…"))
+        #expect(entry.fullPassage == longPassage)
+        #expect(entry.headline == entry.passage)                         // no note yet: the book's words lead
+
+        let typed = String(repeating: "and then I thought about it some more ", count: 80)      // ~3,000
+        let stored = typed.trimmingCharacters(in: .whitespacesAndNewlines)                      // `setNote` trims
+        await model.setNote(typed, on: entry)
+        entry = try #require(model.entries.first)
+        #expect(stored.utf16.count > 2_000)
+        #expect(entry.hasNote)
+        #expect(entry.userNote == stored)                                // the trailing space, and nothing else
+        #expect(entry.headline == stored)                                // the reader's words lead, in full
+        #expect(entry.quote == entry.passage)                            // and the book's drop to the quote
+        #expect(model.error == nil)
     }
 }

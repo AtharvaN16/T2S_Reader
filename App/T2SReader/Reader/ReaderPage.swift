@@ -132,8 +132,9 @@ struct ReaderPage: View {
         .sheet(isPresented: $showChapters) { ChapterList() }
         .sheet(isPresented: $showAppearance) { AppearanceSheet() }
         .sheet(isPresented: $showSpeed) { SpeedPicker() }
-        .sheet(isPresented: $showBookmarks) {
-            if let current = env.player.current { BookmarksSheet(summary: current) }
+        // A page, not a sheet, and the same one the Book sheet opens (owner, 2026-09-12).
+        .fullScreenCover(isPresented: $showBookmarks) {
+            if let current = env.player.current { BookmarksPage(summary: current) }
         }
         .sheet(isPresented: $showSleepTimer) { SleepTimerSheet() }
         .sheet(isPresented: $showVoiceChange) {

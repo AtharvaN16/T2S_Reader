@@ -6,9 +6,11 @@ import T2SStore
 
 /// Spec §2.4.5 book sheet, after the owner's 2026-09-09 cut: the book alone at the top, lit from
 /// behind in its own colour and tilting with the phone, the title and author centred under it,
-/// one Play pill in the Home row's form, then the chapters and the bookmarks. Chapters come from
-/// the timeline (re-derived if stale) and their progress from the persisted position through
-/// `DocumentProgress`. Nothing about a queue: playing is what puts a book on Home.
+/// one Play pill in the Home row's form, then the chapters. Chapters come from the timeline
+/// (re-derived if stale) and their progress from the persisted position through `DocumentProgress`.
+/// Nothing about a queue: playing is what puts a book on Home. The bookmarks were listed under the
+/// chapters until 2026-09-12 and are behind the `⋯` now, as a page — a sheet that grew with every
+/// note written in the book was a sheet about two things.
 struct BookSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
@@ -30,7 +32,7 @@ struct BookSheet: View {
     /// The resume chapter's one flash, right after the sheet scrolls to it (owner, 2026-09-11:
     /// opening the sheet from Home should land the eye on where the book picks up).
     @State private var pulsingChapter: Int?
-    @State private var editingBookmark: BookmarkEntry?
+    @State private var showBookmarks = false
 
     private static let heroHeight: CGFloat = 200
 
@@ -84,8 +86,9 @@ struct BookSheet: View {
                                             readerRoute.open(live)
                                         }
                                     },
-                                    // The same jump the Bookmarks section below makes: under the
-                                    // chapter these are rows you can open now, not just marks.
+                                    // The same jump `BookmarksPage` makes from behind the `⋯`:
+                                    // under the chapter these are rows you can open now, not just
+                                    // marks.
                                     onSelectBookmark: { entry in
                                         Task {
                                             await bookmarkModel().jump(to: entry, in: live)
@@ -94,21 +97,6 @@ struct BookSheet: View {
                                         }
                                     })
                     .padding(.horizontal, -12)                                 // the rows' fill runs into the margin, as in the Reader
-                    if let bookmarks, !bookmarks.entries.isEmpty {
-                        VStack(alignment: .leading, spacing: 20) {
-                            Text("Bookmarks").typeRole(.groupTitle).foregroundStyle(Tokens.ink)
-                            ForEach(bookmarks.entries) { entry in
-                                BookmarkRow(entry: entry, onJump: {
-                                    Task {
-                                        await bookmarks.jump(to: entry, in: live)
-                                        dismiss()
-                                        readerRoute.open(live)
-                                    }
-                                }, onEditNote: { editingBookmark = entry },
-                                   onDelete: { Task { await bookmarks.delete(entry) } })
-                            }
-                        }
-                    }
                     Color.clear.frame(height: Spacing.section)
                 }
                 .padding(.horizontal, Spacing.margin)
@@ -118,14 +106,31 @@ struct BookSheet: View {
                 await scrollToResumeChapterAndPulse(proxy)
             }
         }
+        // The sheet's own menu, at the corner where a sheet's overflow belongs: the bookmarks moved
+        // out from under the chapters and behind it (owner, 2026-09-12), which keeps the sheet the
+        // length of the book rather than the length of the book plus everything written about it.
+        .overlay(alignment: .topTrailing) {
+            Menu {
+                Button { showBookmarks = true } label: { Label("Bookmarks", systemImage: "bookmark") }
+            } label: {
+                CircleGlyph(systemName: "ellipsis")
+            }
+            .accessibilityLabel("More")
+            .padding(.trailing, Spacing.margin)
+            .padding(.top, Spacing.grid)
+        }
         .background(Tokens.raised)
         .presentationCornerRadius(Spacing.sheetCorner)
+        // A page over the sheet, not a sheet over a sheet: it is the same `BookmarksPage` the
+        // Reader opens, so a bookmark reads and behaves the same whichever way you came at it.
+        .fullScreenCover(isPresented: $showBookmarks) {
+            BookmarksPage(summary: live) {
+                dismiss()                                                  // the sheet goes with the page
+                readerRoute.open(live)                                     // and the Reader opens where the bookmark is
+            }
+        }
         .onChange(of: shouldTilt, initial: true) { _, on in motion.setEnabled(on) }
         .onDisappear { motion.setEnabled(false) }
-        .sheet(item: $editingBookmark) { entry in
-            BookmarkNoteSheet(summary: live, entry: entry,
-                              onSaved: { Task { await bookmarks?.load(live) } })
-        }
     }
 
     /// Lands the eye on where the book picks up (owner, 2026-09-11): centres the resume chapter —

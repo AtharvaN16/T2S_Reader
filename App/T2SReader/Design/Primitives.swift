@@ -16,6 +16,10 @@ struct Pill: View {
     var detail: String? = nil
     var glyph: String? = nil
     var style: Style = .soft
+    /// A pill that takes the whole width instead of hugging its label — the one action at the foot
+    /// of a sheet (the sleep timer's Start), where a capsule the width of its two words reads as an
+    /// afterthought under a full-width card. Taller too, the way a bar key is.
+    var fillsWidth: Bool = false
     var action: () -> Void
 
     var body: some View {
@@ -30,9 +34,10 @@ struct Pill: View {
             // What gives instead is whatever shares the row — on the Collection that is the title,
             // which scales down.
             .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
+            .fixedSize(horizontal: !fillsWidth, vertical: false)
             .padding(.horizontal, 14)
-            .padding(.vertical, 9)
+            .padding(.vertical, fillsWidth ? 16 : 9)
+            .frame(maxWidth: fillsWidth ? .infinity : nil)
             .foregroundStyle(foreground)
             .background(background, in: Capsule())
         }

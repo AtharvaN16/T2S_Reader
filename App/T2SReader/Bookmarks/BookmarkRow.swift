@@ -6,11 +6,14 @@ import T2SApp
 /// and the book's passage drops to a quote beneath them; with no note the passage keeps the
 /// headline. The list then reads as a notebook rather than a second copy of the book.
 ///
-/// Tapping the row opens the note in full; only the Listen pill plays (owner, 2026-09-12). The two
-/// targets used to do the same thing, which left no way to read a long bookmark without starting
-/// the audio.
+/// Tapping the row opens the bookmark (`BookmarkDetail`); only the Listen pill plays (owner,
+/// 2026-09-12). The two targets used to do the same thing, which left no way to read a long
+/// bookmark without starting the audio — and then the tap opened the *editor*, so reading a long
+/// one meant looking at it past a keyboard. Opening and writing are two different asks now.
 struct BookmarkRow: View {
     var entry: BookmarkEntry
+    /// Opens the bookmark in full.
+    var onOpen: () -> Void
     var onJump: () -> Void
     var onEditNote: () -> Void
     var onDelete: () -> Void
@@ -43,8 +46,9 @@ struct BookmarkRow: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .onTapGesture(perform: onEditNote)
+        .onTapGesture(perform: onOpen)
         .contextMenu {
+            Button(action: onOpen) { Label("Open bookmark", systemImage: "arrow.up.left.and.arrow.down.right") }
             Button(action: onEditNote) {
                 Label(entry.hasNote ? "Edit note" : "Add a note", systemImage: "square.and.pencil")
             }
@@ -52,7 +56,7 @@ struct BookmarkRow: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(entry.headline), \(meta)")
-        .accessibilityHint("Opens the note")
+        .accessibilityHint("Opens the bookmark")
         .accessibilityAction(named: "Listen", onJump)
         .accessibilityAction(named: "Delete bookmark", onDelete)
     }

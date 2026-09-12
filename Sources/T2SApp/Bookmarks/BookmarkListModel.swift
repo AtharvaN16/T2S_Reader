@@ -4,6 +4,34 @@ import T2SCore
 import T2SLibrary
 import T2SStore
 
+/// The order a document's bookmarks are listed in (owner, 2026-09-12). Book order leads, and the
+/// reason is that `createdAt` descending — the only order there used to be — is book order backwards
+/// for anyone listening straight through: the place you reached last stands at the top and the
+/// opening of the book at the foot. A bookmark is a place in a story, and a story has an order.
+/// "Recently added" is still worth having for the one question the other cannot answer, which is
+/// what you just saved. Remembered across launches: a reader who has stated a preference should not
+/// restate it.
+public enum BookmarkSort: String, CaseIterable, Sendable {
+    case book, recent
+
+    public var title: String {
+        switch self {
+        case .book: return "In book order"
+        case .recent: return "Recently added"
+        }
+    }
+
+    private static let key = "bookmarks.sort"
+
+    public static var remembered: BookmarkSort {
+        UserDefaults.standard.string(forKey: key).flatMap(BookmarkSort.init(rawValue:)) ?? .book
+    }
+
+    public static func remember(_ sort: BookmarkSort) {
+        UserDefaults.standard.set(sort.rawValue, forKey: key)
+    }
+}
+
 /// A document's bookmarks, ready for a list (spec §2.2): resolved against the document's
 /// timeline for the chapter, the snippet and the time. Jumping re-resolves the stored position
 /// against the coordinator's own timeline, which may have been re-derived since the list was
@@ -11,9 +39,18 @@ import T2SStore
 @MainActor
 @Observable
 public final class BookmarkListModel {
-    /// Newest first.
+    /// In ``sort``'s order.
     public private(set) var entries: [BookmarkEntry] = []
     public private(set) var error: String?
+    /// The order the list is in. Setting it reorders what is already loaded — no round trip to the
+    /// store, which is what lets the control feel like a control — and remembers the choice.
+    public var sort: BookmarkSort = .remembered {
+        didSet {
+            guard sort != oldValue else { return }
+            BookmarkSort.remember(sort)
+            entries = Self.ordered(entries, by: sort)
+        }
+    }
 
     private let library: Library
     private let player: PlayerModel
@@ -44,12 +81,25 @@ public final class BookmarkListModel {
                 return
             }
             let index = TimeIndex(timeline)
-            entries = bookmarks
-                .map { bookmark in Self.displayEntry(for: bookmark, timeline: timeline, index: index) }
-                .sorted { $0.createdAt > $1.createdAt }
+            entries = Self.ordered(bookmarks.map { bookmark in
+                Self.displayEntry(for: bookmark, timeline: timeline, index: index)
+            }, by: sort)
         } catch {
             self.error = "\(error)"
             entries = []
+        }
+    }
+
+    /// Book order is the time the bookmark sits at, and `createdAt` breaks a tie: two bookmarks in
+    /// one utterance share a second, and without the tie-break they would trade places on reload.
+    nonisolated static func ordered(_ entries: [BookmarkEntry], by sort: BookmarkSort) -> [BookmarkEntry] {
+        switch sort {
+        case .book:
+            return entries.sorted {
+                $0.timeSeconds == $1.timeSeconds ? $0.createdAt < $1.createdAt : $0.timeSeconds < $1.timeSeconds
+            }
+        case .recent:
+            return entries.sorted { $0.createdAt > $1.createdAt }
         }
     }
 

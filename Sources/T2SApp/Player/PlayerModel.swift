@@ -210,12 +210,22 @@ public final class PlayerModel {
     /// loaded document is persisted before the mutation, then reloaded from the store afterwards.
     /// Keeping that sequence here prevents callers from accidentally writing stale audio references
     /// back after an eviction or reprocess.
+    ///
+    /// `resumingPlayback` picks the reload back up where the pause left it, for a change a listener
+    /// makes *while listening* and expects to hear the result of — swapping the voice from the
+    /// Reader (owner, 2026-09-12: "when I change the voice, I just want the player to auto-resume").
+    /// It is off by default because most destructive changes are not that: deleting rendered audio
+    /// from Storage, or reprocessing a document, should leave a stopped player stopped.
     @discardableResult
     public func performDestructiveChange(
         for documentID: UUID,
+        resumingPlayback: Bool = false,
         _ change: @MainActor () async throws -> Void
     ) async -> Bool {
         let reloadCurrent = current?.id == documentID
+        // Read before the pause, and `isPlaying` covers `.catchingUp` — a change made during the
+        // stall before the first sound was still a change made with the intent to be listening.
+        let resume = resumingPlayback && reloadCurrent && isPlaying
         if reloadCurrent {
             coordinator.pause()
             await persistRenderedChapters()
@@ -231,7 +241,7 @@ public final class PlayerModel {
                 localError = "Document is missing"
                 return false
             }
-            await load(fresh, play: false, persistingCurrent: false)
+            await load(fresh, play: resume, persistingCurrent: false)
             return localError == nil
         } catch {
             localError = "\(error)"

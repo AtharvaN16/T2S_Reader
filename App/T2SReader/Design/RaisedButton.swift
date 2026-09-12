@@ -8,19 +8,21 @@ import SwiftUI
 /// one in the face's own hue. A press sinks it: the light goes out of it, the shadow tightens,
 /// it scales down a little.
 ///
-/// Two tones. `.blue` is the reference's own (`Tokens.keyTop` → `keyBottom`): the empty shelf's
+/// Three tones. `.blue` is the reference's own (`Tokens.keyTop` → `keyBottom`): the empty shelf's
 /// one "do this first", and the Reader's skip pill. `.ink` is the app's black button raised
 /// (owner, 2026-09-10: "replace the black buttons with skeuomorphic versions") — the bar at the
 /// foot of an Import step, the Voice page's confirm, the Reader's "Back to current" pill, which
 /// stays ink so the one key that moves you on reads first. In the dark ink is graphite, not white:
-/// `Tokens.keyInkTop`. Three sizes: `.bar` fills its width at 56 pt (what `BarButton` is),
+/// `Tokens.keyInkTop`. `.quiet` is the second key in a pair — the flat `surface` slab, not a key
+/// at all, so the Reader's voice bar can offer "Make default" beside "Done" without two raised
+/// keys competing for the same press. Three sizes: `.bar` fills its width at 56 pt (what `BarButton` is),
 /// `.key` hugs its label at 56, `.compact` hugs it at 40 for a pill in the Reader.
 ///
 /// Disabled it is not a key at all but the flat `surface` slab `BarButton` always showed while
 /// there was nothing to act on — a raised key that cannot be pressed would be a lie; `busyLabel`
 /// puts a spinner in front of the words while the model works and disables it the same way.
 struct RaisedButton: View {
-    enum Tone { case blue, ink }
+    enum Tone { case blue, ink, quiet }
     enum Size { case bar, key, compact }
 
     var label: String
@@ -43,12 +45,18 @@ struct RaisedButton: View {
             .lineLimit(1)
             .fixedSize(horizontal: size != .bar, vertical: false)
             .foregroundStyle(enabled ? face.text : Tokens.ink2)
-            .padding(.horizontal, size == .compact ? 18 : 36)
+            // A `.bar` key is `maxWidth: .infinity` with its label centred, so this padding never
+            // shows there — it only sets the width below which the label starts truncating. 20 pt
+            // rather than 36 so two bar keys can share a row ("Make default" · "Done") at phone
+            // width without either losing a letter.
+            .padding(.horizontal, size == .compact ? 18 : size == .bar ? 20 : 36)
             .frame(maxWidth: size == .bar ? .infinity : nil)
             .frame(minHeight: size == .compact ? 40 : 56)
             .contentShape(Capsule())
         }
-        .buttonStyle(RaisedStyle(face: face, raised: enabled))
+        // A quiet key is deliberately never `raised`: it borrows the disabled slab's flat face and
+        // gets the press back (`flat`), which is what makes it read as the softer of the two.
+        .buttonStyle(RaisedStyle(face: face, raised: enabled && tone != .quiet, flat: enabled && tone == .quiet))
         .disabled(!enabled)
         .animation(.snappy, value: enabled)
     }
@@ -57,6 +65,7 @@ struct RaisedButton: View {
         switch tone {
         case .blue: return RaisedFace(top: Tokens.keyTop, bottom: Tokens.keyBottom, halo: Tokens.glow, rim: Tokens.gloss.opacity(0.75), text: Tokens.onAccent)
         case .ink: return RaisedFace(top: Tokens.keyInkTop, bottom: Tokens.keyInkBottom, halo: Tokens.shade, rim: Tokens.keyInkRim, text: Tokens.onKeyInk)
+        case .quiet: return RaisedFace(top: Tokens.surface, bottom: Tokens.surface, halo: .clear, rim: .clear, text: Tokens.ink)
         }
     }
 }
@@ -72,11 +81,13 @@ private struct RaisedFace {
 
 private struct RaisedStyle: ButtonStyle {
     var face: RaisedFace
-    /// False while disabled: the flat slab, no bevel, no shadow, no press.
+    /// False while disabled, and for a `.quiet` tone: the flat slab, no bevel, no shadow.
     var raised: Bool
+    /// Flat but live — the quiet tone. Same slab as disabled, but it takes a press.
+    var flat: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
-        let pressed = configuration.isPressed && raised
+        let pressed = configuration.isPressed && (raised || flat)
         configuration.label
             .background {
                 if raised {
@@ -102,6 +113,9 @@ private struct RaisedStyle: ButtonStyle {
                         }
                         // Pressed: the light goes out of it.
                         .overlay { Capsule().fill(Tokens.shade.opacity(pressed ? 0.18 : 0)) }
+                } else if flat {
+                    Capsule().fill(face.top)
+                        .overlay { Capsule().fill(Tokens.shade.opacity(pressed ? 0.14 : 0)) }
                 } else {
                     Capsule().fill(Tokens.surface)
                 }

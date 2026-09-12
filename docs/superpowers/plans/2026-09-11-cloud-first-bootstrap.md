@@ -893,7 +893,10 @@ In the initializer, after `prepareRunner.voiceRouting = voiceRouting`, add:
 
 ```swift
         // A charger never renders a library through the mirrors: prepare waits for the on-device voice.
-        prepareRunner.isStandingIn = { await voiceRouting.effectiveVoiceID(VoiceOption.systemDefault.id).hasPrefix("cloud:") }
+        // The routing alone is captured, not the environment: it is `Sendable`, and the runner
+        // must not retain everything through its gate.
+        let routing = voiceRouting
+        prepareRunner.isStandingIn = { await routing.effectiveVoiceID(VoiceOption.systemDefault.id).hasPrefix("cloud:") }
 ```
 
 - [ ] **Step 3: The key's path from xcconfig to Info.plist**

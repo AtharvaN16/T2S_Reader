@@ -11,6 +11,7 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .pcm import float32_to_pcm16
+from .synthesizer import InputExpansionError
 
 
 MAX_REQUEST_BYTES = 4096
@@ -136,6 +137,11 @@ def create_app(
             if sample_rate != 24_000:
                 raise ValueError("unexpected sample rate")
             return Response(content=float32_to_pcm16(samples), media_type="audio/pcm")
+        except InputExpansionError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Input expands beyond the synthesis limit",
+            ) from error
         except Exception as error:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

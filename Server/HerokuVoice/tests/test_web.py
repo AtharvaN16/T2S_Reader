@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
+from voice_service.synthesizer import InputExpansionError
 from voice_service.web import SynthesisGate, create_app
 
 
@@ -182,3 +183,22 @@ def test_speech_hides_invalid_engine_output() -> None:
 
     assert response.status_code == 503
     assert response.json() == {"detail": "Synthesis unavailable"}
+
+
+class ExpandingInputSynthesizer(FakeSynthesizer):
+    def synthesize(self, text: str, voice: str) -> tuple[np.ndarray, int]:
+        self.calls.append((text, voice))
+        raise InputExpansionError
+
+
+def test_speech_rejects_pathological_pronunciation_expansion() -> None:
+    client, _ = make_client(ExpandingInputSynthesizer())
+
+    response = client.post(
+        "/v1/audio/speech",
+        headers={"Authorization": "Bearer pilot-secret"},
+        json=valid_request(),
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Input expands beyond the synthesis limit"}

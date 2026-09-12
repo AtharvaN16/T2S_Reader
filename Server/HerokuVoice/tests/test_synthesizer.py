@@ -6,15 +6,28 @@ import numpy as np
 import onnxruntime as ort
 
 from voice_service.synthesizer import (
+    InputExpansionError,
     KokoroSynthesizer,
     low_memory_session_options,
+    release_memory,
     split_text,
 )
 
 
+class FakeTokenizer:
+    def __init__(self, phonemes: str | None = None) -> None:
+        self.phonemes = phonemes
+        self.calls: list[tuple[str, str]] = []
+
+    def phonemize(self, text: str, lang: str) -> str:
+        self.calls.append((text, lang))
+        return text if self.phonemes is None else self.phonemes
+
+
 class FakeKokoro:
-    def __init__(self) -> None:
+    def __init__(self, phonemes: str | None = None) -> None:
         self.calls: list[dict[str, object]] = []
+        self.tokenizer = FakeTokenizer(phonemes)
 
     def create(
         self,
@@ -23,6 +36,7 @@ class FakeKokoro:
         voice: str,
         speed: float,
         lang: str,
+        is_phonemes: bool,
     ) -> tuple[np.ndarray, int]:
         self.calls.append(
             {
@@ -30,6 +44,7 @@ class FakeKokoro:
                 "voice": voice,
                 "speed": speed,
                 "lang": lang,
+                "is_phonemes": is_phonemes,
             }
         )
         return np.array([0.25, -0.25], dtype=np.float32), 24_000
@@ -57,8 +72,10 @@ def test_synthesizer_loads_pinned_paths_and_uses_the_server_voice_contract(tmp_p
             "voice": "af_heart",
             "speed": 1.0,
             "lang": "en-us",
+            "is_phonemes": True,
         }
     ]
+    assert fake.tokenizer.calls == [("Read this.", "en-us")]
     assert rate == 24_000
     np.testing.assert_array_equal(samples, np.array([0.25, -0.25], dtype=np.float32))
 
@@ -122,7 +139,30 @@ def test_synthesizer_renders_long_input_as_bounded_calls(tmp_path) -> None:
     assert len(fake.calls) == 5
     assert all(len(str(call["text"])) <= 80 for call in fake.calls)
     assert " ".join(str(call["text"]) for call in fake.calls) == text
+    assert all(call["is_phonemes"] is True for call in fake.calls)
     assert len(samples) > sum(2 for _ in fake.calls)
+
+
+def test_synthesizer_rejects_pathological_phoneme_expansion_before_inference(tmp_path) -> None:
+    model = tmp_path / "model.onnx"
+    voices = tmp_path / "voices.bin"
+    model.write_bytes(b"model")
+    voices.write_bytes(b"voices")
+    fake = FakeKokoro(phonemes="p" * 601)
+    synthesizer = KokoroSynthesizer(
+        model,
+        voices,
+        kokoro_factory=lambda _model, _voices: fake,
+    )
+
+    try:
+        synthesizer.synthesize("99999999999999999999", "af_heart")
+    except InputExpansionError:
+        pass
+    else:
+        raise AssertionError("pathological phoneme expansion was accepted")
+
+    assert fake.calls == []
 
 
 def test_eco_session_uses_one_thread_without_retained_cpu_arenas() -> None:
@@ -133,3 +173,29 @@ def test_eco_session_uses_one_thread_without_retained_cpu_arenas() -> None:
     assert options.execution_mode == ort.ExecutionMode.ORT_SEQUENTIAL
     assert options.enable_cpu_mem_arena is False
     assert options.enable_mem_pattern is False
+
+
+def test_synthesizer_returns_freed_pages_after_every_chunk(tmp_path) -> None:
+    model = tmp_path / "model.onnx"
+    voices = tmp_path / "voices.bin"
+    model.write_bytes(b"model")
+    voices.write_bytes(b"voices")
+    fake = FakeKokoro(phonemes=" ".join("phoneme" for _ in range(40)))
+    releases: list[int] = []
+    synthesizer = KokoroSynthesizer(
+        model,
+        voices,
+        kokoro_factory=lambda _model, _voices: fake,
+        release_memory=lambda: releases.append(len(fake.calls)),
+    )
+
+    synthesizer.synthesize("Read this.", "af_heart")
+
+    # Peak RSS is set by the largest live working set, so the allocator is asked
+    # to give pages back between inferences, not once at the end.
+    assert releases == list(range(1, len(fake.calls) + 1))
+
+
+def test_release_memory_is_safe_on_every_platform() -> None:
+    release_memory()
+    release_memory()

@@ -30,6 +30,11 @@ struct ReaderPage: View {
     /// `player.elapsed` when `syncOffer` last appeared, so the ten-second auto-dismiss measures
     /// listening time from there rather than from playback's own start.
     @State private var offerShownAt: TimeInterval = 0
+    /// The save confirmation, and the bookmark it is about so "Add a note" knows what to open.
+    @State private var toast: ToastContent?
+    @State private var toastBookmark: Bookmark?
+    @State private var noteTarget: BookmarkEntry?
+    @State private var toastTask: Task<Void, Never>?
 
     var body: some View {
         let reader = env.readerModel
@@ -126,6 +131,12 @@ struct ReaderPage: View {
         .sheet(isPresented: $showDetails) {
             if let current = env.player.current { DetailsSheet(summary: current) }
         }
+        .sheet(item: $noteTarget) { entry in
+            if let current = env.player.current {
+                BookmarkNoteSheet(summary: current, entry: entry,
+                                  onSaved: { Task { await env.player.refreshBookmarks() } })
+            }
+        }
     }
 
     /// The first numbered chapter, while the playhead is before it.
@@ -211,7 +222,8 @@ struct ReaderPage: View {
             chapterRow
                 .padding(.bottom, 2)
             VStack(spacing: 2) {
-                ThinScrubber(model: player.scrubber, segments: chapterSegments) { fraction in
+                ThinScrubber(model: player.scrubber, segments: chapterSegments,
+                             bookmarkFractions: player.bookmarkFractions) { fraction in
                     Task { await player.seek(fraction: fraction) }
                 }
                 // Elapsed on the left, time left on the right (Apple Music's "-1:02:33"), in the
@@ -253,12 +265,66 @@ struct ReaderPage: View {
         .padding(.horizontal, Spacing.margin)
         .padding(.top, 12)
         .padding(.bottom, Spacing.grid)
+        .overlay(alignment: .top) {
+            if let toast {
+                Toast(content: toast,
+                      onAction: { openNoteEditor(); dismissToast() },
+                      onDismiss: dismissToast)
+                    .padding(.horizontal, Spacing.margin)
+                    // The toast's bottom sits on the block's top edge, 10 pt clear, so it floats
+                    // over the text and never covers the chapter row, the scrubber or the transport.
+                    .alignmentGuide(.top) { d in d[.bottom] + 10 }
+            }
+        }
         .background(alignment: .bottom) {
             Tokens.ground
                 .mask(Self.groundShape(solidAtTop: false, span: 0.25))
                 .padding(.top, -64)                                        // hangs above the block, over the text
                 .ignoresSafeArea(edges: .bottom)
         }
+    }
+
+    /// Saves, says so, and offers the note there and then.
+    private func saveBookmark() async {
+        let result = await env.player.saveBookmark()
+        let chapter = env.player.chapterIndex.flatMap { i in env.player.chapters.first { $0.index == i }?.title } ?? ""
+        let stamp = DurationFormatter.clock(env.player.elapsed)
+        let detail = chapter.isEmpty ? stamp : "\(chapter) · \(stamp)"
+        switch result {
+        case .saved(let bookmark):
+            toastBookmark = bookmark
+            show(ToastContent(title: "Bookmark saved", detail: detail, actionLabel: "Add a note"))
+        case .alreadyBookmarked(let bookmark):
+            toastBookmark = bookmark
+            show(ToastContent(title: "Already bookmarked", detail: detail, actionLabel: "Edit note"))
+        case .failed:
+            toastBookmark = nil
+            show(ToastContent(title: "Could not save a bookmark", detail: nil, actionLabel: nil))
+        }
+    }
+
+    /// Four seconds, restarted by a second save so two taps do not leave a stale message.
+    private func show(_ content: ToastContent) {
+        toastTask?.cancel()
+        withAnimation(.spring(duration: 0.3)) { toast = content }
+        UIAccessibility.post(notification: .announcement, argument: content.title)
+        toastTask = Task {
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.2)) { toast = nil }
+        }
+    }
+
+    private func dismissToast() {
+        toastTask?.cancel()
+        withAnimation(.easeOut(duration: 0.2)) { toast = nil }
+    }
+
+    /// The toast's action: resolve the bookmark just saved into a display entry, then edit it.
+    private func openNoteEditor() {
+        guard let bookmark = toastBookmark, let timeline = env.player.coordinator.timeline else { return }
+        noteTarget = BookmarkListModel.displayEntry(for: bookmark, timeline: timeline,
+                                                    index: env.player.coordinator.timeIndex)
     }
 
     /// The chapters as spans of the whole, for the scrubber's segments; empty for a document whose
@@ -306,18 +372,19 @@ struct ReaderPage: View {
     /// Appearance (left) · voice chip (centred) · bookmark (right). The chip shows the voice
     /// actually routed for this document (`shownVoiceID`), named in `resolveVoiceName`. The
     /// bookmark took the contents circle's place (owner's ask, 2026-09-09; the chapter row above
-    /// already opens the list): filled while the sentence under the playhead is bookmarked, and a
-    /// tap then removes that bookmark rather than adding a second.
+    /// already opens the list). Momentary since 2026-09-11: a tap saves and says so in a toast,
+    /// which offers the note in the same breath. Saving twice on one sentence does not make two
+    /// rows — `saveBookmark()` checks the resolved list — and removing is done from the list.
     private var toolRow: some View {
-        let bookmarked = env.player.isBookmarkedAtPlayhead
-        return ZStack {
+        ZStack {
             HStack {
                 icon("textformat.size", "Appearance") { showAppearance = true }
                 Spacer()
-                icon(bookmarked ? "bookmark.fill" : "bookmark", bookmarked ? "Bookmarked" : "Bookmark") {
-                    Task { await env.player.toggleBookmark() }
-                }
-                .accessibilityHint(bookmarked ? "Removes the bookmark" : "Saves this place and its sentence")
+                // Momentary, never filled (2026-09-11 spec §5): the old toggle's fill meant "the
+                // sentence under the playhead is bookmarked", which paused looked stuck and playing
+                // looked like the bookmark had been lost. Removing is done from the list.
+                icon("bookmark", "Bookmark") { Task { await saveBookmark() } }
+                    .accessibilityHint("Saves this place and its sentence")
             }
             Button { showVoiceChange = true } label: {
                 HStack(spacing: 8) {

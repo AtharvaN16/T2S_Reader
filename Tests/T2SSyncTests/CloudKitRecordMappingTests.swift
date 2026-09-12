@@ -30,4 +30,36 @@ import T2SCore
         let updated = CloudKitRecordMapping.record(for: bookmark, zone: zone, updating: record)
         #expect(updated === record)                                             // the server's copy is edited, its change tag kept
     }
+
+    @Test func userNoteSurvivesTheRecordRoundTrip() throws {
+        let zone = CKRecordZone.ID(zoneName: "t2s", ownerName: CKCurrentUserDefaultName)
+        let bookmark = SyncedBookmark(id: UUID(), contentKey: "key", position: Position(resourceHref: "ch1.xhtml", progression: 0.5),
+                                      note: "the passage", userNote: "my own words",
+                                      createdAt: Date(timeIntervalSince1970: 1), updatedAt: Date(timeIntervalSince1970: 2))
+        let record = CloudKitRecordMapping.record(for: bookmark, zone: zone, updating: nil)
+        guard case .bookmark(let back)? = CloudKitRecordMapping.syncRecord(from: record) else {
+            Issue.record("not a bookmark record"); return
+        }
+        #expect(back == bookmark)
+    }
+
+    /// The old-device case, and the reason the spec adds a key instead of changing one: a record
+    /// written by a build that has never heard of `userNote` must decode with it nil, and must keep
+    /// its passage.
+    @Test func aRecordWithoutTheUserNoteKeyDecodesWithNoNote() throws {
+        let zone = CKRecordZone.ID(zoneName: "t2s", ownerName: CKCurrentUserDefaultName)
+        let id = UUID()
+        let record = CKRecord(recordType: "Bookmark", recordID: CKRecord.ID(recordName: "bm-" + id.uuidString, zoneID: zone))
+        record["bookmarkID"] = id.uuidString as NSString
+        record["contentKey"] = "key" as NSString
+        record["position"] = #"{"resourceHref":"ch1.xhtml","progression":0.5}"# as NSString
+        record["note"] = "the passage" as NSString
+        record["createdAt"] = Date(timeIntervalSince1970: 1) as NSDate
+        record["updatedAt"] = Date(timeIntervalSince1970: 2) as NSDate
+        guard case .bookmark(let back)? = CloudKitRecordMapping.syncRecord(from: record) else {
+            Issue.record("not a bookmark record"); return
+        }
+        #expect(back.userNote == nil)
+        #expect(back.note == "the passage")
+    }
 }

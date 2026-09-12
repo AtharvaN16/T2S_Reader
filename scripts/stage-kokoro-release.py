@@ -13,7 +13,9 @@ Produces, under --out:
     voices/ runtime/    unchanged from the staging
     LICENSE             Apache-2.0 (§4(a): a derivative must carry a copy)
     README.md           the model card, with the front matter the Hub reads
-    config.json         empty, so the Hub counts downloads for a `library_name: coreml` repo
+    config.json         `{}` — the file the Hub counts downloads by for a `library_name: coreml`
+                        repo. It has to be valid JSON: an empty file renders a "Configuration
+                        Parsing Warning" banner on the model page.
     manifest.json       every file with its sha256 and byte count, for anyone pinning the way we do
 
 and, beside --out rather than inside it, `<out>.files.swift`: the generated `File(...)` rows to paste
@@ -184,7 +186,9 @@ def main() -> int:
             shutil.copytree(source, args.out / folder)
 
     shutil.copy(REPO / "Packages/KokoroPipeline/LICENSE", args.out / "LICENSE")
-    (args.out / "config.json").write_text("")
+    # Valid JSON, not an empty file: the Hub parses this and warns on the model page if it
+    # cannot. Its only job is to exist, so that downloads are counted.
+    (args.out / "config.json").write_text("{}\n")
 
     entries = []
     for path in sorted(args.out.rglob("*")):

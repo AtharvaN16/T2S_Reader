@@ -234,38 +234,22 @@ import T2SStore
         #expect(player.renderError == nil)
     }
 
-    @Test func addBookmarkStoresTheCurrentPosition() async throws {
+    @Test func saveBookmarkStoresTheCurrentPosition() async throws {
         let f = try AppFixtures()
         let id = try await f.importFake()
         let player = try makePlayer(f)
-        #expect(await player.addBookmark() == false)                       // nothing loaded
+        #expect(await player.saveBookmark() == .failed)                    // nothing loaded
         await player.load(try #require(try await f.store.summary(id: id)), play: false)
         await player.seek(toChapter: 1)
-        #expect(await player.addBookmark())
+        guard case .saved(let bookmark) = await player.saveBookmark() else {
+            Issue.record("save did not save"); return
+        }
         let bookmarks = try await f.store.bookmarks(for: id)
         #expect(bookmarks.count == 1)
+        #expect(bookmarks[0].id == bookmark.id)
         #expect(bookmarks[0].position.resourceHref == "OEBPS/ch2.xhtml")
-        #expect(bookmarks[0].note == "Sentence number 2 here.")             // the block of text it lands on
-        #expect(player.isBookmarkedAtPlayhead)
-    }
-
-    @Test func toggleBookmarkAddsThenRemovesTheOneUnderThePlayhead() async throws {
-        let f = try AppFixtures()
-        let id = try await f.importFake()
-        let player = try makePlayer(f)
-        #expect(await player.toggleBookmark() == false)                    // nothing loaded
-        await player.load(try #require(try await f.store.summary(id: id)), play: false)
-        #expect(!player.isBookmarkedAtPlayhead)
-        #expect(await player.toggleBookmark())
-        #expect(player.isBookmarkedAtPlayhead)
-        #expect(try await f.store.bookmarks(for: id).count == 1)
-        await player.seek(toChapter: 1)
-        #expect(!player.isBookmarkedAtPlayhead)                             // another utterance
-        await player.seek(toChapter: 0)
-        #expect(player.isBookmarkedAtPlayhead)                              // back on the bookmarked one
-        #expect(await player.toggleBookmark() == false)
-        #expect(!player.isBookmarkedAtPlayhead)
-        #expect(try await f.store.bookmarks(for: id).isEmpty)
+        #expect(bookmarks[0].passageText == "Sentence number 2 here.")      // the block of text it lands on
+        #expect(player.bookmarks.count == 1)
     }
 
     @Test func loadReadsTheDocumentsBookmarksAndUnloadForgetsThem() async throws {
@@ -274,11 +258,44 @@ import T2SStore
         try await f.store.add(Bookmark(documentID: id, position: Position(resourceHref: "OEBPS/ch2.xhtml", progression: 0, charOffset: 0)))
         let player = try makePlayer(f)
         await player.load(try #require(try await f.store.summary(id: id)), play: false)
-        #expect(!player.isBookmarkedAtPlayhead)
-        await player.seek(toChapter: 1)
-        #expect(player.isBookmarkedAtPlayhead)
+        #expect(player.bookmarks.count == 1)
         player.unload()
-        #expect(player.bookmarkedUtterances.isEmpty)
+        #expect(player.bookmarks.isEmpty)
+    }
+
+    @Test func savingTwiceOnTheSameSentenceDoesNotMakeTwoBookmarks() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let summary = try #require(try await f.store.summary(id: id))
+        let player = try makePlayer(f)
+        await player.load(summary, play: false)
+
+        guard case .saved(let first) = await player.saveBookmark() else {
+            Issue.record("first save did not save"); return
+        }
+        #expect(player.bookmarks.count == 1)
+        #expect(first.passageText == "First sentence.")
+
+        guard case .alreadyBookmarked(let same) = await player.saveBookmark() else {
+            Issue.record("second save on the same sentence should report it was already bookmarked"); return
+        }
+        #expect(same.id == first.id)
+        #expect(player.bookmarks.count == 1)
+        #expect(try await f.store.bookmarks(for: id).count == 1)
+    }
+
+    @Test func movingOnAndSavingAgainMakesASecondBookmark() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let summary = try #require(try await f.store.summary(id: id))
+        let player = try makePlayer(f)
+        await player.load(summary, play: false)
+        _ = await player.saveBookmark()
+        await player.seek(toChapter: 1)
+        guard case .saved = await player.saveBookmark() else {
+            Issue.record("a different sentence should save"); return
+        }
+        #expect(player.bookmarks.count == 2)
     }
 
     @Test func defaultVoiceAppliesOnlyWithoutAnOverride() async throws {

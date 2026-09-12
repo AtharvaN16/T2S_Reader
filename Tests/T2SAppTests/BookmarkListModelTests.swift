@@ -24,19 +24,19 @@ import T2SStore
         let summary = try #require(try await f.store.summary(id: id))
         let (player, _) = try await makePlayer(f)
         await player.load(summary, play: false)
-        #expect(await player.addBookmark())                 // chapter 1, "First sentence."
+        #expect(await player.saveBookmark() != .failed)     // chapter 1, "First sentence."
         await player.seek(toChapter: 1)
-        #expect(await player.addBookmark())                 // chapter 2, "Sentence number 2 here."
+        #expect(await player.saveBookmark() != .failed)     // chapter 2, "Sentence number 2 here."
 
         let model = BookmarkListModel(library: f.library, player: player)
         await model.load(summary)
         #expect(model.error == nil)
         #expect(model.entries.count == 2)
         #expect(model.entries[0].chapterTitle == "Chapter 2")
-        #expect(model.entries[0].snippet == "Sentence number 2 here.")
+        #expect(model.entries[0].passage == "Sentence number 2 here.")
         #expect(model.entries[0].timeSeconds == player.chapters[1].startSeconds)
         #expect(model.entries[1].chapterTitle == "Chapter 1")
-        #expect(model.entries[1].snippet == "First sentence.")
+        #expect(model.entries[1].passage == "First sentence.")
         #expect(model.entries[1].timeText == "0:00")
         #expect(model.entries[0].createdAt >= model.entries[1].createdAt)
     }
@@ -54,29 +54,29 @@ import T2SStore
         let first = timeline[utterance: 0]
         let midWord = Position(resourceHref: first.position.resourceHref, progression: first.position.progression,
                                charOffset: (first.position.charOffset ?? 0) + 6)
-        try await f.store.add(Bookmark(documentID: id, position: midWord, note: first.source, createdAt: Date(timeIntervalSince1970: 2)))
-        try await f.store.add(Bookmark(documentID: id, position: midWord, note: nil, createdAt: Date(timeIntervalSince1970: 1)))
+        try await f.store.add(Bookmark(documentID: id, position: midWord, passageText: first.source, createdAt: Date(timeIntervalSince1970: 2)))
+        try await f.store.add(Bookmark(documentID: id, position: midWord, passageText: nil, createdAt: Date(timeIntervalSince1970: 1)))
 
         let model = BookmarkListModel(library: f.library, player: player)
         await model.load(summary)
         #expect(model.entries.count == 2)
-        #expect(model.entries[0].snippet == "First sentence.")               // the saved block
-        #expect(model.entries[1].snippet == "sentence.")                     // from the word, as before
+        #expect(model.entries[0].passage == "First sentence.")               // the saved block
+        #expect(model.entries[1].passage == "sentence.")                     // from the word, as before
     }
 
-    /// Deleting from the list keeps the player's bookmark button honest for the loaded book.
-    @Test func deleteRefreshesThePlayersBookmarkedUtterances() async throws {
+    /// Deleting from the list keeps the player's own `bookmarks` list honest for the loaded book.
+    @Test func deleteRefreshesThePlayersBookmarks() async throws {
         let f = try AppFixtures()
         let id = try await f.importFake()
         let summary = try #require(try await f.store.summary(id: id))
         let (player, _) = try await makePlayer(f)
         await player.load(summary, play: false)
-        #expect(await player.addBookmark())
-        #expect(player.isBookmarkedAtPlayhead)
+        #expect(await player.saveBookmark() != .failed)
+        #expect(player.bookmarks.count == 1)
         let model = BookmarkListModel(library: f.library, player: player)
         await model.load(summary)
         await model.delete(try #require(model.entries.first))
-        #expect(!player.isBookmarkedAtPlayhead)
+        #expect(player.bookmarks.isEmpty)
     }
 
     /// A stale document is re-derived when it is opened, never by the bookmark list (Plan 17, audit
@@ -102,7 +102,7 @@ import T2SStore
         let summary = try #require(try await f.store.summary(id: id))
         let (player, _) = try await makePlayer(f)
         await player.load(summary, play: false)
-        #expect(await player.addBookmark())
+        #expect(await player.saveBookmark() != .failed)
         let model = BookmarkListModel(library: f.library, player: player)
         await model.load(summary)
         let entry = try #require(model.entries.first)
@@ -118,7 +118,7 @@ import T2SStore
         let (player, _) = try await makePlayer(f)
         await player.load(summary, play: false)
         await player.seek(toChapter: 1)
-        #expect(await player.addBookmark())
+        #expect(await player.saveBookmark() != .failed)
         let model = BookmarkListModel(library: f.library, player: player)
         await model.load(summary)
         let entry = try #require(model.entries.first)
@@ -150,8 +150,8 @@ import T2SStore
         #expect(model.entries.count == 1)
         let entry = try #require(model.entries.first)
         #expect(entry.chapterTitle == "Chapter 1")
-        #expect(!entry.snippet.isEmpty)
-        #expect(entry.snippet == BookmarkSnippet.make(from: "First sentence.", offset: 0))
+        #expect(!entry.passage.isEmpty)
+        #expect(entry.passage == BookmarkSnippet.make(from: "First sentence.", offset: 0))
     }
 
     @Test func aDocumentWithoutBookmarksListsNothing() async throws {
@@ -162,5 +162,31 @@ import T2SStore
         let model = BookmarkListModel(library: f.library, player: player)
         await model.load(summary)
         #expect(model.entries.isEmpty && model.error == nil)
+    }
+
+    @Test func theReadersNoteBecomesTheHeadlineAndThePassageBecomesTheQuote() async throws {
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let summary = try #require(try await f.store.summary(id: id))
+        let (player, _) = try await makePlayer(f)
+        await player.load(summary, play: false)
+        #expect(await player.saveBookmark() != .failed)
+
+        let model = BookmarkListModel(library: f.library, player: player)
+        await model.load(summary)
+        let before = try #require(model.entries.first)
+        #expect(before.headline == "First sentence.")
+        #expect(before.quote == nil)
+        #expect(before.endSeconds > before.timeSeconds)
+        #expect(before.rangeText == "\(DurationFormatter.clock(before.timeSeconds)) – \(DurationFormatter.clock(before.endSeconds))")
+
+        await model.setNote("my own words", on: before)
+        let after = try #require(model.entries.first)
+        #expect(after.headline == "my own words")
+        #expect(after.quote == "First sentence.")
+
+        await model.setNote("   ", on: after)
+        #expect(model.entries.first?.headline == "First sentence.")
+        #expect(model.entries.first?.quote == nil)
     }
 }

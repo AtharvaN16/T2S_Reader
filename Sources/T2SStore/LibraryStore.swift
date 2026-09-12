@@ -70,7 +70,7 @@ public enum LibraryStoreError: Error, Equatable, Sendable {
 /// see value types.
 @ModelActor
 public actor LibraryStore {
-    static let schema = Schema(versionedSchema: LibrarySchemaV3.self)
+    static let schema = Schema(versionedSchema: LibrarySchemaV4.self)
 
     /// SwiftData crashes intermittently when several containers are created at once (Swift Testing
     /// runs suites in parallel and each test opens its own store). Creation is rare and cheap, so

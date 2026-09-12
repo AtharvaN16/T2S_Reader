@@ -38,12 +38,15 @@ for app in "${apps[@]}"; do
   if ! heroku apps:info -a "$app" >/dev/null 2>&1; then
     heroku apps:create "$app" --stack heroku-24 --region us >/dev/null
   fi
-  heroku buildpacks:set heroku/python -a "$app" >/dev/null
+  heroku buildpacks -a "$app" 2>/dev/null | grep -q "heroku/python" || heroku buildpacks:set heroku/python -a "$app" >/dev/null
   heroku config:set T2S_VOICE_API_KEY="$KEY" MALLOC_ARENA_MAX=2 PYTHONUNBUFFERED=1 -a "$app" >/dev/null
   # Eco keeps one thread and no arena, the settings 512 MB survives; a tier test may have set these.
   heroku config:unset T2S_ORT_THREADS T2S_ORT_ARENA -a "$app" >/dev/null 2>&1 || true
   heroku labs:enable log-runtime-metrics -a "$app" >/dev/null 2>&1 || true
-  git push -f "https://git.heroku.com/$app.git" "$SPLIT:refs/heads/main" 2>&1 | grep -E "Released v|deployed to Heroku|rror|Everything up-to-date" || true
+  if ! git push -f "https://git.heroku.com/$app.git" "$SPLIT:refs/heads/main" > "/tmp/mirrors-push-$app.log" 2>&1; then
+    echo "push to $app failed:" >&2; tail -20 "/tmp/mirrors-push-$app.log" >&2; exit 1
+  fi
+  grep -E "Released v|deployed to Heroku|Everything up-to-date" "/tmp/mirrors-push-$app.log" || true
   heroku ps:scale "web=1:$SIZE" -a "$app" >/dev/null
 done
 

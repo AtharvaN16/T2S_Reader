@@ -159,7 +159,9 @@ final class AppEnvironment {
         // Closed until the scene reports itself active; a process launched for a background task
         // never opens it, so nothing that needs the foreground ever starts there.
         let foregroundGate = ForegroundGate(isForeground: false)
-        let cpuBudget = CPUBudget(gate: foregroundGate)
+        // Forty percent of one core leaves headroom for audio and app work on the CPU-only phones;
+        // the previous 60% render allowance could keep an older phone hot throughout playback.
+        let cpuBudget = CPUBudget(gate: foregroundGate, budgetSeconds: 24)
         // The budget's pacing decisions otherwise live only in `os_log`, which the phone does not
         // hand over; the timing log is what a crash report can actually be read against.
         #if KOKORO_ENGINE
@@ -175,13 +177,13 @@ final class AppEnvironment {
             key: { try cloudVoiceSecrets.load() }
         )
         let renderArbiter = RenderArbiter()
-        // The Kokoro route's own play-ahead — ten minutes on a GPU phone, three on the CPU path — in
-        // every state; the window has no foreground/background split (`KokoroComposition.playAheadWindowSeconds`).
-        // The fill past it — the rest of the chapter — runs only while frontmost and listening
-        // (`foregroundFillSeconds`, Plan 18); nil in the everyday build leaves the coordinator as it was.
+        // Kokoro keeps one urgent minute unpaced. Its fill beyond that runs only while frontmost and
+        // listening, capped at five minutes and paced to 2x real time; nil in the everyday build leaves the
+        // coordinator as it was.
         var configuration = CoordinatorConfiguration(prepareBudgetSeconds: prepareBudget)
         if let window = kokoro.playAheadWindowSeconds { configuration.windowSeconds = window }
         configuration.foregroundFill = kokoro.foregroundFillSeconds
+        configuration.foregroundFillRate = kokoro.foregroundFillSeconds == nil ? nil : 2
         let coordinator = PlaybackCoordinator(engine: cloudRouter, store: shared.audioStore, player: try AudioPlayer(),
                                               playheadStore: shared.store, timeSource: SystemTimeSource(),
                                               configuration: configuration,

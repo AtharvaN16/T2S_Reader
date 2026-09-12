@@ -218,9 +218,36 @@ import Testing
 
 @Suite struct RenderSchedulerPacingTests {
     let doc = UUID()
-    func request(_ i: Int) -> RenderRequest {
+    func request(_ i: Int, tier: RenderTier = .prepare) -> RenderRequest {
         let key = RenderKey(documentID: doc, utteranceIndex: i, voiceID: "v", engineID: "fake", normalizerVersion: 1, segmenterVersion: 1)
-        return RenderRequest(job: RenderJob(documentID: doc, utteranceIndex: i, tier: .prepare), key: key, spoken: "hello there", voiceID: "v")
+        return RenderRequest(job: RenderJob(documentID: doc, utteranceIndex: i, tier: tier), key: key, spoken: "hello there", voiceID: "v")
+    }
+
+    /// The urgent window runs immediately, but chapter-ahead work rests between calls so generated
+    /// audio advances at no more than the configured multiple of wall time.
+    @Test func chapterAheadIsPacedToTwoTimesWhilePlayAheadIsNot() async throws {
+        let clock = ManualTimeSource()
+        let engine = FakeEngine(secondsPerCharacter: 0.1, simulatedRTF: 0.1, timeSource: clock)
+        let sleeps = OSAllocatedUnfairLockBox<[TimeInterval]>([])
+        let scheduler = RenderScheduler(
+            engine: engine,
+            store: InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000),
+            timeSource: clock,
+            foregroundFillRate: 2,
+            foregroundFillSleeper: { seconds in
+                sleeps.value.append(seconds)
+                clock.advance(by: seconds)
+            }
+        )
+
+        await scheduler.setPlan([request(0, tier: .chapterAhead), request(1, tier: .chapterAhead)])
+        for await event in scheduler.events { if event == .idle { break } }
+        let pacedSleep = sleeps.value.reduce(0, +)
+        #expect(abs(pacedSleep - 0.44) < 0.001) // 1.1 s audio / 2 − 0.11 s render
+
+        await scheduler.setPlan([request(2, tier: .playAhead)])
+        for await event in scheduler.events { if event == .idle { break } }
+        #expect(abs(sleeps.value.reduce(0, +) - pacedSleep) < 0.001)
     }
 
     /// A background render behind a full CPU window waits on the budget before it synthesizes;

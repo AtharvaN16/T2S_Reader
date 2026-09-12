@@ -8,17 +8,10 @@ import KokoroPipeline
 /// Deliberately MLX-free, like ``KokoroResources``: availability probes and the app's launch path ask
 /// whether the Core ML route can run long before anything decides to load a model.
 public enum KokoroCoreMLResources: Sendable {
-    /// The revision of ``KokoroCoreMLManifest/repositoryURL`` these files were taken from.
-    ///
-    /// Ours, not upstream's: the int8 weights have no revision in `mattmireles/kokoro-coreml`, so
-    /// the files live in a repository we control. The graphs are still upstream's export at
-    /// `2e878c6a33c56b40de094ef8237bf15a83d233c5` — only the weight encoding differs.
-    public static let modelRevision = "3ffe1347795cc0648686d4e2a403f46104e481c2"
+    /// The upstream `mattmireles/kokoro-coreml` model revision these files were exported from.
+    public static let modelRevision = "2e878c6a33c56b40de094ef8237bf15a83d233c5"
     /// The first eight characters of ``modelRevision``.
-    ///
-    /// This keys the install directory, the engine identity and so the render keys: moving the pin
-    /// re-downloads the model, rebuilds the compute plans and invalidates rendered audio, by design.
-    public static let revisionPrefix = "3ffe1347"
+    public static let revisionPrefix = "2e878c6a"
     /// Bucket lengths, in seconds, staged for the decoder and F0Ntrain models. 3 and 10 since Plan 17
     /// (audit #9): a streamed first piece (48 ids, about 3 s) renders in the 3 s bucket, and a packed
     /// sentence of 8-10 s in the 10 s one rather than padding out the 15 s one. Every weight file is

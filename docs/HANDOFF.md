@@ -7,6 +7,15 @@ older and dated as marked. The dated per-session entries that used to stack here
 for the lot, `git log` for the rest), and what mattered from them lives in `crashreport.md`,
 `docs/research/` and the specs._
 
+## Heroku Kokoro Eco pilot (2026-09-11 evening)
+
+The owner purchased Heroku's $5 Eco plan for a server-side Kokoro feasibility run. The approved
+design is `docs/superpowers/specs/2026-09-11-heroku-kokoro-pilot-design.md`; its execution plan is
+`docs/superpowers/plans/2026-09-11-heroku-kokoro-pilot.md`. The service lives under
+`Server/HerokuVoice`: native Python 3.12, no Docker or add-ons, one CPU inference at a time, pinned
+INT8 ONNX weights from Hugging Face, and the existing OpenAI-compatible 24 kHz PCM contract. Eco
+sleep is accepted; do not add a pinger or upgrade the dyno without the owner's approval.
+
 ## Resume here (2026-09-11, morning) — for Harsh: where things stand, the crash fixes, what's next
 
 _Written 03:20 by the owner's session as it handed over. `dev` is pushed; the owner's iPhone 11 Pro runs
@@ -21,12 +30,13 @@ at the repo root, the `.ips` in `crashreport-ips/`), plus what the night's phone
 |---|---|---|
 | `EXC_BREAKPOINT` in the `BGTaskScheduler` launch handler — six of the eight, every Prepare launch | the handler is `@Sendable` and hops to the main actor itself | PR #16 (`21d1940`) |
 | `cpu_resource_fatal`: a plan build at 99 % CPU in a non-frontmost process | the `ForegroundGate` before every compute-plan build; a background launch never builds one | PR #16 (`68233bd`) |
+| `cpu_resource_fatal` at 15:42 on the A19: the secondary CPU set's first `MLModel.load` crossed into the background and held a core at 99% for 48 s | GPU phones no longer build that set; their cached foreground audio plays behind the lock and new synthesis waits for the foreground | uncommitted |
 | `SIGABRT`, a C++ exception out of MLX on Metal while locked (the G2P fallback network) | `mlxPinnedToCPU`: MLX's default device is the CPU for the process | your `072ab74`, on `dev` since the merge |
 | `std::bad_alloc` in MPSGraph: the GPU path's plan compile on a 4 GB phone | the GPU needs 5 GB; the chip policy and `kokoro.computeUnits` both hold to it | `84e16f9` |
 | the model download dying on the first non-2xx (Hugging Face 429s) | retry with `Retry-After`/backoff (`5d40ac8`); a file whose bytes are staged under another path is copied, 238 MB fetched of 619 (`b6548e6`); one `URLSession` per install, `Range` resume, the rate-limit headers (`7c0f1dc`) | see left |
 | "No space left on device" inside the app's own Caches: iOS keeps every install's Core ML plans, 4.36 GB on the 11 Pro | `KokoroPlanCache.prepare(for:)` wipes plans built for another install identity before the warm-up; one generation (~600 MB) at a time — this hits shipped users at every app or iOS update too | `6bc589a` |
 | a render cancelled while the phone is locked spinning on the gate at full CPU | `renderSet` throws `CancellationError` | `37f79df` |
-| not a crash: the audio starving once a minute while locked (`CPUBudget` bursts against a 60 s window) | the budget's floor (`abb3875`), a 180 s window on the CPU path (`b5b34fa`), and Plan 18 — render to the end of the chapter while in front, so a lock only tops up (`54f3a7b`, **not yet run on a phone**) | see left |
+| sustained heat from aggressive render-ahead | one urgent minute, then a five-minute fill paced to 2x real time; the CPU-only background budget is 24/60 s instead of 36/60 | uncommitted |
 | not a crash: an eight-minute first launch on the A13 (the `duration_t256` plan) | readiness waits for seven stages, t256 lands after the buckets; 57 s to speaking | `b8bc24b` |
 
 Verified on the 11 Pro: a >2.5 min lock during the first warm-up (no crash, the plan builds pause and
@@ -152,19 +162,16 @@ ready. Not verified on any phone: Plan 18, the 180 s window locked for four minu
    and the §7.3 MLX spike only if MLX for A14+ is ever revisited.
 7. **Two open questions from the crash report** are still yours: did the 17 Pro's 15:23 download go
    through in one launch, and which tier did the playback test plan under with the phone on USB?
-8. **The model is int8 now and comes from our own repository** (2026-09-11 evening): the download is
-   ~132 MB instead of ~227 MB and the compiled model on the phone ~326 MB instead of 578 MB, from
-   `anayak16/kokoro-coreml-int8` @ `3ffe1347` — ours because the quantized weights have no revision
-   in `mattmireles/kokoro-coreml`. `scripts/quantize-kokoro-coreml.py` builds it, the generator's
-   final conv and its two upsamplers and the prosody LSTM stay float, the bucket weight-sharing (so
-   the hard links) survives, and the owner did not pick it out in a blind A/B. The whole account is
-   `docs/research/2026-09-11-kokoro-quantization-how-to-and-publishing.md`. **Left:** nothing has run
-   on a phone. Core ML expands the weights at load so speech should not change, but the A13's
-   compute-plan builds (60 s and 235 s) and its ~1 GB plan cache are unmeasured under int8, and there
-   is prior art of an int8 model failing to build a plan on an A16 where fp16 loaded — treat a
-   plan-build failure on the 11 Pro as a veto. `scripts/quantization-probe.sh` renders both model sets
-   for listening; `scripts/fetch-kokoro-coreml.sh --app` still stages the float16 files, which the
-   probe compares against, so keep both.
+8. **The int8 model was vetoed on the iPhone 17 Pro and reverted** (2026-09-11 15:31): six foreground
+   launches aborted with `SIGABRT` immediately after "Voice ready". Every report ends in
+   `MTLReportFailure` while `warmKokoroStages` specializes the first GPU prediction through
+   MPSGraph; the latest is `T2SReaderKokoro-2026-09-11-153100.ips`. The shipping pin is therefore
+   back on upstream's phone-proven fp16 `mattmireles/kokoro-coreml` @ `2e878c6a`; do not re-enable
+   `anayak16/kokoro-coreml-int8` @ `3ffe1347` without a successful predictor warm-up and render on
+   both the A19 GPU path and the A13 CPU path. Keep `scripts/quantize-kokoro-coreml.py`,
+   `scripts/stage-kokoro-release.py` and `scripts/quantization-probe.sh` as experiment tooling; the
+   blind A/B only established audio quality on the Mac, not Core ML execution compatibility on a
+   phone.
 9. **A click mid-sentence that is not quantization** (2026-09-11): in the Scrooge passage it is an
    onset transient at the start of the speech that resumes 40 ms after "Humbug!" — t = 2.962 s in
    `spikes/findings/quantization-probe/06-quotes-fp16.wav`, a 0.041 jump at 12x the local envelope,

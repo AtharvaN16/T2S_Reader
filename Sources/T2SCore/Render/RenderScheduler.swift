@@ -51,6 +51,7 @@ public enum RenderEvent: Hashable, Sendable {
 /// Serial executor of `RenderRequest`s (spec §3.4). Knows nothing about timelines: the
 /// coordinator turns policy jobs into requests and applies the events.
 public actor RenderScheduler {
+    public typealias Sleeper = @Sendable (TimeInterval) async -> Void
     public static let failureSilenceSeconds: TimeInterval = 0.2
 
     public nonisolated let events: AsyncStream<RenderEvent>
@@ -63,6 +64,11 @@ public actor RenderScheduler {
     /// Holds a background render until the process's CPU fits iOS's limit (``CPUBudget``); nil
     /// renders unpaced, which is what tests and the everyday build want.
     private let budget: CPUBudget?
+    /// Maximum generated-audio seconds per wall second for the non-urgent foreground fill. Nil
+    /// leaves that tier unpaced; the urgent play-ahead tier never waits here.
+    private let foregroundFillRate: Double?
+    private let foregroundFillSleeper: Sleeper
+    private var foregroundFillDelay: TimeInterval = 0
     /// What the last synthesis cost in CPU seconds — the estimate the budget is asked to fit next
     /// time. A render before the first is guessed at ``firstRenderCPUEstimate``.
     private var lastRenderCPUSeconds: TimeInterval?
@@ -81,13 +87,17 @@ public actor RenderScheduler {
     private var hasSkippedFirstSample = false
 
     public init(engine: any SynthesisEngine, store: any AudioStore, timeSource: any TimeSource,
-                rtfWindow: Int = 20, arbiter: RenderArbiter = RenderArbiter(), budget: CPUBudget? = nil) {
+                rtfWindow: Int = 20, arbiter: RenderArbiter = RenderArbiter(), budget: CPUBudget? = nil,
+                foregroundFillRate: Double? = nil,
+                foregroundFillSleeper: @escaping Sleeper = { seconds in try? await Task.sleep(for: .seconds(seconds)) }) {
         self.engine = engine
         self.store = store
         self.timeSource = timeSource
         self.rtfWindow = max(1, rtfWindow)
         self.arbiter = arbiter
         self.budget = budget
+        self.foregroundFillRate = foregroundFillRate.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+        self.foregroundFillSleeper = foregroundFillSleeper
         (events, continuation) = AsyncStream.makeStream(of: RenderEvent.self, bufferingPolicy: .unbounded)
     }
 
@@ -126,6 +136,8 @@ public actor RenderScheduler {
 
     private func run() async {
         while !isPausedForStorage, !pending.isEmpty {
+            await paceForegroundFillIfNeeded()
+            guard !isPausedForStorage, !pending.isEmpty else { break }
             let request = pending.removeFirst()
             switch await render(request) {
             case .events(let events):
@@ -139,6 +151,21 @@ public actor RenderScheduler {
         }
         running = false
         continuation.yield(.idle)
+    }
+
+    /// Rests between chapter-ahead calls. Quarter-second slices let a seek, an empty plan, or a new
+    /// urgent play-ahead request preempt the rest promptly; the lease is not held while sleeping.
+    private func paceForegroundFillIfNeeded() async {
+        guard pending.first?.job.tier == .chapterAhead else {
+            foregroundFillDelay = 0
+            return
+        }
+        while foregroundFillDelay > 0, pending.first?.job.tier == .chapterAhead, !isCancelled {
+            let slice = min(0.25, foregroundFillDelay)
+            await foregroundFillSleeper(slice)
+            foregroundFillDelay -= slice
+        }
+        foregroundFillDelay = 0
     }
 
     /// The lease is intentionally scoped to one cache check / synthesis / store transaction. This
@@ -156,6 +183,7 @@ public actor RenderScheduler {
 
     private func renderWhileHoldingLease(_ request: RenderRequest) async -> RenderOutcome {
         if await store.contains(request.key), let clip = try? await store.read(request.key) {
+            foregroundFillDelay = 0
             return .events([.rendered(RenderedUtterance(
                 documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, key: request.key,
                 duration: clip.duration, wordTimings: []))])
@@ -177,6 +205,11 @@ public actor RenderScheduler {
                 : try await engine.synthesize(SynthesisRequest(spoken: request.spoken, voiceID: request.voiceID))
             let synthSeconds = timeSource.now() - t0
             let rtf: Double? = result.audio.duration > 0 ? synthSeconds / result.audio.duration : nil
+            if request.job.tier == .chapterAhead, let foregroundFillRate {
+                foregroundFillDelay = max(0, result.audio.duration / foregroundFillRate - synthSeconds)
+            } else {
+                foregroundFillDelay = 0
+            }
             if let rtf { record(rtf: rtf) }
             if let cpu0 { lastRenderCPUSeconds = max(0, CPUBudget.processCPUSeconds() - cpu0) }
             budget?.record()                                        // keeps the window's floor current
@@ -190,6 +223,7 @@ public actor RenderScheduler {
                 budget.report?("render cpu \(String(format: "%.1f", lastRenderCPUSeconds ?? 0)) s for \(String(format: "%.1f", result.audio.duration)) s of audio (rtf \(String(format: "%.2f", rtf))), waited \(String(format: "%.1f", waited)) s")
             }
         } catch {
+            foregroundFillDelay = 0
             events.append(.failed(documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, message: "\(error)"))
             result = SynthesisResult(audio: .silence(seconds: Self.failureSilenceSeconds), wordTimings: [])
         }

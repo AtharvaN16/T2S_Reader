@@ -18,15 +18,18 @@ public struct CoordinatorConfiguration: Sendable {
     /// seconds at 1x (Plan 18). Nil — the default, the everyday build, every test that does not
     /// ask — renders only the window.
     public var foregroundFill: ClosedRange<TimeInterval>?
+    /// Maximum generated-audio seconds per wall second for `foregroundFill`. Nil leaves it unpaced.
+    public var foregroundFillRate: Double?
 
     public init(windowSeconds: TimeInterval = 60, primeSeconds: TimeInterval = 30,
                 prepareBudgetSeconds: TimeInterval = 3 * 3600, queuedSegments: Int = 2,
-                foregroundFill: ClosedRange<TimeInterval>? = nil) {
+                foregroundFill: ClosedRange<TimeInterval>? = nil, foregroundFillRate: Double? = nil) {
         self.windowSeconds = windowSeconds
         self.primeSeconds = primeSeconds
         self.prepareBudgetSeconds = prepareBudgetSeconds
         self.queuedSegments = max(1, queuedSegments)
         self.foregroundFill = foregroundFill
+        self.foregroundFillRate = foregroundFillRate
     }
 }
 
@@ -126,7 +129,10 @@ public final class PlaybackCoordinator {
         self.player = player
         self.playheadStore = playheadStore
         self.configuration = configuration
-        self.scheduler = RenderScheduler(engine: engine, store: store, timeSource: timeSource, arbiter: arbiter, budget: budget)
+        self.scheduler = RenderScheduler(
+            engine: engine, store: store, timeSource: timeSource, arbiter: arbiter, budget: budget,
+            foregroundFillRate: configuration.foregroundFillRate
+        )
         player.onSegmentFinished = { [weak self] tag in self?.segmentFinished(tag) }
         eventTask = Task { [weak self, scheduler] in
             for await event in scheduler.events {

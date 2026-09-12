@@ -234,6 +234,23 @@ import T2SCore
         #expect(TestURLProtocol.allRequests.count == 1)
     }
 
+    /// Every mirror carries at most one of this engine's requests at a time: with four routes the
+    /// fifth request waits for a release, and takes the route that was released.
+    @Test func theRoutePoolNeverHandsOutABusyMirror() async {
+        let pool = HTTPVoiceEngine.RoutePool(count: 4)
+        var taken: [Int] = []
+        for _ in 0..<4 { taken.append(await pool.acquire()) }
+        #expect(Set(taken) == [0, 1, 2, 3])
+
+        let fifth = Task { await pool.acquire() }
+        var spins = 0
+        while await pool.waitingCount != 1, spins < 10_000 { await Task.yield(); spins += 1 }
+        #expect(await pool.waitingCount == 1)                                  // parked: every mirror is busy
+        await pool.release(2)
+        #expect(await fifth.value == 2)                                        // and takes the one released
+        #expect(await pool.waitingCount == 0)
+    }
+
     @Test func rateLimiterSpacesRequestsAndHonoursRetryAfter() async {
         let clock = TestRateClock()
         let limiter = RequestRateLimiter(requestsPerMinute: 60, now: { clock.now }, sleeper: { seconds in

@@ -204,26 +204,35 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
     private let session: URLSession
     /// One per endpoint, in the configuration's order: each mirror is rate-limited on its own.
     private let routes: [Route]
-    private let cursor = Cursor()
+    private let pool: RoutePool
 
     private struct Route: Sendable {
         let endpoint: URL
         let limiter: RequestRateLimiter
     }
 
-    /// Round-robin over the routes. Each request takes the next, so a batch as wide as the mirror
-    /// list lands one request on each mirror.
-    private final class Cursor: @unchecked Sendable {
-        private let lock = NSLock()
-        private var next = 0
+    /// The routes free of this engine's own requests. A request takes a free route and waits for
+    /// one when every mirror is busy, so this engine never sends a mirror a second request while
+    /// its first is in flight — a batch, a long utterance's pieces, a preview and a prime queue
+    /// here rather than collide and draw the mirror's 429. The walk in `synthesizePiece` covers
+    /// contention from other clients of the same mirrors. Released routes go to the back, so
+    /// requests rotate through every mirror.
+    actor RoutePool {
+        private var free: [Int]
+        private var waiters: [CheckedContinuation<Int, Never>] = []
 
-        func take(of count: Int) -> Int {
-            lock.lock()
-            defer { lock.unlock() }
-            let index = next % count
-            next = (next + 1) % count
-            return index
+        init(count: Int) { free = Array((0..<count).reversed()) }
+
+        func acquire() async -> Int {
+            if let index = free.popLast() { return index }
+            return await withCheckedContinuation { waiters.append($0) }
         }
+
+        func release(_ index: Int) {
+            if waiters.isEmpty { free.insert(index, at: 0) } else { waiters.removeFirst().resume(returning: index) }
+        }
+
+        var waitingCount: Int { waiters.count }
     }
 
     /// `limiterSleeper` replaces every route's limiter sleep — a test's no-op, so pieces sent at
@@ -238,6 +247,7 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
                 ?? RequestRateLimiter(requestsPerMinute: configuration.requestRatePerMinute)
             return Route(endpoint: endpoint, limiter: limiter)
         }
+        pool = RoutePool(count: configuration.endpoints.count)
     }
 
     public func maxConcurrentRenders(for voiceID: String) -> Int { routes.count }
@@ -261,12 +271,24 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
         return SynthesisResult(audio: PCMAudio(sampleRate: 24_000, samples: results.flatMap(\.audio.samples)), wordTimings: [])
     }
 
-    /// One request, on the next mirror. A mirror that answers 429 has its limiter deferred and the
-    /// request walks on; each mirror is tried at most once, and only when all have refused does
-    /// the request fail as rate limited.
+    /// One request, on a mirror free of this engine's other requests — waiting for one if every
+    /// mirror is busy. A mirror that answers 429 anyway (another client's render) has its limiter
+    /// deferred and the request walks on; each mirror is tried at most once, and only when all
+    /// have refused does the request fail as rate limited.
     private func synthesizePiece(_ text: String, voice: String) async throws -> SynthesisResult {
         guard let key = try await key()?.trimmed, !key.isEmpty else { throw HTTPVoiceError.missingKey }
-        let start = cursor.take(of: routes.count)
+        let start = await pool.acquire()
+        do {
+            let result = try await walk(text, voice: voice, key: key, from: start)
+            await pool.release(start)
+            return result
+        } catch {
+            await pool.release(start)
+            throw error
+        }
+    }
+
+    private func walk(_ text: String, voice: String, key: String, from start: Int) async throws -> SynthesisResult {
         var refused: HTTPVoiceError?
         for attempt in 0 ..< routes.count {
             let route = routes[(start + attempt) % routes.count]

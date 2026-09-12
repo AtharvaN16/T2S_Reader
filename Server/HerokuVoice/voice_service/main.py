@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -28,4 +29,22 @@ def build_app(
         model_dir / "kokoro-v1.0.int8.onnx",
         model_dir / "voices-v1.0.bin",
     )
+    warm_up(synthesizer)
     return create_app(synthesizer, api_key=api_key)
+
+
+WARM_UP_TEXT = "Ready."
+
+
+def warm_up(synthesizer: Synthesizer) -> None:
+    """One short render before the first request.
+
+    The first inference pays for the runtime's lazy setup — the phonemizer, the
+    session's first run — and on a dyno that had just booted it pushed the first
+    real request past the router's 30 s. A failure here is logged by type only
+    and the app still serves; the first request then pays it, as before.
+    """
+    try:
+        synthesizer.synthesize(WARM_UP_TEXT, "af_heart")
+    except Exception as error:  # noqa: BLE001 - the app must come up either way
+        logging.getLogger("voice_service").warning("warm-up render failed: %s", type(error).__name__)

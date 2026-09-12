@@ -354,6 +354,15 @@ struct WarmUpLine: View {
     private static let barHeight: CGFloat = 5
     private static let segmentGap: CGFloat = 3
 
+    /// How far below the safe-area inset the three rows reach, with a few points under the bar so
+    /// the ground does not stop on its edge: 8 of top pad, the 11 pt title's ~14, the subtext row's
+    /// 13 over its 2 of pad, and the bar's 5 under its 7. `TopFade` holds this much solid while the
+    /// glow is up so the bar reads against ground rather than against a book row scrolled under it.
+    /// The Ready row collapses 15 pt of this, and deliberately does not shrink the band: the glow is
+    /// already fading out by then and a ground that stepped up on the last beat would be the one
+    /// movement on screen that means nothing.
+    static let bandHeight: CGFloat = 54
+
     var body: some View {
         let showing = WarmUpVeil.isShowing(env)
         ZStack {

@@ -136,7 +136,13 @@ struct RootPager: View {
                 // one to two through its fade (owner, 2026-09-12: "there is a top fade messing with
                 // the glow"). The warm-up's line is not gated: it belongs wherever the reader is.
                 if !chrome.isSubpageOpen {
-                    TopFade(inset: geo.safeAreaInsets.top)
+                    // The fade grows to hold the warm-up's rows while they are up, and eases back
+                    // on the glow's own timing so the two leave together rather than the ground
+                    // snapping out from under a line that is still fading.
+                    let warming = WarmUpVeil.isShowing(env)
+                    TopFade(inset: geo.safeAreaInsets.top,
+                            extra: warming ? TopFade.warmBand : 0)
+                        .animation(.easeInOut(duration: WarmUpVeil.fadeOut), value: warming)
                     WarmRim(edge: .top)
                     // The foot's rim is a sibling of the head's, not a passenger on `bottomFill`.
                     // It rode on the fill while the fill was the only thing that reached past the

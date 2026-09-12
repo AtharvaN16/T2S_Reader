@@ -43,6 +43,10 @@ final class AppEnvironment {
     let pronunciation: PronunciationModel
     let storage: StorageModel
     let prepareRunner: PrepareRunner
+    /// The reader-initiated "render this chapter" queue, one for the whole app (chapter-rendering
+    /// design). It sits beside Prepare rather than inside it — and beside the player rather than on
+    /// it — because it renders books that are not loaded, which is the whole point of it.
+    let chapterRenderer: ChapterRenderRunner
     let voiceChange: VoiceChangeModel
     let readerModel: ReaderModel
     let sleepTimer: SleepTimer
@@ -101,6 +105,10 @@ final class AppEnvironment {
         storage = StorageModel(library: library, audioStore: audioStore, player: player, libraryModel: libraryModel)
         prepareRunner = PrepareRunner(library: library, store: store, audioStore: audioStore,
                                       engine: engine, arbiter: renderArbiter, budget: cpuBudget)
+        // The same arbiter Prepare and the player share: "one render at a time" and "playback wins"
+        // are its lease, not three subsystems agreeing to take turns.
+        chapterRenderer = ChapterRenderRunner(library: library, store: store, audioStore: audioStore,
+                                              engine: engine, arbiter: renderArbiter, budget: cpuBudget)
         voiceChange = VoiceChangeModel(library: library, player: player, libraryModel: libraryModel)
         readerModel = ReaderModel(player: player)
         sleepTimer = SleepTimer(player: player)
@@ -108,10 +116,14 @@ final class AppEnvironment {
         nowPlaying = NowPlayingController(player: player, libraryModel: libraryModel, preferences: preferences, paths: paths)
         player.defaultVoiceID = preferences.defaultVoiceID
         prepareRunner.defaultVoiceID = preferences.defaultVoiceID
+        chapterRenderer.defaultVoiceID = preferences.defaultVoiceID
         // One resolver for all three: a document's voice is decided the same way whether it is
-        // played now, prepared in the background, or described in Preferences (spec §6).
+        // played now, prepared in the background, or described in Preferences (spec §6). A chapter
+        // put on the device by hand renders with the same route, so what it stores is the audio the
+        // next tap plays rather than a second copy under another key.
         player.voiceRouting = voiceRouting
         prepareRunner.voiceRouting = voiceRouting
+        chapterRenderer.voiceRouting = voiceRouting
         // A charger never renders a library through the mirrors: prepare waits for the on-device voice.
         // The routing alone is captured, not the environment: it is `Sendable`, and the runner
         // must not retain everything through its gate.

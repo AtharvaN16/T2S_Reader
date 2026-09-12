@@ -54,8 +54,12 @@ struct ChapterListView: View {
     var pulsing: Int? = nil
     /// Chapter index → its bookmarks. A chapter with no key shows no pill.
     var bookmarks: [Int: [BookmarkEntry]] = [:]
+    /// Render mode (the Book sheet): chapter index → the trailing mark it wears instead of the
+    /// progress ring. Empty everywhere else, which is what makes this the same list it always was.
+    var renderMarks: [Int: ChapterRenderMark] = [:]
     var onSelect: (ChapterEntry) -> Void
     var onSelectBookmark: ((BookmarkEntry) -> Void)? = nil
+    var onEvict: ((ChapterEntry) -> Void)? = nil
 
     @State private var expanded: Set<Int> = []
 
@@ -75,11 +79,13 @@ struct ChapterListView: View {
                     ChapterRow(chapter: chapter, isCurrent: isCurrent,
                                isHeard: current.map { chapter.index < $0 } ?? false,
                                bookmarkCount: stamps.count, isShowingBookmarks: isOpen,
+                               renderMark: renderMarks[chapter.index],
                                onToggleBookmarks: {
                                    withAnimation(.spring(duration: 0.25)) {
                                        if isOpen { expanded.remove(chapter.index) } else { expanded.insert(chapter.index) }
                                    }
-                               }) { onSelect(chapter) }
+                               },
+                               onEvict: { onEvict?(chapter) }) { onSelect(chapter) }
                     if isOpen {
                         ForEach(stamps) { stamp in
                             BookmarkStampRow(entry: stamp) { onSelectBookmark?(stamp) }
@@ -109,7 +115,7 @@ struct BookmarkStampRow: View {
         Button(action: action) {
             HStack(alignment: .center, spacing: 10) {
                 Circle().fill(Tokens.accent).frame(width: 7, height: 7)
-                Text(entry.headline).typeRole(.meta).foregroundStyle(Tokens.ink).lineLimit(1)
+                Text(entry.lead).typeRole(.meta).foregroundStyle(Tokens.ink).lineLimit(1)
                 Spacer(minLength: 8)
                 // Inter, not the `.mono` role the stamp wore when the time led the row: out at the
                 // end it is read, not scanned down a column (owner, 2026-09-12).
@@ -123,7 +129,7 @@ struct BookmarkStampRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(entry.headline), at \(entry.timeText)")
+        .accessibilityLabel("\(entry.lead), at \(entry.timeText)")
         .accessibilityHint("Plays from this bookmark")
     }
 }
@@ -139,7 +145,11 @@ struct ChapterRow: View {
     /// How many bookmarks this chapter holds; 0 shows no pill.
     var bookmarkCount: Int = 0
     var isShowingBookmarks: Bool = false
+    /// In render mode, what this chapter has on the device or is doing about it — nil otherwise,
+    /// and then the row is the row it has always been.
+    var renderMark: ChapterRenderMark? = nil
     var onToggleBookmarks: () -> Void = {}
+    var onEvict: () -> Void = {}
     var action: () -> Void
 
     var body: some View {
@@ -159,8 +169,12 @@ struct ChapterRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            // A fully rendered chapter has nothing left to render, so its row does not take a tap:
+            // the trash beside it is its one action.
+            .allowsHitTesting(renderMark?.isSelectable ?? true)
             .accessibilityAddTraits(isCurrent ? .isSelected : [])
-            .accessibilityValue(isCurrent ? "\(Int((chapter.fraction * 100).rounded())) percent" : (isHeard ? "Heard" : ""))
+            .accessibilityValue(renderMark?.accessibilityText
+                ?? (isCurrent ? "\(Int((chapter.fraction * 100).rounded())) percent" : (isHeard ? "Heard" : "")))
 
             if bookmarkCount > 0 {
                 Button(action: onToggleBookmarks) {
@@ -181,7 +195,12 @@ struct ChapterRow: View {
                 .accessibilityHint(isShowingBookmarks ? "Hides them" : "Shows them")
             }
 
-            if isCurrent {
+            if let renderMark {
+                // Render mode replaces the end of the row rather than crowding it: the ring says
+                // how far you have listened, and this says what is on the device — two different
+                // questions, and only one of them is being asked.
+                ChapterRenderMarkView(mark: renderMark, onEvict: onEvict)
+            } else if isCurrent {
                 CircularProgress(fraction: chapter.fraction, lineWidth: 2, size: 18)
             } else if isHeard {
                 Image(systemName: "checkmark.circle.fill")
@@ -192,5 +211,116 @@ struct ChapterRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+    }
+}
+
+/// The trailing mark on a chapter row in render mode — the whole language of that screen
+/// (chapter-rendering design, "UI"): an empty circle, a filled check once picked, "Queued", a
+/// waveform filling as it renders, and the `positive` tick with a size and a trash once it is on
+/// the device.
+enum ChapterRenderMark: Equatable {
+    case unselected
+    case selected
+    case queued
+    /// 0…1 of the chapter's utterances.
+    case running(Double)
+    /// Its size on disk, once the store can name one.
+    case ready(String?)
+    /// What went wrong, said in the row's accessibility value; the row stays selectable, so a tap
+    /// is the retry.
+    case failed(String)
+
+    /// What the queue is doing with the chapter outranks what the store holds, because what the
+    /// store holds is about to change. With no job, the store has the last word: a chapter rendered
+    /// in an earlier session — or by the fill tier while you listened — is as ready as one this
+    /// queue just finished.
+    static func mark(status: ChapterAudioStatus?, job: ChapterRenderJob?, isSelected: Bool) -> ChapterRenderMark {
+        switch job?.state {
+        case .queued: return .queued
+        case .running: return .running(job?.fraction ?? 0)
+        case .failed(let message): return isSelected ? .selected : .failed(message)
+        case .ready, .none: break
+        }
+        if status?.isFullyRendered == true { return .ready(status?.sizeText) }
+        return isSelected ? .selected : .unselected
+    }
+
+    /// Whether tapping the row does anything. A ready chapter's row does not: there is nothing left
+    /// to render in it.
+    var isSelectable: Bool {
+        if case .ready = self { return false }
+        return true
+    }
+
+    var accessibilityText: String {
+        switch self {
+        case .unselected: return "Not rendered"
+        case .selected: return "Selected"
+        case .queued: return "Queued"
+        case .running(let fraction): return "Rendering, \(Int((fraction * 100).rounded())) percent"
+        case .ready(let size): return size.map { "On this device, \($0)" } ?? "On this device"
+        case .failed(let message): return message
+        }
+    }
+}
+
+/// The mark drawn. Visual only but for the trash, which is its own button and plainly visible
+/// rather than behind a long press — the lesson of the bookmarks work of the same day: a
+/// destructive action hidden behind a gesture reads to the owner as absent.
+struct ChapterRenderMarkView: View {
+    var mark: ChapterRenderMark
+    var onEvict: () -> Void
+
+    var body: some View {
+        switch mark {
+        case .unselected:
+            RadioMark(isOn: false)
+        case .selected:
+            RadioMark(isOn: true)
+        case .queued:
+            Text("Queued").typeRole(.meta).foregroundStyle(Tokens.ink2)
+        case .running(let fraction):
+            RenderWaveform(fraction: fraction)
+        case .ready(let size):
+            HStack(spacing: 6) {
+                PositiveCheck()
+                if let size { Text(size).typeRole(.meta).foregroundStyle(Tokens.ink2) }
+                Button(action: onEvict) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Tokens.destructive)
+                        .frame(width: 30, height: 30)                   // a target of its own, clear of the tick
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remove this chapter's audio")
+            }
+        case .failed(let message):
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 15))
+                .foregroundStyle(Tokens.destructive)
+                .accessibilityLabel(message)
+        }
+    }
+}
+
+/// The SF `waveform` filling left to right as the chapter renders: a progress bar in the shape of
+/// the thing being made. Both copies sit in the same box as the marks it stands between, so the
+/// column does not shift when a row starts or finishes.
+private struct RenderWaveform: View {
+    var fraction: Double
+    private static let box: CGFloat = 24
+
+    var body: some View {
+        let glyph = Image(systemName: "waveform").font(.system(size: 16, weight: .semibold))
+        let filled = Self.box * min(1, max(0, fraction))
+        return ZStack(alignment: .leading) {
+            glyph.foregroundStyle(Tokens.ink3).frame(width: Self.box, height: Self.box)
+            glyph.foregroundStyle(Tokens.accent).frame(width: Self.box, height: Self.box)
+                .mask(alignment: .leading) { Rectangle().frame(width: filled) }
+        }
+        .frame(width: Self.box, height: Self.box)
+        .animation(.linear(duration: 0.25), value: fraction)
+        .accessibilityHidden(true)                                      // the row says the percentage
     }
 }

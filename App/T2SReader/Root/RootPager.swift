@@ -138,8 +138,13 @@ struct RootPager: View {
                 if !chrome.isSubpageOpen {
                     TopFade(inset: geo.safeAreaInsets.top)
                     WarmRim(edge: .top)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                        .ignoresSafeArea(edges: .top)
+                    // The foot's rim is a sibling of the head's, not a passenger on `bottomFill`.
+                    // It rode on the fill while the fill was the only thing that reached past the
+                    // home indicator; the rim reaches on its own now, and hanging it off a host
+                    // that bleeds its own safe area is the arrangement that cost the Reader its
+                    // bottom 34 pt (see `WarmRim`). Above the fill, below the mini-player, as
+                    // before.
+                    WarmRim(edge: .bottom)
                 }
                 WarmUpLine(band: geo.safeAreaInsets.top)
 
@@ -232,6 +237,14 @@ struct RootPager: View {
         .onChange(of: env.preferences.defaultVoiceID) { _, voiceID in
             env.player.defaultVoiceID = voiceID
             env.prepareRunner.defaultVoiceID = voiceID
+            env.chapterRenderer.defaultVoiceID = voiceID
+        }
+        // One message when the queue empties, not one per chapter, and from here rather than the
+        // Book sheet: the queue outlives the sheet, so the reader who started it and swiped away is
+        // the one who most needs telling.
+        .onChange(of: env.chapterRenderer.lastCompletion) { _, completion in
+            guard let completion else { return }
+            env.toasts.show(Self.renderToast(completion, queue: env.chapterRenderer.queue))
         }
         .onChange(of: env.preferences.defaultRate) { _, rate in
             env.player.setRate(rate)
@@ -356,18 +369,36 @@ struct RootPager: View {
             return .init(color: Tokens.ground.opacity(eased), location: fadeEnd * t)
         }
         stops.append(.init(color: Tokens.ground, location: 1))
-        // The rim over the fill, not under it: this ground is opaque where the glow is brightest,
-        // and was painting the foot of it out (owner, 2026-09-12).
+        // Ground only. The rim that goes over it — this fill is opaque exactly where the glow is
+        // brightest, and painting under it puts the foot of the light out (owner, 2026-09-12) — is
+        // a sibling in `body`, drawn after this.
         return LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
-            .overlay(alignment: .bottom) { WarmRim() }
-        .frame(height: height)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .ignoresSafeArea(edges: .bottom)
-        .allowsHitTesting(false)
+            .frame(height: height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .ignoresSafeArea(edges: .bottom)
+            .allowsHitTesting(false)
     }
 
     private func refreshHome() {
         Task { await env.libraryModel.refresh() }
+    }
+
+    /// What one drain of the chapter queue came to. A chapter that failed carries its own sentence
+    /// — how many sentences never became audio, or why the book could not be read — so the detail
+    /// line quotes it rather than saying "something went wrong": the reader can act on the first
+    /// and not on the second.
+    private static func renderToast(_ completion: ChapterRenderRunner.Completion,
+                                    queue: [ChapterRenderJob]) -> ToastContent {
+        let reason = queue.compactMap { job -> String? in
+            if case .failed(let message) = job.state { return message }
+            return nil
+        }.last
+        let ready = completion.ready == 1 ? "1 chapter ready" : "\(completion.ready) chapters ready"
+        guard completion.failed > 0 else { return ToastContent(title: ready, actionLabel: nil) }
+        let failed = completion.failed == 1 ? "1 chapter could not be rendered"
+                                            : "\(completion.failed) chapters could not be rendered"
+        if completion.ready == 0 { return ToastContent(title: failed, detail: reason, actionLabel: nil) }
+        return ToastContent(title: ready, detail: failed, actionLabel: nil)
     }
 
     /// A foreground pass is only a convenience while the app is awake and idle. The scheduler's
@@ -387,6 +418,10 @@ struct RootPager: View {
 
     private func updatePrepareDeviceState(_ state: DeviceState) {
         env.coordinator.device = state
+        // The chapter queue decides for itself what heat and a full store mean to it — it holds
+        // rather than stops, and a `.storeFull` it hit itself is released by the next report of
+        // room. It only needs to be told (chapter-rendering design, "State machine").
+        env.chapterRenderer.deviceStateChanged(state)
         if state.charging && !state.thermalSerious && !state.lowPowerMode && !state.storeFull {
             startForegroundPrepareIfNeeded()
         } else {

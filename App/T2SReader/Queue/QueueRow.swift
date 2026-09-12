@@ -161,11 +161,11 @@ struct QueueRow: View {
         Button(action: onDetails) { Label("Details", systemImage: "info.circle") }
         Button { showSleepTimer = true } label: { Label("Sleep timer", systemImage: "moon.zzz") }
         Button { showVoiceChange = true } label: { Label("Change voice", systemImage: "person.wave.2") }
+        // The book's resume chapter — chapter 1 if it has never been played — without loading it.
+        // The `load` this used to do made pressing "Render chapter" on a book you were not
+        // listening to silently make it your current book (chapter-rendering design, "Entry points").
         Button {
-            Task {
-                if !isCurrent { await env.player.load(summary, play: false) }
-                env.player.renderCurrentChapter()
-            }
+            Task { await env.chapterRenderer.enqueueResumeChapter(of: summary.id) }
         } label: { Label(hasChapters ? "Render chapter" : "Render whole document", systemImage: "waveform") }
     }
 

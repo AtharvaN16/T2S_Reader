@@ -51,26 +51,17 @@ struct SettingsSubpage: ViewModifier {
                     TopFade(inset: top).offset(y: -top)
                 }
             }
-            // The rim is anchored the way the foot's is — fill the region, pin to its edge, and let
-            // `ignoresSafeArea` be the thing that reaches the window — and *not* by the measured
-            // shift its neighbour above uses. Both together was one shift too many: `ignoresSafeArea`
-            // already takes the region's origin up to the window's top edge, so the offset took the
-            // lit edge another status bar past it, off the screen, leaving the sides lit and the top
-            // of the glow gone (owner, 2026-09-12, twice on the Voice page — cut at the content's
-            // top without this, hoisted off the top with both).
-            .overlay {
-                WarmRim(edge: .top)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .ignoresSafeArea(edges: .top)
-            }
-            // And the foot, which a pushed page never had: the root pager's bottom glow rides on
-            // `bottomFill`, and that goes when a subpage takes the screen, so the light simply
-            // stopped at the top of the page (owner, 2026-09-12: "there is no glow in the bottom").
-            .overlay {
-                WarmRim(edge: .bottom)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                    .ignoresSafeArea(edges: .bottom)
-            }
+            // The rim anchors itself to the window's edges (`WarmRim`), and is *not* given the
+            // measured shift its neighbour above uses. Both together was one shift too many: the
+            // rim's own `ignoresSafeArea` already takes it to the window's top edge, so the offset
+            // took the lit edge another status bar past it, off the screen, leaving the sides lit
+            // and the top of the glow gone (owner, 2026-09-12, twice on the Voice page — cut at
+            // the content's top without this, hoisted off the top with both).
+            .overlay { WarmRim(edge: .top) }
+            // And the foot, which a pushed page never had: the root pager's bottom glow goes when
+            // a subpage takes the screen, so the light simply stopped at the top of the page
+            // (owner, 2026-09-12: "there is no glow in the bottom").
+            .overlay { WarmRim(edge: .bottom) }
     }
 }
 

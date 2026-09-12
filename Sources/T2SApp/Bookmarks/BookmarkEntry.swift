@@ -5,9 +5,12 @@ import T2SCore
 /// the span of audio it covers. `position` is kept so the jump can resolve it against the timeline
 /// the coordinator actually holds.
 ///
-/// The row leads with the reader's own words when there are any, and with the book's otherwise
-/// (2026-09-11 spec §6) — `headline` and `quote` are that rule, in one place, so every surface
-/// showing a bookmark shows it the same way.
+/// The book's words lead and the reader's note follows them, quoted against a rule — ``lead`` and
+/// ``note`` are that arrangement, in one place, so every surface showing a bookmark shows it the
+/// same way. It was the other way about until 2026-09-12, on the 2026-09-11 spec §6 reading that a
+/// list of one's own words is a notebook rather than a second copy of the book. The owner's call
+/// reverses it: "the bookmark is the main focus". A note is a gloss on a passage, and a gloss reads
+/// under the thing it glosses.
 public struct BookmarkEntry: Identifiable, Hashable, Sendable {
     public let id: UUID
     public let position: Position
@@ -45,10 +48,11 @@ public struct BookmarkEntry: Identifiable, Hashable, Sendable {
     }
 
     public var hasNote: Bool { writtenNote != nil }
-    /// The reader's words when they wrote any, else the book's.
-    public var headline: String { writtenNote ?? passage }
-    /// The book's words, but only when they are not already the headline.
-    public var quote: String? { writtenNote == nil ? nil : passage }
+    /// What a bookmark says first: the book's words, always. A bookmark is a place in a book before
+    /// it is anything of the reader's.
+    public var lead: String { passage }
+    /// The reader's own words, to stand under the passage; nil when they wrote none.
+    public var note: String? { writtenNote }
 
     public var timeText: String { DurationFormatter.clock(timeSeconds) }
     public var rangeText: String { "\(DurationFormatter.clock(timeSeconds)) – \(DurationFormatter.clock(endSeconds))" }

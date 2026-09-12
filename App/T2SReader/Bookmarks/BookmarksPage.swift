@@ -27,6 +27,13 @@ struct BookmarksPage: View {
     @State private var model: BookmarkListModel?
     @State private var editing: BookmarkEntry?
     @State private var opened: BookmarkEntry?
+    /// Whether the order menu is down.
+    @State private var picking = false
+
+    /// The air between two bookmarks. Generous on the owner's word (2026-09-12): a bookmark is up
+    /// to four lines of the book plus a note plus two buttons, and at 18 two of them ran together
+    /// into one block of text with a rule somewhere in the middle of it.
+    private static let rowGap: CGFloat = 30
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -39,7 +46,6 @@ struct BookmarksPage: View {
                         .padding(.top, Spacing.row)
                     Spacer()
                 } else {
-                    sortPills(model)
                     rows(model)
                 }
                 if let error = model.error {
@@ -52,6 +58,7 @@ struct BookmarksPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Tokens.ground.ignoresSafeArea())
+        .overlay { if picking, let model { orderMenu(model) } }
         .fullScreenCover(item: $opened) { entry in
             BookmarkDetail(entry: entry,
                            onListen: { jump(to: entry) },
@@ -70,35 +77,59 @@ struct BookmarksPage: View {
     }
 
     private var header: some View {
-        HStack {
-            Button { dismiss() } label: { CircleGlyph(systemName: "chevron.left") }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Back")
-            Spacer()
-        }
-        .padding(.horizontal, Spacing.margin)
-        .padding(.top, Spacing.grid)
-        .overlay(alignment: .bottomLeading) {
-            PageTitle(text: "Bookmarks")
-                .padding(.horizontal, Spacing.margin)
-                .offset(y: Spacing.row + 12)
-        }
-        .padding(.bottom, Spacing.row + 12)
-    }
-
-    /// Two pills, the Voice page's filter idiom: the order is a choice worth seeing, not one worth
-    /// hunting for in a menu — and with two options a menu would be a tap to reveal a single
-    /// alternative.
-    private func sortPills(_ model: BookmarkListModel) -> some View {
-        HStack(spacing: 8) {
-            ForEach(BookmarkSort.allCases, id: \.self) { option in
-                Pill(label: option.title, style: model.sort == option ? .selected : .soft) {
-                    withAnimation(.snappy) { model.sort = option }
-                }
+        VStack(alignment: .leading, spacing: Spacing.grid) {
+            HStack {
+                Button { dismiss() } label: { CircleGlyph(systemName: "chevron.left") }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Back")
+                Spacer()
+            }
+            HStack(alignment: .firstTextBaseline) {
+                PageTitle(text: "Bookmarks")
+                Spacer(minLength: 12)
+                if let model, !model.entries.isEmpty { filterButton(model) }
             }
         }
         .padding(.horizontal, Spacing.margin)
+        .padding(.top, Spacing.grid)
         .padding(.bottom, Spacing.row)
+    }
+
+    /// The order, behind the Collection's own dropdown rather than two pills across the page (owner,
+    /// 2026-09-12). The pills said the same thing but spent a row of the screen saying it, and the
+    /// Collection has already settled what a filter looks like here: a mark you tap, a card that
+    /// drops under it with the choices and a radio against the one in force (`TitleMenuCard`).
+    private func filterButton(_ model: BookmarkListModel) -> some View {
+        Button {
+            withAnimation(picking ? TitleMenuMotion.close : TitleMenuMotion.open) { picking.toggle() }
+        } label: {
+            CircleGlyph(systemName: "line.3.horizontal.decrease")
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Order")
+        .accessibilityValue(model.sort.title)
+        .accessibilityHint("Chooses the order the bookmarks are in")
+        .sensoryFeedback(trigger: picking) { _, open in
+            open ? .impact(weight: .light, intensity: 0.7) : nil
+        }
+    }
+
+    /// The card, hanging from the mark at the top right. Over a full-page catcher, so a tap
+    /// anywhere else closes it without reaching the list underneath.
+    private func orderMenu(_ model: BookmarkListModel) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture { withAnimation(TitleMenuMotion.close) { picking = false } }
+            TitleMenuCard(options: BookmarkSort.allCases, title: \.title, selection: model.sort) { order in
+                withAnimation(TitleMenuMotion.close) {
+                    model.sort = order
+                    picking = false
+                }
+            }
+            .padding(.trailing, Spacing.margin)
+            .padding(.top, Spacing.grid + 44)                              // clear of the mark it hangs from
+        }
         .sensoryFeedback(.selection, trigger: model.sort)
     }
 
@@ -118,7 +149,7 @@ struct BookmarksPage: View {
                                 onEditNote: { editing = entry },
                                 onDelete: { Task { await model.delete(entry) } })
                         .padding(.horizontal, Spacing.margin)
-                        .padding(.vertical, 18)
+                        .padding(.vertical, Self.rowGap)
                 }
                 Color.clear.frame(height: Spacing.section)
             }

@@ -2,9 +2,8 @@
 import SwiftUI
 import T2SApp
 
-/// One bookmark (2026-09-11 spec §6). The reader's own words are the headline when there are any
-/// and the book's passage drops to a quote beneath them; with no note the passage keeps the
-/// headline. The list then reads as a notebook rather than a second copy of the book.
+/// One bookmark. The book's words lead and the reader's note stands under them against a rule
+/// (`BookmarkEntry.lead` / `.note`, where the arrangement and the reason for it live).
 ///
 /// Tapping the row opens the bookmark (`BookmarkDetail`); only the Listen pill plays (owner,
 /// 2026-09-12). The two targets used to do the same thing, which left no way to read a long
@@ -25,10 +24,10 @@ struct BookmarkRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(meta).typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(1)
-            Text(entry.headline).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
+            Text(entry.lead).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
                 .lineLimit(4).multilineTextAlignment(.leading)
-            if let quote = entry.quote {
-                Text(quote).typeRole(.meta).foregroundStyle(Tokens.ink2)
+            if let note = entry.note {
+                Text(note).typeRole(.meta).foregroundStyle(Tokens.ink2)
                     .lineLimit(3).multilineTextAlignment(.leading)
                     .padding(.leading, 11)
                     .overlay(alignment: .leading) {
@@ -55,7 +54,7 @@ struct BookmarkRow: View {
             Button(role: .destructive, action: onDelete) { Label("Delete bookmark", systemImage: "trash") }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(entry.headline), \(meta)")
+        .accessibilityLabel("\(entry.lead), \(meta)")
         .accessibilityHint("Opens the bookmark")
         .accessibilityAction(named: "Listen", onJump)
         .accessibilityAction(named: "Delete bookmark", onDelete)

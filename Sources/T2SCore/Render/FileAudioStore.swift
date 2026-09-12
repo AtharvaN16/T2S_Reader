@@ -118,6 +118,11 @@ public actor FileAudioStore: AudioStore {
         return AudioStoreStats(bytes: lru.bytes, entries: lru.sizes.count, capacityBytes: capacity)
     }
 
+    public func bytes(for keys: [RenderKey]) -> Int {
+        ensureIndexed()
+        return Set(keys).reduce(0) { $0 + (lru.sizes[$1] ?? 0) }
+    }
+
     public func setCapacity(bytes: Int) {
         ensureIndexed()
         capacity = bytes

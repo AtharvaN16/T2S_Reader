@@ -28,6 +28,11 @@ public protocol AudioStore: Sendable {
     func read(_ key: RenderKey) async throws -> PCMAudio?
     func remove(_ key: RenderKey) async throws
     func stats() async -> AudioStoreStats
+    /// What these keys occupy — the Book sheet's per-chapter size and its "38 MB" summary, which is
+    /// one book's audio rather than the whole cache `stats()` reports. A key the store does not hold
+    /// counts nothing, and a key given twice counts once: this is the space evicting them would free,
+    /// and one blob is freed once. Every store answers from its own index, never by reading the audio.
+    func bytes(for keys: [RenderKey]) async -> Int
     /// Evicts immediately if the new cap is below current usage.
     func setCapacity(bytes: Int) async
 }

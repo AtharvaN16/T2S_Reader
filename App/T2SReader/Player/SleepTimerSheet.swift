@@ -4,9 +4,13 @@ import T2SApp
 /// Sleep-timer sheet with time and chapter-end options (spec §2.4.5).
 ///
 /// The owner's reference (2026-09-12) is a centred sheet: the moon over its own title, the options
-/// as a grid of tiles inside one grey card rather than a wrapping row of chips, and one full-width
-/// key under it. Our own elements do the work — `Tokens`, the `.selected` chip's ink fill, `Pill`
-/// — so it is the podcast app's *shape*, not its paint.
+/// as a grid of tiles inside one grey card rather than a wrapping row of chips, and the one action
+/// a full-width key at the foot. Our own elements do the work — `Tokens`, the `.selected` chip's
+/// ink fill, the blue `RaisedButton` — so it is the podcast app's *shape*, not its paint.
+///
+/// The key sits on the floor of the sheet rather than under the card (owner, 2026-09-12), with the
+/// air between them doing what the instruction line used to: nothing else is asked of you here, so
+/// there is nothing left to explain.
 struct SleepTimerSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
@@ -14,42 +18,57 @@ struct SleepTimerSheet: View {
 
     var body: some View {
         let timer = env.sleepTimer
-        VStack(spacing: Spacing.row - 4) {
-            VStack(spacing: 10) {
-                Image(systemName: "moon.zzz.fill")
-                    .font(.system(size: 32, weight: .semibold))
-                    .foregroundStyle(Tokens.ink3)
-                Text("Sleep timer").typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
-            }
-            .padding(.top, Spacing.margin)
+        let caption = timer.caption
+        VStack(spacing: 0) {
+            // The scroll view is what holds the key to the floor: it takes whatever room is left
+            // over, so the air above the key grows with the phone rather than the key drifting up
+            // to meet the card. On a short screen, or at the accessibility text sizes, the same
+            // view scrolls rather than clipping its last row — a medium detent is a fraction of
+            // the screen, and the grid at its new height nearly fills one on a small phone.
+            ScrollView {
+                VStack(spacing: 0) {
+                    VStack(spacing: 10) {
+                        Image(systemName: "moon.zzz.fill")
+                            .font(.system(size: 32, weight: .semibold))
+                            .foregroundStyle(Tokens.ink3)
+                        Text("Sleep timer").typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
+                    }
+                    .padding(.top, Spacing.margin)
+                    .padding(.bottom, Spacing.row)
 
-            if let caption = timer.caption {
-                Text(caption).typeRole(.playerTitle).foregroundStyle(Tokens.ink)
+                    if let caption {
+                        Text(caption).typeRole(.playerTitle).foregroundStyle(Tokens.ink)
+                    } else {
+                        OptionGrid(options: SleepOption.all, selected: $selected)
+                    }
+                }
+                .padding(.bottom, Spacing.row)
+            }
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize)
+
+            if caption != nil {
                 Pill(label: "Cancel timer", style: .soft, fillsWidth: true) {
                     timer.cancel()
                     dismiss()
                 }
             } else {
-                OptionGrid(options: SleepOption.all, selected: $selected)
-                VStack(spacing: 12) {
-                    Pill(label: "Start sleep timer", glyph: "play.fill", style: .accent, fillsWidth: true) {
-                        timer.start(selected)
-                        dismiss()
-                    }
-                    Text("The timer ends early if the document does.")
-                        .typeRole(.meta)
-                        .foregroundStyle(Tokens.ink2)
-                        .multilineTextAlignment(.center)
+                RaisedButton(label: "Start sleep timer", glyph: "play.fill", tone: .blue, size: .bar) {
+                    timer.start(selected)
+                    dismiss()
                 }
             }
-            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, Spacing.margin)
+        .padding(.bottom, Spacing.margin)
         // `presentationBackground`, not `.background`: the content is only as wide as it needs to
         // be, so a background painted on it left the sheet's own sides unfilled (owner, 2026-09-12).
         .presentationBackground(Tokens.raised)
-        .presentationDetents([.medium])
+        // A shade taller than `.medium` (owner, 2026-09-12: the grid at its new height, and air
+        // between it and the key). Medium is a fixed fraction of the screen, and at that height the
+        // card all but touched the key; this is the fraction the content actually asks for.
+        .presentationDetents([.fraction(0.62)])
         .presentationCornerRadius(Spacing.sheetCorner)
     }
 }
@@ -61,14 +80,14 @@ private struct OptionGrid: View {
     @Binding var selected: SleepOption
 
     var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Spacing.grid), count: 3),
-                  spacing: Spacing.grid) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Spacing.grid + 4), count: 3),
+                  spacing: Spacing.grid + 4) {
             ForEach(options, id: \.self) { option in
                 OptionTile(option: option, isSelected: option == selected) { selected = option }
             }
         }
-        .padding(Spacing.grid)
-        .background(Tokens.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .padding(Spacing.grid * 2)
+        .background(Tokens.surface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
     }
 }
 
@@ -89,9 +108,9 @@ private struct OptionTile: View {
             .minimumScaleFactor(0.5)
             .foregroundStyle(isSelected ? Tokens.ground : Tokens.ink)
             .frame(maxWidth: .infinity)
-            .frame(height: 62)
-            .background(isSelected ? Tokens.ink : .clear, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .frame(height: 84)
+            .background(isSelected ? Tokens.ink : .clear, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
         .buttonStyle(.plain)
         .animation(.snappy, value: isSelected)

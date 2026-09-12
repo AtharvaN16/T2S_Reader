@@ -180,7 +180,8 @@ key from `Local.xcconfig` and rebuilding; nothing else needs undoing.
 
 ## Constraints
 
-- Eco only, as before; the mirrors and their script are untouched.
+- Basic mirrors, $28 a month for four, as decided on 2026-09-12 so the route is
+  always warm; the mirrors and their script are otherwise untouched.
 - The key never appears in a tracked file, a log, or a test fixture.
 - Two phones only, until per-reader tokens exist: every reader's first
   minutes draw on the shared Eco pool, and a key in the binary can be read

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Deploys Server/HerokuVoice to N identical Heroku Eco apps and verifies each one.
-# Safe to re-run: every step is idempotent. Eco only, by construction.
+# Deploys Server/HerokuVoice to N identical Heroku Basic apps and verifies each one.
+# Safe to re-run: every step is idempotent. Basic only, by construction: a Basic dyno never
+# sleeps, so every mirror stays warm (owner's decision of 2026-09-12, $7 each).
 #
 #   scripts/mirrors.sh [count]        default 4
 #
@@ -11,7 +12,7 @@ set -euo pipefail
 COUNT="${1:-4}"
 PRIMARY="kokoro-t2s"
 KEY_FILE="${T2S_VOICE_KEY_FILE:-$HOME/.t2s/heroku-voice-key}"
-SIZE="eco"                                    # the only size this script will ever scale to
+SIZE="basic"                                  # the only size this script will ever scale to
 
 case "$COUNT" in ''|*[!0-9]*) echo "count must be a positive integer" >&2; exit 2;; esac
 [ "$COUNT" -ge 1 ] || { echo "count must be at least 1" >&2; exit 2; }
@@ -65,6 +66,6 @@ for app in "${apps[@]}"; do
   dyno="$(heroku ps -a "$app" --json | python3 -c 'import sys, json; d = json.load(sys.stdin); print(d[0]["size"] if d else "none")')"
   addons="$(heroku addons -a "$app" --json | python3 -c 'import sys, json; print(len(json.load(sys.stdin)))')"
   printf '%-16s health=%s render=%s dyno=%s addons=%s  %s/v1/audio/speech\n' "$app" "$health" "$ctype" "$dyno" "$addons" "$url"
-  [ "$health" = "200" ] && [ "$ctype" = "audio/pcm" ] && [ "$dyno" = "Eco" ] && [ "$addons" = "0" ] || fail=1
+  [ "$health" = "200" ] && [ "$ctype" = "audio/pcm" ] && [ "$dyno" = "Basic" ] && [ "$addons" = "0" ] || fail=1
 done
 exit "$fail"

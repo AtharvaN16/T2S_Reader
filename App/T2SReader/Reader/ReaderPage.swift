@@ -38,11 +38,6 @@ struct ReaderPage: View {
     /// The chapter under the finger while the scrubber is dragged, so the picker names where the
     /// release would land rather than where playback still is (owner, 2026-09-12).
     @State private var scrubChapter: Int?
-    /// The word a tap marked, waiting on "Continue from here". A tap used to jump on the spot,
-    /// which made a mis-tap cost your place (owner, 2026-09-12).
-    @State private var previewTap: (utteranceIndex: Int, sourceOffset: Int)?
-    /// Where that word sits on screen, so the pill can stand with it rather than up in the chrome.
-    @State private var previewRect: CGRect?
 
     var body: some View {
         let reader = env.readerModel
@@ -63,9 +58,7 @@ struct ReaderPage: View {
                     isFollowing: reader.isFollowing,
                     onTap: handleTap,
                     onUserScroll: { reader.suspendFollowing() },
-                    onSaveSelection: saveSelection,
-                    isPreviewing: previewTap != nil,
-                    onPreviewRect: { previewRect = $0 }
+                    onSaveSelection: saveSelection
                 )
                 .ignoresSafeArea(edges: .bottom)
             } else if let error {
@@ -108,24 +101,6 @@ struct ReaderPage: View {
             }
             .animation(.easeInOut(duration: 0.2), value: chromeVisible)
 
-            // Beside the word it is about: above it where there is room, below it near the top of
-            // the page (owner, 2026-09-12).
-            GeometryReader { geo in
-                if let tap = previewTap, let rect = previewRect {
-                    let above = rect.minY > 150
-                    RaisedButton(label: "Continue from here", glyph: "play.fill", tone: .ink, size: .compact) {
-                        Task {
-                            _ = await reader.seek(toUtterance: tap.utteranceIndex, sourceOffset: tap.sourceOffset)
-                            previewTap = nil
-                        }
-                    }
-                    .position(x: min(max(rect.midX, 110), max(110, geo.size.width - 110)),
-                              y: above ? rect.minY - 28 : rect.maxY + 28)
-                    .transition(.opacity.combined(with: .scale(scale: 0.94)))
-                    .accessibilityHint("Plays from the word you tapped")
-                }
-            }
-            .animation(.snappy(duration: 0.2), value: previewRect)
         }
         .task(id: summary.id) { await open() }
         .task(id: env.player.current?.id) {
@@ -501,22 +476,15 @@ struct ReaderPage: View {
         }
     }
 
-    /// A tap marks the word and offers it; the pill is what actually moves the playhead. While an
-    /// offer is up, the next tap anywhere takes it down — otherwise it followed every press around
-    /// the page with no way to be rid of it (owner, 2026-09-12).
+    /// A tap on a word plays from it; a tap anywhere else shows or hides the chrome.
     private func handleTap(_ tap: ReaderTextView.Tap) {
-        if previewTap != nil {
-            withAnimation(.snappy) { previewTap = nil }
-            return
-        }
-        if case .word(let index, let offset) = tap {
-            withAnimation(.snappy) {
-                previewTap = (index, offset)
-                chromeVisible = true
+        Task {
+            if case .word(let index, let offset) = tap,
+               await env.readerModel.seek(toUtterance: index, sourceOffset: offset) {
+                return
             }
-            return
+            withAnimation { chromeVisible.toggle() }
         }
-        withAnimation { chromeVisible.toggle() }
     }
 
     /// Loads and starts the requested document when necessary, then draws its timeline's text

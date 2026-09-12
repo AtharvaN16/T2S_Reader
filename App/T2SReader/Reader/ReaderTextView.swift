@@ -29,10 +29,6 @@ struct ReaderTextView: UIViewRepresentable {
     let onUserScroll: () -> Void
     /// A passage the reader picked out by hand, to keep: its flattened range and its words.
     var onSaveSelection: ((Range<Int>, String) -> Void)? = nil
-    /// False clears the marked word a tap put up (the reader went on, or changed their mind).
-    var isPreviewing: Bool = false
-    /// Where the marked word sits in the view, so the pill can stand beside it; nil when none is.
-    var onPreviewRect: ((CGRect?) -> Void)? = nil
 
     /// Room for the header and the bottom block. The page gives the view `.ignoresSafeArea(edges:
     /// .bottom)`, so the top is measured from the safe-area top and the bottom from the window's:
@@ -89,8 +85,6 @@ struct ReaderTextView: UIViewRepresentable {
         coordinator.onTap = onTap
         coordinator.onUserScroll = onUserScroll
         coordinator.onSaveSelection = onSaveSelection
-        coordinator.onPreviewRect = onPreviewRect
-        if !isPreviewing { coordinator.clearPreview() }
         coordinator.setHighlightTheme(highlightTheme)
         coordinator.setText(text, scale: textScale, lineHeight: lineHeight, following: isFollowing)
         coordinator.setHighlight(highlight, following: isFollowing)
@@ -117,7 +111,6 @@ struct ReaderTextView: UIViewRepresentable {
         var onTap: (Tap) -> Void
         var onUserScroll: () -> Void
         var onSaveSelection: ((Range<Int>, String) -> Void)?
-        var onPreviewRect: ((CGRect?) -> Void)?
         /// Ours, kept so the text view's own single tap can be made to yield to it.
         weak var tap: UITapGestureRecognizer?
         private weak var view: UITextView?
@@ -131,14 +124,6 @@ struct ReaderTextView: UIViewRepresentable {
         /// Flattened offset of the word being spoken: everything before it has been read. Nil before
         /// the first word lands, when the whole document is still "coming".
         private var readBoundary: Int?
-        /// The word a tap has offered to continue from, in `accent` until it is taken up or dropped.
-        /// No rule under it: that wanted a layer hand-synced to a scrolling coordinate space, which
-        /// failed three ways, while the colour — the same mechanism the read-along itself uses — is
-        /// the one thing here that was ever measured working (owner asked for the simplest, 2026-09-12).
-        private var previewRange: Range<Int>?
-        /// The marked word's box in content coordinates, kept so a scroll can re-report it.
-        private var previewBox: CGRect?
-
         /// The word crossing from unread to read, eased rather than snapped (owner, 2026-09-12).
         private var fade: (range: Range<Int>, from: UIColor, to: UIColor, start: CFTimeInterval)?
         /// Words waiting their turn. Each takes the same `fadeSeconds`, whatever the speech is
@@ -267,42 +252,6 @@ struct ReaderTextView: UIViewRepresentable {
             collapseRead()
             fadeLink?.invalidate()
             fadeLink = nil
-            repaint()
-        }
-
-        // MARK: The word a tap offers
-
-        private func markPreview(_ range: Range<Int>) {
-            clearPreview()
-            previewRange = range
-            // `accent`, not `ink`: brightening to the read colour said nothing at all on a word
-            // already read, which is half the page (owner, 2026-09-12).
-            paint(UIColor(Tokens.accent), over: range)
-            let boxes = rects(for: range)
-            guard let first = boxes.first else { repaint(); return }
-            let box = boxes.dropFirst().reduce(first) { $0.union($1) }
-            previewBox = box
-            reportPreviewRect()
-            repaint(force: true)               // a tap during a glide must still show its mark
-        }
-
-        /// The marked word in view coordinates, for the pill that stands beside it.
-        private func reportPreviewRect() {
-            guard let view, let box = previewBox, previewRange != nil else { onPreviewRect?(nil); return }
-            onPreviewRect?(box.offsetBy(dx: 0, dy: -view.contentOffset.y))
-        }
-
-        /// Puts the word back on whichever side of the boundary it belongs to.
-        func clearPreview() {
-            guard let range = previewRange else { return }
-            previewRange = nil
-            previewBox = nil
-            onPreviewRect?(nil)
-            if let boundary = readBoundary, range.lowerBound >= boundary {
-                markUnread(range)
-            } else {
-                markRead(range)
-            }
             repaint()
         }
 
@@ -502,45 +451,11 @@ struct ReaderTextView: UIViewRepresentable {
             let elementStart = contentManager.offset(from: contentManager.documentRange.location, to: elementRange.location)
             let index = line.characterIndex(for: CGPoint(x: local.x - line.typographicBounds.minX, y: local.y - line.typographicBounds.minY))
             let clamped = min(max(index, line.characterRange.location), line.characterRange.location + max(0, line.characterRange.length - 1))
-            let offset = elementStart + clamped
-            if let hit = text.hit(at: offset) {
-                markPreview(wordBounds(around: offset))
+            if let hit = text.hit(at: elementStart + clamped) {
                 onTap(.word(utteranceIndex: hit.utteranceIndex, sourceOffset: hit.sourceOffset))
             } else {
-                clearPreview()
                 onTap(.elsewhere)
             }
-        }
-
-        /// The run of non-space around `offset` in the flattened string: the word under the finger.
-        /// A tap that lands between two words lands *on the space*, and marking that gave a rule
-        /// under a blank — the pill arrived with no word marked (owner, 2026-09-12). The nearer
-        /// neighbour is taken instead, so every tap marks a word.
-        private func wordBounds(around offset: Int) -> Range<Int> {
-            guard let content = view?.textLayoutManager?.textContentManager as? NSTextContentStorage,
-                  let storage = content.textStorage, offset >= 0, offset < storage.length
-            else { return offset..<(offset + 1) }
-            let string = storage.string as NSString
-            let spaces = CharacterSet.whitespacesAndNewlines
-            func isSpace(_ i: Int) -> Bool {
-                guard i >= 0, i < string.length, let scalar = Unicode.Scalar(string.character(at: i)) else { return true }
-                return spaces.contains(scalar)
-            }
-            var seed = offset
-            if isSpace(seed) {
-                var back = seed - 1
-                while back >= 0, isSpace(back) { back -= 1 }
-                var ahead = seed + 1
-                while ahead < string.length, isSpace(ahead) { ahead += 1 }
-                let hasBack = back >= 0, hasAhead = ahead < string.length
-                if hasBack, !hasAhead || (offset - back) <= (ahead - offset) { seed = back }
-                else if hasAhead { seed = ahead }
-                else { return offset..<(offset + 1) }
-            }
-            var lower = seed, upper = seed
-            while lower > 0, !isSpace(lower - 1) { lower -= 1 }
-            while upper < string.length, !isSpace(upper) { upper += 1 }
-            return lower..<max(upper, lower + 1)
         }
 
         // MARK: UIScrollViewDelegate
@@ -576,7 +491,6 @@ struct ReaderTextView: UIViewRepresentable {
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            if previewRange != nil { reportPreviewRect() }
             if pressOrigin == nil, let origin = dragOrigin,
                abs(scrollView.contentOffset.y - origin) > Self.strayDistance {
                 dragOrigin = nil
@@ -621,7 +535,6 @@ struct ReaderTextView: UIViewRepresentable {
         /// Following would scroll the page out from under the selection handles.
         func textViewDidChangeSelection(_ textView: UITextView) {
             guard textView.selectedRange.length > 0 else { return }
-            clearPreview()                                   // a held passage is not an offered word
             // Not `onUserScroll()`: holding a passage is not leaving your place, and giving up
             // following put "Back to current" up on every long press (owner, 2026-09-12).
             // `centreIfNeeded` stands down while a selection is up, which is all this needed.

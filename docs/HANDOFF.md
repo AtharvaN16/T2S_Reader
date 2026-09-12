@@ -44,8 +44,11 @@ named "Heart · Cloud" (`9dc46c9`). Design: `docs/superpowers/specs/2026-09-11-c
 run: `docs/superpowers/evidence/2026-09-11-cloud-first-acceptance.log`. A fresh install on the 17 Pro
 spoke from the mirrors with nothing typed (04:00Z: 48 renders, no 429, no H12). Owed: the final
 listen — the handoff at the chapter boundary and locked-screen continuity — written into the log.
-Also: `scripts/test-kokoro.sh` runs well over 40 minutes (the compute-plan probe); a run killed
-mid-way leaves an unfinalized `.xcresult` with no verdict.
+Also: `scripts/test-kokoro.sh` runs about an hour (the compute-plan probe); a run killed mid-way
+leaves an unfinalized `.xcresult` with no verdict. Its full run on 2026-09-11 (61 min): 165 of 166,
+the one failure `KokoroCoreMLLoadTests.rendersBeforeTheLaterBucketsLandAndHoldsEveryBucketAfter`,
+because this Mac's ANE compiler failed on the `10s` decoder bucket; CI's `kokoro-macos` is green at
+the same commit. Recompile the stages on the Mac before the next package change.
 
 **PR #17** (2026-09-12) opens `dev` against `main` with all of the above, merged over the
 bookmarks-and-notes work that was already on `main`: https://github.com/AtharvaN16/T2S_Reader/pull/17.

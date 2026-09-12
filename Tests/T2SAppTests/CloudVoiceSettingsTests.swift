@@ -49,6 +49,38 @@ import T2SAudio
         #expect(settings.cloudVoiceID == nil)
     }
 
+    @Test func oneEndpointPerLineTheFirstBeingThePrimary() async throws {
+        let settings = CloudVoiceSettings(defaults: freshDefaults())
+        settings.endpointText = " https://one.example/v1/audio/speech \n\nhttps://two.example/v1/audio/speech\nhttps://three.example/v1/audio/speech\n"
+        settings.model = "m"
+        settings.voice = "v"
+        try await settings.save()
+
+        let configuration = try #require(settings.configurationStore.current())
+        #expect(configuration.endpoints.map(\.host) == ["one.example", "two.example", "three.example"])
+        #expect(configuration.endpoint.host == "one.example")
+    }
+
+    /// Adding a mirror keeps the route's identity, so nothing already rendered is thrown away.
+    @Test func aMirrorEditKeepsTheRouteIdentity() throws {
+        let settings = CloudVoiceSettings(defaults: freshDefaults())
+        settings.endpointText = "https://one.example/v1/audio/speech"
+        settings.model = "m"
+        settings.voice = "v"
+        let alone = try #require(settings.cloudVoiceID)
+        settings.endpointText += "\nhttps://two.example/v1/audio/speech"
+        #expect(settings.cloudVoiceID == alone)
+    }
+
+    @Test func aBadMirrorLineInvalidatesTheRoute() async {
+        let settings = CloudVoiceSettings(defaults: freshDefaults())
+        settings.endpointText = "https://one.example/v1/audio/speech\nhttp://two.example/v1/audio/speech"
+        settings.model = "m"
+        settings.voice = "v"
+        await #expect(throws: HTTPVoiceError.invalidConfiguration) { try await settings.save() }
+        #expect(settings.cloudVoiceID == nil)
+    }
+
     private func freshDefaults() -> UserDefaults {
         let suite = "t2s-cloud-voice-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

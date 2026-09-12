@@ -139,11 +139,17 @@ public final class CloudVoiceSettings {
         configurationStore.replace(with: nil)
     }
 
+    /// One endpoint per line, the first being the primary; blank lines are ignored. A single line
+    /// is what every existing install has stored, and it parses as before.
     private static func makeConfiguration(endpointText: String, model: String, voice: String, rate: Int) throws -> HTTPVoiceConfiguration {
-        guard let endpoint = URL(string: endpointText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-            throw HTTPVoiceError.invalidConfiguration
+        let endpoints = try endpointText.split(whereSeparator: \.isNewline).compactMap { line -> URL? in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return nil }
+            guard let url = URL(string: trimmed) else { throw HTTPVoiceError.invalidConfiguration }
+            return url
         }
-        let configuration = HTTPVoiceConfiguration(endpoint: endpoint, model: model, voice: voice, requestRatePerMinute: rate)
+        guard !endpoints.isEmpty else { throw HTTPVoiceError.invalidConfiguration }
+        let configuration = HTTPVoiceConfiguration(endpoints: endpoints, model: model, voice: voice, requestRatePerMinute: rate)
         try configuration.validate()
         return configuration
     }

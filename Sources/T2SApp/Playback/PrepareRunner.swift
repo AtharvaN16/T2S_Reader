@@ -16,6 +16,8 @@ public enum PrepareRunReason: Hashable, Sendable {
 public enum PrepareSkipReason: Hashable, Sendable {
     case unsafeDevice
     case alreadyRunning
+    /// The hosted voice stands in for the default; a charger must not render through the mirrors.
+    case waitingForVoice
 }
 
 public enum PrepareStopReason: Hashable, Sendable {
@@ -64,6 +66,9 @@ public final class PrepareRunner {
     /// Resolves an unavailable route to the system default for the whole document before planning,
     /// so Prepare renders the audio playback will actually ask for (spec §6). Mirrors `PlayerModel`.
     public var voiceRouting: any VoiceRouteResolving = PassthroughVoiceRouting()
+    /// True while the app's default voice resolves to the hosted stand-in (cloud-first bootstrap
+    /// spec): a run then does nothing rather than render a library through the mirrors on a charger.
+    public var isStandingIn: @Sendable () async -> Bool = { false }
     /// How long a chapter's rendered metadata may sit unwritten while the pass stays in that chapter.
     /// Rendered audio is already on disk under its key; a lost write self-heals on the next load
     /// (`PlaybackCoordinator.reconcileWithStore`), so this bounds a crash's loss, not correctness.
@@ -192,6 +197,9 @@ public final class PrepareRunner {
         }
         guard Self.isSafe(device) else {
             return finish(PrepareRunResult(reason: reason, stopReason: .skipped(.unsafeDevice)))
+        }
+        guard await !isStandingIn() else {
+            return finish(PrepareRunResult(reason: reason, stopReason: .skipped(.waitingForVoice)))
         }
 
         beginRun()

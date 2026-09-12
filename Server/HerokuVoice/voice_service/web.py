@@ -5,7 +5,8 @@ import threading
 from typing import Annotated, Literal, Protocol
 
 import numpy as np
-from fastapi import Depends, FastAPI, Header, HTTPException, Response, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, status
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -113,6 +114,14 @@ def create_app(
         openapi_url=None,
     )
     app.add_middleware(SpeechRequestGuard, api_key=api_key)
+
+    @app.exception_handler(RequestValidationError)
+    async def reject_without_echo(_request: Request, _error: RequestValidationError) -> JSONResponse:
+        # FastAPI's default body repeats the offending input. Nothing a client sent comes back.
+        return JSONResponse(
+            {"detail": "Invalid request"},
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
 
     def authorize(authorization: Annotated[str | None, Header()] = None) -> None:
         expected = f"Bearer {api_key}"

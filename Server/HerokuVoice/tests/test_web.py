@@ -202,3 +202,20 @@ def test_speech_rejects_pathological_pronunciation_expansion() -> None:
 
     assert response.status_code == 422
     assert response.json() == {"detail": "Input expands beyond the synthesis limit"}
+
+
+def test_speech_validation_errors_never_echo_the_request() -> None:
+    client, engine = make_client()
+    body = valid_request()
+    body["input"] = "x" * 401
+
+    response = client.post(
+        "/v1/audio/speech",
+        headers={"Authorization": "Bearer pilot-secret"},
+        json=body,
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Invalid request"}
+    assert "xxxx" not in response.text
+    assert engine.calls == []

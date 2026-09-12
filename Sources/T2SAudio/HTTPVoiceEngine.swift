@@ -194,6 +194,10 @@ public actor RequestRateLimiter {
 /// It neither guesses other media formats nor retains keys.
 public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
     public let engineID = "http-voice-v2"
+    /// The longest text sent in one request. Eco's 30 s router timeout was measured at about 210
+    /// characters (`docs/superpowers/evidence/2026-09-11-heroku-eco-measurements.log`); anything
+    /// longer is cut at clause boundaries and the pieces sent at once.
+    static let maxRequestCharacters = 180
 
     private let configuration: HTTPVoiceConfiguration
     private let key: @Sendable () async throws -> String?
@@ -241,7 +245,20 @@ public final class HTTPVoiceEngine: SynthesisEngine, @unchecked Sendable {
     public func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
         try configuration.validate()
         let providerVoice = CloudVoiceID(rawValue: request.voiceID)?.voice ?? configuration.voice
-        return try await synthesizePiece(request.spoken, voice: providerVoice)
+        let pieces = ClauseSplitter.pieces(of: request.spoken, maxLength: Self.maxRequestCharacters)
+        guard pieces.count > 1 else {
+            return try await synthesizePiece(request.spoken, voice: providerVoice)
+        }
+        let results = try await withThrowingTaskGroup(of: (Int, SynthesisResult).self) { group in
+            for (index, piece) in pieces.enumerated() {
+                group.addTask { (index, try await self.synthesizePiece(piece, voice: providerVoice)) }
+            }
+            var ordered = [SynthesisResult?](repeating: nil, count: pieces.count)
+            for try await (index, result) in group { ordered[index] = result }
+            return ordered.compactMap { $0 }
+        }
+        // Pieces rendered apart carry no timings over the whole; the pilot server sends none anyway.
+        return SynthesisResult(audio: PCMAudio(sampleRate: 24_000, samples: results.flatMap(\.audio.samples)), wordTimings: [])
     }
 
     /// One request, on the next mirror. A mirror that answers 429 has its limiter deferred and the

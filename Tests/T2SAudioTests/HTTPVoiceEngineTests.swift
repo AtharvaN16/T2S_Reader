@@ -197,6 +197,43 @@ import T2SCore
         #expect(TestURLProtocol.allRequests.count == 2)
     }
 
+    /// Text over the request cap is cut at clause boundaries, the pieces sent at once, and their
+    /// audio joined in text order whichever mirror answers first.
+    @Test func longTextIsSplitAtClausesSentConcurrentlyAndJoinedInOrder() async throws {
+        // Three clauses of 170 characters: each fits the 180 cap alone, the whole does not.
+        let clauses = (1...3).map { n in "\(n) " + String(repeating: "w", count: 166) + "," }
+        let text = clauses.joined(separator: " ")
+        // Answer each piece with one sample carrying its leading digit, so the join order shows.
+        let session = TestURLProtocol.session { request in
+            let body = request.httpBody.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let input = body?["input"] as? String ?? "0"
+            return TestURLProtocol.pcmResponse(samples: [Int16(String(input.prefix(1))) ?? 0])
+        }
+        let engine = HTTPVoiceEngine(configuration: .example, key: { "test-key" }, session: session, limiterSleeper: { _ in })
+
+        let result = try await engine.synthesize(.init(spoken: text, voiceID: "cloud:x:v"))
+
+        let sent = TestURLProtocol.allRequests.compactMap { request in
+            (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any])?["input"] as? String
+        }
+        #expect(sent.count == 3)
+        #expect(Set(sent) == Set(clauses))
+        #expect(sent.allSatisfy { ($0 as NSString).length <= HTTPVoiceEngine.maxRequestCharacters })
+        #expect(result.audio.samples.map { Int16(($0 * 32768).rounded()) } == [1, 2, 3])
+        #expect(result.wordTimings.isEmpty)
+    }
+
+    /// Text within the cap goes out exactly as it came, untouched by the splitter.
+    @Test func shortTextIsSentWhole() async throws {
+        let session = TestURLProtocol.session(status: 200, headers: ["Content-Type": "audio/pcm"], body: Data([0, 0]))
+        let engine = HTTPVoiceEngine(configuration: .example, key: { "test-key" }, session: session, limiterSleeper: { _ in })
+        _ = try await engine.synthesize(.init(spoken: "  Kept, spaces and all.  ", voiceID: "cloud:x:v"))
+        let body = try #require(TestURLProtocol.lastRequest?.httpBody)
+        let request = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        #expect(request?["input"] as? String == "  Kept, spaces and all.  ")
+        #expect(TestURLProtocol.allRequests.count == 1)
+    }
+
     @Test func rateLimiterSpacesRequestsAndHonoursRetryAfter() async {
         let clock = TestRateClock()
         let limiter = RequestRateLimiter(requestsPerMinute: 60, now: { clock.now }, sleeper: { seconds in

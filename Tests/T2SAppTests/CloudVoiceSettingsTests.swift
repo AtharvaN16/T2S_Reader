@@ -86,7 +86,7 @@ import T2SAudio
         #expect(settings.endpointText == CloudVoiceDefaults.pilot.endpointText)
         #expect(settings.model == "kokoro" && settings.voice == "af_heart" && settings.requestRatePerMinute == 20)
         let configuration = try #require(settings.configurationStore.current())
-        #expect(configuration.endpoints.count == 4)
+        #expect(configuration.endpoints.count == 7)
         #expect(settings.cloudVoiceID?.hasPrefix("cloud:") == true)
     }
 

@@ -17,13 +17,16 @@ public struct CloudVoiceDefaults: Hashable, Sendable {
         self.requestRatePerMinute = requestRatePerMinute
     }
 
-    /// The four Eco mirrors (`Server/HerokuVoice/scripts/mirrors.sh`), primary first.
+    /// The seven Basic mirrors (`Server/HerokuVoice/scripts/mirrors.sh`), primary first.
     public static let pilot = CloudVoiceDefaults(
         endpointText: """
         https://kokoro-t2s-a007171ff076.herokuapp.com/v1/audio/speech
         https://kokoro-t2s-m2-d13cbe083bd3.herokuapp.com/v1/audio/speech
         https://kokoro-t2s-m3-71b4e3836076.herokuapp.com/v1/audio/speech
         https://kokoro-t2s-m4-b46b9e051494.herokuapp.com/v1/audio/speech
+        https://kokoro-t2s-m5-aa90f85dde1c.herokuapp.com/v1/audio/speech
+        https://kokoro-t2s-m6-00b5b70ab03d.herokuapp.com/v1/audio/speech
+        https://kokoro-t2s-m7-e73d54cc01ec.herokuapp.com/v1/audio/speech
         """,
         model: "kokoro",
         voice: "af_heart",

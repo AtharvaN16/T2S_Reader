@@ -81,6 +81,31 @@ import T2SAudio
         #expect(settings.cloudVoiceID == nil)
     }
 
+    @Test func shippedDefaultsAreWrittenOnceIntoEmptySettings() throws {
+        let settings = CloudVoiceSettings(defaults: freshDefaults(), shipped: .pilot)
+        #expect(settings.endpointText == CloudVoiceDefaults.pilot.endpointText)
+        #expect(settings.model == "kokoro" && settings.voice == "af_heart" && settings.requestRatePerMinute == 20)
+        let configuration = try #require(settings.configurationStore.current())
+        #expect(configuration.endpoints.count == 4)
+        #expect(settings.cloudVoiceID?.hasPrefix("cloud:") == true)
+    }
+
+    /// The reader's edit wins, even an edit to nothing: the shipped route is a first-launch value,
+    /// never a reset.
+    @Test func aStoredEndpointIsNeverOverwrittenByTheShippedOne() {
+        let defaults = freshDefaults()
+        let first = CloudVoiceSettings(defaults: defaults, shipped: .pilot)
+        first.endpointText = ""
+        let again = CloudVoiceSettings(defaults: defaults, shipped: .pilot)
+        #expect(again.endpointText == "")
+        #expect(again.configurationStore.current() == nil)
+    }
+
+    @Test func noShippedDefaultsLeaveTheSettingsEmpty() {
+        let settings = CloudVoiceSettings(defaults: freshDefaults())
+        #expect(settings.endpointText == "" && settings.configurationStore.current() == nil)
+    }
+
     private func freshDefaults() -> UserDefaults {
         let suite = "t2s-cloud-voice-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

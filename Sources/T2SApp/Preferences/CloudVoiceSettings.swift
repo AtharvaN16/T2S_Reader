@@ -92,8 +92,16 @@ public final class CloudVoiceSettings {
         }
     }
 
-    public init(defaults: UserDefaults = .standard) {
+    public init(defaults: UserDefaults = .standard, shipped: CloudVoiceDefaults? = nil) {
         self.defaults = defaults
+        if let shipped, defaults.string(forKey: Key.endpoint) == nil {
+            // First launch: the shipped route becomes the stored one, once. An edit later — even
+            // to nothing — is never overwritten.
+            defaults.set(shipped.endpointText, forKey: Key.endpoint)
+            defaults.set(shipped.model, forKey: Key.model)
+            defaults.set(shipped.voice, forKey: Key.voice)
+            defaults.set(shipped.requestRatePerMinute, forKey: Key.rate)
+        }
         let savedEndpoint = defaults.string(forKey: Key.endpoint) ?? ""
         let savedModel = defaults.string(forKey: Key.model) ?? ""
         let savedVoice = defaults.string(forKey: Key.voice) ?? ""

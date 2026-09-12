@@ -19,6 +19,7 @@
 - Width 1 must leave the existing scheduler suite passing unchanged: that is the on-device regression guard.
 - Swift targets compile in Swift 6 language mode (`.swiftLanguageMode(.v6)`); tests are Swift Testing (`@Test`, `#expect`, `#require`).
 - Swift tests: `swift test --filter <Suite>` from the repository root. Server tests: `cd Server/HerokuVoice && PYTHONPATH=. /tmp/t2s-heroku-voice-venv/bin/python -m pytest tests -q`.
+- A full run is two commands, `swift test --skip T2SStoreTests` then `swift test --filter T2SStoreTests`: run in parallel with everything else, `LibraryStoreSync…OpensUnder…` intermittently aborts on a SwiftData `NSUnknownKeyException` (`StoredDocument` / `contentKey`, a cross-suite entity race from schema V3, `9eebe1c`). Alone it is clean. Pre-existing; not this plan's to fix.
 - Every commit stages only the task's own files. Commit messages are declarative sentences in the repository's style, no `feat:` prefixes.
 
 ## File Map
@@ -1119,7 +1120,7 @@ git commit -m "An utterance longer than a hosted request may carry is cut at cla
 - Test: `Tests/T2SAudioTests/RoutedEngineTests.swift`
 
 **Interfaces:**
-- Consumes: `HTTPVoiceConfiguration.endpoints`, `CloudVoiceID(rawValue:)`, `TestURLProtocol.session(byHost:)` and `pcmResponse(samples:)` (Task 5).
+- Consumes: `HTTPVoiceConfiguration.endpoints`, `CloudVoiceID(rawValue:)`.
 - Produces: `RoutedEngine.maxConcurrentRenders(for:)` — `nonisolated`, the endpoint count for a cloud voice whose fingerprint matches the current configuration, else 1.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1145,12 +1146,13 @@ Add to the `RoutedEngineTests` suite, after `refusesAKokoroIdentityFromAnotherBu
     }
 
     /// The fingerprint ignores mirrors, so the engine cache cannot key on it alone: a changed
-    /// mirror list builds a new engine, seen here as the new mirror taking its turn.
+    /// mirror list builds a new engine, seen here as the new mirror taking its turn. The transport
+    /// is this file's own: `TestURLProtocol`'s state is process-wide, and the HTTP engine's suite
+    /// runs alongside this one.
     @Test func aChangedMirrorListRebuildsTheCloudEngine() async throws {
         let one = try #require(URL(string: "https://one.example/v1/audio/speech"))
         let two = try #require(URL(string: "https://two.example/v1/audio/speech"))
-        let pcm = TestURLProtocol.pcmResponse(samples: [1])
-        let session = TestURLProtocol.session(byHost: ["one.example": pcm, "two.example": pcm])
+        let session = MirrorTransport.session()
         let box = ConfigurationBox(HTTPVoiceConfiguration(endpoints: [one], model: "m", voice: "v", requestRatePerMinute: 120))
         let routed = RoutedEngine(system: RecordingEngine(), configuration: { box.value }, key: { "test-key" }, session: session)
         let voiceID = CloudVoiceID(configuration: try #require(box.value), voice: "v").rawValue
@@ -1160,11 +1162,11 @@ Add to the `RoutedEngineTests` suite, after `refusesAKokoroIdentityFromAnotherBu
         _ = try await routed.synthesize(.init(spoken: "b", voiceID: voiceID))      // same fingerprint, new engine: its cursor starts at one
         _ = try await routed.synthesize(.init(spoken: "c", voiceID: voiceID))      // then two
 
-        #expect(TestURLProtocol.allRequests.compactMap { $0.url?.host } == ["one.example", "one.example", "two.example"])
+        #expect(MirrorTransport.hosts == ["one.example", "one.example", "two.example"])
     }
 ```
 
-and at the bottom of the file, beside `RecordingEngine`:
+and at the bottom of the file, beside `RecordingEngine`, a configuration box and a transport of the file's own (the router's suite runs alongside the HTTP engine's, and `TestURLProtocol`'s state is process-wide, so the two must not share it):
 
 ```swift
 private final class ConfigurationBox: @unchecked Sendable {
@@ -1175,6 +1177,44 @@ private final class ConfigurationBox: @unchecked Sendable {
         get { lock.lock(); defer { lock.unlock() }; return stored }
         set { lock.lock(); stored = newValue; lock.unlock() }
     }
+}
+
+/// A transport of this file's own, so it never shares state with `TestURLProtocol` in a suite
+/// running alongside: answers one PCM sample to any host and records the hosts in order.
+private final class MirrorTransport: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var hostsSeen: [String] = []
+
+    static var hosts: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return hostsSeen
+    }
+
+    static func session() -> URLSession {
+        lock.lock()
+        hostsSeen = []
+        lock.unlock()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MirrorTransport.self]
+        return URLSession(configuration: configuration)
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        Self.lock.lock()
+        Self.hostsSeen.append(request.url?.host ?? "")
+        Self.lock.unlock()
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+                                       headerFields: ["Content-Type": "audio/pcm"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Data([0, 0]))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }
 ```
 

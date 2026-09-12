@@ -136,9 +136,12 @@ by construction.
 
 ## HTTP engine
 
-`HTTPVoiceEngine` owns one `RequestRateLimiter` per endpoint and a
-round-robin cursor. Each request takes the next endpoint. A batch of width
-N therefore lands one request on each of N mirrors.
+`HTTPVoiceEngine` owns one `RequestRateLimiter` per endpoint and a pool of
+the endpoints free of its own requests. Each request takes a free endpoint
+and waits for one when all are busy, so the engine never sends a mirror a
+second request while its first is in flight, whatever adds requests beyond
+the batch — a long utterance's pieces, a voice preview, a prime. Released
+endpoints go to the back, so requests rotate through every mirror.
 
 - A `429` from a mirror defers only that mirror's limiter and moves the
   request on to the next mirror; each mirror is tried at most once per

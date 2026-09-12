@@ -479,8 +479,9 @@ struct ReaderTextView: UIViewRepresentable {
         private func centreIfNeeded(animated: Bool) {
             guard let view, let wordRange else { return }
             // Never against a finger: inside the stray distance the page is still following, and
-            // re-centring mid-drag would pull it out from under the reader.
-            guard !view.isDragging, !view.isDecelerating else { return }
+            // re-centring mid-drag — or under a selection's handles — would pull it out from
+            // under the reader.
+            guard !view.isDragging, !view.isDecelerating, view.selectedRange.length == 0 else { return }
             let rects = rects(for: wordRange)
             guard let first = rects.first else { return }
             let word = rects.dropFirst().reduce(first) { $0.union($1) }
@@ -525,17 +526,33 @@ struct ReaderTextView: UIViewRepresentable {
         }
 
         /// The run of non-space around `offset` in the flattened string: the word under the finger.
+        /// A tap that lands between two words lands *on the space*, and marking that gave a rule
+        /// under a blank — the pill arrived with nothing underlined (owner, 2026-09-12). The nearer
+        /// neighbour is taken instead, so every tap marks a word.
         private func wordBounds(around offset: Int) -> Range<Int> {
             guard let content = view?.textLayoutManager?.textContentManager as? NSTextContentStorage,
                   let storage = content.textStorage, offset >= 0, offset < storage.length
             else { return offset..<(offset + 1) }
             let string = storage.string as NSString
             let spaces = CharacterSet.whitespacesAndNewlines
-            var lower = offset, upper = offset
-            while lower > 0, let scalar = Unicode.Scalar(string.character(at: lower - 1)),
-                  !spaces.contains(scalar) { lower -= 1 }
-            while upper < string.length, let scalar = Unicode.Scalar(string.character(at: upper)),
-                  !spaces.contains(scalar) { upper += 1 }
+            func isSpace(_ i: Int) -> Bool {
+                guard i >= 0, i < string.length, let scalar = Unicode.Scalar(string.character(at: i)) else { return true }
+                return spaces.contains(scalar)
+            }
+            var seed = offset
+            if isSpace(seed) {
+                var back = seed - 1
+                while back >= 0, isSpace(back) { back -= 1 }
+                var ahead = seed + 1
+                while ahead < string.length, isSpace(ahead) { ahead += 1 }
+                let hasBack = back >= 0, hasAhead = ahead < string.length
+                if hasBack, !hasAhead || (offset - back) <= (ahead - offset) { seed = back }
+                else if hasAhead { seed = ahead }
+                else { return offset..<(offset + 1) }
+            }
+            var lower = seed, upper = seed
+            while lower > 0, !isSpace(lower - 1) { lower -= 1 }
+            while upper < string.length, !isSpace(upper) { upper += 1 }
             return lower..<max(upper, lower + 1)
         }
 
@@ -588,7 +605,9 @@ struct ReaderTextView: UIViewRepresentable {
         func textViewDidChangeSelection(_ textView: UITextView) {
             guard textView.selectedRange.length > 0 else { return }
             clearPreview()                                   // a held passage is not an offered word
-            onUserScroll()
+            // Not `onUserScroll()`: holding a passage is not leaving your place, and giving up
+            // following put "Back to current" up on every long press (owner, 2026-09-12).
+            // `centreIfNeeded` stands down while a selection is up, which is all this needed.
         }
 
         /// "Save as bookmark" in front of Look Up, Translate and the rest, which UIKit supplies.

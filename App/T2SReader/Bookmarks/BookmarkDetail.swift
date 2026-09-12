@@ -7,16 +7,16 @@ import T2SStore
 /// don't want to see the text field. I want the bookmark to be big and prominent and nothing else
 /// on the screen").
 ///
-/// So: the words, large, and almost nothing around them — where it is above them in small type, the
-/// book's passage beneath when the reader wrote a note of their own, and the three things you can do
-/// with it at the foot. A row's tap used to open `BookmarkNoteSheet`, which meant the only way to
-/// *read* a long bookmark was to open the editor and look past a keyboard at it. Writing is now
+/// So: the book's words, large, and almost nothing around them — where it is above them in small
+/// type, the reader's note under them against a rule when they wrote one, and the two things you
+/// would do next at the foot. A row's tap used to open `BookmarkNoteSheet`, which meant the only way
+/// to *read* a long bookmark was to open the editor and look past a keyboard at it. Writing is now
 /// something you choose from here rather than what opening one does.
 ///
 /// **Long ones fit.** The words scroll and nothing truncates — this screen is the one place a
-/// bookmark is shown whole. The row it came from still clips to four lines, which is a row's job;
-/// this is where the rest of a note lives, and a note has no length limit anywhere in the app. The
-/// foot does not scroll with the text, so Delete is reachable without reading to the end.
+/// bookmark is shown whole. The row it came from still clips to four lines, which is a row's job.
+/// The foot does not scroll with the text, and the text fades into it rather than meeting it at a
+/// line (the same eased ramp every other edge in the app fades on, `TopFade.shape`, turned over).
 struct BookmarkDetail: View {
     @Environment(\.dismiss) private var dismiss
     var entry: BookmarkEntry
@@ -26,9 +26,15 @@ struct BookmarkDetail: View {
 
     @State private var confirmingDelete = false
 
+    /// Where it is, in the app's own face — `.mono` put the one line of small print on this screen
+    /// in a typeface used nowhere near it (owner, 2026-09-12).
     private var meta: String {
         entry.chapterTitle.isEmpty ? entry.rangeText : "\(entry.rangeText) · \(entry.chapterTitle)"
     }
+
+    /// Solid under the buttons, easing to clear above them.
+    private static let footSolid: CGFloat = 76
+    private static let footFade: CGFloat = 44
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -36,17 +42,15 @@ struct BookmarkDetail: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.row) {
                     Text(meta)
-                        .typeRole(.mono).foregroundStyle(Tokens.ink2)
-                    // The reader's words when they wrote any, else the book's — `headline` is that
-                    // rule, and it lives on the entry so every surface tells the same story.
-                    Text(entry.headline)
+                        .typeRole(.meta).foregroundStyle(Tokens.ink2)
+                    Text(entry.lead)
                         .typeRole(.playerTitle).foregroundStyle(Tokens.ink)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
-                    // Only when it is not already the headline, and in full: the row shows three
-                    // lines of the trimmed snippet, this shows the whole block that was saved.
-                    if entry.quote != nil {
-                        Text(entry.fullPassage)
+                    // The reader's note under the passage it is about, against the rule the row
+                    // gives it too. In full: the row shows two lines of it, this shows all of it.
+                    if let note = entry.note {
+                        Text(note)
                             .typeRole(.rowTitle).foregroundStyle(Tokens.ink2)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
@@ -55,17 +59,18 @@ struct BookmarkDetail: View {
                                 Rectangle().fill(Tokens.ink3).frame(width: 2)
                             }
                     }
-                    Color.clear.frame(height: Spacing.section)
+                    // Room under the words for the fade and the buttons standing over them.
+                    Color.clear.frame(height: Self.footSolid + Self.footFade)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, Spacing.margin)
-                .padding(.top, Spacing.row)
+                .padding(.top, Spacing.grid)
             }
             .scrollIndicators(.hidden)
-            actions
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Tokens.ground.ignoresSafeArea())
+        .overlay(alignment: .bottom) { foot }
         .confirmationDialog("Delete this bookmark?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("Delete bookmark", role: .destructive) {
                 onDelete()
@@ -77,38 +82,51 @@ struct BookmarkDetail: View {
         }
     }
 
+    /// Back on the left as everywhere else in the app, and Delete at the far right — the corner a
+    /// destructive thing belongs in, and out of the way of the two buttons you actually came for.
     private var header: some View {
         HStack {
-            Button { dismiss() } label: { CircleGlyph(systemName: "chevron.down") }
+            Button { dismiss() } label: { CircleGlyph(systemName: "chevron.left") }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Close")
+                .accessibilityLabel("Back")
             Spacer()
+            Button { confirmingDelete = true } label: {
+                CircleGlyph(systemName: "trash")
+                    .foregroundStyle(Tokens.destructive)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Delete bookmark")
         }
         .padding(.horizontal, Spacing.margin)
         .padding(.top, Spacing.grid)
     }
 
-    /// Pinned under the words rather than following them: on a long note the actions would
-    /// otherwise be a scroll away, and Delete is the one the owner could not find at all.
-    private var actions: some View {
-        HStack(spacing: 8) {
-            Pill(label: "Listen", glyph: "play.fill", style: .soft) {
+    /// The two things you do with a bookmark, a half of the row each: neither is the lesser, and a
+    /// pair of capsules hugging their words left an odd gap where Delete used to sit.
+    private var foot: some View {
+        HStack(spacing: 12) {
+            Pill(label: "Listen", glyph: "play.fill", style: .soft, fillsWidth: true) {
                 onListen()
                 dismiss()
             }
             Pill(label: entry.hasNote ? "Edit note" : "Add a note", glyph: "square.and.pencil",
-                 style: .soft, action: onEditNote)
-            Spacer(minLength: 8)
-            Pill(label: "Delete", glyph: "trash", style: .destructiveSoft) { confirmingDelete = true }
+                 style: .soft, fillsWidth: true, action: onEditNote)
         }
         .padding(.horizontal, Spacing.margin)
-        .padding(.top, Spacing.grid)
         .padding(.bottom, Spacing.grid)
-        .background(alignment: .top) {
-            // A hairline over the foot, so a note scrolling under the actions stops at a line
-            // rather than fading into them.
-            Rectangle().fill(Tokens.ink3).frame(height: 1)
-                .frame(maxHeight: .infinity, alignment: .top)
+        .frame(height: Self.footSolid, alignment: .top)
+        .frame(maxWidth: .infinity)
+        .background {
+            // `TopFade`'s ramp, turned over: solid under the buttons, easing to clear above them,
+            // so the words pass under it instead of stopping at a line.
+            Tokens.ground
+                .mask(
+                    TopFade.shape(solidThrough: Self.footSolid, fade: Self.footFade)
+                        .scaleEffect(y: -1)
+                )
+                .frame(height: Self.footSolid + Self.footFade)
+                .frame(maxHeight: .infinity, alignment: .bottom)
         }
+        .ignoresSafeArea(edges: .bottom)
     }
 }

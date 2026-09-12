@@ -8,8 +8,8 @@ import T2SStore
 /// shape, "the one action of a step, as a full-width bar pinned to a page's foot", and already
 /// rides above the keyboard.
 ///
-/// Saving blank clears the note rather than storing an empty string, so the row falls back to the
-/// passage (`BookmarkEntry.headline`).
+/// Saving blank clears the note rather than storing an empty string, so the row simply loses the
+/// line under its passage (`BookmarkEntry.note`).
 struct BookmarkNoteSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss

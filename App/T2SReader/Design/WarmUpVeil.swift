@@ -200,6 +200,31 @@ enum WarmRamp {
 /// the veil and the bar is transparent; the moment one layer is not, the glow is cut off at the
 /// bar's foot with nothing to say so (the Voice page, 2026-09-10). Laid over the bar instead, this
 /// view needs nothing underneath to cooperate.
+///
+/// **It anchors itself, and that is the whole of the arrangement.** The view fills whatever region
+/// it is put in, pins its 240 pt of light to `edge`, and takes the safe-area inset on that edge, so
+/// the lit rim lands on the screen's edge rather than on the inset's inner boundary. Call sites say
+/// `WarmRim(edge:)` and nothing else — no frame, no `ignoresSafeArea`.
+///
+/// That is not tidiness. All four call sites used to spell the anchoring out, and one of them
+/// spelled it in the wrong order: the Reader hung its foot rim off a ground that had already said
+/// `.ignoresSafeArea(edges: .bottom)` and attached the rim as an `.overlay` *after* it. An
+/// `ignoresSafeArea` bleeds a view's drawing outward but leaves the frame its own overlays align
+/// against where it was, so the rim's lit edge sat on the inner boundary of the home-indicator
+/// inset and the inset below it stayed dead ground — measured on the 16 Pro at exactly its 34 pt
+/// (owner, 2026-09-12: "why does the warm-up glow in reader not go to the bottom of the page").
+/// Nothing in the three copies that worked said which order was the load-bearing one, so there was
+/// nothing to notice. With the anchoring in here there is no order left to get wrong, and a host
+/// that has already bled its own safe area cannot shorten the glow, because the rim no longer hangs
+/// off the host: it is a sibling over the page.
+///
+/// **The one place this does not reach is the top of a pushed Settings page**, which still wears a
+/// status bar's worth of bare ground above the light. `ignoresSafeArea` is a no-op there — UIKit
+/// has spent the inset and SwiftUI has none left to give back — and a measured `.offset` up to the
+/// window's edge, the trick the page's own ground and `TopFade` use, does not show either: the
+/// measurement is right (62 pt on the 16 Pro, read off the live view) and the light still does not
+/// move, so something between the page and the window is clipping it. Unfinished, and deliberately
+/// left as it was rather than guessed at.
 struct WarmRim: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -249,6 +274,11 @@ struct WarmRim: View {
             }
         }
         .frame(height: WarmRamp.height)
+        // Fill the region, pin the light to the edge, and close whatever gap is left between that
+        // edge and the window's. See the note above for why the gap has to be measured rather than
+        // assumed away.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: edge == .top ? .top : .bottom)
+        .ignoresSafeArea(edges: edge == .top ? .top : .bottom)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
         .animation(.easeInOut(duration: WarmUpVeil.fadeOut), value: showing)

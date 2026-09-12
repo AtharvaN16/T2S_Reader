@@ -109,7 +109,7 @@ struct BookmarkStampRow: View {
         Button(action: action) {
             HStack(alignment: .center, spacing: 10) {
                 Circle().fill(Tokens.accent).frame(width: 7, height: 7)
-                Text(entry.headline).typeRole(.meta).foregroundStyle(Tokens.ink).lineLimit(1)
+                Text(entry.lead).typeRole(.meta).foregroundStyle(Tokens.ink).lineLimit(1)
                 Spacer(minLength: 8)
                 // Inter, not the `.mono` role the stamp wore when the time led the row: out at the
                 // end it is read, not scanned down a column (owner, 2026-09-12).
@@ -123,7 +123,7 @@ struct BookmarkStampRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(entry.headline), at \(entry.timeText)")
+        .accessibilityLabel("\(entry.lead), at \(entry.timeText)")
         .accessibilityHint("Plays from this bookmark")
     }
 }

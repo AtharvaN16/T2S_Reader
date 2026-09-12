@@ -105,8 +105,14 @@ struct ReaderPage: View {
             // it (it never looked as though it did, because the veil underneath carried the same
             // pixels — the bar going was invisible only by luck).
             WarmRim(edge: .top)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .ignoresSafeArea(edges: .top)
+            // And the foot, over the bottom bar's ground for the same reason the head's is over
+            // the header: that ground is opaque through the home-indicator inset and would paint
+            // the light out. It hung off the bar's own background until 2026-09-12, and because
+            // that background had already bled into the inset, the rim's lit edge landed on the
+            // inset's inner boundary instead of the glass — the glow stopped 34 pt short of the
+            // bottom of the screen (see `WarmRim`). A sibling here cannot be shortened by anything
+            // the bar does.
+            WarmRim(edge: .bottom)
         }
         .task(id: summary.id) { await open() }
         .task(id: env.player.current?.id) {
@@ -302,9 +308,6 @@ struct ReaderPage: View {
                 .mask(Self.groundShape(solidAtTop: false, span: 0.25))
                 .padding(.top, -64)                                        // hangs above the block, over the text
                 .ignoresSafeArea(edges: .bottom)
-                // The rim over this ground, as the pager's foot does it: opaque ground at the
-                // screen's edge would otherwise paint the foot of the glow out.
-                .overlay(alignment: .bottom) { WarmRim().ignoresSafeArea(edges: .bottom) }
         }
     }
 

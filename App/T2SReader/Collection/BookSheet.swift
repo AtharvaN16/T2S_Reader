@@ -72,8 +72,14 @@ struct BookSheet: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    playPill
-                        .frame(maxWidth: .infinity)
+                    // The `⋯` beside the pill rather than off in the sheet's corner (owner,
+                    // 2026-09-12): what it holds is about the book, so it belongs with the book's
+                    // one action instead of hovering over the cover.
+                    HStack(spacing: 12) {
+                        playPill
+                        bookMenu
+                    }
+                    .frame(maxWidth: .infinity)
                     ChapterListView(chapters: chapters, current: resumeIndex, heading: .groupTitle,
                                     pulsing: pulsingChapter,
                                     bookmarks: isCurrent ? env.player.bookmarksByChapter : [:],
@@ -105,19 +111,6 @@ struct BookSheet: View {
                 await reload()
                 await scrollToResumeChapterAndPulse(proxy)
             }
-        }
-        // The sheet's own menu, at the corner where a sheet's overflow belongs: the bookmarks moved
-        // out from under the chapters and behind it (owner, 2026-09-12), which keeps the sheet the
-        // length of the book rather than the length of the book plus everything written about it.
-        .overlay(alignment: .topTrailing) {
-            Menu {
-                Button { showBookmarks = true } label: { Label("Bookmarks", systemImage: "bookmark") }
-            } label: {
-                CircleGlyph(systemName: "ellipsis")
-            }
-            .accessibilityLabel("More")
-            .padding(.trailing, Spacing.margin)
-            .padding(.top, Spacing.grid)
         }
         .background(Tokens.raised)
         .presentationCornerRadius(Spacing.sheetCorner)
@@ -167,6 +160,18 @@ struct BookSheet: View {
 
     /// The Home row's Play pill, centred: Pause while this book plays, "Continue  17m" once there's
     /// a saved position, "Play  17m" for a book never started.
+    /// The book's own menu: what there is to do with this book that is not "play it". The bookmarks
+    /// moved out from under the chapters and behind it (owner, 2026-09-12), which keeps the sheet
+    /// the length of the book rather than the length of the book plus everything written about it.
+    private var bookMenu: some View {
+        Menu {
+            Button { showBookmarks = true } label: { Label("Bookmarks", systemImage: "bookmark") }
+        } label: {
+            CircleGlyph(systemName: "ellipsis")
+        }
+        .accessibilityLabel("More")
+    }
+
     private var playPill: some View {
         Pill(label: isPlayingHere ? "Pause" : (isStarting ? "Starting…" : (hasProgress ? "Continue" : "Play")),
              detail: isStarting ? nil : timeDetail,

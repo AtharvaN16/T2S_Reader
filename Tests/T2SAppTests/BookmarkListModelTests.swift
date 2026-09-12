@@ -170,7 +170,9 @@ import T2SStore
         #expect(model.entries.isEmpty && model.error == nil)
     }
 
-    @Test func theReadersNoteBecomesTheHeadlineAndThePassageBecomesTheQuote() async throws {
+    /// The passage leads whether or not a note was written, and the note stands under it — the
+    /// owner's reversal of 2026-09-12, "the bookmark is the main focus".
+    @Test func thePassageLeadsAndTheReadersNoteStandsUnderIt() async throws {
         let f = try AppFixtures()
         let id = try await f.importFake()
         let summary = try #require(try await f.store.summary(id: id))
@@ -181,19 +183,19 @@ import T2SStore
         let model = BookmarkListModel(library: f.library, player: player)
         await model.load(summary)
         let before = try #require(model.entries.first)
-        #expect(before.headline == "First sentence.")
-        #expect(before.quote == nil)
+        #expect(before.lead == "First sentence.")
+        #expect(before.note == nil)
         #expect(before.endSeconds > before.timeSeconds)
         #expect(before.rangeText == "\(DurationFormatter.clock(before.timeSeconds)) – \(DurationFormatter.clock(before.endSeconds))")
 
         await model.setNote("my own words", on: before)
         let after = try #require(model.entries.first)
-        #expect(after.headline == "my own words")
-        #expect(after.quote == "First sentence.")
+        #expect(after.lead == "First sentence.")          // the book leads, whatever was written
+        #expect(after.note == "my own words")             // and the note stands under it
 
         await model.setNote("   ", on: after)
-        #expect(model.entries.first?.headline == "First sentence.")
-        #expect(model.entries.first?.quote == nil)
+        #expect(model.entries.first?.lead == "First sentence.")
+        #expect(model.entries.first?.note == nil)
     }
 
     /// Book order is the order the book goes in, not the order the bookmarks were written — which
@@ -251,7 +253,7 @@ import T2SStore
         #expect(entry.passage.utf16.count <= BookmarkSnippet.maxLength)
         #expect(entry.passage.hasSuffix("…"))
         #expect(entry.fullPassage == longPassage)
-        #expect(entry.headline == entry.passage)                         // no note yet: the book's words lead
+        #expect(entry.lead == entry.passage)                             // the book's words lead
 
         let typed = String(repeating: "and then I thought about it some more ", count: 80)      // ~3,000
         let stored = typed.trimmingCharacters(in: .whitespacesAndNewlines)                      // `setNote` trims
@@ -260,8 +262,8 @@ import T2SStore
         #expect(stored.utf16.count > 2_000)
         #expect(entry.hasNote)
         #expect(entry.userNote == stored)                                // the trailing space, and nothing else
-        #expect(entry.headline == stored)                                // the reader's words lead, in full
-        #expect(entry.quote == entry.passage)                            // and the book's drop to the quote
+        #expect(entry.note == stored)                                    // the note stands under it, in full
+        #expect(entry.lead == entry.passage)                             // and the passage still leads
         #expect(model.error == nil)
     }
 }

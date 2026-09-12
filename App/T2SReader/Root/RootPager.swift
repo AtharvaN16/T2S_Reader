@@ -146,8 +146,13 @@ struct RootPager: View {
                 if !chrome.isSubpageOpen {
                     TopFade(inset: geo.safeAreaInsets.top)
                     WarmRim(edge: .top)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                        .ignoresSafeArea(edges: .top)
+                    // The foot's rim is a sibling of the head's, not a passenger on `bottomFill`.
+                    // It rode on the fill while the fill was the only thing that reached past the
+                    // home indicator; the rim reaches on its own now, and hanging it off a host
+                    // that bleeds its own safe area is the arrangement that cost the Reader its
+                    // bottom 34 pt (see `WarmRim`). Above the fill, below the mini-player, as
+                    // before.
+                    WarmRim(edge: .bottom)
                 }
                 WarmUpLine(band: geo.safeAreaInsets.top)
 
@@ -359,14 +364,14 @@ struct RootPager: View {
             return .init(color: Tokens.ground.opacity(eased), location: fadeEnd * t)
         }
         stops.append(.init(color: Tokens.ground, location: 1))
-        // The rim over the fill, not under it: this ground is opaque where the glow is brightest,
-        // and was painting the foot of it out (owner, 2026-09-12).
+        // Ground only. The rim that goes over it — this fill is opaque exactly where the glow is
+        // brightest, and painting under it puts the foot of the light out (owner, 2026-09-12) — is
+        // a sibling in `body`, drawn after this.
         return LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
-            .overlay(alignment: .bottom) { WarmRim() }
-        .frame(height: height)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .ignoresSafeArea(edges: .bottom)
-        .allowsHitTesting(false)
+            .frame(height: height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .ignoresSafeArea(edges: .bottom)
+            .allowsHitTesting(false)
     }
 
     private func refreshHome() {

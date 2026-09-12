@@ -255,6 +255,26 @@ import Testing
         _ = await events
     }
 
+    /// A batch stops at a change of voice as it stops at a change of tier: a hosted batch (width
+    /// four) and an on-device one (width one) never share a lease.
+    @Test func aBatchNeverSpansVoices() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let engine = FakeEngine(concurrentRenders: 4)
+        await engine.hold()
+        let s = RenderScheduler(engine: engine, store: store, timeSource: ManualTimeSource())
+        async let events = collect(s)
+        func req(_ i: Int, _ voice: String) -> RenderRequest {
+            RenderRequest(job: RenderJob(documentID: doc, utteranceIndex: i, tier: .playAhead), key: key(i), spoken: "x\(i)", voiceID: voice)
+        }
+        await s.setPlan([req(0, "cloud:a:v"), req(1, "cloud:a:v"), req(2, "kokoro:b:v"), req(3, "kokoro:b:v")])
+        var spins = 0
+        while await engine.parkedCount != 2, spins < 10_000 { await Task.yield(); spins += 1 }
+        #expect(await engine.parkedCount == 2)                            // only the two hosted
+        #expect(await s.pending.count == 2)
+        await engine.release()
+        _ = await events
+    }
+
     /// Four renders that all fail to store pause the scheduler once, not four times.
     @Test func storeFullInsideABatchPausesOnce() async throws {
         let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 100)   // nothing fits

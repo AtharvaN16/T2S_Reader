@@ -159,13 +159,15 @@ public actor RenderScheduler {
     }
 
     /// Up to the engine's width for the first request's voice, from the front of `pending`, and
-    /// never across a tier: an urgent plan then waits behind at most one batch of its own tier.
+    /// never across a tier or a voice: an urgent plan then waits behind at most one batch of its own
+    /// tier, and a hosted batch never shares a lease with an on-device one.
     /// On-device engines answer 1, so their batch is the single request it always was.
     private func takeBatch() -> [RenderRequest] {
         let first = pending.removeFirst()
         let width = max(1, engine.maxConcurrentRenders(for: first.voiceID))
         var batch = [first]
-        while batch.count < width, let next = pending.first, next.job.tier == first.job.tier {
+        while batch.count < width, let next = pending.first,
+              next.job.tier == first.job.tier, next.voiceID == first.voiceID {
             batch.append(pending.removeFirst())
         }
         return batch

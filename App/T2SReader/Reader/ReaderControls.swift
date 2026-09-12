@@ -33,18 +33,16 @@ struct ReaderControls: View {
                 Button {
                     Task { await player.togglePlay() }
                 } label: {
-                    Group {
-                        if env.isWarmingUp {
-                            WarmingDot()
-                        } else if player.isCatchingUp {
-                            ProgressView().progressViewStyle(.circular).tint(Tokens.ink)
-                        } else {
-                            Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                                .font(.system(size: 44, weight: .regular))
-                        }
-                    }
-                    .frame(width: 72, height: 72)
-                    .contentShape(Rectangle())
+                    // The glyph holds its place and breathes instead of being swapped out
+                    // (owner, 2026-09-12: "just keep the play button and fade it out, don't show
+                    // the tiny dot"). A 10 pt dot and a spinner where a 44 pt glyph was is a hole
+                    // in the middle of the transport, and it read as the button having gone away
+                    // rather than as the app working; the words for what is happening are already
+                    // on the line above the scrubber. `TransportGlyph` owns the breath so the
+                    // repeating animation is not restarted by every unrelated redraw of this row.
+                    TransportGlyph(isPlaying: player.isPlaying, isBusy: player.isCatchingUp)
+                        .frame(width: 72, height: 72)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
@@ -86,5 +84,36 @@ struct ReaderControls: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+    }
+}
+
+/// The transport's play/pause glyph, dimmed and breathing while the player is catching up or the
+/// voice is warming. One view so `.repeatForever` lives on state this view owns: driven from the
+/// caller's `isBusy` directly, SwiftUI restarts the animation on every redraw of the row — and the
+/// row redraws on every tick of the clock beside it.
+private struct TransportGlyph: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var isPlaying: Bool
+    var isBusy: Bool
+
+    /// Off until the first frame after `isBusy` turns on, so the breath animates *into* the dim
+    /// rather than appearing already there.
+    @State private var breathing = false
+
+    var body: some View {
+        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+            .font(.system(size: 44, weight: .regular))
+            .opacity(isBusy ? (breathing ? 0.28 : 0.6) : 1)
+            .animation(breathAnimation, value: breathing)
+            .animation(.easeInOut(duration: 0.25), value: isBusy)
+            .onChange(of: isBusy, initial: true) { _, busy in breathing = busy && !reduceMotion }
+            // A live toggle of Reduce Motion settles the glyph without waiting for the next stall.
+            .onChange(of: reduceMotion) { _, reduce in breathing = isBusy && !reduce }
+    }
+
+    /// Nil once the breath is over, so the ease back to full opacity is not caught by a repeating
+    /// curve and left pulsing after playback has started.
+    private var breathAnimation: Animation? {
+        breathing ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : nil
     }
 }

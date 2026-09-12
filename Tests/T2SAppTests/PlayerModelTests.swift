@@ -319,6 +319,63 @@ import T2SStore
         #expect(try await f.store.document(id: id)?.voiceID == kokoroVoiceID)
     }
 
+    /// A route that answers one thing until told otherwise: the hosted voice while Heart installs,
+    /// then the on-device voice.
+    private actor FlippingRouting: VoiceRouteResolving {
+        private var answer: String
+        init(_ answer: String) { self.answer = answer }
+        func flip(to answer: String) { self.answer = answer }
+        func effectiveVoiceID(_ requested: String) async -> String { answer }
+    }
+
+    @Test func aChapterChangeWhileStillHostedHandsNothingOff() async throws {
+        let hosted = "cloud:fingerprint:af_heart"
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let engine = FakeEngine(secondsPerCharacter: 0.05)
+        let player = try makePlayer(f, engine: engine)
+        player.voiceRouting = FlippingRouting(hosted)
+        await player.load(try #require(try await f.store.summary(id: id)), play: false)
+        await player.coordinator.waitForRenderIdle()
+        #expect(Set(await engine.requests.map(\.voiceID)) == [hosted])
+
+        await player.seek(toChapter: 1)
+        player.tick()
+        await player.settleHandoff()
+        #expect(player.coordinator.voiceHandoff == nil)
+        #expect(player.routedVoiceID == hosted)
+    }
+
+    @Test func theFirstChapterChangeAfterTheOnDeviceVoiceAnswersHandsOff() async throws {
+        let hosted = "cloud:fingerprint:af_heart"
+        let local = "kokoro:kokoro-coreml-2e878c6a-misaki1.0.6:af_heart"
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let engine = FakeEngine(secondsPerCharacter: 0.05)
+        let player = try makePlayer(f, engine: engine)
+        let routing = FlippingRouting(hosted)
+        player.voiceRouting = routing
+        await player.load(try #require(try await f.store.summary(id: id)), play: false)
+        await player.coordinator.waitForRenderIdle()
+        let rendered = await engine.requests.count
+
+        // Ready, but no chapter change yet: nothing happens on a tick.
+        await routing.flip(to: local)
+        player.tick()
+        await player.settleHandoff()
+        #expect(player.coordinator.voiceHandoff == nil)
+
+        // The next chapter boundary hands the rest of the book to the on-device voice.
+        await player.seek(toChapter: 1)
+        player.tick()
+        await player.settleHandoff()
+        #expect(player.coordinator.voiceHandoff == VoiceHandoff(fromChapter: 1, voiceID: Delivery.applied(to: local)))
+        #expect(player.routedVoiceID == local)
+        await player.coordinator.waitForRenderIdle()
+        let after = Array((await engine.requests).dropFirst(rendered))
+        #expect(!after.isEmpty && after.allSatisfy { $0.voiceID == Delivery.applied(to: local) })
+    }
+
     /// The fixed delivery is attached to the render, so every render key carries it and a book
     /// re-renders consistently; the reader's stored choice stays the plain voice.
     @Test func aKokoroVoiceRendersAtTheFixedDeliveryWhileTheStoredChoiceStaysPlain() async throws {

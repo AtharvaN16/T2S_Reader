@@ -155,8 +155,13 @@ endpoints go to the back, so requests rotate through every mirror.
   and their audio concatenated in order. A split request returns no word
   timings; the pilot server never sends any. 180 is chosen because Eco's
   30 s router timeout was measured at about 210 characters.
-- `synthesizeStreaming` keeps the protocol default: one piece, then
-  finished.
+- `synthesizeStreaming` — the head utterance the player is waiting on — cuts
+  the text at clause boundaries into pieces of at most 80 characters, renders
+  them at once with priority for the next free mirror, and yields each piece
+  the moment it and everything before it has landed, with the server's own
+  80 ms pause before every piece after the first. A head that fits one piece
+  streams as the whole. Measured 2026-09-12: whole heads took up to 10 s on a
+  mirror; a piece takes one short render.
 
 ## Failure behavior
 

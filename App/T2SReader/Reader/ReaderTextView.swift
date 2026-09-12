@@ -70,6 +70,13 @@ struct ReaderTextView: UIViewRepresentable {
         tap.cancelsTouchesInView = false
         view.addGestureRecognizer(tap)
         context.coordinator.tap = tap
+        // Rides along with the system's own press, only to watch where it starts and ends.
+        let press = UILongPressGestureRecognizer(target: context.coordinator,
+                                                 action: #selector(Coordinator.handlePress(_:)))
+        press.delegate = context.coordinator
+        press.cancelsTouchesInView = false
+        press.minimumPressDuration = 0.3
+        view.addGestureRecognizer(press)
         _ = view.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak coordinator = context.coordinator] (_: UITextView, _: UITraitCollection) in
             coordinator?.restateFade()
         }
@@ -432,6 +439,9 @@ struct ReaderTextView: UIViewRepresentable {
                 recomputeRanges()
                 setReadBoundary(wordRange?.lowerBound ?? readBoundary)
             }
+            if following, !wasFollowing, let view, view.selectedRange.length > 0 {
+                view.selectedRange = NSRange(location: view.selectedRange.location, length: 0)
+            }
             if following, changed || !wasFollowing {
                 // A centre still pending from the rebuild is the opening one: land on the word
                 // rather than flinging to it from the top.
@@ -562,7 +572,26 @@ struct ReaderTextView: UIViewRepresentable {
         /// somewhere. Any touch on the page used to hand it over, and "Back to current" appeared on
         /// the slightest nudge (owner, 2026-09-12).
         private var dragOrigin: CGFloat?
+        /// Where a long press began. Selecting drags the page along, and once that has carried it a
+        /// stray distance you have left your place — but the pill waits for the finger to lift,
+        /// rather than appearing over the passage being held (owner, 2026-09-12).
+        private var pressOrigin: CGFloat?
         private static let strayDistance: CGFloat = 140
+
+        @objc func handlePress(_ gesture: UILongPressGestureRecognizer) {
+            guard let view else { return }
+            switch gesture.state {
+            case .began:
+                pressOrigin = view.contentOffset.y
+            case .ended, .cancelled, .failed:
+                if let origin = pressOrigin, abs(view.contentOffset.y - origin) > Self.strayDistance {
+                    onUserScroll()
+                }
+                pressOrigin = nil
+            default:
+                break
+            }
+        }
 
         func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
             dragOrigin = scrollView.contentOffset.y
@@ -571,7 +600,8 @@ struct ReaderTextView: UIViewRepresentable {
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
             syncOverlay()
             if previewRange != nil { reportPreviewRect() }
-            if let origin = dragOrigin, abs(scrollView.contentOffset.y - origin) > Self.strayDistance {
+            if pressOrigin == nil, let origin = dragOrigin,
+               abs(scrollView.contentOffset.y - origin) > Self.strayDistance {
                 dragOrigin = nil
                 onUserScroll()
             }

@@ -106,7 +106,6 @@ struct QueueRow: View {
                                 .multilineTextAlignment(.leading)
                                 .fixedSize(horizontal: false, vertical: true)      // wraps to its 2 lines instead of hugging 1
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.leading, 10)                             // stepped in: the book talking, not the app
                                 .padding(.top, 7)                                  // its own top, so a row without one keeps the 18 below
                         }
                     }
@@ -119,7 +118,7 @@ struct QueueRow: View {
                 .accessibilityLabel([chapterText, summary.document.title].compactMap { $0 }.joined(separator: ", "))
                 .accessibilityHint("Opens the book")
 
-                HStack(spacing: 8) {
+                HStack(spacing: 14) {                                          // fixed gap, not a Spacer: ⋯ sits near Play instead of riding the row's far edge
                     Pill(label: isPlayingHere ? "Pause" : (isStarting ? "Starting…" : (hasProgress ? "Continue" : "Play")),
                          detail: isStarting ? nil : timeDetail,
                          glyph: isPlayingHere ? "pause.fill" : (isStarting ? nil : "play.fill"),
@@ -136,7 +135,6 @@ struct QueueRow: View {
                     }
                     .disabled(isStarting)
                     .accessibilityHint(isPlayingHere ? "Pauses" : "Plays and opens the reader")
-                    Spacer()                                                       // ⋯ rides the margin: it stops crowding Play, and the row spans like the text above it
                     Menu {
                         contextItems
                     } label: {

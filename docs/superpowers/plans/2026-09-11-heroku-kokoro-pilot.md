@@ -96,8 +96,8 @@
   Pin `kokoro-onnx==0.6.1`, FastAPI, Uvicorn, and compatible transitive versions. Download these release assets and verify their published digests:
 
   ```text
-  kokoro-v1.0.int8.onnx
-  sha256 ae315a79b623f244700e4afb9246c46a26066782e049ba174bf3ba433970ee9c
+  Hugging Face model_quantized.onnx, installed as kokoro-v1.0.int8.onnx
+  sha256 fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478
   voices-v1.0.bin
   sha256 bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d
   ```

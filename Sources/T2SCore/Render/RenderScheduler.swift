@@ -48,8 +48,9 @@ public enum RenderEvent: Hashable, Sendable {
     case idle
 }
 
-/// Serial executor of `RenderRequest`s (spec §3.4). Knows nothing about timelines: the
-/// coordinator turns policy jobs into requests and applies the events.
+/// Executor of `RenderRequest`s, one batch at a time — a batch as wide as the engine allows, one
+/// for anything on the device (spec §3.4). Knows nothing about timelines: the coordinator turns
+/// policy jobs into requests and applies the events.
 public actor RenderScheduler {
     public typealias Sleeper = @Sendable (TimeInterval) async -> Void
     public static let failureSilenceSeconds: TimeInterval = 0.2
@@ -138,19 +139,36 @@ public actor RenderScheduler {
         while !isPausedForStorage, !pending.isEmpty {
             await paceForegroundFillIfNeeded()
             guard !isPausedForStorage, !pending.isEmpty else { break }
-            let request = pending.removeFirst()
-            switch await render(request) {
-            case .events(let events):
-                events.forEach { continuation.yield($0) }
-            case .storeFull:
-                isPausedForStorage = true
-                pending.removeAll()
-                continuation.yield(.storeFull)
-                break
+            let batch = takeBatch()
+            var paused = false
+            for outcome in await render(batch) {
+                switch outcome {
+                case .events(let events):
+                    events.forEach { continuation.yield($0) }
+                case .storeFull:
+                    guard !paused else { continue }               // one pause for the batch
+                    paused = true
+                    isPausedForStorage = true
+                    pending.removeAll()
+                    continuation.yield(.storeFull)
+                }
             }
         }
         running = false
         continuation.yield(.idle)
+    }
+
+    /// Up to the engine's width for the first request's voice, from the front of `pending`, and
+    /// never across a tier: an urgent plan then waits behind at most one batch of its own tier.
+    /// On-device engines answer 1, so their batch is the single request it always was.
+    private func takeBatch() -> [RenderRequest] {
+        let first = pending.removeFirst()
+        let width = max(1, engine.maxConcurrentRenders(for: first.voiceID))
+        var batch = [first]
+        while batch.count < width, let next = pending.first, next.job.tier == first.job.tier {
+            batch.append(pending.removeFirst())
+        }
+        return batch
     }
 
     /// Rests between chapter-ahead calls. Quarter-second slices let a seek, an empty plan, or a new
@@ -168,28 +186,50 @@ public actor RenderScheduler {
         foregroundFillDelay = 0
     }
 
-    /// The lease is intentionally scoped to one cache check / synthesis / store transaction. This
-    /// lets play-ahead preempt Prepare at the next utterance without allowing a second renderer.
-    private func render(_ request: RenderRequest) async -> RenderOutcome {
-        await arbiter.acquire(request.job.tier)
+    /// The lease is held once for the batch, at the tier of its first request, and scoped to the
+    /// batch's cache checks, syntheses, and store writes. Preemption between tiers happens at
+    /// batch boundaries; for a width of 1 that is the utterance boundary it always was.
+    private func render(_ batch: [RenderRequest]) async -> [RenderOutcome] {
+        await arbiter.acquire(batch[0].job.tier)
         if isCancelled {
             await arbiter.release()
-            return .events([])
+            return batch.map { _ in .events([]) }
         }
-        let outcome = await renderWhileHoldingLease(request)
+        let t0 = timeSource.now()
+        let results = await renderWhileHoldingLease(batch)
+        let wall = timeSource.now() - t0
         await arbiter.release()
-        return outcome
+        // Throughput, not one render's latency: the rate control asks what the route can keep
+        // fed, and four mirrors that each take ten seconds deliver forty seconds of audio in ten.
+        let synthesized = results.reduce(0) { $0 + $1.synthesizedSeconds }
+        if synthesized > 0 { record(rtf: wall / synthesized) }
+        return results.map(\.outcome)
     }
 
-    private func renderWhileHoldingLease(_ request: RenderRequest) async -> RenderOutcome {
+    /// Every request in the batch at once; results in the batch's order so events apply in the
+    /// order the plan gave them.
+    private func renderWhileHoldingLease(_ batch: [RenderRequest]) async -> [RenderResult] {
+        if batch.count == 1 { return [await renderWhileHoldingLease(batch[0])] }
+        return await withTaskGroup(of: (Int, RenderResult).self) { group in
+            for (index, request) in batch.enumerated() {
+                group.addTask { (index, await self.renderWhileHoldingLease(request)) }
+            }
+            var results = [RenderResult?](repeating: nil, count: batch.count)
+            for await (index, result) in group { results[index] = result }
+            return results.map { $0 ?? RenderResult(outcome: .events([]), synthesizedSeconds: 0) }
+        }
+    }
+
+    private func renderWhileHoldingLease(_ request: RenderRequest) async -> RenderResult {
         if await store.contains(request.key), let clip = try? await store.read(request.key) {
             foregroundFillDelay = 0
-            return .events([.rendered(RenderedUtterance(
+            return RenderResult(outcome: .events([.rendered(RenderedUtterance(
                 documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, key: request.key,
-                duration: clip.duration, wordTimings: []))])
+                duration: clip.duration, wordTimings: []))]), synthesizedSeconds: 0)
         }
 
         var events: [RenderEvent] = []
+        var synthesized: TimeInterval = 0
         // In the background, only when the trailing window has room for what a render costs: the
         // lease is held meanwhile, so the other tier waits behind this one rather than pile on.
         var waited: TimeInterval = 0
@@ -210,7 +250,7 @@ public actor RenderScheduler {
             } else {
                 foregroundFillDelay = 0
             }
-            if let rtf { record(rtf: rtf) }
+            synthesized = result.audio.duration
             if let cpu0 { lastRenderCPUSeconds = max(0, CPUBudget.processCPUSeconds() - cpu0) }
             budget?.record()                                        // keeps the window's floor current
             // The budget's report sink is the timing log's only view of what a render actually cost
@@ -231,7 +271,7 @@ public actor RenderScheduler {
         do {
             try await store.write(result.audio, for: request.key)
         } catch AudioStoreError.capacityExceeded, AudioStoreError.diskFull {
-            return .storeFull
+            return RenderResult(outcome: .storeFull, synthesizedSeconds: synthesized)
         } catch {
             // Encoding or I/O failed for this clip: log it and fall back to the failure silence so
             // the utterance still arrives (spec §6). Only if that write fails too is it bare failed.
@@ -240,16 +280,16 @@ public actor RenderScheduler {
             do {
                 try await store.write(result.audio, for: request.key)
             } catch AudioStoreError.capacityExceeded, AudioStoreError.diskFull {
-                return .storeFull
+                return RenderResult(outcome: .storeFull, synthesizedSeconds: synthesized)
             } catch {
-                return .events(events)
+                return RenderResult(outcome: .events(events), synthesizedSeconds: synthesized)
             }
         }
 
         events.append(.rendered(RenderedUtterance(
             documentID: request.job.documentID, utteranceIndex: request.job.utteranceIndex, key: request.key,
             duration: result.audio.duration, wordTimings: result.wordTimings)))
-        return .events(events)
+        return RenderResult(outcome: .events(events), synthesizedSeconds: synthesized)
     }
 
     /// Renders in pieces, yielding each to the events stream the moment it arrives — the player is
@@ -292,5 +332,12 @@ public actor RenderScheduler {
     private enum RenderOutcome: Sendable {
         case events([RenderEvent])
         case storeFull
+    }
+
+    private struct RenderResult: Sendable {
+        var outcome: RenderOutcome
+        /// Audio seconds this render actually synthesized: 0 for a cache hit or a failure, which
+        /// therefore contribute nothing to the batch's RTF.
+        var synthesizedSeconds: TimeInterval
     }
 }

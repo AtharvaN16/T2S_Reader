@@ -214,6 +214,83 @@ import Testing
         #expect(abs(r.duration - 0.3) < 1e-9 && r.wordTimings.isEmpty)
         #expect(try await store.read(key(0))?.duration == 0.3)
     }
+
+    /// With a width of four, four requests reach the engine before any finishes, and only the
+    /// batch is taken from the plan. (`setPlanFlushesPendingWork` shows the default width takes
+    /// one.)
+    @Test func widthFourHoldsFourRendersInFlight() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let engine = FakeEngine(concurrentRenders: 4)
+        await engine.hold()
+        let s = RenderScheduler(engine: engine, store: store, timeSource: ManualTimeSource())
+        async let events = collect(s)
+        await s.setPlan((0..<6).map { request($0, "utterance \($0)") })
+        var spins = 0
+        while await engine.parkedCount != 4, spins < 10_000 { await Task.yield(); spins += 1 }
+        #expect(await engine.parkedCount == 4)                            // the whole batch is in the engine
+        #expect(await s.pending.count == 2)                               // and only the batch was taken
+        await engine.release()
+        let got = await events
+        let rendered = got.compactMap { if case .rendered(let r) = $0 { return r.utteranceIndex } else { return nil } }
+        #expect(rendered == [0, 1, 2, 3, 4, 5])                           // applied in submission order
+    }
+
+    /// A batch stops at a tier boundary: play-ahead and prepare never share one, so an urgent
+    /// plan waits behind at most one batch of its own tier.
+    @Test func aBatchNeverSpansTiers() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000)
+        let engine = FakeEngine(concurrentRenders: 4)
+        await engine.hold()
+        let s = RenderScheduler(engine: engine, store: store, timeSource: ManualTimeSource())
+        async let events = collect(s)
+        func req(_ i: Int, _ tier: RenderTier) -> RenderRequest {
+            RenderRequest(job: RenderJob(documentID: doc, utteranceIndex: i, tier: tier), key: key(i), spoken: "x\(i)", voiceID: "v")
+        }
+        await s.setPlan([req(0, .playAhead), req(1, .playAhead), req(2, .prepare), req(3, .prepare)])
+        var spins = 0
+        while await engine.parkedCount != 2, spins < 10_000 { await Task.yield(); spins += 1 }
+        #expect(await engine.parkedCount == 2)                            // only the two play-ahead
+        #expect(await s.pending.count == 2)
+        await engine.release()
+        _ = await events
+    }
+
+    /// Four renders that all fail to store pause the scheduler once, not four times.
+    @Test func storeFullInsideABatchPausesOnce() async throws {
+        let store = InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 100)   // nothing fits
+        let s = RenderScheduler(engine: FakeEngine(secondsPerCharacter: 0.1, concurrentRenders: 4), store: store, timeSource: ManualTimeSource())
+        async let events = collect(s)
+        await s.setPlan([request(0, "abc"), request(1, "def"), request(2, "ghi"), request(3, "jkl")])
+        let got = await events
+        #expect(got == [.storeFull, .idle])
+        #expect(await s.isPausedForStorage)
+        #expect(await s.pending.isEmpty)
+    }
+
+    /// The rate control sees the batch's throughput, not one mirror's latency: four renders that
+    /// each span the batch's ten seconds, for twenty seconds of audio, measure 0.5. The window is
+    /// one sample so the batch's own figure is what is read — a per-render scheduler would record
+    /// 2.0 for the parked render and 0 for the three that follow it unparked.
+    @Test func rtfIsRecordedPerBatch() async throws {
+        let clock = ManualTimeSource()
+        let engine = FakeEngine(secondsPerCharacter: 1, concurrentRenders: 4)
+        let s = RenderScheduler(engine: engine, store: InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000), timeSource: clock, rtfWindow: 1)
+        // The first sample is the warm-up's and is dropped, so spend it on a batch of one.
+        async let warmUp = collect(s)
+        await s.setPlan([request(9, "warm")])
+        _ = await warmUp
+        #expect(await s.measuredRTF == nil)
+
+        await engine.hold()
+        async let events = collect(s)
+        await s.setPlan([request(0, "aaaaa"), request(1, "bbbbb"), request(2, "ccccc"), request(3, "ddddd")])   // 5 s of audio each
+        var spins = 0
+        while await engine.parkedCount != 4, spins < 10_000 { await Task.yield(); spins += 1 }
+        clock.advance(by: 10)                                             // the whole batch took ten seconds
+        await engine.release()
+        _ = await events
+        #expect(abs((await s.measuredRTF ?? 0) - 0.5) < 1e-9)             // 10 s / 20 s, not 10 s / 5 s
+    }
 }
 
 @Suite struct RenderSchedulerPacingTests {

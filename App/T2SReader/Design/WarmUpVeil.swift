@@ -259,8 +259,51 @@ struct WarmRim: View {
     var edge: VerticalEdge = .bottom
 
     var body: some View {
+        // `ignoresSafeArea` on the outside, and inside it a reader that says whether the foot of
+        // the light actually landed on the window's foot. Where it did — every surface on the
+        // iOS 18 simulator — `shortfall` is zero and the negative padding is a no-op; where it did
+        // not, `shortfall` is exactly the inset the rim still has to cross, and the padding takes
+        // it there. Harsh's 17 Pro is the case that needs it: the Reader's foot came back one
+        // home-indicator inset short of the glass, the same failure the Reader had on the way in
+        // (owner, 2026-09-12), on a surface where the arrangement above is already correct.
+        //
+        // **The foot only.** The head is anchored the way it always was, because the measurement
+        // lies there. On a pushed Settings page the top rim's *frame* reports the content's top —
+        // a status bar down from the window — while its drawing has bled up to the glass anyway,
+        // so correcting by the difference hoists the lit edge off the screen and leaves the sides
+        // lit and the top gone. Measured against the previous build, the Voice page loses its top
+        // rim exactly that way; the foot of every surface is pixel-identical. That asymmetry is
+        // real — UIKit's navigation controller has spent the top inset and SwiftUI has none to
+        // give back, which is the same thing the last paragraph above describes — so the foot is
+        // the only edge where "where did I land" answers the question honestly.
+        GeometryReader { geo in
+            rim(shortfall: edge == .bottom ? footShortfall(in: geo) : 0)
+        }
+        .ignoresSafeArea(edges: edge == .top ? .top : .bottom)
+    }
+
+    /// How far this view's foot still falls short of the window's, in points, clamped to the
+    /// largest inset a phone has so a bad window read can never throw the light off the screen.
+    private func footShortfall(in geo: GeometryProxy) -> CGFloat {
+        guard let height = Self.windowHeight else { return 0 }
+        return min(max(0, height - geo.frame(in: .global).maxY), 80)
+    }
+
+    /// The window the rim is measured against. `.global` is the hosting view's space, and every
+    /// surface that draws a rim is full-screen (the root pager, a pushed Settings page, the
+    /// Reader's `fullScreenCover`), so the hosting view *is* the window. nil rather than a guess
+    /// when there is no key window to read: the rim then anchors the way it always did.
+    private static var windowHeight: CGFloat? {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }?
+            .bounds.height
+    }
+
+    private func rim(shortfall: CGFloat) -> some View {
         let showing = WarmUpVeil.isShowing(env)
-        ZStack {
+        return ZStack {
             if showing {
             TimelineView(.animation) { context in
                 // Both endings ride the same curve: the breath eases up to full while the colour
@@ -307,11 +350,11 @@ struct WarmRim: View {
             }
         }
         .frame(height: WarmRamp.height)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: edge == .top ? .top : .bottom)
         // Fill the region, pin the light to the edge, and close whatever gap is left between that
         // edge and the window's. See the note above for why the gap has to be measured rather than
         // assumed away.
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: edge == .top ? .top : .bottom)
-        .ignoresSafeArea(edges: edge == .top ? .top : .bottom)
+        .padding(edge == .top ? .top : .bottom, -shortfall)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
         .animation(.easeInOut(duration: WarmUpVeil.fadeOut), value: showing)

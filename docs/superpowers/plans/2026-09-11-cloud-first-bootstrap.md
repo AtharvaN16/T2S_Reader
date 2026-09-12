@@ -568,11 +568,22 @@ Replace `renderKey(for:timeline:utteranceIndex:)` with:
     }
 
     /// From `chapter` on, render with `voiceID`. Chapters before it keep their keys and play as they
-    /// are; a render in flight for a later chapter lands under its old key and is superseded by the
-    /// plan this triggers. Nothing without a document.
+    /// are. What the boundary chapter and later already hold was rendered under the old voice's
+    /// keys, so it is marked unrendered and its stale refs dropped — exactly what a load does for a
+    /// whole book — and the plan this triggers renders it again; a render still in flight lands
+    /// under its old key and is superseded the same way. Nothing without a document.
     public func handOff(to voiceID: String, fromChapter chapter: Int) {
-        guard document != nil, timeline != nil else { return }
+        guard let document, let timeline else { return }
         voiceHandoff = VoiceHandoff(fromChapter: chapter, voiceID: voiceID)
+        for i in 0..<timeline.utteranceCount where (timeline.chapterIndex(forUtterance: i) ?? 0) >= chapter {
+            let expected = renderKey(for: document, timeline: timeline, utteranceIndex: i)
+            guard timeline[utterance: i].audioRef != expected.rawValue else { continue }
+            rendered[i] = false
+            if timeline[utterance: i].audioRef != nil {
+                self.timeline?[utterance: i].audioRef = nil
+                changedChapters.insert(timeline.chapterIndex(forUtterance: i) ?? 0)
+            }
+        }
         replan()
     }
 ```

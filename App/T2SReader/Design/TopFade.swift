@@ -37,13 +37,20 @@ struct TopFade: View {
     /// should be visible, the reason we are going with the faded look is so that some of the title
     /// can be seen through").
     ///
-    /// So the solid stops at 28 — above the title's top at 40, so no hard edge ever lands on a
-    /// letter — and the fade runs 76 from there, which is long enough to still be most of the way
-    /// opaque behind the bar at 44…49 and all but gone by the title's baseline at 81. "Home" comes
-    /// through veiled at the crown and nearly clear at the foot, and it is the ramp that crosses
-    /// it, never an edge.
-    static let warmSolid: CGFloat = 28
-    static let warmFade: CGFloat = 76
+    /// So the solid stops short of the title's top at 40, so no hard edge ever lands on a letter,
+    /// and a long ramp runs from there: still most of the way opaque behind the bar at 44…49, and
+    /// thinning across the title so "Home" comes through veiled at the crown and clearer at the
+    /// foot. It is the ramp that crosses the title, never an edge.
+    ///
+    /// 36 and 116 since the owner asked for it lower and smoother (2026-09-12: "move the indicator
+    /// fade slightly lower so more of the screen is covered and it is a smoother fade"), up from 28
+    /// and 76. The extra 8 of solid buys the bar a little more ground to sit on without reaching
+    /// the title, and the ramp being half again as long is what makes it read as smooth: the same
+    /// eased curve spread over more points has a shallower slope everywhere, so there is less of a
+    /// gradient across any one row of the page. It now clears at 152 rather than 104, which puts
+    /// the foot of it below the section header instead of on top of it.
+    static let warmSolid: CGFloat = 36
+    static let warmFade: CGFloat = 116
 
     var body: some View {
         let solid = inset + extra

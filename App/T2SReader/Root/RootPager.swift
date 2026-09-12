@@ -240,6 +240,14 @@ struct RootPager: View {
         .onChange(of: env.preferences.defaultVoiceID) { _, voiceID in
             env.player.defaultVoiceID = voiceID
             env.prepareRunner.defaultVoiceID = voiceID
+            env.chapterRenderer.defaultVoiceID = voiceID
+        }
+        // One message when the queue empties, not one per chapter, and from here rather than the
+        // Book sheet: the queue outlives the sheet, so the reader who started it and swiped away is
+        // the one who most needs telling.
+        .onChange(of: env.chapterRenderer.lastCompletion) { _, completion in
+            guard let completion else { return }
+            env.toasts.show(Self.renderToast(completion, queue: env.chapterRenderer.queue))
         }
         .onChange(of: env.preferences.defaultRate) { _, rate in
             env.player.setRate(rate)
@@ -378,6 +386,24 @@ struct RootPager: View {
         Task { await env.libraryModel.refresh() }
     }
 
+    /// What one drain of the chapter queue came to. A chapter that failed carries its own sentence
+    /// — how many sentences never became audio, or why the book could not be read — so the detail
+    /// line quotes it rather than saying "something went wrong": the reader can act on the first
+    /// and not on the second.
+    private static func renderToast(_ completion: ChapterRenderRunner.Completion,
+                                    queue: [ChapterRenderJob]) -> ToastContent {
+        let reason = queue.compactMap { job -> String? in
+            if case .failed(let message) = job.state { return message }
+            return nil
+        }.last
+        let ready = completion.ready == 1 ? "1 chapter ready" : "\(completion.ready) chapters ready"
+        guard completion.failed > 0 else { return ToastContent(title: ready, actionLabel: nil) }
+        let failed = completion.failed == 1 ? "1 chapter could not be rendered"
+                                            : "\(completion.failed) chapters could not be rendered"
+        if completion.ready == 0 { return ToastContent(title: failed, detail: reason, actionLabel: nil) }
+        return ToastContent(title: ready, detail: failed, actionLabel: nil)
+    }
+
     /// A foreground pass is only a convenience while the app is awake and idle. The scheduler's
     /// shared lease means a user starting playback always receives the next render slot.
     private func startForegroundPrepareIfNeeded() {
@@ -395,6 +421,10 @@ struct RootPager: View {
 
     private func updatePrepareDeviceState(_ state: DeviceState) {
         env.coordinator.device = state
+        // The chapter queue decides for itself what heat and a full store mean to it — it holds
+        // rather than stops, and a `.storeFull` it hit itself is released by the next report of
+        // room. It only needs to be told (chapter-rendering design, "State machine").
+        env.chapterRenderer.deviceStateChanged(state)
         if state.charging && !state.thermalSerious && !state.lowPowerMode && !state.storeFull {
             startForegroundPrepareIfNeeded()
         } else {

@@ -11,6 +11,11 @@ import T2SStore
 /// Nothing about a queue: playing is what puts a book on Home. The bookmarks were listed under the
 /// chapters until 2026-09-12 and are behind the `⋯` now, as a page — a sheet that grew with every
 /// note written in the book was a sheet about two things.
+///
+/// Behind the same `⋯` is render mode (chapter-rendering design, "UI"), which turns the chapter
+/// list into a selection list rather than opening a screen of its own: the summary line of what
+/// this book has on the device, a state mark on every row, and one bar at the foot. It is the one
+/// place in the app that says what is cached and the one place that can take it back.
 struct BookSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
@@ -21,6 +26,9 @@ struct BookSheet: View {
     /// Only Home's book tap asks for the scroll-and-pulse (owner, 2026-09-11) — Collection's tile
     /// and row open on the chapter list as it's always shown, at the top.
     var pulseOnOpen: Bool = false
+    /// The Collection's "Render chapter" opens straight into render mode rather than dropping the
+    /// reader on the chapter list to find the `⋯` again (chapter-rendering design, "Entry points").
+    var startInRenderMode: Bool = false
 
     @State private var chapters: [ChapterEntry] = []
     @State private var bookmarks: BookmarkListModel?
@@ -33,6 +41,12 @@ struct BookSheet: View {
     /// opening the sheet from Home should land the eye on where the book picks up).
     @State private var pulsingChapter: Int?
     @State private var showBookmarks = false
+    /// The chapter list turned into a selection list. The queue itself is app-wide and outlives
+    /// this sheet; only the picking is local.
+    @State private var isRendering = false
+    @State private var selection: Set<Int> = []
+    /// What this book has on the device, chapter by chapter. Re-read whenever it can have changed.
+    @State private var audio = BookAudioStatus()
 
     private static let heroHeight: CGFloat = 200
 
@@ -80,10 +94,15 @@ struct BookSheet: View {
                         bookMenu
                     }
                     .frame(maxWidth: .infinity)
+                    if isRendering { renderBanner }
                     ChapterListView(chapters: chapters, current: resumeIndex, heading: .groupTitle,
                                     pulsing: pulsingChapter,
-                                    bookmarks: isCurrent ? env.player.bookmarksByChapter : [:],
+                                    // Render mode is about what is on the device, so the rows are
+                                    // about that alone: the bookmark pills stand down until it ends.
+                                    bookmarks: isCurrent && !isRendering ? env.player.bookmarksByChapter : [:],
+                                    renderMarks: renderMarks,
                                     onSelect: { chapter in
+                                        if isRendering { toggle(chapter.index); return }
                                         Task {
                                             if !isCurrent { await env.player.load(live, play: false) }
                                             await env.player.seek(toChapter: chapter.index)
@@ -101,15 +120,34 @@ struct BookSheet: View {
                                             dismiss()
                                             readerRoute.open(live)
                                         }
-                                    })
+                                    },
+                                    onEvict: { chapter in evict(chapter: chapter.index) })
                     .padding(.horizontal, -12)                                 // the rows' fill runs into the margin, as in the Reader
                     Color.clear.frame(height: Spacing.section)
                 }
                 .padding(.horizontal, Spacing.margin)
             }
             .task {
+                isRendering = startInRenderMode
                 await reload()
                 await scrollToResumeChapterAndPulse(proxy)
+            }
+            // A job finishing, failing or starting changes what a row says and what the store
+            // holds; the progress ticks in between do not, so this watches the states rather than
+            // the queue, and does not re-read the book once a sentence.
+            .onChange(of: env.chapterRenderer.queue.map(\.state)) { _, _ in
+                Task { await refreshAudio() }
+            }
+            .safeAreaInset(edge: .bottom) {
+                // Only once something is picked: an inert bar at the foot of a list of ready
+                // chapters would be a permanent invitation to nothing.
+                if isRendering, !selection.isEmpty {
+                    BarButton(label: "Start rendering (\(selection.count))", action: startRendering)
+                        .padding(.horizontal, Spacing.margin)
+                        .padding(.bottom, Spacing.grid)
+                        .background(Tokens.raised)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
         }
         .background(Tokens.raised)
@@ -166,10 +204,110 @@ struct BookSheet: View {
     private var bookMenu: some View {
         Menu {
             Button { showBookmarks = true } label: { Label("Bookmarks", systemImage: "bookmark") }
+            // In and out by the same door: render mode was entered from here, so it is left from
+            // here too, rather than by closing the sheet on the reader who only wanted a look.
+            Button {
+                withAnimation(.snappy) {
+                    isRendering.toggle()
+                    if !isRendering { selection.removeAll() }
+                }
+            } label: {
+                Label(isRendering ? "Done" : "Render chapters",
+                      systemImage: isRendering ? "checkmark" : "waveform")
+            }
         } label: {
             CircleGlyph(systemName: "ellipsis")
         }
         .accessibilityLabel("More")
+    }
+
+    /// What sits above the chapter list in render mode: this book's own total — not the whole
+    /// cache, which Settings → Storage keeps — with the one control that undoes it, and, when the
+    /// queue has stopped with work still in it, why.
+    @ViewBuilder private var renderBanner: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 12) {
+                Text(audio.summary).typeRole(.meta).foregroundStyle(Tokens.ink2)
+                Spacer(minLength: 8)
+                if audio.hasAudio {
+                    Pill(label: "Evict all", glyph: "trash", style: .destructiveSoft, action: evictAll)
+                }
+            }
+            if let hold = env.chapterRenderer.hold { holdNotice(hold) }
+        }
+    }
+
+    /// A held queue says so where the queue is: the sheet is where this lives, and a reader who
+    /// picked four chapters and saw nothing happen is owed the reason on the same screen.
+    @ViewBuilder private func holdNotice(_ hold: ChapterRenderRunner.Hold) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(hold == .hot
+                 ? "Paused: the phone is warm. Rendering picks up on its own once it cools."
+                 : "Paused: there is no room left for audio. Free some in Settings → Storage.")
+                .typeRole(.meta).foregroundStyle(Tokens.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            // Heat is the reader's call to overrule; a full store is not. The override lapses when
+            // the queue drains, so it never quietly becomes the setting.
+            if hold == .hot {
+                Pill(label: "Continue anyway", style: .soft) { env.chapterRenderer.continueAnyway() }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Tokens.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    /// This book's jobs, by chapter. The queue is the whole app's, so another book's chapters are
+    /// in it too and are none of this sheet's business.
+    private var jobs: [Int: ChapterRenderJob] {
+        var out: [Int: ChapterRenderJob] = [:]
+        for job in env.chapterRenderer.queue where job.documentID == live.id { out[job.chapterIndex] = job }
+        return out
+    }
+
+    private var renderMarks: [Int: ChapterRenderMark] {
+        guard isRendering else { return [:] }
+        let jobs = self.jobs
+        return Dictionary(uniqueKeysWithValues: chapters.map { chapter in
+            (chapter.index, ChapterRenderMark.mark(status: audio.chapter(chapter.index),
+                                                   job: jobs[chapter.index],
+                                                   isSelected: selection.contains(chapter.index)))
+        })
+    }
+
+    /// A chapter already waiting or under way is not picked again — re-queueing one is ignored, and
+    /// a check beside a running row would promise a second render that never comes.
+    private func toggle(_ chapter: Int) {
+        switch jobs[chapter]?.state {
+        case .queued, .running: return
+        default: break
+        }
+        withAnimation(.snappy) {
+            if selection.contains(chapter) { selection.remove(chapter) } else { selection.insert(chapter) }
+        }
+    }
+
+    /// Hands the picked chapters to the app's one queue and lets go of them: the rows read their
+    /// state back off the queue from here on, and the sheet can close without stopping anything.
+    private func startRendering() {
+        let picked = selection.sorted()
+        withAnimation(.snappy) { selection.removeAll() }
+        Task { await env.chapterRenderer.enqueue(documentID: live.id, chapters: picked) }
+    }
+
+    private func evict(chapter: Int) {
+        Task {
+            try? await env.library.evictAudio(for: live.id, chapter: chapter)
+            await refreshAudio()
+        }
+    }
+
+    /// The whole-document form the rest of the app already uses, unchanged.
+    private func evictAll() {
+        Task {
+            try? await env.library.evictAudio(for: live.id)
+            await refreshAudio()
+        }
     }
 
     private var playPill: some View {
@@ -211,8 +349,21 @@ struct BookSheet: View {
     }
 
     private func loadChapters() async {
-        guard let timeline = try? await env.library.timelineForPlayback(live.id) else { chapters = []; return }
+        guard let timeline = try? await env.library.timelineForPlayback(live.id) else {
+            chapters = []
+            audio = BookAudioStatus()
+            return
+        }
         let progress = DocumentProgress.compute(summary: live, timeline: timeline)
         chapters = ChapterEntry.entries(timeline: timeline, timeIndex: TimeIndex(timeline), elapsed: progress.elapsedSeconds)
+        audio = await BookAudioStatus.read(timeline: timeline, audioStore: env.audioStore)
+    }
+
+    /// What the store holds for this book, asked again after anything that can have changed it: a
+    /// job finishing, a chapter evicted. `currentTimeline` rather than `timelineForPlayback` — the
+    /// sheet's own open has already re-derived a stale book, and a refresh must never pay for one.
+    private func refreshAudio() async {
+        guard let timeline = try? await env.library.currentTimeline(live.id) else { return }
+        audio = await BookAudioStatus.read(timeline: timeline, audioStore: env.audioStore)
     }
 }

@@ -187,7 +187,7 @@ struct ReaderPage: View {
                     Button { showVoiceChange = true } label: { Label("Change voice", systemImage: "person.wave.2") }
                     Button { showSleepTimer = true } label: { Label("Sleep timer", systemImage: "moon.zzz") }
                     Button { showDetails = true } label: { Label("Details", systemImage: "info.circle") }
-                    Button { env.player.renderCurrentChapter() } label: {
+                    Button(action: renderThisChapter) {
                         Label(env.player.chapters.count > 1 ? "Render chapter" : "Render whole document", systemImage: "waveform")
                     }
                 } label: {
@@ -309,6 +309,24 @@ struct ReaderPage: View {
                 .padding(.top, -64)                                        // hangs above the block, over the text
                 .ignoresSafeArea(edges: .bottom)
         }
+    }
+
+    /// The chapter now playing, on the device, whole — not `chapterAhead`'s five-minute window:
+    /// it continues while paused, while backgrounded, and through heat if overruled
+    /// (chapter-rendering design, "Entry points"). It goes to the app's queue rather than to the
+    /// transport, so nothing about what is playing changes.
+    ///
+    /// The Reader can be up before the transport has this document — the page opens and the load
+    /// follows — and then there is no chapter now playing; the book's resume chapter is what the
+    /// reader is looking at, and is what the queue is given.
+    private func renderThisChapter() {
+        let renderer = env.chapterRenderer
+        let id = summary.id
+        guard env.player.current?.id == id, let chapter = env.player.chapterIndex else {
+            Task { await renderer.enqueueResumeChapter(of: id) }
+            return
+        }
+        Task { await renderer.enqueue(documentID: id, chapters: [chapter]) }
     }
 
     /// Saves, says so, and offers the note there and then.

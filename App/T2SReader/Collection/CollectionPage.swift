@@ -39,6 +39,10 @@ struct CollectionPage: View {
     /// Set by the Import page; opened from its `onDismiss`, once it has actually gone.
     @State private var pendingOpen: DocumentSummary?
     @State private var selected: DocumentSummary?
+    /// The same sheet, opened straight into render mode by the `⋯`'s "Render chapters". Its own
+    /// state rather than a flag beside `selected`: the two are different ways in, and one of them
+    /// must not change what the other opens.
+    @State private var renderTarget: DocumentSummary?
     @State private var launchOpened = false
     @State private var details: DocumentSummary?
     @State private var voiceChange: DocumentSummary?
@@ -124,6 +128,7 @@ struct CollectionPage: View {
         // is what lets the warm-up wash sit behind this one rather than over it (owner, 2026-09-10).
         .fullScreenCover(isPresented: $showAdd, onDismiss: openPending) { ImportPage(imported: $pendingOpen) }
         .sheet(item: $selected) { BookSheet(summary: $0) }
+        .sheet(item: $renderTarget) { BookSheet(summary: $0, startInRenderMode: true) }
         .onChange(of: env.libraryModel.summaries.map(\.id), initial: true) { _, _ in
             // `T2S_OPEN=book` (screenshots, see `RootPage.launchOpen`): the book sheet, once.
             if RootPage.launchOpen == "book", !launchOpened,
@@ -305,7 +310,7 @@ struct CollectionPage: View {
     /// 2026-09-09): playing a book is what puts it on Home. Play resumes a paused current book before
     /// opening the Reader, as the Home row and the book sheet do; for any other book the Reader
     /// loads and plays it itself. A placeholder has no file on this device (sync spec §5), so Play
-    /// and Render chapter — both of which need one — give way to a single "Add here", which
+    /// and Render chapters — both of which need one — give way to a single "Add here", which
     /// does what the tile's and row's own tap do; the rest of the menu is unchanged.
     @ViewBuilder private func menuItems(for book: DocumentSummary) -> some View {
         let isCurrent = env.player.current?.id == book.id
@@ -326,12 +331,13 @@ struct CollectionPage: View {
         Button { voiceChange = book } label: { Label("Change voice", systemImage: "person.wave.2") }
         if !book.document.isPlaceholder {
             let hasChapters = book.document.sourceType != .article && book.chapterCount > 1
-            Button {
-                Task {
-                    if !isCurrent { await env.player.load(book, play: false) }
-                    env.player.renderCurrentChapter()
-                }
-            } label: { Label(hasChapters ? "Render chapter" : "Render whole document", systemImage: "waveform") }
+            // The Collection is where a book is chosen rather than listened to, so this opens the
+            // book sheet in render mode and lets the reader pick which chapters — where Home's row
+            // and the Reader both render one chapter on the spot (chapter-rendering design,
+            // "Entry points"). No `load`: it no longer hijacks the current book.
+            Button { renderTarget = book } label: {
+                Label(hasChapters ? "Render chapters" : "Render whole document", systemImage: "waveform")
+            }
         }
         Button(role: .destructive) { pendingDelete = book } label: { Label("Delete", systemImage: "trash") }
     }

@@ -1,0 +1,316 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scope chip — placement, colour, motion</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&display=swap">
+<style>
+:root{
+  --ground:#F8F8F7; --paper:#FFFFFF; --ink:#111111; --ink2:#6E7076; --ink3:#C9C9C7;
+  --hair:#E2E3E8; --glow:#0066FF; --ready:#12A150; --warn:#C25A00; --no:#C0392B;
+  --serif:"Newsreader",Georgia,"Times New Roman",serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --app-face:"Inter",-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0E0F12;--paper:#16171B;--ink:#ECEDF0;--ink2:#94969E;--ink3:#3A3A3A;
+  --hair:#26272D;--glow:#5F84FF;--ready:#37D97C;--warn:#FFA24D;--no:#FF6B5E;}}
+:root[data-theme="dark"]{--ground:#0E0F12;--paper:#16171B;--ink:#ECEDF0;--ink2:#94969E;
+  --ink3:#3A3A3A;--hair:#26272D;--glow:#5F84FF;--ready:#37D97C;--warn:#FFA24D;--no:#FF6B5E;}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--serif);font-size:17px;line-height:1.6;margin:0;padding:0 20px 120px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto}.col{max-width:68ch}
+h1,h2{text-wrap:balance;margin:0;font-weight:400}
+h1{font-size:clamp(34px,6vw,52px);line-height:1.05;letter-spacing:-.02em}
+h2{font-size:clamp(24px,3.4vw,31px);letter-spacing:-.01em;line-height:1.15}
+p{margin:0} ul{margin:0;padding-left:1.15em} li{margin:.22em 0}
+code{font-family:var(--mono);font-size:.78em;background:color-mix(in srgb,var(--ink) 8%,transparent);padding:.14em .4em;border-radius:3px}
+.eyebrow{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2)}
+.lede{font-size:20px;line-height:1.5;color:var(--ink2);font-weight:300}
+header{padding-block:72px 0}header .col{display:flex;flex-direction:column;gap:20px}
+.meta{font-family:var(--mono);font-size:12px;color:var(--ink2);line-height:2;border-top:1px solid var(--hair);padding-top:16px}
+.meta b{color:var(--ink);font-weight:500}
+section{padding-block:66px 0;display:flex;flex-direction:column;gap:26px}
+.shead{display:flex;flex-direction:column;gap:12px;max-width:68ch}
+.snum{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--glow);letter-spacing:.1em}
+.stack{display:flex;flex-direction:column;gap:16px;max-width:68ch}
+.callout{border-left:2px solid var(--glow);padding:2px 0 2px 18px;color:var(--ink2);max-width:68ch}
+.callout b{color:var(--ink);font-weight:500}
+.callout.ok{border-color:var(--ready)}.callout.warnc{border-color:var(--warn)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:26px 24px;align-items:start}
+.card{display:flex;flex-direction:column;gap:12px;margin:0;background:var(--paper);border:1px solid var(--hair);border-radius:16px;padding:16px}
+.card.pick{border-color:color-mix(in srgb,var(--ready) 55%,var(--hair))}
+.cname{font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.05em;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tag{font-family:var(--mono);font-weight:500;letter-spacing:.08em;font-size:9.5px;padding:2px 6px;border-radius:3px;text-transform:uppercase}
+.tag.rec{background:color-mix(in srgb,var(--ready) 18%,transparent);color:var(--ready)}
+.tag.no{background:color-mix(in srgb,var(--no) 15%,transparent);color:var(--no)}
+.tag.alt{background:color-mix(in srgb,var(--glow) 16%,transparent);color:var(--glow)}
+.cnote{font-size:14.5px;line-height:1.45;color:var(--ink2)}.cnote b{color:var(--ink);font-weight:500}
+.spec{font-family:var(--mono);font-size:10px;color:var(--ink2);line-height:1.75}
+.spec .y{color:var(--ready)}.spec .n{color:var(--no)}
+.btn{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;background:transparent;
+     border:1px solid var(--hair);color:var(--ink2);border-radius:20px;padding:6px 12px;cursor:pointer}
+.btn:hover{color:var(--ink);border-color:var(--ink3)}
+.ctrls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* ── phone ───────────────────────────────────────────────── */
+.phone{width:400px;max-width:100%;background:#101010;border-radius:40px 40px 14px 14px;padding:24px 20px 18px;
+       font-family:var(--app-face);color:#F2F2F2;user-select:none;position:relative;overflow:hidden}
+.phone.mini{border-radius:14px;padding:14px 16px 12px}
+.body{font-family:var(--serif);font-size:16.5px;line-height:1.6;height:112px;overflow:hidden;position:relative;
+      -webkit-mask-image:linear-gradient(to bottom,transparent,#000 46%,#000 72%,transparent 100%);
+      mask-image:linear-gradient(to bottom,transparent,#000 46%,#000 72%,transparent 100%)}
+.body s{text-decoration:none;opacity:.34}
+.statusLine{display:flex;justify-content:center;padding:6px 0 4px;font-size:13px;letter-spacing:.01em;min-height:26px}
+.statusLine .txt{transition:opacity .25s}
+.st-tint{color:#5F84FF}
+.st-pill{color:#5F84FF;background:rgba(95,132,255,.14);padding:3px 11px;border-radius:12px}
+.st-cap{color:#F2F2F2;background:#101010;padding:3px 12px;border-radius:12px;box-shadow:0 0 0 1px #262626}
+.st-ink2{color:#8E8E8E}
+.chapRow{display:flex;align-items:center;gap:6px;min-height:28px;font-size:16px;font-weight:500;letter-spacing:-.01em}
+.chapRow .chev{opacity:.85;font-size:14px}
+.scrubHit{padding:10px 0 5px}
+.track{display:flex;align-items:center;height:12px;gap:0}
+.seg{height:6px;position:relative;overflow:hidden;flex-grow:1;flex-basis:0;
+     transition:flex-grow var(--dur) var(--ease),height var(--dur) var(--ease),
+                border-radius var(--dur) var(--ease),opacity calc(var(--dur)*.55) linear,
+                margin var(--dur) var(--ease)}
+.seg .ticks{display:flex;width:100%;height:100%}.seg .ticks i{flex:1 1 0}
+.seg .ticks i.r{background:#8E8E8E}.seg .ticks i.u{background:#3A3A3A}
+.seg .played{position:absolute;inset:0 auto 0 0;background:#F2F2F2}
+.track.book .seg{margin:0 1.5px;border-radius:0}
+.track.book .seg:first-child{margin-left:0}.track.book .seg:last-child{margin-right:0}
+.track.chapter .seg{margin:0;height:12px;border-radius:6px}
+.track.chapter .seg:not(.cur){flex-grow:0.0001;opacity:0}
+.clockRow{display:flex;align-items:center;font-size:13px;color:#8E8E8E;font-variant-numeric:tabular-nums;min-height:26px}
+.clockRow .sp{flex:1}
+.num{display:inline-block;transition:opacity .18s,transform .18s}
+.num.flip{opacity:0;transform:translateY(-3px)}
+.transport{display:flex;align-items:center;padding-top:10px;height:56px}
+.transport .sp{flex:1}.transport .s{font-size:16px;color:#8E8E8E}
+.transport .mid{display:flex;align-items:center;gap:12px}
+/* ── the chip ────────────────────────────────────────────── */
+.two{display:inline-flex;background:#191919;border-radius:11px;padding:2px;position:relative}
+.two .thumb{position:absolute;top:2px;left:2px;width:calc(50% - 2px);height:18px;border-radius:9px;background:#333;
+     transition:transform var(--dur) var(--ease)}
+.two.chapter .thumb{transform:translateX(100%)}
+.two i{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;height:18px;padding:0 6px;
+       border-radius:9px;opacity:.42;transition:opacity calc(var(--dur)*.6) linear}
+.two.book i.a,.two.chapter i.b{opacity:1}
+.g{display:inline-flex;align-items:center;gap:1.5px;height:12px}
+.g u{display:block;height:3px;border-radius:.5px;background:currentColor}
+.g.one u{width:17px;border-radius:1.5px}
+.g.many u:nth-child(1){width:3px}.g.many u:nth-child(2){width:6px}
+.g.many u:nth-child(3){width:3.5px}.g.many u:nth-child(4){width:2px}
+table{border-collapse:collapse;font-family:var(--app-face);font-size:14px;width:100%;max-width:980px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+th{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);font-weight:500}
+td code{white-space:nowrap}
+.scroll{overflow-x:auto}
+.themer{position:fixed;right:16px;top:16px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+  background:var(--paper);border:1px solid var(--hair);color:var(--ink2);border-radius:20px;padding:7px 13px;cursor:pointer;z-index:9}
+.hint{font-family:var(--mono);font-size:10px;color:var(--glow)}
+</style>
+
+<button class="themer" id="themer">THEME</button>
+<div class="wrap">
+
+<header><div class="col">
+  <div class="eyebrow">t2s_reader · reader page · motion + placement</div>
+  <h1>Centre it, and make it move</h1>
+  <p class="lede">The chip goes in the middle of the clock row; the status line moves up above the chapter picker and changes colour to survive the text behind it. Everything below is live — press the bar, drag the springs.</p>
+  <div class="meta">
+    <b>Settled</b> twin-bars two-up chip · centred in the clock row · status line relocated and tinted.<br>
+    <b>This doc</b> what the status line looks like up there, and exactly how both animations run.
+  </div>
+</div></header>
+
+<section>
+  <div class="shead">
+    <div class="snum">01</div>
+    <h2>The status line, moved up</h2>
+    <p>Today it is an overlay centred across the clock row, in <code>ink2</code> — or <code>glow</code> while the voice warms. Moved above the chapter picker it lands on the tail of the text fade, where <code>ink2</code> grey against dimmed body text is exactly the wrong colour: both are grey, and the one that matters is the smaller. Three ways to keep it readable.</p>
+  </div>
+  <div class="grid" id="status"></div>
+  <div class="callout"><b>Where the fade is.</b> The <code>ground</code> gradient starts 64&nbsp;pt above the bottom block and is solid by the chapter row's foot, so a line placed directly above the picker sits in the middle of the ramp — partly over body text, partly over ground, and the mix changes with scroll position. That is the argument for <b>B</b>: a line that carries its own ground does not care what is behind it.</p></div>
+</section>
+
+<section>
+  <div class="shead">
+    <div class="snum">02</div>
+    <h2>The morph is already written</h2>
+    <p>Press the bar in the mock below and watch what <code>ThinScrubber</code> does today: the chapter under the finger widens to <code>activeShare</code>&nbsp;=&nbsp;0.45, rounds its corners, grows 6&nbsp;pt → 12&nbsp;pt, and the others dull to 0.5 — all on <code>.spring(duration: 0.25)</code>. Chapter scope <em>is that same layout with <code>activeShare</code> driven to 1.0</em>.</p>
+  </div>
+  <div class="grid" id="morph"></div>
+  <div class="callout ok"><b>What this buys.</b> The scope switch is not a new animation, it is the existing one taken to its limit — so the two bars are visibly the same bar, and the press-to-scrub gesture and the chip end up speaking the same visual language. In code it is a single <code>activeShare</code> value moving between 0.45 and 1.0, with the segment loop, the layout maths and the spring all untouched.</div>
+  <div class="callout warnc"><b>The one thing that will pop.</b> Ticks are laid out per segment from the book-wide 48. Chapter 2 owns about five of them at rest and needs forty at full width, so if the tick count changes when the scope does, the fill under the growing bar re-lays-out mid-spring and flickers. Fix: compute the current chapter's ticks at chapter resolution in <em>both</em> scopes and let them be squeezed while the bar is narrow. A tick grid that is too fine to resolve at 6&nbsp;pt costs nothing; one that changes count mid-animation costs the whole effect.</div>
+</section>
+
+<section>
+  <div class="shead">
+    <div class="snum">03</div>
+    <h2>Tune it</h2>
+    <p>Both springs on one page so they can be judged together. The chip's thumb and the bar's morph should not run at the same speed — the chip is a small object that should feel snappy and settled before the bar has finished travelling, so the bar reads as a <em>consequence</em> of the tap rather than a co-event.</p>
+  </div>
+  <div class="grid" id="tune"></div>
+</section>
+
+<section>
+  <div class="shead">
+    <div class="snum">04</div>
+    <h2>Timings</h2>
+  </div>
+  <div class="scroll"><table>
+    <tr><th>What</th><th>From → to</th><th>Curve</th><th>Note</th></tr>
+    <tr><td>Chip thumb</td><td>left cell → right cell</td><td><code>.spring(response: .28, dampingFraction: .72)</code></td><td>A touch of overshoot; it is the only thing on the row that should feel springy.</td></tr>
+    <tr><td>Chip glyph</td><td>0.42 → 1.0 opacity</td><td><code>.linear(duration: .16)</code></td><td>Opacity on a spring wobbles visibly. Keep it linear and short.</td></tr>
+    <tr><td>Bar <code>activeShare</code></td><td>0.45 ⇄ 1.0</td><td><code>.spring(duration: .34, bounce: .18)</code></td><td>Slower than the chip so it reads as the result. Existing press animation stays at 0.25.</td></tr>
+    <tr><td>Bar height</td><td>6 pt ⇄ 12 pt</td><td>same spring</td><td>Already animated by the <code>isActive</code> path.</td></tr>
+    <tr><td>Corner radius</td><td>0 ⇄ height/2</td><td>same spring</td><td>Already animated by <code>rounded</code>.</td></tr>
+    <tr><td>Other segments</td><td>1 → 0 opacity</td><td><code>.linear(duration: .19)</code></td><td>Gone before the growing bar reaches them, so nothing is seen sliding under.</td></tr>
+    <tr><td>Clocks</td><td>2:43:40 → 1:43:40</td><td><code>.contentTransition(.numericText())</code></td><td>Only the digits that change roll. Requires <code>Text</code>, not an interpolated string, per digit group.</td></tr>
+    <tr><td>Played fill</td><td>—</td><td><b>none</b></td><td>It is explicitly un-animated today (<code>transaction { $0.animation = nil }</code>) so a stale fraction cannot slide backwards. Leave it: it rides the bar's width change for free.</td></tr>
+    <tr><td>Reduce Motion</td><td>—</td><td>cross-fade, 0.2 s</td><td>No travel, no spring. <code>TransportGlyph</code> already reads the environment value; follow it.</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <div class="shead">
+    <div class="snum">05</div>
+    <h2>Notes for the build</h2>
+  </div>
+  <div class="stack"><ul>
+    <li><b><code>ScrubberModel</code> grows a scope.</b> Ticks are a book-wide pass today; chapter resolution has to come from the same model, not from <code>ThinScrubber</code> slicing a coarse array.</li>
+    <li><b>Haptic.</b> A soft <code>.selection</code> on the chip tap, nothing on the bar — the bar already fires on scrub.</li>
+    <li><b>The chip must not move the transport.</b> A 22&nbsp;pt pill sets the clock row's height; run the chip at 18&nbsp;pt inside a row that keeps its current height, or the whole transport shifts down by six points the first time the bar is drawn.</li>
+    <li><b>Scrubbing in chapter scope.</b> With <code>activeShare</code> at 1.0 the existing gesture already maps the finger to the current chapter — but the chapter <em>picker</em> above is then the only way to reach another chapter. Worth deciding whether a scrub to either end nudges into the neighbour.</li>
+    <li><b>Accessibility.</b> <code>accessibilityValue</code> on the scrubber must name the scope — "42 percent of chapter 2" — because the same percentage now means two things.</li>
+  </ul></div>
+</section>
+
+</div>
+
+<script>
+const W=[3600,9000,5400,7200,4200,6600,5100,8400,3900,7800,6000,5700,9300,5454];
+const TOTAL=W.reduce((a,b)=>a+b,0), PLAYHEAD=9820, TICKS=48;
+const SPANS=(()=>{let t=0;return W.map(w=>{const s=t/TOTAL;t+=w;return [s,t/TOTAL];});})();
+const CUR=SPANS.findIndex(([a,b])=>PLAYHEAD/TOTAL>=a&&PLAYHEAD/TOTAL<b);
+const rendered=f=>(f<0.132)||(f>0.615&&f<0.672)||(f>0.79&&f<0.806);
+const clock=s=>{s=Math.round(Math.abs(s));const h=(s/3600)|0,m=((s%3600)/60)|0,x=s%60;
+  const p=n=>String(n).padStart(2,'0');return h?`${h}:${p(m)}:${p(x)}`:`${m}:${p(x)}`;};
+function times(scope){ if(scope==='chapter'){const [a,b]=SPANS[CUR];
+    return [clock(PLAYHEAD-a*TOTAL),'-'+clock(b*TOTAL-PLAYHEAD)];}
+  return [clock(PLAYHEAD),'-'+clock(TOTAL-PLAYHEAD)];}
+
+/* One DOM per segment, built once; scope only changes classes, so flex-grow can spring. */
+function buildTrack(){
+  return `<div class="track book">` + SPANS.map(([a,b],i)=>{
+    const len=b-a, f=PLAYHEAD/TOTAL, played=Math.min(1,Math.max(0,(f-a)/len));
+    /* the current chapter is ticked at chapter resolution in BOTH scopes — see §02 */
+    const n = i===CUR ? 40 : Math.max(1,Math.round(len*TICKS));
+    let t=''; for(let k=0;k<n;k++){const ff=a+(k+0.5)/n*len;t+=`<i class="${rendered(ff)?'r':'u'}"></i>`;}
+    return `<div class="seg ${i===CUR?'cur':''}" style="flex-grow:${len*100}">
+        <div class="ticks">${t}</div><div class="played" style="width:${played*100}%"></div></div>`;
+  }).join('') + `</div>`;
+}
+const CHIP=`<span class="two book"><span class="thumb"></span>
+  <i class="a"><span class="g many"><u></u><u></u><u></u><u></u></span></i>
+  <i class="b"><span class="g one"><u></u></span></i></span>`;
+const TEXT=`on the far side of the argument, where the noise of the market could no longer reach them,
+  <s>the two of them kept walking until the road turned to sand and the sand to nothing at all, and
+  neither said the thing that both had come all that way to say.</s>`;
+
+function phone({status='none',statusClass='st-tint',mini=false,chip=true,transport=true}={}){
+  const [L,R]=times('book');
+  const st = status==='none' ? '' :
+    `<div class="statusLine"><span class="txt ${statusClass}">${status}</span></div>`;
+  return `<div class="phone ${mini?'mini':''}" style="--dur:.34s;--ease:cubic-bezier(.32,1.34,.46,1)">
+    ${mini?'':`<div class="body">${TEXT}</div>`}
+    ${st}
+    <div class="chapRow">Chp 2: Believers and Infidels <span class="chev">›</span></div>
+    <div class="scrubHit">${buildTrack()}</div>
+    <div class="clockRow"><span class="num nl">${L}</span><span class="sp"></span>
+      ${chip?CHIP:''}<span class="sp"></span><span class="num nr">${R}</span></div>
+    ${transport?`<div class="transport"><span class="s">☾</span><span class="sp"></span>
+      <span class="mid"><span style="font-size:21px">↺15</span><span style="font-size:31px">▶</span><span style="font-size:21px">↻30</span></span>
+      <span class="sp"></span><span class="s" style="font-size:15px">1x</span></div>`:''}
+  </div>`;
+}
+
+/* flip scope on a phone element */
+function flip(ph,scope){
+  const tr=ph.querySelector('.track'), two=ph.querySelector('.two');
+  scope = scope || (tr.classList.contains('chapter')?'book':'chapter');
+  tr.classList.toggle('chapter',scope==='chapter'); tr.classList.toggle('book',scope!=='chapter');
+  if(two){two.classList.toggle('chapter',scope==='chapter');two.classList.toggle('book',scope!=='chapter');}
+  const [L,R]=times(scope);
+  ['nl','nr'].forEach((c,i)=>{const n=ph.querySelector('.'+c); if(!n)return;
+    n.classList.add('flip'); setTimeout(()=>{n.textContent=[L,R][i];n.classList.remove('flip');},170);});
+}
+
+/* ── §01 status treatments ─────────────────────────────────── */
+const STATUS=[
+ {cls:'st-tint',t:'A · TINTED ONLY',tag:'',
+  n:'The existing <code>glow</code> blue, 13 pt, centred on the fade. Cheapest change — one line moves, one colour token swaps in. Blue against dimmed serif is a genuine contrast, but it is <b>colour alone</b> doing the work, over a background whose luminance changes as the reader scrolls.',
+  s:'<span class="y">+</span> one-line change<br><span class="n">−</span> legibility depends on what sentence is underneath'},
+ {cls:'st-pill',t:'B · TINTED CAPSULE',tag:'<span class="tag rec">recommended</span>',
+  n:'The same blue on a <code>glowFaint</code> capsule. The capsule is the point: it carries its own ground, so the line is equally readable over a dense paragraph, over white space, and mid-scroll. It also reads as a <em>transient status object</em> rather than as a line of the book — which is exactly what it is.',
+  s:'<span class="y">+</span> legible against anything behind it<br><span class="y">+</span> tokens already exist (<code>glow</code>, <code>glowFaint</code>)<br><span class="m">~</span> one more shape on a page that likes few'},
+ {cls:'st-cap',t:'C · GROUND CAPSULE, INK TEXT',tag:'<span class="tag alt">alt</span>',
+  n:'A <code>ground</code>-filled capsule with a hairline, text in <code>ink</code>. Punches a clean hole in the text rather than tinting through it, and stays colour-neutral so <code>glow</code> is kept for the warm-up state alone — the distinction the <code>glow</code> token comment is careful about.',
+  s:'<span class="y">+</span> keeps glow meaning "the engine is doing something"<br><span class="n">−</span> an opaque hole over the text is heavier than a tint'},
+];
+document.getElementById('status').innerHTML = STATUS.map(x=>`
+  <figure class="card ${x.cls==='st-pill'?'pick':''}">
+    <div class="cname">${x.t} ${x.tag}</div>
+    ${phone({status:'catching up…',statusClass:x.cls,chip:true,transport:false})}
+    <p class="cnote">${x.n}</p><div class="spec">${x.s}</div>
+  </figure>`).join('');
+
+/* ── §02 morph ─────────────────────────────────────────────── */
+document.getElementById('morph').innerHTML = `
+  <figure class="card pick">
+    <div class="cname">THE MORPH — activeShare 0.45 → 1.0 <span class="tag rec">live</span></div>
+    ${phone({status:'none'})}
+    <div class="ctrls"><button class="btn" data-act="flip">Toggle scope</button>
+      <button class="btn" data-act="slow">Slow (2×)</button>
+      <button class="btn" data-act="normal">Normal</button></div>
+    <p class="cnote">Tap the chip, the bar, or the buttons. The current chapter's segment grows from its true share to the whole width while the rest collapse to nothing; height, radius and the clocks ride along. <b>Nothing here is a new animation</b> — it is the press-to-scrub layout with its ceiling raised.</p>
+    <div class="spec"><span class="y">+</span> same spring, same layout maths, one new value<br><span class="y">+</span> the two bars are legibly one bar</div>
+  </figure>`;
+
+/* ── §03 tuning ────────────────────────────────────────────── */
+const TUNES=[
+ {t:'SNAPPY — .24 s, bounce .28',d:'.24s',e:'cubic-bezier(.28,1.5,.42,1)',
+  n:'Quick with real overshoot. Delightful on the chip; on a bar this wide the overshoot is a whole chapter of travel and reads as a bounce rather than a settle.',s:'<span class="m">~</span> right for the chip, too much for the bar'},
+ {t:'SETTLED — .34 s, bounce .18',d:'.34s',e:'cubic-bezier(.32,1.34,.46,1)',tag:'<span class="tag rec">recommended</span>',
+  n:'Enough overshoot to feel sprung, short enough that a double-tap does not queue up. This is the pairing in the timings table: chip at .28, bar at .34, so the chip lands first.',s:'<span class="y">+</span> the chip settles before the bar arrives'},
+ {t:'CALM — .42 s, no bounce',d:'.42s',e:'cubic-bezier(.4,0,.2,1)',
+  n:'Material-ish ease, no overshoot. Reads as correct and slightly dead; at this width the eye has time to notice the other segments vanishing, which is the one thing the motion is meant to hide.',s:'<span class="n">−</span> long enough to watch the seams'},
+];
+document.getElementById('tune').innerHTML = TUNES.map(x=>`
+  <figure class="card ${x.tag?'pick':''}">
+    <div class="cname">${x.t} ${x.tag||''}</div>
+    <div data-dur="${x.d}" data-ease="${x.e}">${phone({status:'none',mini:true,transport:false})}</div>
+    <div class="ctrls"><button class="btn" data-act="flip">Toggle</button></div>
+    <p class="cnote">${x.n}</p><div class="spec">${x.s}</div>
+  </figure>`).join('');
+document.querySelectorAll('[data-dur]').forEach(w=>{
+  const p=w.querySelector('.phone'); p.style.setProperty('--dur',w.dataset.dur); p.style.setProperty('--ease',w.dataset.ease);});
+
+/* ── interaction ───────────────────────────────────────────── */
+document.addEventListener('click',e=>{
+  const btn=e.target.closest('.btn');
+  if(btn){
+    const card=btn.closest('.card'), ph=card.querySelector('.phone');
+    if(btn.dataset.act==='flip') flip(ph);
+    if(btn.dataset.act==='slow'){ph.style.setProperty('--dur','.68s');}
+    if(btn.dataset.act==='normal'){ph.style.setProperty('--dur','.34s');}
+    return;
+  }
+  const hit=e.target.closest('.two,.scrubHit');
+  if(hit) flip(hit.closest('.phone'));
+});
+document.getElementById('themer').onclick=()=>{const r=document.documentElement;
+  r.dataset.theme=r.dataset.theme==='dark'?'light':'dark';};
+</script>

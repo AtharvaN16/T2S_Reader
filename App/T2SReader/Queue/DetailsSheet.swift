@@ -37,7 +37,7 @@ struct DetailsSheet: View {
                     }
                 }
             }
-            Text("Re-reads the file with the current pronunciation dictionary. Rendered audio is discarded.")
+            Text("Re-reads the file and re-renders it. Rendered audio is discarded.")
                 .typeRole(.meta)
                 .foregroundStyle(Tokens.ink2)
             Pill(label: "Delete…", glyph: "trash", style: .destructiveSoft) { confirmDelete = true }

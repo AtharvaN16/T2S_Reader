@@ -52,7 +52,7 @@ struct PreferencesPage: View {
                         }
                         row("Default speed") {
                             Menu {
-                                ForEach(SpeedPickerModel.rates.filter { $0 <= 3.0 }, id: \.self) { rate in
+                                ForEach(SpeedPickerModel.rates, id: \.self) { rate in
                                     Button(SpeedPickerModel.label(for: rate)) { preferences.defaultRate = rate }
                                 }
                             } label: {

@@ -338,10 +338,12 @@ struct ReaderPage: View {
         switch result {
         case .saved(let bookmark):
             toastBookmark = bookmark
-            show(ToastContent(title: "Bookmark saved", detail: detail, actionLabel: "Add a note"))
+            show(ToastContent(title: "Bookmark saved", detail: detail, actionLabel: "Add a note",
+                               secondaryActionLabel: "Go to bookmark", icon: "checkmark"))
         case .alreadyBookmarked(let bookmark):
             toastBookmark = bookmark
-            show(ToastContent(title: "Already bookmarked", detail: detail, actionLabel: "Edit note"))
+            show(ToastContent(title: "Already bookmarked", detail: detail, actionLabel: "Edit note",
+                               secondaryActionLabel: "Go to bookmark", icon: "checkmark"))
         case .failed:
             toastBookmark = nil
             show(ToastContent(title: "Could not save a bookmark", detail: nil, actionLabel: nil))

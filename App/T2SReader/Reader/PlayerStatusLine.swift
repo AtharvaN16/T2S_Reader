@@ -42,6 +42,10 @@ struct PlayerStatusLine: View {
         // translucent blue — `glowFaint`, `glowSoft`, `glow` at a third — still let the sentence
         // behind read through, which is a highlighter over words rather than a surface under them.
         .background(Tokens.surface, in: Capsule())
+        // `edge` is the app's hairline for exactly this — the mini-player's capsule already wears
+        // it. All but invisible in light, where the fill alone is enough to sit off the page; a
+        // faint light line in dark, where there is no shadow to give the capsule an edge.
+        .overlay(Capsule().strokeBorder(Tokens.edge, lineWidth: 1))
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(text)

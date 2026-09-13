@@ -219,7 +219,7 @@ struct RootPager: View {
         // the one who most needs telling.
         .onChange(of: env.chapterRenderer.lastCompletion) { _, completion in
             guard let completion else { return }
-            env.toasts.show(Self.renderToast(completion, queue: env.chapterRenderer.queue))
+            showRenderToast(completion)
         }
         .onChange(of: env.preferences.defaultRate) { _, rate in
             env.player.setRate(rate)
@@ -328,22 +328,62 @@ struct RootPager: View {
         Task { await env.libraryModel.refresh() }
     }
 
+    /// The one message a drain earns, with the one thing worth doing about it: audio that is ready
+    /// is ready *to play*, so the toast offers to play it (owner, 2026-09-13). Only when everything
+    /// that finished belongs to one book — a mixed drain has no single thing a Play could mean.
+    private func showRenderToast(_ completion: ChapterRenderRunner.Completion) {
+        let ready = env.chapterRenderer.queue.filter { $0.state == .ready }
+        let ids = Set(ready.map(\.documentID))
+        let summary = ids.count == 1 ? env.libraryModel.summaries.first { $0.id == ids.first } : nil
+        // One chapter of a book plays from that chapter; anything else picks the book up where the
+        // reader left it, which is what the Play pill everywhere else in the app does.
+        let chapter = ready.count == 1 ? ready[0].chapterIndex : nil
+        let content = Self.renderToast(completion, queue: env.chapterRenderer.queue,
+                                       chapters: summary.flatMap { env.libraryModel.progress(for: $0.id)?.chapterCount } ?? 0,
+                                       canPlay: summary != nil)
+        env.toasts.show(content, action: summary.map { book in
+            { playRendered(book, chapter: chapter) }
+        })
+    }
+
+    /// Opens the book and starts it, from the chapter that was just made when there is one.
+    private func playRendered(_ summary: DocumentSummary, chapter: Int?) {
+        Task {
+            if env.player.current?.id != summary.id { await env.player.load(summary, play: false) }
+            if let chapter { await env.player.seek(toChapter: chapter) }
+            if !env.player.isPlaying { await env.player.togglePlay() }
+            readerDocument = summary
+        }
+    }
+
     /// What one drain of the chapter queue came to. A chapter that failed carries its own sentence
     /// — how many sentences never became audio, or why the book could not be read — so the detail
     /// line quotes it rather than saying "something went wrong": the reader can act on the first
     /// and not on the second.
     private static func renderToast(_ completion: ChapterRenderRunner.Completion,
-                                    queue: [ChapterRenderJob]) -> ToastContent {
+                                    queue: [ChapterRenderJob],
+                                    chapters: Int, canPlay: Bool) -> ToastContent {
         let reason = queue.compactMap { job -> String? in
             if case .failed(let message) = job.state { return message }
             return nil
         }.last
-        let ready = completion.ready == 1 ? "1 chapter ready" : "\(completion.ready) chapters ready"
-        guard completion.failed > 0 else { return ToastContent(title: ready, actionLabel: nil) }
+        // A document with one chapter is not a book with a chapter in it — an article, or a PDF the
+        // reader imported — and calling its one piece "1 chapter" is the app describing its own
+        // data model rather than the thing on the screen.
+        let ready: String
+        if completion.ready == 1 {
+            ready = chapters == 1 ? "Document ready to play" : "Chapter ready to play"
+        } else {
+            ready = "\(completion.ready) chapters ready to play"
+        }
+        let play = canPlay ? "Play" : nil
+        guard completion.failed > 0 else {
+            return ToastContent(title: ready, actionLabel: play, actionGlyph: "play.fill")
+        }
         let failed = completion.failed == 1 ? "1 chapter could not be rendered"
                                             : "\(completion.failed) chapters could not be rendered"
         if completion.ready == 0 { return ToastContent(title: failed, detail: reason, actionLabel: nil) }
-        return ToastContent(title: ready, detail: failed, actionLabel: nil)
+        return ToastContent(title: ready, detail: failed, actionLabel: play, actionGlyph: "play.fill")
     }
 
     /// A foreground pass is only a convenience while the app is awake and idle. The scheduler's

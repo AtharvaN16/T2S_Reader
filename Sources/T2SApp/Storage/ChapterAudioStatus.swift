@@ -64,6 +64,17 @@ public struct BookAudioStatus: Hashable, Sendable {
         return "Nothing rendered yet"
     }
 
+    /// The same count without the size, for a box that already prints the size in its header.
+    /// "2 of 9 chapters" rather than "2 chapters ready": in a box headed "On this device" the word
+    /// "ready" is the header's job, and the denominator is the thing the reader actually wants —
+    /// how much of this book is still to do.
+    public var countLine: String {
+        let ready = readyChapters
+        if ready > 0 { return "\(ready) of \(chapters.count) \(chapters.count == 1 ? "chapter" : "chapters")" }
+        if hasAudio { return "Partly rendered" }
+        return "Nothing rendered yet"
+    }
+
     public func chapter(_ index: Int) -> ChapterAudioStatus? {
         chapters.first { $0.chapterIndex == index }
     }

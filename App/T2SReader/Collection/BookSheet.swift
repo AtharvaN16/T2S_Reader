@@ -96,13 +96,17 @@ struct BookSheet: View {
                         bookMenu
                     }
                     .frame(maxWidth: .infinity)
-                    if isRendering { renderBanner }
+                    if isRendering { onDeviceBox } else if let job = runningHere { renderProgress(job) }
                     ChapterListView(chapters: chapters, current: resumeIndex, heading: .groupTitle,
                                     pulsing: pulsingChapter,
                                     // Render mode is about what is on the device, so the rows are
                                     // about that alone: the bookmark pills stand down until it ends.
                                     bookmarks: isCurrent && !isRendering ? env.player.bookmarksByChapter : [:],
                                     renderMarks: renderMarks,
+                                    // The tag belongs to the list as it is normally read; in render
+                                    // mode the trailing mark says the same thing and says it louder.
+                                    onDevice: isRendering ? [] : onDeviceChapters,
+                                    headerAction: isRendering ? nil : { enterRendering() },
                                     onSelect: { chapter in
                                         if isRendering { toggle(chapter.index); return }
                                         Task {
@@ -149,9 +153,7 @@ struct BookSheet: View {
                 // `⋯` (owner, 2026-09-13: "there is no way to exit the render mode"). "Done" is not
                 // an invitation to nothing; it is the answer to the question the mode is asking.
                 if isRendering {
-                    BarButton(label: selection.isEmpty ? "Done" : "Start rendering (\(selection.count))") {
-                        if selection.isEmpty { endRendering() } else { startRendering() }
-                    }
+                    BarButton(label: doneLabel) { endRendering(startingPicked: true) }
                     .padding(.horizontal, Spacing.margin)
                     // Air over the key, and the list fading out under it rather than being cut off
                     // at a straight grey line (owner, 2026-09-13). `BottomFade` is the same ramp
@@ -234,14 +236,6 @@ struct BookSheet: View {
     private var bookMenu: some View {
         Menu {
             Button { showBookmarks = true } label: { Label("Bookmarks", systemImage: "bookmark") }
-            // In and out by the same door: render mode was entered from here, so it is left from
-            // here too, rather than by closing the sheet on the reader who only wanted a look.
-            Button {
-                if isRendering { endRendering() } else { withAnimation(.snappy) { isRendering = true } }
-            } label: {
-                Label(isRendering ? "Done" : "Render chapters",
-                      systemImage: isRendering ? "checkmark" : "waveform")
-            }
             Button(role: .destructive) { confirmDelete = true } label: { Label("Delete", systemImage: "trash") }
         } label: {
             CircleGlyph(systemName: "ellipsis")
@@ -249,18 +243,106 @@ struct BookSheet: View {
         .accessibilityLabel("More")
     }
 
-    /// What sits above the chapter list in render mode: this book's own total — not the whole
-    /// cache, which Settings → Storage keeps — with the one control that undoes it. Why a held
-    /// queue has stopped was here too until 2026-09-13; it is `RenderHoldSheet` now, app-wide and
-    /// up from the foot, because at the top of this sheet nobody ever saw it.
-    private var renderBanner: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Text(audio.summary).typeRole(.meta).foregroundStyle(Tokens.ink2)
-            Spacer(minLength: 8)
+    /// What sits above the chapter list in render mode (owner, 2026-09-13): this book's own total —
+    /// not the whole cache, which Settings → Storage keeps — how many chapters that is, and the one
+    /// control that takes it all back. A box rather than the bare line it was until today, because
+    /// it is the header of the screen you have just entered and has to look like one.
+    ///
+    /// Why a held queue has stopped lived here too until 2026-09-13; it is `RenderHoldSheet` now,
+    /// app-wide and up from the foot, because at the top of this sheet nobody ever saw it.
+    private var onDeviceBox: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("On this device").typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
+                Spacer(minLength: 8)
+                Text(BookAudioStatus.sizeText(audio.bytes)).typeRole(.meta).foregroundStyle(Tokens.ink2)
+            }
+            Text(audio.countLine).typeRole(.meta).foregroundStyle(Tokens.ink2)
             if audio.hasAudio {
                 Pill(label: "Evict all", glyph: "trash", style: .destructiveSoft, action: evictAll)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        // `ground`, not `surface`: a `.soft` pill *is* `surface`, so a surface box swallowed the
+        // capsules whole and left Evict all as three floating red words. The sheet stands on
+        // `raised`, so this reads as a well cut into it, and the controls stand on the well.
+        .background(Tokens.ground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    /// The queue, said in the sheet you are reading rather than only in the mode you have left
+    /// (owner, 2026-09-13). Which chapter is being made, how far in, and the two controls —
+    /// Pause / Resume and Stop — that until today existed on the runner and nowhere in the app.
+    ///
+    /// This book's jobs only. The queue is the whole app's, so another book's chapter is none of
+    /// this sheet's business and must not be reported here as though it were this book's.
+    @ViewBuilder private func renderProgress(_ job: ChapterRenderJob) -> some View {
+        let paused = env.chapterRenderer.isPaused
+        let held = env.chapterRenderer.hold != nil
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(progressTitle(job, paused: paused, held: held))
+                        .typeRole(.sectionHeader).foregroundStyle(Tokens.ink).lineLimit(1)
+                    Text(ChapterLabel.text(for: job.title, ordinal: job.chapterIndex + 1))
+                        .typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                Text("\(Int((job.fraction * 100).rounded()))%")
+                    .typeRole(.metaStrong).foregroundStyle(Tokens.ink2)
+                    .monospacedDigit()
+            }
+            ProgressBar(fraction: job.fraction)
+            HStack(spacing: 8) {
+                // One key for both reasons to be stopped: the phone's and the reader's. Resuming a
+                // queue the heat stopped is the "render anyway" the held-queue sheet also offers.
+                Pill(label: held ? "Resume" : "Pause",
+                     glyph: held ? "play.fill" : "pause.fill",
+                     style: .soft) {
+                    if held { env.chapterRenderer.resume() } else { env.chapterRenderer.pause() }
+                }
+                Pill(label: "Stop", glyph: "xmark", style: .destructiveSoft) {
+                    env.chapterRenderer.cancelAll()
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Tokens.ground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    /// "Rendering 2 of 5", or why it has stopped. A hold the reader did not ask for names itself,
+    /// since the app-wide sheet that would have said so is dismissible and may already be gone.
+    private func progressTitle(_ job: ChapterRenderJob, paused: Bool, held: Bool) -> String {
+        let outstanding = jobs.values.count { $0.state == .queued || $0.state == .running }
+        let total = jobs.values.count { if case .failed = $0.state { return false } else { return true } }
+        let position = max(1, total - outstanding + 1)
+        if paused { return "Paused · \(position) of \(total)" }
+        switch env.chapterRenderer.hold {
+        case .hot: return "Paused — the phone is warm"
+        case .storeFull: return "Paused — no room left"
+        case .byReader, .none: break
+        }
+        return total > 1 ? "Rendering \(position) of \(total)" : "Rendering"
+    }
+
+    /// This book's job that the queue is actually working on, or the next one waiting — nil when
+    /// this book has nothing outstanding, which is what takes the block off the screen.
+    private var runningHere: ChapterRenderJob? {
+        let mine = jobs.values
+        return mine.first { $0.state == .running } ?? mine.first { $0.state == .queued }
+    }
+
+    /// Which chapters the device holds in full, for the row tag.
+    private var onDeviceChapters: Set<Int> {
+        Set(audio.chapters.filter(\.isFullyRendered).map(\.chapterIndex))
+    }
+
+    /// The one key at the foot of render mode: it commits what was picked and leaves. Two keys —
+    /// one to start and one to close — meant the reader who pressed Start was left standing in a
+    /// mode with nothing more to do in it (owner, 2026-09-13).
+    private var doneLabel: String {
+        selection.isEmpty ? "Done" : "Render \(selection.count) \(selection.count == 1 ? "chapter" : "chapters")"
     }
 
     /// This book's jobs, by chapter. The queue is the whole app's, so another book's chapters are
@@ -293,22 +375,24 @@ struct BookSheet: View {
         }
     }
 
-    /// Hands the picked chapters to the app's one queue and lets go of them: the rows read their
-    /// state back off the queue from here on, and the sheet can close without stopping anything.
-    private func startRendering() {
-        let picked = selection.sorted()
-        withAnimation(.snappy) { selection.removeAll() }
-        Task { await env.chapterRenderer.enqueue(documentID: live.id, chapters: picked) }
+    private func enterRendering() {
+        withAnimation(.snappy) { isRendering = true }
     }
 
-    /// Leaves render mode: the marks come off the rows, the bookmarks come back, and the bar goes.
-    /// Nothing is stopped by it — the queue is the app's and outlives this sheet — so a reader who
-    /// has started four chapters can close the mode and watch them arrive on the rows underneath.
-    private func endRendering() {
+    /// Leaves render mode, handing whatever was picked to the app's one queue on the way out.
+    ///
+    /// The two are one action because they are one intention: you came in here to choose chapters,
+    /// and the moment you have chosen them there is nothing else to do in the mode. The rows read
+    /// their state back off the queue from here on, the progress block outside takes over, and
+    /// nothing is stopped by leaving — the queue is the app's and outlives this sheet.
+    private func endRendering(startingPicked: Bool = false) {
+        let picked = startingPicked ? selection.sorted() : []
         withAnimation(.snappy) {
             isRendering = false
             selection.removeAll()
         }
+        guard !picked.isEmpty else { return }
+        Task { await env.chapterRenderer.enqueue(documentID: live.id, chapters: picked) }
     }
 
     private func evict(chapter: Int) {

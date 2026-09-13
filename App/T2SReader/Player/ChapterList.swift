@@ -57,6 +57,13 @@ struct ChapterListView: View {
     /// Render mode (the Book sheet): chapter index → the trailing mark it wears instead of the
     /// progress ring. Empty everywhere else, which is what makes this the same list it always was.
     var renderMarks: [Int: ChapterRenderMark] = [:]
+    /// Which chapters the device holds in full, for the tag the row wears outside render mode
+    /// (owner, 2026-09-13: "the chapters now have an on device tag to them"). Empty in the Reader's
+    /// copy of this list, which is about listening and has no business saying what is cached.
+    var onDevice: Set<Int> = []
+    /// The way into render mode, as a glyph beside the heading (owner, 2026-09-13). Only the Book
+    /// sheet passes one; without it the heading is the word it has always been.
+    var headerAction: (() -> Void)? = nil
     var onSelect: (ChapterEntry) -> Void
     var onSelectBookmark: ((BookmarkEntry) -> Void)? = nil
     var onEvict: ((ChapterEntry) -> Void)? = nil
@@ -65,9 +72,17 @@ struct ChapterListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Chapters").typeRole(heading).foregroundStyle(Tokens.ink)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 24)
+            HStack(alignment: .center, spacing: 10) {
+                Text("Chapters").typeRole(heading).foregroundStyle(Tokens.ink)
+                if let headerAction {
+                    Spacer(minLength: 8)
+                    Button(action: headerAction) { CircleGlyph(systemName: "waveform") }
+                        .accessibilityLabel("Render chapters")
+                        .accessibilityHint("Choose chapters to keep on this device")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 24)
             ForEach(chapters) { chapter in
                 let stamps = bookmarks[chapter.index] ?? []
                 let isOpen = expanded.contains(chapter.index)
@@ -80,6 +95,7 @@ struct ChapterListView: View {
                                isHeard: current.map { chapter.index < $0 } ?? false,
                                bookmarkCount: stamps.count, isShowingBookmarks: isOpen,
                                renderMark: renderMarks[chapter.index],
+                               isOnDevice: onDevice.contains(chapter.index),
                                onToggleBookmarks: {
                                    withAnimation(.spring(duration: 0.25)) {
                                        if isOpen { expanded.remove(chapter.index) } else { expanded.insert(chapter.index) }
@@ -151,6 +167,12 @@ struct ChapterRow: View {
     /// In render mode, what this chapter has on the device or is doing about it — nil otherwise,
     /// and then the row is the row it has always been.
     var renderMark: ChapterRenderMark? = nil
+    /// Whether the device holds the whole chapter. Said in the line under the title rather than at
+    /// the end of the row, where the listening ring and the heard-check already live: how far you
+    /// have listened and what is cached are two questions, and the row can answer both only if they
+    /// are not fighting for the same slot. A part-rendered chapter says nothing — a tag that is
+    /// true of half a chapter is worse than no tag.
+    var isOnDevice: Bool = false
     var onToggleBookmarks: () -> Void = {}
     var onEvict: () -> Void = {}
     var action: () -> Void
@@ -164,8 +186,18 @@ struct ChapterRow: View {
                         Text(ChapterLabel.text(for: chapter.title, ordinal: chapter.index + 1))
                             .typeRole(.settingsRow).foregroundStyle(Tokens.ink).lineLimit(2)
                             .multilineTextAlignment(.leading)
-                        Text(DurationFormatter.remaining(chapter.durationSeconds, approximate: false))
-                            .typeRole(.pill).foregroundStyle(Tokens.ink2)
+                        HStack(spacing: 5) {
+                            Text(DurationFormatter.remaining(chapter.durationSeconds, approximate: false))
+                                .typeRole(.pill).foregroundStyle(Tokens.ink2)
+                            if isOnDevice, renderMark == nil {
+                                Text("·").typeRole(.pill).foregroundStyle(Tokens.ink3)
+                                Label("On device", systemImage: "arrow.down.circle.fill")
+                                    .labelStyle(.titleAndIcon)
+                                    .font(.custom("Inter-Medium", size: 12, relativeTo: .footnote))
+                                    .foregroundStyle(Tokens.positive)
+                                    .imageScale(.small)
+                            }
+                        }
                     }
                     Spacer(minLength: 12)
                 }
@@ -177,7 +209,9 @@ struct ChapterRow: View {
             .allowsHitTesting(renderMark?.isSelectable ?? true)
             .accessibilityAddTraits(isCurrent ? .isSelected : [])
             .accessibilityValue(renderMark?.accessibilityText
-                ?? (isCurrent ? "\(Int((chapter.fraction * 100).rounded())) percent" : (isHeard ? "Heard" : "")))
+                ?? [isCurrent ? "\(Int((chapter.fraction * 100).rounded())) percent" : (isHeard ? "Heard" : ""),
+                    isOnDevice ? "On this device" : ""]
+                    .filter { !$0.isEmpty }.joined(separator: ", "))
 
             if bookmarkCount > 0 {
                 Button(action: onToggleBookmarks) {

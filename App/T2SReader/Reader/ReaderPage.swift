@@ -155,7 +155,12 @@ struct ReaderPage: View {
                 WarmUpLine(band: geo.frame(in: .global).minY)
             }
         }
-        .task(id: summary.id) { await open() }
+        .task(id: summary.id) {
+            await open()
+            // Screenshots only (`RootPage.launchShowsBookmarkToast`): after the document is open,
+            // so the message carries the chapter and the clock it would carry in earnest.
+            if RootPage.launchShowsBookmarkToast { stageBookmarkToast() }
+        }
         .task(id: env.player.current?.id) {
             // Not `player.current.map { await … }`: `Optional.map`'s transform is synchronous, and
             // a closure with `await` inside cannot satisfy that (confirmed against the compiler).
@@ -450,6 +455,19 @@ struct ReaderPage: View {
             toastBookmark = nil
             show(ToastContent(title: "Could not save a bookmark", detail: nil, actionLabel: nil))
         }
+    }
+
+    /// The save message, put up without a save and without the four-second timer that would take
+    /// it away again (`RootPage.launchShowsBookmarkToast`). Assigned rather than `show`n for that
+    /// reason: `show` starts the clock. Built field for field the way `saveBookmark` builds it, so
+    /// a photograph of this is a photograph of the real thing.
+    private func stageBookmarkToast() {
+        let chapter = env.player.chapterIndex.flatMap { i in env.player.chapters.first { $0.index == i }?.title }
+            ?? env.player.chapters.first?.title ?? ""
+        let stamp = DurationFormatter.clock(env.player.elapsed)
+        let detail = chapter.isEmpty ? stamp : "\(chapter) · \(stamp)"
+        toast = ToastContent(title: "Bookmark saved", detail: detail, actionLabel: "Add a note",
+                             secondaryActionLabel: "Go to bookmark", icon: "checkmark")
     }
 
     /// Four seconds, restarted by a second save so two taps do not leave a stale message.

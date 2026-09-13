@@ -33,7 +33,8 @@ enum RootPage: Hashable, CaseIterable {
     }
 
     /// `T2S_OPEN`, the same idea one step further: `reader` opens the Reader, `chapters` the Reader
-    /// with its chapter list up, `bookmarks` the Reader with its bookmarks page over it — on a
+    /// with its chapter list up, `bookmark-toast` the Reader with the save message standing on it,
+    /// `bookmarks` the Reader with its bookmarks page over it — on a
     /// sample seeded with bookmarks, since a bookmark is a position in a timeline and cannot be
     /// written by a script — `kinds` the Collection title's kind menu, `book` its book sheet —
     /// on the first document whose
@@ -45,6 +46,14 @@ enum RootPage: Hashable, CaseIterable {
     /// `kinds` on the Collection, a scripted simulator cannot tap a mark, so anything that is
     /// normally opened by a finger has to be asked for at launch.
     static var launchOpensBookmarks: Bool { launchOpen?.hasPrefix("bookmarks") == true }
+
+    /// `T2S_OPEN=bookmark-toast`: the Reader with the "Bookmark saved" message already up, and up
+    /// for good — the real one is raised by a tap on the bookmark key and takes itself away after
+    /// four seconds, so neither end of it can be photographed by a script. The message is staged,
+    /// not saved: it is built from the same fields the save builds it from (`ReaderPage`), against
+    /// the document that is open, and nothing is written to the library. Screenshots only, like the
+    /// rest of `launchOpen`.
+    static var launchShowsBookmarkToast: Bool { launchOpen == "bookmark-toast" }
 
     /// `T2S_VOICE=pending`: the voice list opens with a radio already moved off the voice in
     /// effect, which is the only way a script-driven simulator can see the commit bar — the bar is
@@ -210,7 +219,7 @@ struct RootPager: View {
             if RootPage.launchSeeds { await seedSamples() }
             if RootPage.launchOpensBookmarks { await seedBookmarks() }
             await env.libraryModel.refresh()
-            if ["reader", "chapters", "voice"].contains(RootPage.launchOpen ?? "") || RootPage.launchOpensBookmarks,
+            if ["reader", "chapters", "voice", "bookmark-toast"].contains(RootPage.launchOpen ?? "") || RootPage.launchOpensBookmarks,
                let document = RootPage.launchDocument(in: env.libraryModel.summaries) {
                 readerDocument = document
             }

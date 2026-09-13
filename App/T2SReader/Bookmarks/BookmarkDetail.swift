@@ -20,6 +20,9 @@ import T2SStore
 struct BookmarkDetail: View {
     @Environment(\.dismiss) private var dismiss
     var entry: BookmarkEntry
+    /// The book the bookmark belongs to, centered over the two buttons — the chapter stays with
+    /// the clock below (`BookmarkMeta`), so the header carries only the one name.
+    var bookTitle: String
     var onListen: () -> Void
     var onEditNote: () -> Void
     var onDelete: () -> Void
@@ -42,6 +45,7 @@ struct BookmarkDetail: View {
                     // tighter than the gap to the note: the line belongs to those words, where the
                     // note answers them.
                     VStack(alignment: .leading, spacing: 14) {
+                        BookmarkMeta(entry: entry, emphasized: true)
                         // The passage whole (`fullPassage`), not the row's 90-character snippet:
                         // this screen exists to show a long bookmark, and it was printing the same
                         // clipped words as the row it was opened from, ellipsis and all.
@@ -56,7 +60,6 @@ struct BookmarkDetail: View {
                             .lineLimit(500)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
-                        BookmarkMeta(entry: entry)
                     }
                     // The reader's note under the passage it is about, against the rule the row
                     // gives it too. In full: the row shows two lines of it, this shows all of it.
@@ -75,7 +78,7 @@ struct BookmarkDetail: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, Spacing.margin)
-                .padding(.top, Spacing.grid + 4)
+                .padding(.top, Spacing.row)
             }
             .scrollIndicators(.hidden)
             // The words pass under the header the way they pass under the foot — the same ramp at
@@ -106,6 +109,12 @@ struct BookmarkDetail: View {
             Button { dismiss() } label: { CircleGlyph(systemName: "chevron.left") }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Back")
+            Spacer()
+            if !bookTitle.isEmpty {
+                Text(bookTitle)
+                    .typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
+                    .lineLimit(1)
+            }
             Spacer()
             Button { confirmingDelete = true } label: {
                 CircleGlyph(systemName: "trash", tint: Tokens.destructive)

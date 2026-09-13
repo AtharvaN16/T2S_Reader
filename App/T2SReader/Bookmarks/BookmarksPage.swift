@@ -71,6 +71,7 @@ struct BookmarksPage: View {
         }
         .fullScreenCover(item: $opened) { entry in
             BookmarkDetail(entry: entry,
+                           bookTitle: summary.document.title,
                            onListen: { jump(to: entry) },
                            onEditNote: { editing = entry },
                            onDelete: { Task { await model?.delete(entry) } })

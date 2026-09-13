@@ -45,3 +45,25 @@ struct TopFade: View {
         return LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom).frame(height: height)
     }
 }
+
+/// A soft edge on a scrolling area that is not the screen's own top — the bookmarks list under its
+/// header, a bookmark's words under theirs (owner, 2026-09-12: "use bottom and top fade"). The same
+/// eased ramp `TopFade` lays over the status bar, with no solid part: ground at the edge easing to
+/// clear a few points in, so a row slides out of the page rather than stopping at a cut.
+///
+/// Ground, so it only works over the page's own ground — which is every page that uses it.
+struct EdgeFade: View {
+    var edge: VerticalEdge
+    /// Shorter at the top, where the content passes under a header that is already there, and
+    /// taller at the foot, where there is nothing below it to stop the eye.
+    var height: CGFloat = 28
+
+    var body: some View {
+        Tokens.ground
+            .mask(TopFade.shape(solidThrough: 0, fade: height).scaleEffect(y: edge == .bottom ? -1 : 1))
+            .frame(height: height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: edge == .bottom ? .bottom : .top)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+}

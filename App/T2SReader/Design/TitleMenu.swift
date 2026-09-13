@@ -32,12 +32,16 @@ enum TitleMenuMotion {
     /// size than it arrives at, so the close reads as a dismissal rather than a rewind.
     /// Computed, not stored: `AnyTransition` is not `Sendable`, so a `static let` of one is a
     /// concurrency error under Swift 6.
-    static var transition: AnyTransition {
+    ///
+    /// `anchor` is the corner the card hangs from: the Collection's drops from under the title on
+    /// the left, the Bookmarks page's from under a mark on the right, and each must grow out of the
+    /// corner it is pinned to or it slides sideways as it opens.
+    static func transition(anchor: UnitPoint = .topLeading) -> AnyTransition {
         .asymmetric(
-            insertion: .scale(scale: 0.82, anchor: .topLeading)
+            insertion: .scale(scale: 0.82, anchor: anchor)
                 .combined(with: .offset(y: -12))
                 .combined(with: .opacity),
-            removal: .scale(scale: 0.94, anchor: .topLeading).combined(with: .opacity)
+            removal: .scale(scale: 0.94, anchor: anchor).combined(with: .opacity)
         )
     }
 

@@ -4,7 +4,7 @@ import SwiftUI
 /// Spec §2.4.1 type roles: Inter with tight tracking on display and label text, normal tracking on
 /// meta, monospaced digits for anything that counts. Sizes are Dynamic Type relative.
 enum TypeRole {
-    case pageTitle, playerTitle, groupTitle, sectionHeader, rowTitle, settingsRow, pill, meta, caption, mono
+    case pageTitle, playerTitle, groupTitle, sectionHeader, rowTitle, settingsRow, pill, meta, metaStrong, caption, mono
 
     var font: Font {
         switch self {
@@ -19,6 +19,11 @@ enum TypeRole {
         case .settingsRow: return .custom("Inter-Medium", size: 16, relativeTo: .callout)
         case .pill: return .custom("Inter-Medium", size: 15, relativeTo: .subheadline)
         case .meta: return .custom("Inter-Regular", size: 13, relativeTo: .footnote)
+        /// `meta`'s size in a heavier cut, for the half of a small line that should lead it — a
+        /// bookmark's clock against the chapter it sits in (owner, 2026-09-12: "use different
+        /// weights to make them look different"). Weight, not colour or size: the line stays one
+        /// quiet line, and the two halves are still told apart at a glance.
+        case .metaStrong: return .custom("Inter-SemiBold", size: 13, relativeTo: .footnote)
         /// A step under `meta`: the Collection grid's author line, where `meta` itself is now the
         /// title's weight and needs something quieter under it.
         case .caption: return .custom("Inter-Regular", size: 11, relativeTo: .caption2)
@@ -35,7 +40,7 @@ enum TypeRole {
         case .sectionHeader, .rowTitle: return -0.01 * 17
         case .settingsRow: return -0.01 * 16
         case .pill: return -0.01 * 15
-        case .meta, .caption, .mono: return 0
+        case .meta, .metaStrong, .caption, .mono: return 0
         }
     }
 

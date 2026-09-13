@@ -25,6 +25,15 @@ public struct DocumentProgress: Hashable, Sendable {
                                 isApproximate: !s.isFullyRendered)
     }
 
+    /// How far through the whole document, for the Collection's shelf line (owner, 2026-09-13).
+    /// `LibraryModel.refresh` only tracks progress for queued or finished rows, but the Collection
+    /// lists everything, so an untracked book answers from its own saved playhead — and a finished
+    /// one reads whole however short of the end it stopped.
+    public static func shelfFraction(for s: DocumentSummary, tracked: DocumentProgress?) -> Double {
+        if s.isFinished { return 1 }
+        return (tracked ?? fromSummary(s))?.fraction ?? 0
+    }
+
     public static func compute(summary: DocumentSummary, timeline: Timeline) -> DocumentProgress {
         let index = TimeIndex(timeline)
         guard timeline.utteranceCount > 0 else {

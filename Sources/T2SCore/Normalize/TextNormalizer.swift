@@ -3,7 +3,7 @@ public struct TextNormalizer: Sendable {
     public static let version = Versions.normalizer
     public private(set) var rules: [any NormalizerRule]
 
-    public init(dictionary: [PronunciationEntry] = []) {
+    public init() {
         rules = [
             RejoinHyphenationRule(),
             StripCitationsRule(),
@@ -14,7 +14,6 @@ public struct TextNormalizer: Sendable {
             SpellOutOnlyShortCapsRule(),   // after the rules that match on capitals
 
             CollapseWhitespaceRule(),
-            PronunciationDictionaryRule(entries: dictionary),
         ]
     }
 

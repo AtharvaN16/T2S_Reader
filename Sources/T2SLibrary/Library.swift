@@ -122,18 +122,17 @@ public actor Library {
         return try await store.timeline(for: id)?.timeline
     }
 
-    /// Re-segments the retained chapters with the current segmenter, normalizer, and dictionary and
-    /// replaces the stored ones. The resume position survives (spec §3.2). The reader is opened only
-    /// for a document imported before its chapters were retained, and then retained for next time
-    /// (Plan 17, audit §5.1). The old utterances' audio is removed from the cache — from the old blobs
-    /// read raw before the replacement. When the re-derivation moves the segmenter or normalizer
-    /// version, the new render keys differ from the old (`RenderKey` carries both) and the removal
-    /// runs behind this call: the load path pays for neither the decode nor the removals. When it
-    /// does not — a dictionary change from the Details sheet, a schema-only bump — the keys are the
-    /// same bytes, and the removal must finish before the replacement, or the next render's cache
-    /// probe would adopt the old pronunciation (the Plan 17 review's blocker). An undecodable old
-    /// blob just leaks its keys rather than blocking re-derivation, the very thing meant to recover
-    /// from it.
+    /// Re-segments the retained chapters with the current segmenter and normalizer and replaces the
+    /// stored ones. The resume position survives (spec §3.2). The reader is opened only for a document
+    /// imported before its chapters were retained, and then retained for next time (Plan 17, audit
+    /// §5.1). The old utterances' audio is removed from the cache — from the old blobs read raw before
+    /// the replacement. When the re-derivation moves the segmenter or normalizer version, the new
+    /// render keys differ from the old (`RenderKey` carries both) and the removal runs behind this
+    /// call: the load path pays for neither the decode nor the removals. When it does not — a
+    /// schema-only bump — the keys are the same bytes, and the removal must finish before the
+    /// replacement, or the next render's cache probe would adopt the old audio (the Plan 17 review's
+    /// blocker). An undecodable old blob just leaks its keys rather than blocking re-derivation, the
+    /// very thing meant to recover from it.
     @discardableResult
     public func reprocess(_ id: UUID) async throws -> Timeline {
         guard let document = try await store.document(id: id) else { throw LibraryStoreError.documentNotFound(id) }
@@ -272,10 +271,9 @@ public actor Library {
         return ImportResult(document: document, utteranceCount: timeline.utteranceCount, skippedResources: read.skippedResources)
     }
 
-    /// Phase 1 (spec §3.3) with the dictionary as it stands now (Global Constraints).
+    /// Phase 1 (spec §3.3).
     private func build(_ chapters: [ChapterInput]) async throws -> Timeline {
-        let dictionary = try await store.pronunciations()
-        let segmenter = Segmenter(normalizer: TextNormalizer(dictionary: dictionary), packLength: segmenterPackLength)
+        let segmenter = Segmenter(normalizer: TextNormalizer(), packLength: segmenterPackLength)
         let timeline = TimelineBuilder.build(chapters: chapters, segmenter: segmenter)
         guard timeline.utteranceCount > 0 else { throw ImportError.noText }
         return timeline

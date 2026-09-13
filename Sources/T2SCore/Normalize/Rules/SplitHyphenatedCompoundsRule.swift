@@ -20,12 +20,6 @@ public struct SplitHyphenatedCompoundsRule: NormalizerRule {
 
     public init() {}
 
-    /// `text` as this rule would speak it. The pronunciation dictionary runs after this rule, so a term
-    /// the reader typed with a hyphen is matched in this form.
-    static func spokenForm(of text: String) -> String {
-        pattern.regex.stringByReplacingMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length), withTemplate: " ")
-    }
-
     public func apply(_ input: NormalizedText) -> NormalizedText {
         var t = input
         t.replaceMatches(of: Self.pattern) { _, _ in " " }

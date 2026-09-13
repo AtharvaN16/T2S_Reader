@@ -66,13 +66,6 @@ struct PreferencesPage: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    section("Pronunciation") {
-                        NavigationLink {
-                            PronunciationPage()
-                        } label: {
-                            row("Dictionary", subtitle: "\(env.pronunciation.entries.count) words")
-                        }
-                    }
                     section("Storage") {
                         NavigationLink {
                             StoragePage()
@@ -122,7 +115,6 @@ struct PreferencesPage: View {
         .sheet(isPresented: $showAppearance) { AppearanceSheet(showsTextControls: false) }
         .task {
             resolvedDefaultVoiceID = await env.voiceRouting.effectiveVoiceID(VoiceOption.systemDefault.id)
-            await env.pronunciation.refresh()
             await env.storage.refresh()
         }
         .task { await env.syncModel.refreshAvailability() }

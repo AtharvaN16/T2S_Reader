@@ -1,0 +1,399 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Book sheet — the rendering flow, in detail</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&display=swap">
+<style>
+:root{
+  --ground:#F8F8F7; --paper:#FFFFFF; --ink:#111111; --ink2:#6E7076; --ink3:#C9C9C7; --hair:#E2E3E8;
+  --glow:#0066FF; --ready:#12A150; --warn:#C25A00; --no:#C0392B;
+  --serif:"Newsreader",Georgia,serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --app-face:"Inter",-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;
+  --a-ground:#101010; --a-raised:#1A1A1A; --a-surface:#2F2F2F;
+  --a-ink:#F2F2F2; --a-ink2:#8E8E8E; --a-ink3:#3A3A3A;
+  --a-accent:#FF8C3A; --a-positive:#34C070; --a-destructive:#FF5A50;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0E0F12; --paper:#16171B; --ink:#ECEDF0; --ink2:#94969E; --ink3:#3A3A3A; --hair:#26272D;
+  --glow:#5F84FF; --ready:#37D97C; --warn:#FFA24D; --no:#FF6B5E;
+}}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--serif);font-size:17px;line-height:1.6;margin:0;padding:0 20px 120px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto}
+.col{max-width:68ch}
+h1,h2,h3{text-wrap:balance;margin:0;font-weight:400}
+h1{font-size:clamp(34px,6vw,52px);line-height:1.05;letter-spacing:-.02em}
+h2{font-size:clamp(24px,3.4vw,31px);letter-spacing:-.01em;line-height:1.15}
+h3{font-size:19px;letter-spacing:-.005em}
+p{margin:0} ul{margin:0;padding-left:1.15em} li{margin:.22em 0}
+code{font-family:var(--mono);font-size:.78em;background:color-mix(in srgb,var(--ink) 8%,transparent);padding:.14em .4em;border-radius:3px}
+.eyebrow{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2)}
+.lede{font-size:20px;line-height:1.5;color:var(--ink2);font-weight:300}
+header{padding-block:72px 0} header .col{display:flex;flex-direction:column;gap:20px}
+.meta{font-family:var(--mono);font-size:12px;color:var(--ink2);line-height:2;border-top:1px solid var(--hair);padding-top:16px}
+.meta b{color:var(--ink);font-weight:500}
+section{padding-block:66px 0;display:flex;flex-direction:column;gap:26px}
+.shead{display:flex;flex-direction:column;gap:12px;max-width:68ch}
+.snum{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--glow);letter-spacing:.1em}
+.rail{display:flex;flex-wrap:wrap;gap:34px;align-items:flex-start}
+.unit{display:flex;flex-direction:column;gap:13px;margin:0}
+.unit>figcaption{display:flex;flex-direction:column;gap:7px;max-width:302px}
+.cname{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.04em;display:flex;gap:9px;align-items:baseline;flex-wrap:wrap}
+.tag{font-weight:500;letter-spacing:.08em;font-size:10px;padding:2px 6px;border-radius:3px;text-transform:uppercase}
+.tag.rec{background:color-mix(in srgb,var(--ready) 18%,transparent);color:var(--ready)}
+.tag.alt{background:color-mix(in srgb,var(--glow) 16%,transparent);color:var(--glow)}
+.tag.no{background:color-mix(in srgb,var(--no) 15%,transparent);color:var(--no)}
+.tag.now{background:color-mix(in srgb,var(--ink) 10%,transparent);color:var(--ink2)}
+.cnote{font-size:15px;line-height:1.45;color:var(--ink2)} .cnote b{color:var(--ink);font-weight:500}
+.callout{border-left:2px solid var(--glow);padding-left:14px;font-size:15.5px;color:var(--ink2);max-width:68ch}
+.callout b{color:var(--ink);font-weight:500}
+.callout.bad{border-color:var(--no)}
+table{border-collapse:collapse;font-family:var(--app-face);font-size:14px;width:100%;max-width:880px}
+th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--hair);vertical-align:top}
+th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);font-weight:500}
+.rec{border:1px solid color-mix(in srgb,var(--ready) 45%,transparent);border-radius:11px;padding:20px 22px;background:color-mix(in srgb,var(--ready) 7%,transparent);max-width:72ch}
+.steps{counter-reset:s;display:flex;flex-direction:column;gap:12px;max-width:72ch;font-family:var(--app-face);font-size:15px}
+.steps>div{position:relative;padding-left:34px;line-height:1.5;color:var(--ink2)}
+.steps>div:before{counter-increment:s;content:counter(s);position:absolute;left:0;top:1px;width:22px;height:22px;border-radius:50%;
+  background:color-mix(in srgb,var(--glow) 15%,transparent);color:var(--glow);font-family:var(--mono);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.steps b{color:var(--ink);font-weight:600}
+
+/* phone */
+.phone{width:302px;height:660px;background:var(--a-ground);border-radius:42px;position:relative;overflow:hidden;
+       font-family:var(--app-face);color:var(--a-ink);box-shadow:0 0 0 9px #000,0 0 0 10.5px #2b2b2b,0 26px 54px rgba(0,0,0,.45);flex:0 0 auto}
+.notch{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:88px;height:26px;background:#000;border-radius:14px;z-index:5}
+.bg{position:absolute;inset:0;background:var(--a-ground)}
+.bsheet{position:absolute;left:0;right:0;top:12px;bottom:0;background:var(--a-raised);border-radius:26px 26px 0 0;overflow:hidden;display:flex;flex-direction:column}
+.bsin{padding:38px 18px 0;display:flex;flex-direction:column;gap:12px;overflow:hidden;flex:1}
+.hero{display:flex;flex-direction:column;align-items:center;gap:9px}
+.bigcover{width:74px;height:108px;border-radius:4px;background:linear-gradient(150deg,#42548f,#2d3a63);font-size:8px;font-weight:700;color:#dfe3f2;padding:7px;line-height:1.2;box-shadow:0 0 34px rgba(95,132,255,.30)}
+.btitle{font-size:19px;font-weight:800;letter-spacing:-.025em;text-align:center;line-height:1.12}
+.bauth{font-size:11.5px;color:var(--a-ink2)}
+.actions{display:flex;gap:9px;justify-content:center;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:99px;padding:8px 13px;font-size:12.5px;font-weight:500;background:var(--a-surface);color:var(--a-ink);white-space:nowrap}
+.pill.sel{background:var(--a-ink);color:var(--a-ground)} .pill.des{color:var(--a-destructive)}
+.pill.sm{padding:5px 10px;font-size:11px}
+.circ{width:32px;height:32px;border-radius:50%;background:var(--a-surface);display:flex;align-items:center;justify-content:center;font-size:13px;flex:0 0 auto}
+.grouptitle{font-size:17px;font-weight:700;letter-spacing:-.02em}
+.crow{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:11px}
+.crow.cur{background:var(--a-surface)}
+.ct{font-size:14px;font-weight:500;letter-spacing:-.01em;line-height:1.2}
+.cd{font-size:12px;color:var(--a-ink2);margin-top:3px}
+.cd .st{color:var(--a-ink2)} .cd .st.g{color:var(--a-positive)} .cd .st.a{color:var(--a-accent)} .cd .st.r{color:var(--a-destructive)}
+.grow{flex:1;min-width:0}
+.ring{width:18px;height:18px;border-radius:50%;border:2px solid var(--a-ink3);flex:0 0 auto}
+.ring.p{border-color:var(--a-ink2);background:conic-gradient(var(--a-ink) 0 38%,transparent 38% 100%);border:none;position:relative}
+.ring.p:after{content:"";position:absolute;inset:2.5px;border-radius:50%;background:var(--a-surface)}
+.chk{width:18px;height:18px;border-radius:50%;background:var(--a-positive);color:#0b2a18;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.box{width:19px;height:19px;border-radius:50%;border:2px solid var(--a-ink2);flex:0 0 auto}
+.box.on{background:var(--a-ink);border-color:var(--a-ink);color:var(--a-ground);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.wave{display:inline-flex;gap:1.6px;align-items:flex-end;height:15px;flex:0 0 auto}
+.wave b{width:2px;border-radius:1px;background:var(--a-ink3);display:block}
+.wave b.on{background:var(--a-accent)}
+.bmk{display:inline-flex;align-items:center;gap:3px;background:var(--a-ink3);color:var(--a-ink);font-size:11px;font-weight:500;padding:3px 8px;border-radius:99px;flex:0 0 auto}
+.bar{height:3px;border-radius:2px;background:var(--a-ink3);overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;background:var(--a-accent);border-radius:2px}
+.statusline{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--a-ink2)}
+.footbar{position:absolute;left:0;right:0;bottom:0;padding:16px 18px 14px;
+  background:linear-gradient(to bottom,rgba(26,26,26,0) 0%,rgba(26,26,26,.72) 42%,var(--a-raised) 78%)}
+.key{height:50px;border-radius:99px;background:linear-gradient(#3E3E3E,#1E1E1E);border-top:1px solid rgba(255,255,255,.30);
+  display:flex;align-items:center;justify-content:center;font-size:14.5px;font-weight:600;gap:8px}
+.key.g{background:linear-gradient(#2f2f2f,#1c1c1c)}
+.menu{position:absolute;right:18px;top:196px;width:190px;background:#2a2a2a;border-radius:13px;padding:5px;
+  box-shadow:0 18px 44px rgba(0,0,0,.6);font-size:13px;z-index:6}
+.menu div{padding:9px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px;border-radius:8px}
+.menu div+div{border-top:1px solid #363636}
+.menu .d{color:var(--a-destructive)}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:4}
+.hair{height:1px;background:#242424}
+.tiny{font-family:var(--mono);font-size:10.5px;color:var(--ink2);line-height:1.8}
+.tiny .y{color:var(--ready)} .tiny .n{color:var(--no)}
+.annot{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--no);font-weight:700}
+.annot.y{color:var(--ready)}
+</style>
+
+<div class="wrap">
+<header><div class="col">
+  <div class="eyebrow">t2s reader · design · book sheet only</div>
+  <h1>The Book sheet's rendering flow</h1>
+  <p class="lede">Render mode asks the reader to give up three things — listening progress, the ability to
+     play a chapter, and their bookmarks — in exchange for a checkbox. That trade is the flow's real problem,
+     and it has one cause: a single slot at the end of the row being asked two different questions.</p>
+  <div class="meta">
+    <b>Date</b> 2026-09-13 · <b>Scope</b> <code>BookSheet.swift</code> + <code>ChapterList.swift</code> only<br>
+    <b>Deferred</b> the app-wide strip, Storage, badges — see the companion page<br>
+    <b>Status</b> directions for discussion — nothing implemented
+  </div>
+</div></header>
+
+<!-- 01 -->
+<section>
+  <div class="shead">
+    <div class="snum">01 / THE CONTESTED SLOT</div>
+    <h2>One position, two questions, and you can only ever see one answer</h2>
+  </div>
+
+  <table>
+    <tr><th>The slot at the end of a chapter row</th><th>Normally shows</th><th>In render mode shows</th></tr>
+    <tr><td>Current chapter</td><td>Listening ring, 38%</td><td>◯ / ✓ / waveform / tick+size+trash</td></tr>
+    <tr><td>Chapter already heard</td><td>Green check</td><td>same render marks</td></tr>
+    <tr><td>Chapter with bookmarks</td><td>Bookmark count pill</td><td><b>pill removed entirely</b></td></tr>
+    <tr><td>Tapping the row</td><td>Plays from that chapter</td><td>Toggles selection — and a <b>fully rendered row takes no tap at all</b></td></tr>
+  </table>
+
+  <p class="callout bad">The trap in the last line: <code>allowsHitTesting(renderMark?.isSelectable ?? true)</code>
+     makes a ready chapter's row inert. <b>The chapters most ready to play are the only ones you cannot tap.</b>
+     Render mode is where you go to find out what is playable, and it is the one place that will not play it.</p>
+
+  <div class="rail">
+    <figure class="unit">
+      <div class="phone"><div class="notch"></div><div class="bg"></div>
+        <div class="bsheet"><div class="bsin">
+          <div class="hero"><div class="bigcover">The Last Mughal</div>
+            <div class="btitle">The Last Mughal</div><div class="bauth">William Dalrymple</div></div>
+          <div class="actions"><span class="pill sel">▶ Continue&nbsp; 17m</span><span class="circ">···</span></div>
+          <div class="grouptitle" style="margin-top:8px">Chapters</div>
+          <div class="crow"><div class="grow"><div class="ct">Title Page</div><div class="cd">&lt;1m</div></div><span class="chk">✓</span></div>
+          <div class="crow"><div class="grow"><div class="ct">Dedication</div><div class="cd">&lt;1m</div></div><span class="bmk">􀉚 2</span><span class="chk">✓</span></div>
+          <div class="crow cur"><div class="grow"><div class="ct">Reviews of The Last Mughal</div><div class="cd">10m</div></div><span class="ring p"></span></div>
+          <div class="crow"><div class="grow"><div class="ct">Dramatis Personae</div><div class="cd">22m</div></div></div>
+          <div class="crow"><div class="grow"><div class="ct">Introduction</div><div class="cd">1h 1m</div></div></div>
+        </div></div>
+      </div>
+      <figcaption><div class="cname">TODAY · NORMAL <span class="tag now">as built</span></div>
+        <p class="cnote">Honest about <b>listening</b>. Says nothing whatever about what is on the device —
+           you cannot tell which of these will play on a plane.</p></figcaption>
+    </figure>
+
+    <figure class="unit">
+      <div class="phone"><div class="notch"></div><div class="bg"></div>
+        <div class="bsheet"><div class="bsin">
+          <div class="hero"><div class="bigcover">The Last Mughal</div>
+            <div class="btitle">The Last Mughal</div><div class="bauth">William Dalrymple</div></div>
+          <div class="actions"><span class="pill sel">▶ Continue&nbsp; 17m</span><span class="circ">···</span></div>
+          <div class="statusline" style="margin-top:6px"><span class="grow">2 chapters ready · 244 KB</span><span class="pill sm des">􀈑 Evict all</span></div>
+          <div class="grouptitle" style="margin-top:2px">Chapters</div>
+          <div class="crow"><div class="grow"><div class="ct">Title Page</div><div class="cd">&lt;1m</div></div><span class="chk">✓</span><span style="font-size:12px;color:var(--a-ink2)">0.4 MB</span><span style="font-size:12px;color:var(--a-destructive)">􀈑</span></div>
+          <div class="crow"><div class="grow"><div class="ct">Dedication</div><div class="cd">&lt;1m</div></div><span class="box on">✓</span></div>
+          <div class="crow"><div class="grow"><div class="ct">Reviews of The Last Mughal</div><div class="cd">10m</div></div><span class="box"></span></div>
+          <div class="crow"><div class="grow"><div class="ct">Dramatis Personae</div><div class="cd">22m</div></div><span class="box"></span></div>
+          <div class="crow"><div class="grow"><div class="ct">Introduction</div><div class="cd">1h 1m</div></div><span class="box"></span></div>
+        </div>
+        <div class="footbar"><div class="key">Start rendering (1)</div></div></div>
+      </div>
+      <figcaption><div class="cname">TODAY · RENDER MODE <span class="tag now">as built</span></div>
+        <p class="cnote">Honest about <b>the device</b>. The listening ring is gone, the green checks now mean
+           something else entirely, the bookmark pill has vanished, and the ready row is inert.
+           <b>Two screens that cannot be held in the head at once.</b></p></figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 02 -->
+<section>
+  <div class="shead">
+    <div class="snum">02 / THE FLOW, STEP BY STEP</div>
+    <h2>Where the reader is dropped</h2>
+  </div>
+  <div class="steps">
+    <div>Open the sheet from Home or the Collection. <b>Nothing on screen says any chapter is on the device.</b></div>
+    <div><code>⋯</code> → “Render chapters”. The list changes meaning under you: rings and checks become
+         selection marks, bookmarks disappear. <b>No heading says you have changed mode</b> — only the summary
+         line and the foot bar appear.</div>
+    <div>Tap rows to pick. A ready row does not respond, and nothing explains why.</div>
+    <div>“Start rendering (3)”. The selection clears, the bar reads “Done”. <b>The three rows you just queued
+         look identical to the rows you didn't</b> until the queue reaches them one at a time.</div>
+    <div>Watch, or leave. Leaving is the cliff: <b>close the mode and every mark goes</b>. Reopening the sheet
+         shows the normal list, which says nothing about rendering.</div>
+    <div>No way to stop. <b>Not in the sheet, not anywhere</b> — <code>cancel()</code> and <code>cancelAll()</code>
+         are written and tested but no view calls them.</div>
+    <div>When the queue drains, a 4-second toast. If the sheet is open you also see the ticks appear.
+         <b>If it is not, that toast is the only notice you will ever get.</b></div>
+  </div>
+</section>
+
+<!-- 03 -->
+<section>
+  <div class="shead">
+    <div class="snum">03 / THREE DIRECTIONS</div>
+    <h2>Each one is a different answer to “should this be a mode at all?”</h2>
+  </div>
+
+  <div class="rail">
+
+    <!-- D1 -->
+    <figure class="unit">
+      <div class="phone"><div class="notch"></div><div class="bg"></div>
+        <div class="bsheet"><div class="bsin">
+          <div class="hero"><div class="bigcover">The Last Mughal</div>
+            <div class="btitle">The Last Mughal</div><div class="bauth">William Dalrymple</div></div>
+          <div class="actions"><span class="pill sel">▶ Continue&nbsp; 17m</span><span class="circ">···</span></div>
+          <div style="background:#232323;border-radius:12px;padding:11px 12px;display:flex;flex-direction:column;gap:7px;margin-top:6px">
+            <div style="display:flex;align-items:center;gap:9px">
+              <span class="wave"><b class="on" style="height:5px"></b><b class="on" style="height:12px"></b><b class="on" style="height:8px"></b><b style="height:14px"></b><b style="height:6px"></b></span>
+              <div class="grow"><div class="ct" style="font-size:13px">Rendering 2 of 5</div><div class="cd">Dramatis Personae · 61%</div></div>
+              <span class="pill sm des">Stop</span></div>
+            <div class="bar"><i style="width:61%"></i></div>
+          </div>
+          <div class="grouptitle" style="margin-top:2px">Chapters</div>
+          <div class="crow"><div class="grow"><div class="ct">Title Page</div><div class="cd">&lt;1m</div></div><span class="chk">✓</span></div>
+          <div class="crow"><div class="grow"><div class="ct">Dedication</div><div class="cd">&lt;1m</div></div><span class="box on">✓</span></div>
+          <div class="crow"><div class="grow"><div class="ct">Reviews</div><div class="cd">10m</div></div><span class="wave"><b class="on" style="height:5px"></b><b class="on" style="height:12px"></b><b style="height:8px"></b><b style="height:14px"></b></span></div>
+          <div class="crow"><div class="grow"><div class="ct">Dramatis Personae</div><div class="cd">22m</div></div><span class="box"></span></div>
+        </div>
+        <div class="footbar"><div class="key g">Done</div></div></div>
+      </div>
+      <figcaption><div class="cname">D1 · THE MODE REPORTS <span class="tag alt">smallest change</span></div>
+        <p class="cnote">Render mode stays exactly as it is. It gains a <b>live status block</b> under the Play
+           pill — count, current chapter, percentage, and a <b>Stop</b> that wires <code>cancelAll()</code>.</p>
+        <p class="cnote"><b>Fixes:</b> no stop, no progress-while-in-the-mode.<br>
+           <b>Leaves broken:</b> the mode still hides bookmarks and listening progress, ready rows are still
+           inert, and the moment you leave the mode it is all still gone. Treats the symptom.</p>
+        <p class="tiny">touches: <span class="y">BookSheet</span> only · ~1 new view</p></figcaption>
+    </figure>
+
+    <!-- D2 -->
+    <figure class="unit">
+      <div class="phone"><div class="notch"></div><div class="bg"></div>
+        <div class="bsheet"><div class="bsin">
+          <div class="hero"><div class="bigcover">The Last Mughal</div>
+            <div class="btitle">The Last Mughal</div><div class="bauth">William Dalrymple</div></div>
+          <div class="actions"><span class="pill sel">▶ Continue&nbsp; 17m</span><span class="circ">···</span></div>
+          <div class="statusline" style="margin-top:6px">
+            <span class="wave"><b class="on" style="height:5px"></b><b class="on" style="height:11px"></b><b class="on" style="height:8px"></b><b style="height:13px"></b></span>
+            <span class="grow">Rendering 2 of 5 · 612 MB on this device</span><span class="pill sm des">Stop</span></div>
+          <div class="grouptitle" style="margin-top:2px">Chapters</div>
+          <div class="crow"><div class="grow"><div class="ct">Title Page</div><div class="cd">&lt;1m · <span class="st g">on device</span></div></div><span class="chk">✓</span></div>
+          <div class="crow"><div class="grow"><div class="ct">Dedication</div><div class="cd">&lt;1m · <span class="st g">on device</span></div></div><span class="bmk">􀉚 2</span><span class="chk">✓</span></div>
+          <div class="crow cur"><div class="grow"><div class="ct">Reviews of The Last Mughal</div><div class="cd">10m · <span class="st a">rendering 61%</span></div><div class="bar"><i style="width:61%"></i></div></div><span class="ring p"></span></div>
+          <div class="crow"><div class="grow"><div class="ct">Dramatis Personae</div><div class="cd">22m · <span class="st">2nd in queue</span></div></div></div>
+          <div class="crow"><div class="grow"><div class="ct">Introduction</div><div class="cd">1h 1m</div></div></div>
+          <div class="crow"><div class="grow"><div class="ct">Chapter 1</div><div class="cd">31m · <span class="st r">couldn't render</span></div></div></div>
+        </div></div>
+      </div>
+      <figcaption><div class="cname">D2 · NO MODE — THE ROW SAYS BOTH <span class="tag rec">recommended</span></div>
+        <p class="cnote">Device state moves into <b>the duration line, as words</b>: “22m · on device”,
+           “10m · rendering 61%”, “22m · 2nd in queue”, “31m · couldn't render”. The trailing slot keeps
+           doing its one job — <b>listening</b> progress — and the bookmark pill never leaves.</p>
+        <p class="cnote">There is no mode to enter or leave, so <b>there is nothing to fall off</b>. Open the
+           sheet at any moment and it tells you the truth about both questions at once.</p>
+        <p class="tiny">touches: <span class="y">ChapterRow</span> + <span class="y">BookSheet</span> · deletes
+           <code>ChapterRenderMark</code>'s selection cases</p></figcaption>
+    </figure>
+
+    <!-- D2 menu -->
+    <figure class="unit">
+      <div class="phone"><div class="notch"></div><div class="bg"></div>
+        <div class="bsheet"><div class="bsin">
+          <div class="hero" style="opacity:.5"><div class="bigcover">The Last Mughal</div>
+            <div class="btitle">The Last Mughal</div><div class="bauth">William Dalrymple</div></div>
+          <div class="actions" style="opacity:.5"><span class="pill sel">▶ Continue&nbsp; 17m</span><span class="circ">···</span></div>
+          <div class="grouptitle" style="margin-top:8px;opacity:.5">Chapters</div>
+          <div class="crow" style="opacity:.5"><div class="grow"><div class="ct">Title Page</div><div class="cd">&lt;1m · <span class="st g">on device</span></div></div><span class="chk">✓</span></div>
+          <div class="crow cur" style="box-shadow:0 0 0 2px var(--a-accent)"><div class="grow"><div class="ct">Dramatis Personae</div><div class="cd">22m</div></div></div>
+          <div class="crow" style="opacity:.5"><div class="grow"><div class="ct">Introduction</div><div class="cd">1h 1m</div></div></div>
+        </div>
+        <div class="menu" style="top:360px">
+          <div><span>Play from here</span><span>􀊄</span></div>
+          <div><span>Render this chapter</span><span>􀊫</span></div>
+          <div><span>Select chapters…</span><span>􀆅</span></div>
+          <div class="d"><span>Remove audio</span><span>􀈑</span></div>
+        </div></div>
+      </div>
+      <figcaption><div class="cname">D2· · LONG-PRESS A CHAPTER</div>
+        <p class="cnote">Actions move to a <b>context menu</b>, the idiom Home rows already use
+           (<code>.contextMenu</code> on <code>QueueRow</code>). Zero visual weight on the row, and the trash
+           stops living permanently in the list — which is what makes the list currently read as
+           <i>a place where things get deleted</i> rather than a place where things are ready.</p>
+        <p class="cnote"><b>“Select chapters…”</b> is the batch path, kept for when you genuinely want five at
+           once. It is now an explicit <i>selection</i> mode, not a change of subject.</p></figcaption>
+    </figure>
+
+    <!-- D2 select -->
+    <figure class="unit">
+      <div class="phone"><div class="notch"></div><div class="bg"></div>
+        <div class="bsheet"><div class="bsin">
+          <div class="hero"><div class="bigcover">The Last Mughal</div>
+            <div class="btitle">The Last Mughal</div><div class="bauth">William Dalrymple</div></div>
+          <div class="statusline" style="margin-top:10px"><span class="grow" style="color:var(--a-ink);font-weight:600;font-size:14px">Select chapters to render</span><span class="pill sm">Cancel</span></div>
+          <div class="grouptitle" style="margin-top:2px">Chapters</div>
+          <div class="crow" style="opacity:.45"><span class="chk">✓</span><div class="grow"><div class="ct">Title Page</div><div class="cd">&lt;1m · <span class="st g">on device</span></div></div></div>
+          <div class="crow" style="opacity:.45"><span class="chk">✓</span><div class="grow"><div class="ct">Dedication</div><div class="cd">&lt;1m · <span class="st g">on device</span></div></div></div>
+          <div class="crow"><span class="box on">✓</span><div class="grow"><div class="ct">Reviews of The Last Mughal</div><div class="cd">10m</div></div></div>
+          <div class="crow"><span class="box on">✓</span><div class="grow"><div class="ct">Dramatis Personae</div><div class="cd">22m</div></div></div>
+          <div class="crow"><span class="box"></span><div class="grow"><div class="ct">Introduction</div><div class="cd">1h 1m</div></div></div>
+        </div>
+        <div class="footbar"><div class="key">Render 2 chapters · ~32 min</div></div></div>
+      </div>
+      <figcaption><div class="cname">D2·· · SELECTION, AS A SELECTION</div>
+        <p class="cnote">The checkbox moves to the <b>leading</b> edge — the universal place for it — so it
+           never fights the trailing slot. Rows already on the device dim and keep their green check
+           instead of going inert: <b>the reason they can't be picked is now visible.</b></p>
+        <p class="cnote">The key says <b>what it will do and roughly what it costs</b>, not just a count.
+           This screen appears only when you ask for it and leaves the moment you're done.</p></figcaption>
+    </figure>
+
+    <!-- D3 -->
+    <figure class="unit">
+      <div class="phone"><div class="notch"></div><div class="bg"></div>
+        <div class="bsheet"><div class="bsin">
+          <div class="hero"><div class="bigcover">The Last Mughal</div>
+            <div class="btitle">The Last Mughal</div><div class="bauth">William Dalrymple</div></div>
+          <div class="actions"><span class="pill sel">▶ Continue&nbsp; 17m</span><span class="circ">···</span></div>
+          <div style="background:#232323;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:9px;margin-top:6px">
+            <div style="display:flex;align-items:baseline;gap:7px"><span class="ct" style="font-size:14px">On this device</span><span class="grow"></span><span class="cd">612 MB</span></div>
+            <div class="bar" style="height:5px"><i style="width:43%;background:var(--a-positive)"></i></div>
+            <div class="cd">6 of 14 chapters · rendering 2 more</div>
+            <div style="display:flex;gap:7px"><span class="pill sm" style="flex:1;justify-content:center">Choose chapters</span><span class="pill sm des" style="flex:1;justify-content:center">Stop</span></div>
+          </div>
+          <div class="grouptitle" style="margin-top:2px">Chapters</div>
+          <div class="crow"><div class="grow"><div class="ct">Title Page</div><div class="cd">&lt;1m</div></div><span class="chk">✓</span></div>
+          <div class="crow"><div class="grow"><div class="ct">Dedication</div><div class="cd">&lt;1m</div></div><span class="bmk">􀉚 2</span><span class="chk">✓</span></div>
+          <div class="crow cur"><div class="grow"><div class="ct">Reviews</div><div class="cd">10m</div></div><span class="ring p"></span></div>
+        </div></div>
+      </div>
+      <figcaption><div class="cname">D3 · A SECTION, NOT A MODE <span class="tag alt">middle road</span></div>
+        <p class="cnote">A permanent <b>“On this device”</b> block between the Play pill and the chapters:
+           total, chapters, live progress, and the two controls. The chapter list is never touched —
+           it keeps meaning exactly what it means today.</p>
+        <p class="cnote"><b>Fixes:</b> progress, stop, and “how much of this book is ready” at a glance,
+           without disturbing a list the owner has tuned repeatedly.<br>
+           <b>Leaves broken:</b> per-chapter readiness still needs the mode, so <b>“which chapters can I play
+           on the plane?” is still two taps and a change of subject.</b></p>
+        <p class="tiny">touches: <span class="y">BookSheet</span> only · keeps <code>ChapterRenderMark</code> intact</p></figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 04 -->
+<section>
+  <div class="shead">
+    <div class="snum">04 / THE RECOMMENDATION</div>
+    <h2>D2, with D3's block as the header</h2>
+  </div>
+  <div class="rec">
+    <p style="margin-bottom:14px;font-family:var(--app-face);font-size:15.5px;line-height:1.6">
+      They compose. <b>D2 makes every row honest</b>; <b>D3's block gives the book a total and the two controls</b>
+      that have nowhere else to live. Together they remove the mode entirely and nothing is hidden at any moment.</p>
+    <ul style="font-family:var(--app-face);font-size:15px;line-height:1.65">
+      <li><b>The row</b> — device state as words in the duration line; trailing slot stays listening-only;
+          bookmark pill always present; every row always tappable to play.</li>
+      <li><b>The header block</b> — “On this device · 612 MB · 6 of 14”, a progress bar while the queue runs,
+          <b>Choose chapters</b> and <b>Stop</b>.</li>
+      <li><b>Actions</b> — long-press a chapter: Play from here · Render this chapter · Select chapters… ·
+          Remove audio. The permanent trash leaves the list.</li>
+      <li><b>Selection</b> — leading checkboxes, ready rows dimmed-but-explained, key says cost not count.</li>
+      <li><b>Evict</b> — “Remove audio”, with the sentence about what it frees and what it keeps.
+          <b>Delete-the-book moves out of the <code>⋯</code> that holds it</b>, so the reversible and the
+          irreversible are never adjacent.</li>
+    </ul>
+    <p style="margin-top:14px;font-family:var(--app-face);font-size:14px;color:var(--ink2)">
+      Cost: <code>ChapterRenderMark</code> loses its selection cases and becomes a small status enum;
+      <code>ChapterRow</code> gains a status clause; <code>BookSheet</code> loses <code>isRendering</code> as a
+      display mode and keeps it only for selection. The app-wide strip, Storage and badges stay deferred —
+      this direction doesn't block any of them, and the header block is the piece the strip would later mirror.</p>
+  </div>
+</section>
+</div>

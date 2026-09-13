@@ -119,6 +119,115 @@ import T2SCore
         #expect(await engine.requests.count == 2)
     }
 
+    /// Pause is the reader's hand on the same lever heat pulls: the chapter in flight keeps what it
+    /// has stored, goes back to the head of the queue, and resumes from there rather than starting
+    /// the chapter again.
+    @Test func pauseHoldsTheJobWithItsProgressAndResumePicksItUp() async throws {
+        let fixtures = try AppFixtures()
+        let id = try await fixtures.importFake()
+        let engine = FakeEngine(secondsPerCharacter: 0.01)
+        let runner = makeRunner(fixtures, engine: engine)
+
+        await engine.hold()
+        await runner.enqueue(documentID: id, chapters: [0])
+        var spins = 0
+        while await engine.parkedCount < 1, spins < 10_000 { await Task.yield(); spins += 1 }
+        #expect(await engine.parkedCount == 1)                        // one utterance is in the engine
+
+        runner.pause()
+        #expect(runner.hold == .byReader)
+        #expect(runner.isPaused)
+        await runner.awaitSchedulerCancel()
+        await engine.release()
+        await runner.awaitDrain()
+
+        #expect(runner.queue[0].state == .queued)                     // back at the head
+        #expect(runner.queue[0].rendered == 1)                        // with what it had
+        #expect(runner.isWorking)
+
+        runner.resume()
+        await runner.awaitDrain()
+
+        #expect(runner.hold == nil)
+        #expect(!runner.isPaused)
+        #expect(runner.queue[0].state == .ready)
+        #expect(runner.queue[0].rendered == 2)
+        // Two requests, not three: the utterance stored before the pause was not rendered again.
+        #expect(await engine.requests.count == 2)
+    }
+
+    /// A pause the reader asked for outranks the phone's own reason to stop, and nothing the device
+    /// does can lift it — otherwise a phone that cooled down would quietly start rendering again
+    /// under a reader who had said not to.
+    @Test func aReadersPauseOutranksHeatAndOnlyResumeClearsIt() async throws {
+        let fixtures = try AppFixtures()
+        let id = try await fixtures.importFake()
+        let engine = FakeEngine(secondsPerCharacter: 0.01)
+        let runner = makeRunner(fixtures, engine: engine)
+        let hot = DeviceState(charging: false, thermalSerious: true, lowPowerMode: false, storeFull: false)
+
+        runner.deviceStateChanged(hot)
+        await runner.enqueue(documentID: id, chapters: [0])
+        #expect(runner.hold == .hot)
+
+        runner.pause()
+        #expect(runner.hold == .byReader)                             // the reader's word is the reason now
+
+        // The phone cools. That lifts heat, and leaves the pause exactly where it was.
+        runner.deviceStateChanged(.unplugged)
+        await runner.awaitDrain()
+        #expect(runner.hold == .byReader)
+        #expect(runner.queue[0].state == .queued)
+        #expect(await engine.requests.isEmpty)
+
+        runner.resume()
+        await runner.awaitDrain()
+        #expect(runner.hold == nil)
+        #expect(runner.queue[0].state == .ready)
+    }
+
+    /// Resuming on a warm phone is the override the held-queue sheet's "Continue anyway" has always
+    /// been — one Resume, either reason.
+    @Test func resumingOnAWarmPhoneRendersThroughTheHeat() async throws {
+        let fixtures = try AppFixtures()
+        let id = try await fixtures.importFake()
+        let engine = FakeEngine(secondsPerCharacter: 0.01)
+        let runner = makeRunner(fixtures, engine: engine)
+        let hot = DeviceState(charging: false, thermalSerious: true, lowPowerMode: false, storeFull: false)
+
+        runner.deviceStateChanged(hot)
+        await runner.enqueue(documentID: id, chapters: [0])
+        runner.pause()
+        #expect(runner.hold == .byReader)
+
+        runner.resume()                                               // still hot, and it renders anyway
+        await runner.awaitDrain()
+        #expect(runner.hold == nil)
+        #expect(runner.queue[0].state == .ready)
+    }
+
+    /// Stopping everything clears the pause with it: an empty queue is not a paused queue, and a
+    /// leftover flag would hold the reader's next batch before it started.
+    @Test func stoppingEverythingClearsThePause() async throws {
+        let fixtures = try AppFixtures()
+        let id = try await fixtures.importFake()
+        let engine = FakeEngine(secondsPerCharacter: 0.01)
+        let runner = makeRunner(fixtures, engine: engine)
+
+        await runner.enqueue(documentID: id, chapters: [0])
+        runner.pause()
+        #expect(runner.isPaused)
+
+        runner.cancelAll()
+        #expect(runner.hold == nil)
+        #expect(!runner.isPaused)
+        #expect(runner.queue.isEmpty)
+
+        await runner.enqueue(documentID: id, chapters: [0])
+        await runner.awaitDrain()
+        #expect(runner.queue[0].state == .ready)                      // the next batch is not held
+    }
+
     /// The notice is app-wide now, so it is dismissible — and a dismissal must not be permanent.
     /// It covers the hold it was shown for; the next reason to stop says so again.
     @Test func dismissingTheHoldNoticeLastsOnlyAsLongAsThatHold() async throws {

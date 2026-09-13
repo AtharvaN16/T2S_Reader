@@ -66,9 +66,16 @@ public struct ChapterRenderJob: Identifiable, Hashable, Sendable {
 @MainActor
 @Observable
 public final class ChapterRenderRunner {
-    /// Why the queue is stopped with work still in it. Both are recoverable; neither is an error.
+    /// Why the queue is stopped with work still in it. None of them is an error, and all of them
+    /// keep the running chapter's progress: the job goes back to the head of the queue with what it
+    /// has, and picks up from there (owner, 2026-09-13: thermal pause and pause-on-demand are the
+    /// same pause, and differ only in the sentence they carry).
     public enum Hold: Hashable, Sendable {
-        /// `thermalSerious` or Low Power Mode. Overridable with ``continueAnyway()``.
+        /// The reader pressed Pause. Cleared only by ``resume()``; nothing about the device can
+        /// clear it, which is the whole of "on demand".
+        case byReader
+        /// `thermalSerious` or Low Power Mode. Lifts on its own when the phone cools, and
+        /// ``resume()`` overrides it for the rest of this drain.
         case hot
         /// The store refused a write. Not overridable — the constraint is real, and the way out is
         /// Settings → Storage.
@@ -128,9 +135,12 @@ public final class ChapterRenderRunner {
     private let cpuBudget: CPUBudget?
 
     private var device: DeviceState = .unplugged
-    /// ``continueAnyway()``: ignores heat until the queue drains, then forgets itself. Deliberately
-    /// not persisted, so it cannot quietly become the permanent setting.
+    /// ``resume()``: ignores heat until the queue drains, then forgets itself. Deliberately not
+    /// persisted, so it cannot quietly become the permanent setting.
     private var ignoringHeat = false
+    /// ``pause()``. Outranks every other reason to be stopped: if the reader paused, "you paused
+    /// this" is the true answer even on a phone that has since gone warm.
+    private var pausedByReader = false
     /// Set by the scheduler's `.storeFull`; cleared when the device next reports room, which is what
     /// makes "evict something in Settings → Storage" the way out rather than a relaunch.
     private var storeRefused = false
@@ -217,16 +227,38 @@ public final class ChapterRenderRunner {
         queue.removeAll()
         ignoringHeat = false
         storeRefused = false
+        pausedByReader = false
         updateHold()
         stopScheduler()
     }
 
-    /// Renders through heat and Low Power Mode until the queue drains, and then forgets it.
-    /// Does nothing to a `.storeFull` hold: there is no override for running out of room.
-    public func continueAnyway() {
-        ignoringHeat = true
+    /// Stops the queue where it stands, at the reader's word. The chapter in flight keeps the
+    /// utterances it has already stored and goes back to the head of the queue — the same thing
+    /// heat does to it, because it is the same mechanism.
+    public func pause() {
+        guard !pausedByReader else { return }
+        pausedByReader = true
+        updateHold()
+        stopScheduler()
+    }
+
+    /// The one Resume, for either reason to be stopped. From the reader's own pause it simply
+    /// starts again; from heat it is also the override — pressing Resume on a warm phone means
+    /// "render anyway", and like every such override it lapses when the queue drains. There is
+    /// nothing it can do about `.storeFull`: that constraint is real, and the way out is Settings →
+    /// Storage.
+    public func resume() {
+        pausedByReader = false
+        if device.thermalSerious || device.lowPowerMode { ignoringHeat = true }
         startDraining()
     }
+
+    /// The old name for the heat half of ``resume()``, which is what the held-queue sheet's
+    /// "Continue anyway" has always meant.
+    public func continueAnyway() { resume() }
+
+    /// Whether the reader is the reason nothing is happening.
+    public var isPaused: Bool { hold == .byReader }
 
     /// Called by the app when `DeviceMonitor`'s state changes. Heat and Low Power Mode stop the
     /// queue where it stands; room in the store releases a `.storeFull` hold without a relaunch.
@@ -244,6 +276,7 @@ public final class ChapterRenderRunner {
     }
 
     private var blockingHold: Hold? {
+        if pausedByReader { return .byReader }
         if storeRefused || device.storeFull { return .storeFull }
         if !ignoringHeat, device.thermalSerious || device.lowPowerMode { return .hot }
         return nil

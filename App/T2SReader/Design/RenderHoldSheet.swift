@@ -19,9 +19,16 @@ import T2SApp
 struct RenderHoldHost: View {
     @Environment(AppEnvironment.self) private var env
 
-    /// Nil unless the queue is held and the reader has not already put the notice away.
+    /// Nil unless the queue is held for a reason the reader did not choose, and they have not
+    /// already put the notice away. A pause they asked for is never news: the sheet's own progress
+    /// block says "Paused" and offers Resume, and a modal on top of it explaining that they have
+    /// paused would be the app talking back.
     private var hold: ChapterRenderRunner.Hold? {
-        env.chapterRenderer.holdNoticeDismissed ? nil : env.chapterRenderer.hold
+        guard !env.chapterRenderer.holdNoticeDismissed else { return nil }
+        switch env.chapterRenderer.hold {
+        case .hot, .storeFull: return env.chapterRenderer.hold
+        case .byReader, .none: return nil
+        }
     }
 
     var body: some View {
@@ -107,13 +114,19 @@ struct RenderHoldSheet: View {
     }
 
     private var title: String {
-        hold == .hot ? "Rendering paused" : "No room for audio"
+        switch hold {
+        case .hot: return "Rendering paused"
+        case .storeFull: return "No room for audio"
+        case .byReader: return "Rendering paused"           // never shown; `RenderHoldHost` filters it out
+        }
     }
 
     private var message: String {
-        hold == .hot
-            ? "The phone is warm. Rendering picks up on its own once it cools."
-            : "There is no room left for audio. Free some in Settings → Storage."
+        switch hold {
+        case .hot: return "The phone is warm. Rendering picks up on its own once it cools."
+        case .storeFull: return "There is no room left for audio. Free some in Settings → Storage."
+        case .byReader: return "Paused. Resume it whenever you like."
+        }
     }
 }
 

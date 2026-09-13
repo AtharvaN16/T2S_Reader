@@ -54,7 +54,12 @@ struct ThinScrubber: View {
     private static let markMerge: Double = 6
     /// The scope change is slower than the chip that asks for it (0.28), so the bar reads as the
     /// consequence of the tap rather than a co-event.
-    private static let scopeSpring = Animation.spring(duration: 0.34, bounce: 0.18)
+    ///
+    /// `bounce` is 0.30 rather than the 0.18 it was: the bar carries the whole morph, and at 0.18
+    /// it settles almost without overshoot — correct, and inert. 0.30 puts about 5% of travel past
+    /// the mark before it comes back, which on this bar is a dozen points: enough to feel thrown
+    /// rather than driven, and still inside the 24 pt margin, so nothing reaches the screen edge.
+    private static let scopeSpring = Animation.spring(duration: 0.34, bounce: 0.30)
 
     private var spans: [Range<Double>] { segments.count > 1 ? segments : [0..<1] }
 
@@ -202,9 +207,19 @@ struct ThinScrubber: View {
             // segment — the condition was on the array being non-empty, which has nothing to do
             // with *which* bar this is — so a fourteen-chapter book built 672 tick views to show 48
             // of them (2026-09-13).
-            tickRow(bookTicks(in: span)).opacity(chapterTicks ? 0 : 1)
+            // The cross-fade animates the two grids' opacity and nothing else. It used to be an
+            // `.animation` on the whole segment, below `.frame` and `.clipShape` — and because
+            // `chapterTicks` flips at exactly the moment the scope does, the one bar that grows
+            // across the screen had its width and its corners driven by a 0.2 s ease rather than
+            // by the spring. The morph's most visible element was the only one not springing
+            // (owner, 2026-09-13: "there is no spring, or inertia in it, it feels too linear").
+            tickRow(bookTicks(in: span))
+                .opacity(chapterTicks ? 0 : 1)
+                .animation(.easeInOut(duration: 0.2), value: chapterTicks)
             if isCurrent, !model.chapterTicks.isEmpty {
-                tickRow(TickSlice(ticks: model.chapterTicks)).opacity(chapterTicks ? 1 : 0)
+                tickRow(TickSlice(ticks: model.chapterTicks))
+                    .opacity(chapterTicks ? 1 : 0)
+                    .animation(.easeInOut(duration: 0.2), value: chapterTicks)
             }
             /// Only the layout springs. The seek is async, so on release `fraction` falls back to the
             /// stale model value for a beat — animating the width would show the fill slide back.
@@ -215,7 +230,6 @@ struct ThinScrubber: View {
         }
         .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: rounded ? height / 2 : 0, style: .continuous))
-        .animation(.easeInOut(duration: 0.2), value: chapterTicks)
     }
 
     /// The frontier as two fills rather than as one view per tick: unrendered ground, with the

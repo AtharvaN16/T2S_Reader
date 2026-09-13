@@ -7,10 +7,11 @@ import T2SApp
 /// up here anyway — clear of the transport, it is a note about the page rather than a label on the
 /// controls.
 ///
-/// Tinted rather than boxed, on the owner's word: `glow`, which the token comment reserves for a
-/// state of the engine rather than a mark on the page, and which is exactly what both of these
-/// are. It sits where the text is already dimmed by the `ground` fade, so a blue line at `pill`
-/// weight is the brightest thing in its neighbourhood without needing a background to sit on.
+/// `ink` on a `surface` capsule (owner, 2026-09-13). It stopped needing a colour of its own once
+/// it had a floor of its own: `ink2` grey failed up here because it was grey on dimmed grey words,
+/// and `glow` was tried next, but an opaque fill answers the same problem without spending the
+/// accent — and `glow`'s own token comment reserves it for the warm-up's light rather than for
+/// every line that mentions the engine.
 ///
 /// The three dots are the ellipsis made honest: the strings no longer carry "…" as punctuation the
 /// eye does not count, they carry a wave that says work is still going on.
@@ -26,7 +27,18 @@ struct PlayerStatusLine: View {
             Text(text)
         }
         .typeRole(.pill)                                                    // a step up from `meta`, in Medium
-        .foregroundStyle(Tokens.glow)
+        .foregroundStyle(Tokens.ink)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        // A `surface` capsule, the same fill and the same fully-rounded shape as the voice chip
+        // and the tool circles a few rows below, so the line reads as one of the app's own objects
+        // rather than as a card dropped on the page. Fully rounded rather than a rounded rectangle
+        // on the owner's word (2026-09-13).
+        //
+        // Opaque, because tinting alone did not hold: the fade only reaches ~30% by here, and a
+        // translucent blue — `glowFaint`, `glowSoft`, `glow` at a third — still let the sentence
+        // behind read through, which is a highlighter over words rather than a surface under them.
+        .background(Tokens.surface, in: Capsule())
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(text)

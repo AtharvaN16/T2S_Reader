@@ -428,11 +428,12 @@ struct ReaderPage: View {
     /// black one. The fade starts 64 pt above the block, which is the ceiling here whatever this
     /// number says.
     private static let statusLineGap: CGFloat = 20
-    /// The line's own height — a row of 5 pt dots over 5 pt of air over one `pill` line. Stated
-    /// rather than measured so the gap below is exactly `statusLineGap` and did not change when
-    /// the dots moved above the words: the frame is bottom-aligned and does not clip, so a Dynamic
-    /// Type size needing more room grows upward into the fade, not down into the picker.
-    private static let statusLineHeight: CGFloat = 30
+    /// The line's own height — 9 pt of padding, a row of 5 pt dots, 5 pt of air, one `pill` line,
+    /// 9 pt again. Stated rather than measured so the gap below is exactly `statusLineGap` and did
+    /// not change when the dots moved above the words or the fill went in: the frame is
+    /// bottom-aligned and does not clip, so a Dynamic Type size needing more room grows upward
+    /// into the fade, not down into the picker.
+    private static let statusLineHeight: CGFloat = 48
 
     /// The scope the bar and the clocks are in. A document with one chapter or none has nothing to
     /// zoom to, so it reads `.book` however the preference is set — the chip is hidden there too.

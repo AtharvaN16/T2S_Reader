@@ -68,10 +68,15 @@ struct Toast: View {
     /// The bookmark toasts: a status line with a glyph, and up to two full-width actions on their
     /// own row below — "Add a note" and the way back to the list, side by side rather than one
     /// pill trailing the title on a single cramped baseline (owner, 2026-09-12).
+    ///
+    /// The tick is green (owner, 2026-09-13), the app's `positive`: the one thing on the card that
+    /// reports rather than offers, and the colour says "saved" before the words are read.
     private func card(icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        // More air over the buttons than under the words of the line above (owner, 2026-09-13):
+        // the gap is what says the pair below is a choice to make rather than a third line to read.
+        VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .center, spacing: 12) {
-                CircleGlyph(systemName: icon, tint: Tokens.ground, fill: Tokens.surfaceOnInk)
+                CircleGlyph(systemName: icon, tint: Tokens.positiveOnInk, fill: Tokens.surfaceOnInk)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(content.title).typeRole(.pill).foregroundStyle(Tokens.ground)
                     if let detail = content.detail {
@@ -95,7 +100,7 @@ struct Toast: View {
             }
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 16)
+        .padding(.vertical, 20)
     }
 
     /// Every other toast: one line, and at most the one trailing pill (Download the voice model,

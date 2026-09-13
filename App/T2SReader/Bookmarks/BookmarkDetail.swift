@@ -116,7 +116,7 @@ struct BookmarkDetail: View {
                 // falls in — moved up out of the meta line below the passage (owner, 2026-09-13).
                 // Quieter and a size down, so the stack still reads as one title with an address
                 // under it rather than two headings fighting over the middle of the row.
-                VStack(spacing: 1) {
+                VStack(spacing: 5) {
                     Text(bookTitle)
                         .typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
                         .lineLimit(1)

@@ -32,9 +32,9 @@ struct Pill: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                if let glyph { Image(systemName: glyph).font(.system(size: 13, weight: .semibold)) }
-                Text(label).typeRole(.pill)
-                if let detail { Text(detail).typeRole(.pill).foregroundStyle(foreground.opacity(0.55)) }
+                if let glyph { Image(systemName: glyph).font(.system(size: compact ? 12 : 13, weight: .semibold)) }
+                Text(label).typeRole(labelRole)
+                if let detail { Text(detail).typeRole(labelRole).foregroundStyle(foreground.opacity(0.55)) }
             }
             // A pill's label is one or two words, so it holds its own width and never breaks: at
             // the accessibility text sizes "Search" was wrapping to three lines inside its capsule.
@@ -42,7 +42,7 @@ struct Pill: View {
             // which scales down.
             .lineLimit(1)
             .fixedSize(horizontal: !fillsWidth, vertical: false)
-            .padding(.horizontal, 14)
+            .padding(.horizontal, compact ? 12 : 14)
             .padding(.vertical, fillsWidth ? (compact ? 10 : 16) : 9)
             .frame(maxWidth: fillsWidth ? .infinity : nil)
             .foregroundStyle(foreground)
@@ -50,6 +50,10 @@ struct Pill: View {
         }
         .buttonStyle(.plain)
     }
+
+    /// A compact pill is half the width of a toast and its label is a phrase, not a word, so it
+    /// takes the smaller cut rather than truncating (owner, 2026-09-13).
+    private var labelRole: TypeRole { compact ? .pillSmall : .pill }
 
     private var foreground: Color {
         switch style {

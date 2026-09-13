@@ -78,6 +78,11 @@ enum Tokens {
     static let heartBottom = dynamic(light: 0xDB1729, dark: 0xE62E3E)
     static let heartShade = dynamic(light: 0x99000D, dark: 0x000000)
     static let positive = dynamic(light: 0x22A559, dark: 0x34C070)
+    /// `positive` for a mark on an inverted card — the toast's tick (owner, 2026-09-13: "make the
+    /// checkmark green"). Inverted like `surfaceOnInk`, and for the same reason: in the dark the
+    /// disc under it is a light grey, where the bright green of `positive` has nothing to hold on
+    /// to, so the deep green goes there and the bright one on the near-black light-mode card.
+    static let positiveOnInk = dynamic(light: 0x34C070, dark: 0x12833F)
     static let destructive = dynamic(light: 0xE5453B, dark: 0xFF5A50)
     /// The voice picker's avatar discs: pink for a female voice, blue for a male one. Categorical,
     /// not accent — they say which of two kinds a row is, never that it is selected or active.

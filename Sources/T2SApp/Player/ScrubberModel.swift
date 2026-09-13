@@ -125,4 +125,34 @@ public struct ScrubberModel: Hashable, Sendable {
         }
         return runs
     }
+
+    /// Bookmark marks merged where they would otherwise sit on top of each other, as spans in
+    /// whatever unit `positions` is in — points, when the bar places them.
+    ///
+    /// A 4 pt mark needs about 6 pt between centres to read as two, and on a 354 pt bar that is a
+    /// 22nd of the book: over twenty-two hours, any two bookmarks made in the same sitting land on
+    /// the same pixel. Merging by distance rather than dropping one keeps the information — a pair
+    /// becomes a short lozenge, a densely marked stretch a longer one — and bounds the marks drawn
+    /// by the width of the bar rather than by the size of the reader's library.
+    ///
+    /// Chained deliberately: each mark joins the run if it is within `minGap` of the one before,
+    /// so a trail of close bookmarks is one span even though its ends are far apart. That is what
+    /// is true of the book — there are bookmarks all through that stretch.
+    public static func clusters(of positions: [Double], within minGap: Double) -> [ClosedRange<Double>] {
+        let sorted = positions.sorted()
+        guard let first = sorted.first else { return [] }
+        var spans: [ClosedRange<Double>] = []
+        var lower = first, upper = first
+        for p in sorted.dropFirst() {
+            if p - upper <= minGap {
+                upper = p
+            } else {
+                spans.append(lower...upper)
+                lower = p
+                upper = p
+            }
+        }
+        spans.append(lower...upper)
+        return spans
+    }
 }

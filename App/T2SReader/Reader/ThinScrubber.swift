@@ -46,6 +46,12 @@ struct ThinScrubber: View {
     /// rather than as a second row of controls.
     private static let dotSize: CGFloat = 4
     private static let dotGap: CGFloat = 3
+    /// Marks whose centres are closer than this merge into one. A 4 pt mark needs about 6 pt
+    /// between centres to read as two; below that they are a blot rather than a pair, and over a
+    /// 22-hour book 6 pt is 22 minutes — close enough that any two bookmarks from one sitting
+    /// collide. Merged, a pair is a short lozenge and a densely marked stretch a longer one, and
+    /// the bar can never draw more marks than it has room for.
+    private static let markMerge: Double = 6
     /// The scope change is slower than the chip that asks for it (0.28), so the bar reads as the
     /// consequence of the tap rather than a co-event.
     private static let scopeSpring = Animation.spring(duration: 0.34, bounce: 0.18)
@@ -238,23 +244,39 @@ struct ThinScrubber: View {
     /// under them: in chapter scope they spread across the one bar that is left, and a collapsed
     /// chapter takes its marks with it rather than stacking them on the seam.
     @ViewBuilder private func bookmarkDots(ranges: [Range<CGFloat>]) -> some View {
-        let pressed = dragFraction != nil
+        let marks = ScrubberModel.clusters(of: markPositions(ranges: ranges), within: Self.markMerge)
         ZStack(alignment: .topLeading) {
-            ForEach(Array(spans.enumerated()), id: \.offset) { i, span in
-                if opacity(of: i, pressed: pressed) > 0 {
-                    let leading: CGFloat = i == 0 ? 0 : gap / 2
-                    let trailing: CGFloat = i == spans.count - 1 ? 0 : gap / 2
-                    let w = max(1, ranges[i].upperBound - ranges[i].lowerBound - leading - trailing)
-                    ForEach(Array(dots(in: span).enumerated()), id: \.offset) { _, local in
-                        Circle()
-                            .fill(Tokens.accent)
-                            .frame(width: Self.dotSize, height: Self.dotSize)
-                            .offset(x: ranges[i].lowerBound + leading + w * local - Self.dotSize / 2,
-                                    y: -(Self.dotSize + Self.dotGap))
-                    }
-                }
+            ForEach(Array(marks.enumerated()), id: \.offset) { _, mark in
+                Capsule()
+                    .fill(Tokens.accent)
+                    .frame(width: CGFloat(mark.upperBound - mark.lowerBound) + Self.dotSize,
+                           height: Self.dotSize)
+                    .offset(x: CGFloat(mark.lowerBound) - Self.dotSize / 2,
+                            y: -(Self.dotSize + Self.dotGap))
             }
         }
+    }
+
+    /// Every visible bookmark's position along the bar, in points. Placed through the same `ranges`
+    /// the segments are, so the marks travel with the chapter under them: in chapter scope they
+    /// spread across the one bar that is left, and a collapsed chapter takes its marks with it
+    /// rather than stacking them on the seam.
+    ///
+    /// Flattened across the whole bar before merging rather than merged per chapter, so a pair that
+    /// straddles a chapter boundary — three points apart on screen, and a chapter apart in the book
+    /// — becomes one mark like any other near pair.
+    private func markPositions(ranges: [Range<CGFloat>]) -> [Double] {
+        guard !bookmarkFractions.isEmpty else { return [] }
+        let pressed = dragFraction != nil
+        var positions: [Double] = []
+        for (i, span) in spans.enumerated() where opacity(of: i, pressed: pressed) > 0 {
+            let leading: CGFloat = i == 0 ? 0 : gap / 2
+            let trailing: CGFloat = i == spans.count - 1 ? 0 : gap / 2
+            let width = max(1, ranges[i].upperBound - ranges[i].lowerBound - leading - trailing)
+            let origin = ranges[i].lowerBound + leading
+            positions.append(contentsOf: dots(in: span).map { Double(origin + width * $0) })
+        }
+        return positions
     }
 
     /// The bookmarks inside this chapter, as 0…1 along the chapter itself.

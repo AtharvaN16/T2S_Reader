@@ -164,3 +164,46 @@ import T2SCore
         #expect(drawn.reduce(0) { $0 + $1.count } == ticks.filter { $0 }.count)
     }
 }
+
+/// Bookmark marks that land on top of each other (2026-09-13). On a 354 pt bar a 4 pt mark needs
+/// about 6 pt between centres to read as two, which over a 22-hour book is 22 minutes — so any two
+/// bookmarks made in the same sitting collide. They merge into one mark spanning the pair instead.
+@Suite struct BookmarkClusterTests {
+    @Test func marksFurtherApartThanTheGapStayApart() {
+        #expect(ScrubberModel.clusters(of: [10, 30, 60], within: 6)
+                == [10...10, 30...30, 60...60])
+    }
+
+    @Test func marksInsideTheGapMergeIntoOneSpan() {
+        #expect(ScrubberModel.clusters(of: [10, 13, 40], within: 6) == [10...13, 40...40])
+    }
+
+    /// Chained: each is within the gap of the *previous*, so the whole run is one mark even though
+    /// the ends are far apart. That is the honest reading — bookmarks all through this stretch.
+    @Test func aChainOfNearMarksIsOneSpan() {
+        #expect(ScrubberModel.clusters(of: [10, 15, 20, 25], within: 6) == [10...25])
+    }
+
+    @Test func unsortedInputIsHandled() {
+        #expect(ScrubberModel.clusters(of: [60, 10, 13], within: 6) == [10...13, 60...60])
+    }
+
+    @Test func duplicatesCollapse() {
+        #expect(ScrubberModel.clusters(of: [10, 10, 10], within: 6) == [10...10])
+    }
+
+    @Test func nothingInNothingOut() {
+        #expect(ScrubberModel.clusters(of: [], within: 6).isEmpty)
+        #expect(ScrubberModel.clusters(of: [42], within: 6) == [42...42])
+    }
+
+    /// The count is bounded by the bar, not by the library: however many bookmarks a reader has
+    /// made, the bar cannot draw more marks than it has room for.
+    @Test func theMarkCountIsBoundedByTheBarWidth() {
+        let many = (0..<500).map { Double($0) * 354.0 / 500.0 }      // 500 bookmarks across 354 pt
+        let marks = ScrubberModel.clusters(of: many, within: 6)
+        #expect(marks.count == 1)                                    // 0.7 pt apart — one long span
+        let spread = (0..<500).map { Double($0) * 354.0 / 500.0 * 20 }
+        #expect(ScrubberModel.clusters(of: spread, within: 6).count <= 500)
+    }
+}

@@ -49,11 +49,6 @@ enum Tokens {
     /// is ready, change the glow to green before ending the animation"): the same light, green — a
     /// deeper green than `positive`, which is a tick on a row, not a light on the screen's edge.
     static let glowReady = dynamic(light: 0x12A150, dark: 0x37D97C)
-    /// The held-queue sheet's light (`RenderHoldSheet`, owner 2026-09-13: "add a red glow to the
-    /// bottom sheet"). The same family as the two above — a light on the screen's edge, not a mark
-    /// on a row, so it is a warmer and more open red than `destructive`, which has to hold its own
-    /// as lettering. A phone that is too warm to render is the one thing in this app that goes red.
-    static let glowHot = dynamic(light: 0xFF3B2F, dark: 0xFF5C4A)
     /// The raised key's face, lit from above: the reference's gradient, royal blue at the top rim
     /// falling to indigo at the foot. One object in both themes, like a book's cloth — a key does
     /// not change colour when the room does — but a touch lighter on black so its bevel still reads.

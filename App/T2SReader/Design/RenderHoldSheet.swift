@@ -44,77 +44,6 @@ struct RenderHoldHost: View {
     }
 }
 
-/// The red light a held queue puts on the screen: `WarmRim`'s arrangement exactly — the warm-up's
-/// wash and lit bezel with no ground under them — at the head of the screen, in `glowHot`.
-///
-/// **At the top, and nowhere near the card** (owner, 2026-09-13). It was tried at the foot, where
-/// it lit the keys and read as a glowing button, and then on the card's own top edge, where the two
-/// were one object and the light had to be clipped to keep it off the page behind. This is the
-/// place the app already keeps a light that means "the phone is busy with something": the same edge
-/// the blue warm-up rim uses, so red there is read the same way and needs no explaining.
-///
-/// **It does not breathe.** The warm-up pulses because something is working; a held queue is the
-/// opposite, and `WarmRamp` already knows this — a failed warm-up settles its light to two thirds
-/// and holds it there, because "a warning that keeps breathing at full reads as something still
-/// working on it, and nothing is". This is that ending state from the start, so there is no
-/// `TimelineView` here and nothing for Reduce Motion to turn off.
-/// The red light a held queue puts on the screen: `WarmRim`'s arrangement exactly — the warm-up's
-/// wash and lit bezel with no ground under them — at the head of the screen, in `glowHot`.
-///
-/// **At the top, and nowhere near the card** (owner, 2026-09-13). It was tried at the foot, where
-/// it lit the keys and read as a glowing button, and then on the card's own top edge, where the two
-/// were one object and the light had to be clipped to keep it off the page behind. This is the
-/// place the app already keeps a light that means "the phone is busy with something": the same edge
-/// the blue warm-up rim uses, so red there is read the same way and needs no explaining.
-///
-/// **It does not breathe.** The warm-up pulses because something is working; a held queue is the
-/// opposite, and `WarmRamp` already knows this — a failed warm-up settles its light to two thirds
-/// and holds it there, because "a warning that keeps breathing at full reads as something still
-/// working on it, and nothing is". This is that ending state from the start, so there is no
-/// `TimelineView` here and nothing for Reduce Motion to turn off.
-///
-/// **Behind a sheet, not over it** (owner, 2026-09-13). It spent an afternoon in a `UIWindow` above
-/// `.alert`, which is the only place a light can be that a sheet cannot cut off — and that was the
-/// objection to it. A rim laid over the book sheet's rounded shoulders reads as something in front
-/// of the sheet; page furniture belongs behind the page's furniture. So this is an ordinary overlay
-/// in the hierarchy again, drawn by the surfaces whose frame starts at the window's top edge — the
-/// root pager and the Reader over it — and a sheet in front of it is a sheet in front of it. The
-/// strip a `.sheet` leaves uncovered is where it shows, which is the whole of the intent.
-struct RenderHoldGlowHost: View {
-    @Environment(AppEnvironment.self) private var env
-
-    /// Under `WarmRamp`'s own held strength of 0.66, and arrived at by looking: 0.45 round the card,
-    /// 0.55 when the light moved to the top of the screen, 0.40, and 0.50 once it was behind the
-    /// sheet rather than over it (owner, 2026-09-13). It is a notice that sits on screen until the
-    /// phone cools, so it has to be liveable with for as long as that takes; the blue warm-up, which
-    /// is over in a minute, is the one that can afford to be bright.
-    private static let settled: Double = 0.50
-
-    private var isHeld: Bool {
-        !env.chapterRenderer.holdNoticeDismissed && env.chapterRenderer.hold != nil
-    }
-
-    var body: some View {
-        ZStack {
-            if isHeld {
-                ZStack {
-                    WarmRamp.wash(pulse: Self.settled, light: Tokens.glowHot)
-                    WarmRamp.bezel(pulse: Self.settled, light: Tokens.glowHot)
-                }
-                .frame(height: WarmRamp.height)
-                .transition(.opacity)
-            }
-        }
-        .frame(height: WarmRamp.height)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .ignoresSafeArea(edges: .top)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-        // The same fade `WarmRim` gives the warm-up's light when it arrives and leaves.
-        .animation(.easeInOut(duration: 0.3), value: isHeld)
-    }
-}
-
 /// The card itself: why the queue stopped, and what can be done about it from here.
 struct RenderHoldSheet: View {
     var hold: ChapterRenderRunner.Hold
@@ -159,12 +88,13 @@ struct RenderHoldSheet: View {
         // The home indicator's strip is the card's, not the page's: a sheet that stops above it
         // leaves a sliver of the dimmed page under its foot.
         .padding(.bottom, 36)
-        // Plain ground, and no light on it: the glow is `RenderHoldGlow` at the top of the screen
-        // now (owner, 2026-09-13). Clipping a glow to this card is also what left its foot short —
-        // a `clipShape` fixes the drawing to the frame it was applied on, so the `ignoresSafeArea`
-        // outside it expanded the layout into the home-indicator strip and then had the fill
-        // clipped away again, and the dimmed page showed through under the keys (owner: "the bottom
-        // sheet bottom is not filled"). Nothing clips here, so the fill reaches the glass.
+        // Plain ground. A red light lived on this card for an afternoon on 2026-09-13 — over its
+        // top edge, then clipped inside it, then up at the head of the screen — and was dropped:
+        // "it is not adding much" (owner). Worth keeping the bug it left behind, though: clipping
+        // the light to this card is what left the card's foot short, because `clipShape` fixes the
+        // drawing to the frame it was applied on, so the `ignoresSafeArea` outside it expanded the
+        // layout into the home-indicator strip and then had the fill clipped away again (owner:
+        // "the bottom sheet bottom is not filled"). Nothing clips here, so the fill reaches glass.
         .background {
             let shape = UnevenRoundedRectangle(topLeadingRadius: Spacing.sheetCorner,
                                                topTrailingRadius: Spacing.sheetCorner, style: .continuous)
@@ -194,9 +124,4 @@ extension View {
         overlay { RenderHoldHost() }
     }
 
-    /// Draws the held-queue light at the head of the screen, behind anything presented over this
-    /// surface. Only for a frame that starts at the window's top edge — see `RenderHoldGlowHost`.
-    func renderHoldGlow() -> some View {
-        overlay { RenderHoldGlowHost() }
-    }
 }

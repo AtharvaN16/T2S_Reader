@@ -155,6 +155,9 @@ enum WarmRamp {
     /// few points of the phones either side and blurred enough that the difference did not show as
     /// an arc leaving the corner. It is still not far off — but the 11 Pro this app is tested on is
     /// 39, and at 16 points over, the lit corner did leave the glass.
+    ///
+    /// It was asked of a red rim that has since been dropped; the warm-up's blue one, which was
+    /// always drawn at the wrong radius and never mentioned, is what kept the correction.
     /// Main-actor because reading it touches `UIApplication`; every caller is a view body.
     @MainActor static let bezelRadius: CGFloat = {
         let screen = UIApplication.shared.connectedScenes

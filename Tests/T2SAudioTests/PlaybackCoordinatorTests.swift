@@ -426,22 +426,63 @@ import T2SCore
         #expect(c.rate == 1.0 && player.rate == 1.0)
     }
 
-    @Test func failedRenderIsSurfaced() async throws {
+    /// One failure is logged and nothing else (owner, 2026-09-13). The utterance is filled with
+    /// 200 ms of silence and the book carries on, so a line of red under the scrubber — which used
+    /// to read `utterance 1: failed("…")` and stayed until another document was loaded — told the
+    /// reader about a sentence they had already passed.
+    @Test func aSingleFailedRenderIsQuiet() async throws {
         let (c, _, engine, _, _, doc, timeline) = fixture()
         await engine.fail(on: "Beta two.")
         c.load(doc, timeline: timeline)
         await c.waitForRenderIdle()
-        #expect(c.lastRenderError?.hasPrefix("utterance 1:") == true)
+        #expect(c.lastRenderError == nil)
     }
 
-    @Test func cloudKeyRejectionIsSurfacedForThePlayer() async throws {
-        let (_, player, _, store, saves, doc, timeline) = fixture()
+    /// Five in a row is the voice not working, and that is worth one plain line with nothing to tap.
+    @Test func aRunOfFailuresIsSurfacedOnce() async throws {
+        let (c, _, engine, _, _, doc, _) = fixture()
+        let timeline = longTimeline()
+        // Every utterance, and taken from the timeline rather than written out: `fail(on:)` matches
+        // the *spoken* text, which the normalizer has already been over. All of them, because one
+        // that renders is the voice working again and clears the run — which is the point of
+        // `recoveryClearsTheRun` below.
+        for i in 0 ..< timeline.utteranceCount { await engine.fail(on: timeline[utterance: i].spoken) }
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        #expect(c.lastRenderError == "The voice isn’t responding. Sentences are being skipped.")
+        #expect(c.lastRenderError?.contains("utterance") != true)       // no index in the reader's copy
+    }
+
+    /// The line goes as soon as the voice comes back. `lastRenderError` used to be cleared only by
+    /// loading another document, so one hiccup two hours into a book pinned it for the session.
+    @Test func recoveryClearsTheRun() async throws {
+        let (c, _, engine, _, _, doc, _) = fixture()
+        let timeline = longTimeline()
+        for i in 0 ..< 5 { await engine.fail(on: timeline[utterance: i].spoken) }
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        #expect(c.lastRenderError == nil)                       // the sixth rendered, so the voice is fine
+    }
+
+    /// A rejected key fails every utterance, so it reaches the threshold within a few sentences and
+    /// is surfaced — in the reader's words rather than the engine's. The engine's own message
+    /// ("rejected this request") goes to the log, where it is of use to someone who can act on it.
+    @Test func aRejectedKeyIsSurfacedOnceItHasFailedEnoughUtterances() async throws {
+        let (_, player, _, store, saves, doc, _) = fixture()
         let coordinator = PlaybackCoordinator(engine: KeyRejectedEngine(), store: store, player: player, playheadStore: saves,
                                               timeSource: ManualTimeSource())
-        coordinator.load(doc, timeline: timeline)
+        coordinator.load(doc, timeline: longTimeline())
         await coordinator.waitForRenderIdle()
 
-        #expect(coordinator.lastRenderError?.contains("rejected this request") == true)
+        #expect(coordinator.lastRenderError == "The voice isn’t responding. Sentences are being skipped.")
+    }
+
+    /// Six sentences, so a run of failures can pass the five-in-a-row threshold.
+    private func longTimeline() -> Timeline {
+        let block = SourceBlock(text: "One one. Two two. Three three. Four four. Five five. Six six.",
+                                position: Position(resourceHref: "c.xhtml", progression: 0, charOffset: 0))
+        return TimelineBuilder.build(chapters: [ChapterInput(title: "C", position: block.position, blocks: [block])],
+                                     segmenter: Segmenter(normalizer: TextNormalizer()))
     }
 
     // MARK: Plan 14 — the head streams
@@ -589,7 +630,6 @@ import T2SCore
         await engine.releasePiece()
         for _ in 0 ..< 200 where c.state == .catchingUp { try? await Task.sleep(for: .milliseconds(5)) }
         #expect(c.state == .playing && player.isPlaying)
-        #expect(c.lastRenderError != nil)
         player.advance(seconds: 0.1); await c.settle()               // the empty final buffer completes: the head moves on
         #expect(c.playhead.utteranceIndex == 1)
     }

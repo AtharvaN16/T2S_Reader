@@ -63,8 +63,14 @@ struct QueueRow: View {
                 Button(action: onOpenBook) {
                     VStack(alignment: .leading, spacing: 0) {
                         // "Chapter 7 · ◔ 41%  ✓": the chapter, how far through it, and ready-offline.
-                        HStack(spacing: 6) {
-                            if let chapterText { Text(chapterText) }
+                        HStack(alignment: .top, spacing: 6) {
+                            if let chapterText {
+                                Text(chapterText)
+                                    .lineLimit(2)
+                                    .truncationMode(.tail)
+                                    .fixedSize(horizontal: false, vertical: true)   // wraps to 2 lines instead of hugging 1, as the excerpt below does
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                             if let fraction {
                                 if chapterText != nil {
                                     // A size up from the text it divides, or it reads as punctuation inside one fact.

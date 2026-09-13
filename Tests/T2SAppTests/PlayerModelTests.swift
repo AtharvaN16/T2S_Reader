@@ -393,6 +393,60 @@ import T2SStore
         #expect(!after.isEmpty && after.allSatisfy { $0.voiceID == Delivery.applied(to: local) })
     }
 
+    /// Opening the app before the model has loaded plays in the system voice, and the hand-off used
+    /// to be gated on the current route being `cloud:` — so a book that started on the system voice
+    /// stayed on it for its whole length, and the only way out was the voice picker, where "System
+    /// default" was already ticked and could not be picked again (owner, 2026-09-13).
+    @Test func aChapterChangeAfterTheModelLoadsHandsOffFromTheSystemVoice() async throws {
+        let system = VoiceOption.systemDefault.id
+        let local = "kokoro:kokoro-coreml-2e878c6a-misaki1.0.6:af_heart"
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        let engine = FakeEngine(secondsPerCharacter: 0.05)
+        let player = try makePlayer(f, engine: engine)
+        let routing = FlippingRouting(system)
+        player.voiceRouting = routing
+        await player.load(try #require(try await f.store.summary(id: id)), play: false)
+        await player.coordinator.waitForRenderIdle()
+        #expect(player.routedVoiceID == system)
+
+        // Still loading: a boundary changes nothing.
+        await player.seek(toChapter: 1)
+        player.tick()
+        await player.settleHandoff()
+        #expect(player.coordinator.voiceHandoff == nil)
+
+        // Loaded. The next boundary hands the rest of the book over, with no trip to the picker.
+        await routing.flip(to: local)
+        await player.seek(toChapter: 0)
+        player.tick()
+        await player.settleHandoff()
+        #expect(player.coordinator.voiceHandoff == VoiceHandoff(fromChapter: 0, voiceID: Delivery.applied(to: local)))
+        #expect(player.routedVoiceID == local)
+    }
+
+    /// A reader who named a system voice outright keeps it: only the default re-routes.
+    @Test func anExplicitSystemVoiceIsNotHandedOffToKokoro() async throws {
+        let samantha = "com.apple.voice.compact.en-US.Samantha"
+        let f = try AppFixtures()
+        let id = try await f.importFake()
+        var stored = try #require(try await f.store.document(id: id))
+        stored.voiceID = samantha
+        try await f.store.update(stored)
+
+        let engine = FakeEngine(secondsPerCharacter: 0.05)
+        let player = try makePlayer(f, engine: engine)
+        player.voiceRouting = KokoroVoiceRouting.unavailable      // passes non-Kokoro IDs through
+        await player.load(try #require(try await f.store.summary(id: id)), play: false)
+        await player.coordinator.waitForRenderIdle()
+
+        await player.seek(toChapter: 1)
+        player.tick()
+        await player.settleHandoff()
+        #expect(player.coordinator.voiceHandoff == nil)
+        #expect(player.routedVoiceID == samantha)
+    }
+
     /// The fixed delivery is attached to the render, so every render key carries it and a book
     /// re-renders consistently; the reader's stored choice stays the plain voice.
     @Test func aKokoroVoiceRendersAtTheFixedDeliveryWhileTheStoredChoiceStaysPlain() async throws {

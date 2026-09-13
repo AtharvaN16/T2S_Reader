@@ -442,21 +442,32 @@ public final class PlayerModel {
     }
 
     /// The on-device engine takes over at the first chapter boundary after it is ready (cloud-first
-    /// bootstrap spec): on a chapter change while the book plays through the hosted voice, the route
-    /// is asked again, and a `kokoro:` answer hands the rest of the book to it. One question at a
-    /// time; a boundary crossed while one is in flight is caught by the next.
+    /// bootstrap spec): on a chapter change while the book is playing through anything *but* the
+    /// on-device voice, the route is asked again, and a `kokoro:` answer hands the rest of the book
+    /// to it. One question at a time; a boundary crossed while one is in flight is caught by the
+    /// next.
+    ///
+    /// The test used to be `routedVoiceID?.hasPrefix("cloud:")`, which covered only the hosted
+    /// stand-in. Open the app before the model has loaded and there is no stand-in to be had — the
+    /// route answers the system voice — so the book played in the system voice for its whole length
+    /// and never asked again. The only way out was the voice picker, where the reader found "System
+    /// default" already ticked and nothing to pick (owner, 2026-09-13). Asking "are we not on Kokoro
+    /// yet" instead covers the hosted voice, the system voice, and a Kokoro voice whose own runtime
+    /// was not ready at load — and it cannot hijack a reader who named a voice outright, because
+    /// `effectiveVoiceID` passes a named non-default voice straight through.
     private func handOffIfChapterChanged() {
         let chapter = chapterIndex
         guard chapter != lastChapter else { return }
         lastChapter = chapter
         guard let chapter, current != nil, handoffCheck == nil,
-              let requested = requestedVoiceID, routedVoiceID?.hasPrefix("cloud:") == true
+              let requested = requestedVoiceID,
+              KokoroVoiceID(rawValue: routedVoiceID ?? "") == nil
         else { return }
         handoffCheck = Task { [weak self] in
             guard let self else { return }
             let routed = await self.voiceRouting.effectiveVoiceID(requested)
             self.handoffCheck = nil
-            guard KokoroVoiceID(rawValue: routed) != nil else { return }
+            guard KokoroVoiceID(rawValue: routed) != nil, routed != self.routedVoiceID else { return }
             self.routedVoiceID = routed
             self.coordinator.handOff(to: Delivery.applied(to: routed), fromChapter: chapter)
         }

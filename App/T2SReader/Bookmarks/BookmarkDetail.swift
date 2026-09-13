@@ -110,7 +110,10 @@ struct BookmarkDetail: View {
             Button { dismiss() } label: { CircleGlyph(systemName: "chevron.left") }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Back")
-            Spacer()
+            // `minLength: 12` rather than the default 0: a long title and chapter otherwise had
+            // nothing stopping them from growing flush against the back and delete marks either
+            // side (owner, 2026-09-13).
+            Spacer(minLength: 12)
             if !bookTitle.isEmpty {
                 // The book's name, and under it in small grey type the chapter this bookmark
                 // falls in — moved up out of the meta line below the passage (owner, 2026-09-13).
@@ -128,7 +131,7 @@ struct BookmarkDetail: View {
                 }
                 .accessibilityElement(children: .combine)
             }
-            Spacer()
+            Spacer(minLength: 12)
             Button { confirmingDelete = true } label: {
                 CircleGlyph(systemName: "trash", tint: Tokens.destructive)
             }

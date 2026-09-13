@@ -1,0 +1,345 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Scope Chip — twelve ways to label it</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&display=swap">
+<style>
+:root{
+  --ground:#F8F8F7; --paper:#FFFFFF;
+  --ink:#111111; --ink2:#6E7076; --ink3:#C9C9C7; --hair:#E2E3E8;
+  --glow:#0066FF; --ready:#12A150; --warn:#C25A00; --no:#C0392B;
+  --serif:"Newsreader",Georgia,"Times New Roman",serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --app-face:"Inter",-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0E0F12; --paper:#16171B; --ink:#ECEDF0; --ink2:#94969E; --ink3:#3A3A3A;
+  --hair:#26272D; --glow:#5F84FF; --ready:#37D97C; --warn:#FFA24D; --no:#FF6B5E;}}
+:root[data-theme="dark"]{
+  --ground:#0E0F12; --paper:#16171B; --ink:#ECEDF0; --ink2:#94969E; --ink3:#3A3A3A;
+  --hair:#26272D; --glow:#5F84FF; --ready:#37D97C; --warn:#FFA24D; --no:#FF6B5E;}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--serif);font-size:17px;line-height:1.6;
+     margin:0;padding:0 20px 110px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto}
+.col{max-width:68ch}
+h1,h2,h3{text-wrap:balance;margin:0;font-weight:400}
+h1{font-size:clamp(34px,6vw,52px);line-height:1.05;letter-spacing:-.02em}
+h2{font-size:clamp(24px,3.4vw,31px);letter-spacing:-.01em;line-height:1.15}
+p{margin:0}
+ul{margin:0;padding-left:1.15em} li{margin:.2em 0}
+code{font-family:var(--mono);font-size:.78em;background:color-mix(in srgb,var(--ink) 8%,transparent);padding:.14em .4em;border-radius:3px}
+.eyebrow{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2)}
+.lede{font-size:20px;line-height:1.5;color:var(--ink2);font-weight:300}
+header{padding-block:72px 0} header .col{display:flex;flex-direction:column;gap:20px}
+.meta{font-family:var(--mono);font-size:12px;color:var(--ink2);line-height:2;border-top:1px solid var(--hair);padding-top:16px}
+.meta b{color:var(--ink);font-weight:500}
+section{padding-block:66px 0;display:flex;flex-direction:column;gap:26px}
+.shead{display:flex;flex-direction:column;gap:12px;max-width:68ch}
+.snum{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--glow);letter-spacing:.1em}
+.stack{display:flex;flex-direction:column;gap:16px;max-width:68ch}
+.callout{border-left:2px solid var(--glow);padding:2px 0 2px 18px;color:var(--ink2);max-width:68ch}
+.callout b{color:var(--ink);font-weight:500}
+.callout.warnc{border-color:var(--warn)}
+
+/* card grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:26px 24px;align-items:start}
+.card{display:flex;flex-direction:column;gap:12px;margin:0;background:var(--paper);border:1px solid var(--hair);
+      border-radius:16px;padding:16px 16px 18px}
+.card.pick{border-color:color-mix(in srgb,var(--ready) 55%,var(--hair))}
+.cname{font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.05em;color:var(--ink);
+       display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tag{font-family:var(--mono);font-weight:500;letter-spacing:.08em;font-size:9.5px;padding:2px 6px;border-radius:3px;text-transform:uppercase}
+.tag.rec{background:color-mix(in srgb,var(--ready) 18%,transparent);color:var(--ready)}
+.tag.alt{background:color-mix(in srgb,var(--glow) 16%,transparent);color:var(--glow)}
+.tag.no{background:color-mix(in srgb,var(--no) 15%,transparent);color:var(--no)}
+.tag.words{background:color-mix(in srgb,var(--ink) 8%,transparent);color:var(--ink2)}
+.cnote{font-size:14.5px;line-height:1.45;color:var(--ink2);font-family:var(--serif)}
+.cnote b{color:var(--ink);font-weight:500}
+.spec{font-family:var(--mono);font-size:10px;color:var(--ink2);line-height:1.75}
+.spec .y{color:var(--ready)} .spec .n{color:var(--no)}
+
+/* ── the bottom-bar slice ───────────────────────────────────── */
+.slice{background:#101010;border-radius:12px;padding:14px 16px 12px;font-family:var(--app-face);color:#F2F2F2;
+       user-select:none;cursor:pointer;border:1px solid transparent}
+.slice:hover{border-color:#262626}
+.slice.full{border-radius:34px 34px 12px 12px;padding:22px 20px 18px}
+.chapRow{display:flex;align-items:center;gap:6px;min-height:26px;padding-bottom:2px;font-size:16px;font-weight:500;letter-spacing:-.01em}
+.chapRow .chev{opacity:.85;font-size:14px}
+.scrubHit{padding:9px 0 5px}
+.track{display:flex;gap:3px;align-items:center;height:12px}
+.seg{height:6px;display:flex;overflow:hidden;position:relative}
+.seg .ticks{display:flex;width:100%;height:100%} .seg .ticks i{flex:1 1 0}
+.seg .ticks i.r{background:#8E8E8E} .seg .ticks i.u{background:#3A3A3A}
+.seg .played{position:absolute;inset:0 auto 0 0;background:#F2F2F2}
+.seg.zoom{height:12px;border-radius:6px}
+.clockRow{display:flex;align-items:center;gap:8px;font-size:13px;color:#8E8E8E;font-variant-numeric:tabular-nums;min-height:24px}
+.clockRow .sp{flex:1}
+.capRow{display:flex;justify-content:center;font-size:11px;color:#8E8E8E;padding-top:3px;letter-spacing:.02em}
+.transport{display:flex;align-items:center;padding-top:10px;height:58px;color:#F2F2F2}
+.transport .sp{flex:1} .transport .s{font-size:17px;color:#8E8E8E}
+.transport .mid{display:flex;align-items:center;gap:12px}
+
+/* ── chips ──────────────────────────────────────────────────── */
+.chip{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:11px;
+      background:#1E1E1E;color:#8E8E8E;font-size:11.5px;font-weight:500;letter-spacing:-.005em;white-space:nowrap;
+      transition:background .16s,color .16s}
+.chip.on{background:#2C2C2C;color:#F2F2F2}
+.chip.bare{background:none;padding:0 2px}
+.two{display:inline-flex;background:#191919;border-radius:11px;padding:2px;gap:2px}
+.two i{display:flex;align-items:center;justify-content:center;height:18px;padding:0 6px;border-radius:9px;
+       transition:background .18s,opacity .18s;opacity:.45}
+.two i.on{background:#333;opacity:1}
+
+/* glyphs, drawn the way SwiftUI would draw them (Shapes, not SF Symbols) */
+.g{display:inline-flex;align-items:center;gap:1.5px;height:12px}
+.g u{display:block;height:3px;border-radius:.5px;background:currentColor}
+.g.one u{height:3px;border-radius:1.5px;width:17px}
+.g.many u:nth-child(1){width:3px} .g.many u:nth-child(2){width:6px}
+.g.many u:nth-child(3){width:3.5px} .g.many u:nth-child(4){width:2px}
+.gr{font-size:13px;line-height:1;letter-spacing:-.04em}
+.dots{display:inline-flex;gap:4px;align-items:center}
+.dots s{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.35;text-decoration:none}
+.dots s.on{opacity:1}
+.brk{display:inline-flex;align-items:center;gap:2px;font-size:11px;line-height:1}
+table{border-collapse:collapse;font-family:var(--app-face);font-size:14px;width:100%;max-width:980px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+th{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);font-weight:500}
+td.y{color:var(--ready)} td.n{color:var(--no)} td.m{color:var(--warn)}
+.scroll{overflow-x:auto}
+.themer{position:fixed;right:16px;top:16px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+        background:var(--paper);border:1px solid var(--hair);color:var(--ink2);border-radius:20px;padding:7px 13px;cursor:pointer;z-index:9}
+.hint{font-family:var(--mono);font-size:10px;color:var(--glow);letter-spacing:.03em}
+</style>
+
+<button class="themer" id="themer">THEME</button>
+<div class="wrap">
+
+<header><div class="col">
+  <div class="eyebrow">t2s_reader · reader page · follow-up to the scope directions</div>
+  <h1>What the chip says</h1>
+  <p class="lede">Direction B, chosen — a chip below the scrubber. Twelve labels for it, from icon-only to words that never mention the book. Every card is live: click the slice to flip it.</p>
+  <div class="meta">
+    <b>Settled</b> a chip below the bar toggles the scrubber between whole-book and current-chapter scope.<br>
+    <b>Open</b> what it reads, whether it reads anything at all, and where in the row it sits.
+  </div>
+</div></header>
+
+<section>
+  <div class="shead">
+    <div class="snum">01</div>
+    <h2>Two things to settle before the wording</h2>
+  </div>
+  <div class="stack">
+    <p><b>State or destination?</b> A single chip that flips can either name where you <em>are</em> or name where tapping <em>takes you</em> — and the two read identically while saying opposite things. This is the oldest bug in toggle design, and it is unfixable by better wording: the only real cures are showing both options at once, or making the chip's own appearance change so obviously that no one has to read it as a sentence. Cards A and C below are the same chip under the two readings, so you can feel the difference.</p>
+    <p><b>The centre of the clock row is already occupied.</b> <code>ReaderPage.swift</code> overlays the status line — <em>preparing the voice…</em>, <em>catching up…</em> — across the whole clock row, deliberately centred on the row rather than between the clocks. A centred chip collides with it. So the chip goes <b>left of the elapsed clock</b> or <b>right of the remaining clock</b>, not in the middle.</p>
+  </div>
+  <div class="callout warnc"><b>Redundancy watch.</b> The chapter row directly above already reads <em>"Chp 2: Believers and Infidels"</em>. A chip that says <b>Chapter</b> repeats a word that is six points away and twice the size. That is an argument for the glyph families, or for wording that names something the row above does not — a count, a span, a shape.</div>
+</section>
+
+<section>
+  <div class="shead">
+    <div class="snum">02</div>
+    <h2>Placement</h2>
+    <p>Same chip, three homes. The clock row is 13&nbsp;pt <code>meta</code> in <code>ink2</code>; a 22&nbsp;pt pill sets the row height, which nudges the transport down by about six points unless the row is allowed to keep its height and the chip runs at 18.</p>
+  </div>
+  <div class="grid" id="placements"></div>
+</section>
+
+<section>
+  <div class="shead">
+    <div class="snum">03</div>
+    <h2>Twelve chips</h2>
+    <p>Grouped by family: glyph-only, glyph-plus-word, words that avoid "book", and the two no-chip relatives worth keeping on the table. Click any slice to flip it.</p>
+  </div>
+  <div class="grid" id="chips"></div>
+</section>
+
+<section>
+  <div class="shead">
+    <div class="snum">04</div>
+    <h2>Side by side</h2>
+  </div>
+  <div class="scroll"><table>
+    <tr><th>Chip</th><th>Reads without instruction</th><th>State/action ambiguity</th><th>Width</th><th>Repeats the chapter row</th></tr>
+    <tr><td><b>A</b> Twin bars, two-up</td><td class="y">yes — it draws both bars</td><td class="y">none, both shown</td><td class="m">~62 pt</td><td class="y">no</td></tr>
+    <tr><td><b>B</b> Twin bars, one-up</td><td class="m">after one tap</td><td class="n">real</td><td class="y">~34 pt</td><td class="y">no</td></tr>
+    <tr><td><b>C</b> Twin bars, destination</td><td class="m">after one tap</td><td class="n">real, inverted</td><td class="y">~34 pt</td><td class="y">no</td></tr>
+    <tr><td><b>D</b> Zoom brackets</td><td class="m">medium</td><td class="m">softened — arrows imply action</td><td class="y">~34 pt</td><td class="y">no</td></tr>
+    <tr><td><b>E</b> Two dots</td><td class="n">no — says "two views", not which</td><td class="m">low</td><td class="y">~30 pt</td><td class="y">no</td></tr>
+    <tr><td><b>F</b> Bars + count</td><td class="y">yes</td><td class="y">low — it's a fact, not a verb</td><td class="n">~78 pt</td><td class="m">partly</td></tr>
+    <tr><td><b>G</b> Bars + word</td><td class="y">yes</td><td class="n">real</td><td class="n">~80 pt</td><td class="n">yes</td></tr>
+    <tr><td><b>H</b> Whole / Chapter</td><td class="y">yes</td><td class="n">real</td><td class="m">~64 pt</td><td class="n">yes</td></tr>
+    <tr><td><b>I</b> All / This one</td><td class="m">medium</td><td class="n">real</td><td class="m">~62 pt</td><td class="y">no</td></tr>
+    <tr><td><b>J</b> 2 / 14</td><td class="m">medium</td><td class="y">low — a fact</td><td class="y">~44 pt</td><td class="m">partly</td></tr>
+    <tr><td><b>K</b> Span duration</td><td class="n">no — a third number beside two clocks</td><td class="y">low</td><td class="m">~58 pt</td><td class="y">no</td></tr>
+    <tr><td><b>L</b> Caption, no pill</td><td class="m">medium</td><td class="n">real</td><td class="y">n/a</td><td class="n">yes</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <div class="shead">
+    <div class="snum">05</div>
+    <h2>What I'd build</h2>
+  </div>
+  <div class="stack">
+    <p><b>A — the twin-bars two-up control, right-aligned in the clock row.</b> Two 18&nbsp;pt glyph cells in a 11&nbsp;pt-radius trough: on the left, four short bars with gaps; on the right, one unbroken rounded bar. The lit one is the scope you are in. It is not an icon standing for the idea of a book — it is a miniature of the bar it switches to, six points under the bar itself, so the pairing is read rather than learned.</p>
+    <p>It answers your objection directly: it never says <b>Book</b>, or any word at all, so it cannot repeat the chapter title above it or make anyone wonder whether "Book" is where they are or where they're going. Both states are visible, so the state-versus-action trap closes. And it is the one option whose meaning improves rather than decays when the bar beside it changes shape.</p>
+    <p><b>If you want a single chip instead of two cells</b>, take <b>J — <code>2 / 14</code></b> over any of the word pairs. It states a fact rather than issuing a label, so the state/action ambiguity mostly dissolves; in book scope it reads <code>14 chapters</code> and in chapter scope <code>2 / 14</code>. It is the only worded option that tells you something the row above doesn't.</p>
+    <p><b>Cost either way:</b> the accessibility label has to carry what the glyph won't — "Scrubber scope, whole book" / "Scrubber scope, chapter 2 of 14" — and it needs a real <code>accessibilityValue</code> on the scrubber itself, since "42 percent" means two different things depending on this control.</p>
+  </div>
+</section>
+
+<section>
+  <div class="shead">
+    <div class="snum">06</div>
+    <h2>Still open</h2>
+  </div>
+  <div class="stack"><ul>
+    <li><b>Does the chip animate the bar between scopes</b>, or hard-cut? The bar already springs at 0.25&nbsp;s when a chapter widens under the finger — reusing that curve to grow the current chapter out to full width would make the two views obviously the same bar.</li>
+    <li><b>Chapterless books</b> (PDF, plain text) draw one unbroken bar already. The chip should hide, not disable — there is nothing to switch.</li>
+    <li><b>One chapter only?</b> Same answer as above: hide.</li>
+    <li><b>Left or right of the clocks.</b> Right sits under the render frontier's far end and next to the number that changes most; left sits under the played portion. Section 02 has both.</li>
+    <li><b>Dynamic Type.</b> At the larger accessibility sizes a 22&nbsp;pt pill and two clocks will not share a line. Does the chip wrap to its own row, or drop to the glyph-only form?</li>
+  </ul></div>
+</section>
+
+</div>
+
+<script>
+/* ── fake book, same numbers as the directions doc ─────────── */
+const W=[3600,9000,5400,7200,4200,6600,5100,8400,3900,7800,6000,5700,9300,5454];
+const TOTAL=W.reduce((a,b)=>a+b,0), PLAYHEAD=9820, TICKS=48;
+const SPANS=(()=>{let t=0;return W.map(w=>{const s=t/TOTAL;t+=w;return [s,t/TOTAL];});})();
+const CUR=SPANS.findIndex(([a,b])=>PLAYHEAD/TOTAL>=a&&PLAYHEAD/TOTAL<b);
+const rendered=f=>(f<0.132)||(f>0.615&&f<0.672)||(f>0.79&&f<0.806);
+const clock=s=>{s=Math.round(Math.abs(s));const h=(s/3600)|0,m=((s%3600)/60)|0,x=s%60;
+  const p=n=>String(n).padStart(2,'0');return h?`${h}:${p(m)}:${p(x)}`:`${m}:${p(x)}`;};
+const hm=s=>{const h=(s/3600)|0,m=Math.round((s%3600)/60);return h?`${h}h ${m}m`:`${m}m`;};
+
+function segHTML(a,b,n){const len=Math.max(b-a,1e-9),f=PLAYHEAD/TOTAL;
+  const played=Math.min(1,Math.max(0,(f-a)/len));let t='';
+  for(let i=0;i<n;i++){const ff=a+(i+0.5)/n*len;t+=`<i class="${rendered(ff)?'r':'u'}"></i>`;}
+  return `<div class="ticks">${t}</div><div class="played" style="width:${played*100}%"></div>`;}
+function track(scope){
+  if(scope==='chapter'){const [a,b]=SPANS[CUR];
+    return `<div class="track"><div class="seg zoom" style="flex:1">${segHTML(a,b,TICKS)}</div></div>`;}
+  return `<div class="track">${SPANS.map(([a,b])=>
+    `<div class="seg" style="flex:${b-a} 1 0">${segHTML(a,b,Math.max(1,Math.round((b-a)*TICKS)))}</div>`).join('')}</div>`;}
+function times(scope){
+  if(scope==='chapter'){const [a,b]=SPANS[CUR];return [clock(PLAYHEAD-a*TOTAL),'-'+clock(b*TOTAL-PLAYHEAD)];}
+  return [clock(PLAYHEAD),'-'+clock(TOTAL-PLAYHEAD)];}
+
+/* ── glyph atoms ───────────────────────────────────────────── */
+const gMany=`<span class="g many"><u></u><u></u><u></u><u></u></span>`;
+const gOne =`<span class="g one"><u></u></span>`;
+
+/* ── the twelve chips ──────────────────────────────────────── */
+const CHIPS={
+  A:s=>`<span class="two"><i class="${s==='book'?'on':''}">${gMany}</i><i class="${s==='chapter'?'on':''}">${gOne}</i></span>`,
+  B:s=>`<span class="chip on">${s==='book'?gMany:gOne}</span>`,
+  C:s=>`<span class="chip">${s==='book'?gOne:gMany}</span>`,
+  D:s=>`<span class="chip on"><span class="gr">${s==='book'?'›&#8202;▬&#8202;‹':'‹&#8202;▬&#8202;›'}</span></span>`,
+  E:s=>`<span class="chip on"><span class="dots"><s class="${s==='book'?'on':''}"></s><s class="${s==='chapter'?'on':''}"></s></span></span>`,
+  F:s=>`<span class="chip on">${s==='book'?gMany+'14 chapters':gOne+'Chapter 2'}</span>`,
+  G:s=>`<span class="chip on">${s==='book'?gMany+'Whole':gOne+'Chapter'}</span>`,
+  H:s=>`<span class="chip on">${s==='book'?'Whole':'Chapter'}</span>`,
+  I:s=>`<span class="chip on">${s==='book'?'All':'This one'}</span>`,
+  J:s=>`<span class="chip on">${s==='book'?'14 chapters':'2 / 14'}</span>`,
+  K:s=>`<span class="chip on">${s==='book'?hm(TOTAL):hm(W[CUR])}</span>`,
+  L:s=>``,
+};
+const CARDS=[
+ {k:'A',cls:'pick',tag:'<span class="tag rec">recommended</span><span class="tag words">glyph</span>',
+  t:'TWIN BARS, TWO-UP',
+  n:'Two glyph cells in one trough — four short bars for the book, one unbroken bar for the chapter. The lit cell is where you are. <b>It is a miniature of the bar it switches to</b>, sitting six points under that bar, so nothing has to be learned or read.',
+  s:'<span class="y">+</span> no word to misread · both states visible, so no state/action trap<br><span class="y">+</span> cannot repeat the chapter title above it<br><span class="n">−</span> widest of the glyph options (~62 pt)'},
+ {k:'B',tag:'<span class="tag words">glyph</span>',t:'TWIN BARS, ONE-UP — SHOWS STATE',
+  n:'The same glyph pair, but only one cell: it shows the scope you are <b>currently in</b>. Half the width. Tapping swaps the glyph, which is a satisfying little confirmation — but only if you read it as state.',
+  s:'<span class="y">+</span> compact, quiet, wordless<br><span class="n">−</span> the state/action ambiguity is live; see C'},
+ {k:'C',tag:'<span class="tag no">the trap</span>',t:'TWIN BARS, ONE-UP — SHOWS DESTINATION',
+  n:'Identical pixels to B, opposite meaning: this one shows <b>where tapping takes you</b>. Flip both and notice you cannot tell which convention a chip is using without trying it. This card exists to be rejected — but the choice has to be made deliberately, not by accident.',
+  s:'<span class="n">−</span> indistinguishable from B until tapped<br><span class="n">−</span> half your users will read it the other way'},
+ {k:'D',tag:'<span class="tag alt">glyph</span>',t:'ZOOM BRACKETS',
+  n:'Brackets closing in on a bar, or opening out from it — the zoom metaphor, stated as an action rather than a state. Arrows read as verbs, which quietly sidesteps the ambiguity: nobody asks whether a "zoom in" button means "you are zoomed in".',
+  s:'<span class="y">+</span> action semantics dodge the state/action trap<br><span class="m">~</span> at 11 pt the brackets get delicate<br><span class="n">−</span> zoom is a map idea; this is a timeline'},
+ {k:'E',tag:'<span class="tag no">glyph</span>',t:'TWO DOTS',
+  n:'Page dots: two of them, the filled one is the view you are on. The quietest thing on the page and the least informative — it tells you there are two views and nothing whatsoever about what either one is.',
+  s:'<span class="y">+</span> tiny, familiar from page control<br><span class="n">−</span> carries no meaning, only a count<br><span class="n">−</span> dots usually mean swipe, and this does not swipe'},
+ {k:'F',tag:'<span class="tag words">hybrid</span>',t:'BARS + COUNT',
+  n:'Glyph plus a fact: <b>14 chapters</b> when the bar spans all of them, <b>Chapter 2</b> when it spans one. Reads without instruction and states rather than commands — but at ~78 pt it is a wide object to park beside a clock, and "Chapter 2" restates the row above.',
+  s:'<span class="y">+</span> unambiguous on first sight<br><span class="n">−</span> widest option · partly repeats the chapter row'},
+ {k:'G',tag:'<span class="tag words">hybrid</span>',t:'BARS + WORD',
+  n:'<b>Whole</b> / <b>Chapter</b> with the matching glyph. The glyph does the explaining and the word does the naming — belt and braces. The cost is that it is the most chrome of the twelve, in the app\'s quietest row, for a control most people will touch twice.',
+  s:'<span class="y">+</span> impossible to misunderstand<br><span class="n">−</span> loud · repeats the chapter title'},
+ {k:'H',tag:'<span class="tag words">words</span>',t:'WHOLE / CHAPTER',
+  n:'The straight word pair with <b>Book</b> swapped for <b>Whole</b> — which is what you asked for, and it does read better: "whole" is about extent, and extent is exactly what is changing. Still says "Chapter" directly under a line that says "Chp 2".',
+  s:'<span class="y">+</span> plainest possible reading<br><span class="n">−</span> full state/action ambiguity · echoes the row above'},
+ {k:'I',tag:'<span class="tag words">words</span>',t:'ALL / THIS ONE',
+  n:'Deictic rather than nominal: it points instead of naming, so it never has to pick between "book", "title", and "audiobook". <b>This one</b> leans on the chapter row above for its referent, which is either elegant economy or a sentence with its subject missing, depending on the reader.',
+  s:'<span class="y">+</span> avoids naming the container entirely<br><span class="n">−</span> "this one" is ambiguous out of context'},
+ {k:'J',cls:'pick',tag:'<span class="tag rec">best single chip</span><span class="tag words">words</span>',
+  t:'2 / 14',
+  n:'A count, not a label: <b>14 chapters</b> when the bar covers them all, <b>2 / 14</b> when it covers one. Because it states a fact rather than issuing a command, the state/action question mostly evaporates — and it is the only worded option that tells you something the chapter row does not, namely how much book is left in chapters rather than hours.',
+  s:'<span class="y">+</span> facts read as state, not as buttons<br><span class="y">+</span> adds information instead of repeating it<br><span class="n">−</span> a third numeral in a row of numerals'},
+ {k:'K',tag:'<span class="tag no">words</span>',t:'SPAN DURATION',
+  n:'The chip states how much time the bar covers — <b>24h 21m</b> or <b>2h 30m</b>. Conceptually the purest description of what changes. In place it is a disaster: a third number sitting between two clocks, in the same colour and the same tabular figures, inviting everyone to read it as a time.',
+  s:'<span class="y">+</span> describes the change exactly<br><span class="n">−</span> numerically indistinguishable from its neighbours'},
+ {k:'L',tag:'<span class="tag alt">no pill</span>',t:'CAPTION, NO PILL',
+  n:'Not a chip at all: a centred <code>caption</code>-sized word under the clocks, tappable, no background. The lightest possible touch — and the least obviously interactive; it looks like a label, so it will be read as one. Also lands on the one line the status overlay wants.',
+  s:'<span class="y">+</span> nearly weightless<br><span class="n">−</span> reads as a label, not a control<br><span class="n">−</span> collides with the status line\'s centre'},
+];
+
+/* ── rendering ─────────────────────────────────────────────── */
+function slice(kind,scope,{place='right',full=false}={}){
+  const [L,R]=times(scope);
+  const c = CHIPS[kind] ? CHIPS[kind](scope) : '';
+  let row;
+  if(kind==='L'){
+    row = `<div class="clockRow">${L}<span class="sp"></span>${R}</div>
+           <div class="capRow"><u style="text-decoration:none;border-bottom:1px dotted #444">${scope==='book'?'whole book':'chapter 2'}</u></div>`;
+  } else if(place==='left'){
+    row = `<div class="clockRow">${c}${L}<span class="sp"></span>${R}</div>`;
+  } else if(place==='center'){
+    row = `<div class="clockRow">${L}<span class="sp"></span>${c}<span class="sp"></span>${R}</div>`;
+  } else {
+    row = `<div class="clockRow">${L}<span class="sp"></span>${R}${c}</div>`;
+  }
+  const chap = `<div class="chapRow">Chp 2: Believers and Infidels <span class="chev">›</span></div>`;
+  const tr = full ? `<div class="transport"><span class="s">☾</span><span class="sp"></span>
+      <span class="mid"><span style="font-size:22px">↺15</span><span style="font-size:32px">▶</span><span style="font-size:22px">↻30</span></span>
+      <span class="sp"></span><span class="s" style="font-size:15px">1x</span></div>` : '';
+  return chap + `<div class="scrubHit">${track(scope)}</div>` + row + tr;
+}
+function paint(el){
+  el.innerHTML = slice(el.dataset.chip, el.dataset.scope, {place:el.dataset.place, full:el.dataset.full==='1'});
+}
+function card({k,t,n,s,cls,tag},place='right',full=false){
+  return `<figure class="card ${cls||''}">
+    <div class="cname">${k} · ${t} ${tag||''}</div>
+    <div class="slice ${full?'full':''}" data-chip="${k}" data-scope="book" data-place="${place}" data-full="${full?1:0}"></div>
+    <p class="cnote">${n}</p>
+    <div class="spec">${s}</div>
+    <div class="hint">click to flip</div>
+  </figure>`;
+}
+
+const PLACES=[
+  {p:'right',  t:'RIGHT OF THE REMAINING CLOCK', n:'Next to the number that changes most, and under the far end of the render frontier. The chip and the countdown rescope together in the same glance.', s:'<span class="y">+</span> effect adjacent to control<br><span class="m">~</span> right edge is also the thumb\'s reach on a large phone'},
+  {p:'left',   t:'LEFT OF THE ELAPSED CLOCK',    n:'Under the played part of the bar, at the margin where the sleep-timer glyph sits one row down. Reads as a prefix to the line — "in this chapter: 1:43:40".', s:'<span class="y">+</span> scans as a label for the whole row<br><span class="m">~</span> pushes the elapsed clock off the left margin'},
+  {p:'center', t:'CENTRED', n:'The obvious home, and the one that is taken: <code>ReaderPage.swift</code> overlays <em>catching up…</em> and <em>preparing the voice…</em> across the centre of this exact row. Shown so the collision is visible rather than theoretical.', s:'<span class="n">−</span> collides with the status overlay<br><span class="n">−</span> status is centred on the row, not between the clocks'},
+];
+document.getElementById('placements').innerHTML = PLACES.map(x=>card(
+  {k:'A',t:x.t,n:x.n,s:x.s,cls:x.p==='center'?'':'',tag:x.p==='center'?'<span class="tag no">taken</span>':''},x.p,true)).join('');
+document.getElementById('chips').innerHTML = CARDS.map(c=>card(c,'right',false)).join('');
+document.querySelectorAll('.slice').forEach(paint);
+
+document.addEventListener('click',e=>{
+  const s=e.target.closest('.slice'); if(!s) return;
+  s.dataset.scope = s.dataset.scope==='chapter' ? 'book' : 'chapter';
+  paint(s);
+});
+document.getElementById('themer').onclick=()=>{const r=document.documentElement;
+  r.dataset.theme = r.dataset.theme==='dark' ? 'light' : 'dark';};
+</script>

@@ -134,6 +134,10 @@ struct RootPager: View {
         }
         .environment(chrome)
         .background(Tokens.ground.ignoresSafeArea())
+        // The held-queue notice, over whichever page is up. Drawn by each layer that can be
+        // frontmost — the Reader and the book sheet have their own — because it is a card in a
+        // stack, not a `.sheet`, and a stack only covers what is under it.
+        .renderHoldSheet()
         .appTheme()
         .onOpenURL { url in
             if let id = LibraryHandoff.documentID(from: url) {
@@ -147,6 +151,7 @@ struct RootPager: View {
             ImportPage(imported: $pendingOpen, initialFiles: openedFiles ?? [])
         }
         .fullScreenCover(item: $readerDocument, onDismiss: refreshHome) { ReaderPage(summary: $0) }
+
         .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation, nowPlaying: env.nowPlaying)
         .task {
             await env.libraryModel.refresh()

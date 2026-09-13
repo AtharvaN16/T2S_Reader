@@ -15,6 +15,10 @@ import SwiftUI
 struct BottomFade: View {
     /// How far the ramp runs above the solid ground.
     var fade: CGFloat = fadeHeight
+    /// What it fades *to*. `ground` is the page's, and every root page and pushed page wants that;
+    /// a sheet stands on `raised`, and a ramp to the wrong grey is a visible band across the foot
+    /// of the sheet rather than a fade (owner, 2026-09-13: the book sheet's render bar).
+    var color: Color = Tokens.ground
 
     /// 72 pt: a little over a key's height, which is the shortest ramp that still reads as a fade
     /// rather than a soft edge. The root pager's own is 180 because it has a mini-player's band to
@@ -23,9 +27,9 @@ struct BottomFade: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            LinearGradient(stops: Self.stops(), startPoint: .top, endPoint: .bottom)
+            LinearGradient(stops: Self.stops(color: color), startPoint: .top, endPoint: .bottom)
                 .frame(height: fade)
-            Tokens.ground
+            color
         }
         // Negative padding, so the ramp sits *above* the bar it backs: the child is proposed the
         // bar's height plus `fade` and placed `fade` higher, which puts `Tokens.ground` exactly
@@ -49,13 +53,13 @@ struct BottomFade: View {
     /// - Parameter fadeEnd: where the ramp finishes, as a fraction of the gradient's own height.
     ///   1 when the gradient is only the ramp (this view); less when the caller draws ramp and
     ///   solid ground as one gradient (`RootPager.bottomFill`).
-    static func stops(fadeEnd: Double = 1, steps: Int = 12) -> [Gradient.Stop] {
+    static func stops(color: Color = Tokens.ground, fadeEnd: Double = 1, steps: Int = 12) -> [Gradient.Stop] {
         var stops = (0...steps).map { i -> Gradient.Stop in
             let t = Double(i) / Double(steps)
             let eased = pow(t * t * (3 - 2 * t), 2)
-            return .init(color: Tokens.ground.opacity(eased), location: fadeEnd * t)
+            return .init(color: color.opacity(eased), location: fadeEnd * t)
         }
-        if fadeEnd < 1 { stops.append(.init(color: Tokens.ground, location: 1)) }
+        if fadeEnd < 1 { stops.append(.init(color: color, location: 1)) }
         return stops
     }
 }

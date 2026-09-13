@@ -90,6 +90,12 @@ public final class ChapterRenderRunner {
     /// can keep reporting what became of it; ``cancelAll()`` is what clears the list.
     public private(set) var queue: [ChapterRenderJob] = []
     public private(set) var hold: Hold?
+    /// Whether the reader has already put this hold's notice away. The notice is app-wide now — it
+    /// is drawn over whatever is frontmost, not only inside the book sheet — so it needs a way to
+    /// be dismissed that is not "fix the phone", and the flag belongs with the hold rather than in
+    /// one of the three views that draw it. Cleared whenever the hold changes, so a second reason
+    /// to stop is a second notice.
+    public private(set) var holdNoticeDismissed = false
     /// The last drain's tally, for the toast. Nil until one drain has finished with work in it.
     public private(set) var lastCompletion: Completion?
 
@@ -243,9 +249,17 @@ public final class ChapterRenderRunner {
         return nil
     }
 
+    /// The reader has read the notice. Only the notice goes: the queue stays held, and a new hold
+    /// — or the same one arriving again after it lifted — says so again.
+    public func dismissHoldNotice() { holdNoticeDismissed = true }
+
     /// A hold is a queue stopped with work still in it, so an empty queue is never held: a phone
     /// that happens to be hot must not make the sheet claim it is holding something back.
-    private func updateHold() { hold = isWorking ? blockingHold : nil }
+    private func updateHold() {
+        let next = isWorking ? blockingHold : nil
+        if next != hold { holdNoticeDismissed = false }
+        hold = next
+    }
 
     /// The scheduler is an actor and this is the main one, so the cancellation is a hop away; the
     /// utterance already in the engine finishes and is stored, and nothing after it starts.

@@ -118,4 +118,38 @@ import T2SCore
         #expect(runner.queue[1].state == .queued)
         #expect(await engine.requests.count == 2)
     }
+
+    /// The notice is app-wide now, so it is dismissible — and a dismissal must not be permanent.
+    /// It covers the hold it was shown for; the next reason to stop says so again.
+    @Test func dismissingTheHoldNoticeLastsOnlyAsLongAsThatHold() async throws {
+        let fixtures = try AppFixtures()
+        let id = try await fixtures.importFake()
+        let engine = FakeEngine(secondsPerCharacter: 0.01)
+        let runner = makeRunner(fixtures, engine: engine)
+        let hot = DeviceState(charging: false, thermalSerious: true, lowPowerMode: false, storeFull: false)
+
+        runner.deviceStateChanged(hot)
+        await runner.enqueue(documentID: id, chapters: [0])
+        #expect(runner.hold == .hot)
+        #expect(!runner.holdNoticeDismissed)
+
+        runner.dismissHoldNotice()
+        #expect(runner.holdNoticeDismissed)
+        // Another report of the same heat is not a new reason to stop: the notice stays away.
+        runner.deviceStateChanged(hot)
+        #expect(runner.hold == .hot)
+        #expect(runner.holdNoticeDismissed)
+
+        // The heat lifts, the queue drains, and a second batch meets it again — a new notice.
+        runner.deviceStateChanged(.unplugged)
+        await runner.awaitDrain()
+        #expect(runner.hold == nil)
+        #expect(!runner.holdNoticeDismissed)
+
+        runner.dismissHoldNotice()
+        runner.deviceStateChanged(hot)
+        await runner.enqueue(documentID: id, chapters: [1])
+        #expect(runner.hold == .hot)
+        #expect(!runner.holdNoticeDismissed)
+    }
 }

@@ -141,19 +141,35 @@ struct BookSheet: View {
                 Task { await refreshAudio() }
             }
             .safeAreaInset(edge: .bottom) {
-                // Only once something is picked: an inert bar at the foot of a list of ready
-                // chapters would be a permanent invitation to nothing.
-                if isRendering, !selection.isEmpty {
-                    BarButton(label: "Start rendering (\(selection.count))", action: startRendering)
-                        .padding(.horizontal, Spacing.margin)
-                        .padding(.bottom, Spacing.grid)
-                        .background(Tokens.raised)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                // The bar is up for as long as render mode is, and it is the way out of it: with
+                // nothing picked it reads "Done". It used to appear only once something was picked
+                // — an inert bar at the foot of a list of ready chapters is a permanent invitation
+                // to nothing — but that left the reader who had just pressed Start with the bar
+                // gone, the rows still wearing their marks, and no exit but a `Done` buried in the
+                // `⋯` (owner, 2026-09-13: "there is no way to exit the render mode"). "Done" is not
+                // an invitation to nothing; it is the answer to the question the mode is asking.
+                if isRendering {
+                    BarButton(label: selection.isEmpty ? "Done" : "Start rendering (\(selection.count))") {
+                        if selection.isEmpty { endRendering() } else { startRendering() }
+                    }
+                    .padding(.horizontal, Spacing.margin)
+                    // Air over the key, and the list fading out under it rather than being cut off
+                    // at a straight grey line (owner, 2026-09-13). `BottomFade` is the same ramp
+                    // the root pages and the voice sheet's commit bar use — in `raised`, which is
+                    // the grey this sheet stands on.
+                    .padding(.top, Spacing.grid * 2)
+                    .padding(.bottom, Spacing.grid)
+                    .background { BottomFade(color: Tokens.raised) }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
         }
         .background(Tokens.raised)
         .presentationCornerRadius(Spacing.sheetCorner)
+        // The book sheet is the likeliest thing to be frontmost when the queue holds — it is where
+        // the chapters were just picked — and it owns the one `.sheet` slot, so the notice is drawn
+        // here rather than presented over it.
+        .renderHoldSheet()
         // A page over the sheet, not a sheet over a sheet: it is the same `BookmarksPage` the
         // Reader opens, so a bookmark reads and behaves the same whichever way you came at it.
         .fullScreenCover(isPresented: $showBookmarks) {
@@ -221,10 +237,7 @@ struct BookSheet: View {
             // In and out by the same door: render mode was entered from here, so it is left from
             // here too, rather than by closing the sheet on the reader who only wanted a look.
             Button {
-                withAnimation(.snappy) {
-                    isRendering.toggle()
-                    if !isRendering { selection.removeAll() }
-                }
+                if isRendering { endRendering() } else { withAnimation(.snappy) { isRendering = true } }
             } label: {
                 Label(isRendering ? "Done" : "Render chapters",
                       systemImage: isRendering ? "checkmark" : "waveform")
@@ -237,39 +250,17 @@ struct BookSheet: View {
     }
 
     /// What sits above the chapter list in render mode: this book's own total — not the whole
-    /// cache, which Settings → Storage keeps — with the one control that undoes it, and, when the
-    /// queue has stopped with work still in it, why.
-    @ViewBuilder private var renderBanner: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .center, spacing: 12) {
-                Text(audio.summary).typeRole(.meta).foregroundStyle(Tokens.ink2)
-                Spacer(minLength: 8)
-                if audio.hasAudio {
-                    Pill(label: "Evict all", glyph: "trash", style: .destructiveSoft, action: evictAll)
-                }
-            }
-            if let hold = env.chapterRenderer.hold { holdNotice(hold) }
-        }
-    }
-
-    /// A held queue says so where the queue is: the sheet is where this lives, and a reader who
-    /// picked four chapters and saw nothing happen is owed the reason on the same screen.
-    @ViewBuilder private func holdNotice(_ hold: ChapterRenderRunner.Hold) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(hold == .hot
-                 ? "Paused: the phone is warm. Rendering picks up on its own once it cools."
-                 : "Paused: there is no room left for audio. Free some in Settings → Storage.")
-                .typeRole(.meta).foregroundStyle(Tokens.ink)
-                .fixedSize(horizontal: false, vertical: true)
-            // Heat is the reader's call to overrule; a full store is not. The override lapses when
-            // the queue drains, so it never quietly becomes the setting.
-            if hold == .hot {
-                Pill(label: "Continue anyway", style: .soft) { env.chapterRenderer.continueAnyway() }
+    /// cache, which Settings → Storage keeps — with the one control that undoes it. Why a held
+    /// queue has stopped was here too until 2026-09-13; it is `RenderHoldSheet` now, app-wide and
+    /// up from the foot, because at the top of this sheet nobody ever saw it.
+    private var renderBanner: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(audio.summary).typeRole(.meta).foregroundStyle(Tokens.ink2)
+            Spacer(minLength: 8)
+            if audio.hasAudio {
+                Pill(label: "Evict all", glyph: "trash", style: .destructiveSoft, action: evictAll)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(Tokens.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     /// This book's jobs, by chapter. The queue is the whole app's, so another book's chapters are
@@ -308,6 +299,16 @@ struct BookSheet: View {
         let picked = selection.sorted()
         withAnimation(.snappy) { selection.removeAll() }
         Task { await env.chapterRenderer.enqueue(documentID: live.id, chapters: picked) }
+    }
+
+    /// Leaves render mode: the marks come off the rows, the bookmarks come back, and the bar goes.
+    /// Nothing is stopped by it — the queue is the app's and outlives this sheet — so a reader who
+    /// has started four chapters can close the mode and watch them arrive on the rows underneath.
+    private func endRendering() {
+        withAnimation(.snappy) {
+            isRendering = false
+            selection.removeAll()
+        }
     }
 
     private func evict(chapter: Int) {

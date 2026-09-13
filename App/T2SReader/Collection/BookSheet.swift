@@ -47,6 +47,8 @@ struct BookSheet: View {
     @State private var selection: Set<Int> = []
     /// What this book has on the device, chapter by chapter. Re-read whenever it can have changed.
     @State private var audio = BookAudioStatus()
+    /// The `⋯`'s Delete, asked for confirmation before `AppEnvironment.deleteDocument` runs.
+    @State private var confirmDelete = false
 
     private static let heroHeight: CGFloat = 200
 
@@ -162,6 +164,18 @@ struct BookSheet: View {
         }
         .onChange(of: shouldTilt, initial: true) { _, on in motion.setEnabled(on) }
         .onDisappear { motion.setEnabled(false) }
+        .confirmationDialog("Delete “\(live.document.title)”?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete from this device", role: .destructive) {
+                Task { await env.deleteDocument(live.id); dismiss() }
+            }
+            if env.syncModel.isEnabled {
+                Button("Delete everywhere", role: .destructive) {
+                    Task { await env.deleteDocument(live.id, everywhere: true); dismiss() }
+                }
+            }
+        } message: {
+            Text(env.syncModel.isEnabled ? AppEnvironment.deleteMessageWithSync : AppEnvironment.deleteMessage)
+        }
     }
 
     /// Lands the eye on where the book picks up (owner, 2026-09-11): centres the resume chapter —
@@ -215,6 +229,7 @@ struct BookSheet: View {
                 Label(isRendering ? "Done" : "Render chapters",
                       systemImage: isRendering ? "checkmark" : "waveform")
             }
+            Button(role: .destructive) { confirmDelete = true } label: { Label("Delete", systemImage: "trash") }
         } label: {
             CircleGlyph(systemName: "ellipsis")
         }

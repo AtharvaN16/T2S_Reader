@@ -47,7 +47,7 @@ enum Tokens {
     /// not change colour when the room does — but a touch lighter on black so its bevel still reads.
     static let keyTop = dynamic(light: 0x5477FF, dark: 0x5F81FF)
     static let keyBottom = dynamic(light: 0x2A1FE0, dark: 0x3226E8)
-    /// The ink key — the bar at the foot of an Import step, the Voice page's "Make default", the
+    /// The ink key — the bar at the foot of an Import step, the Voice page's confirm key, the
     /// Reader's skip pill — as a raised key (owner, 2026-09-10: "replace the black buttons with
     /// skeuomorphic versions"). Light: black, with a lighter top face. Dark: *not* the inversion
     /// `ink` would give (a white key on a black page was the one thing the owner was sure they did

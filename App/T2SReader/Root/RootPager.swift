@@ -38,6 +38,11 @@ enum RootPage: Hashable, CaseIterable {
     /// title contains `T2S_BOOK`, else the first document. Screenshots only.
     static var launchOpen: String? { ProcessInfo.processInfo.environment["T2S_OPEN"] }
 
+    /// `T2S_VOICE=pending`: the voice list opens with a radio already moved off the voice in
+    /// effect, which is the only way a script-driven simulator can see the commit bar — the bar is
+    /// raised by a tap, and nothing here can tap. Screenshots only, like the rest.
+    static var launchPendingVoice: Bool { ProcessInfo.processInfo.environment["T2S_VOICE"] == "pending" }
+
     /// `T2S_SEED=1`: at launch, when the library holds no web page and no pasted text, import one
     /// of each (built in place, no network) and put them on Home — a script-driven simulator
     /// cannot type into the Import steps, and the sheet placeholders need something to stand for.
@@ -366,16 +371,10 @@ struct RootPager: View {
         let solid = PageIndicator.height + Spacing.grid + inset
         let height = Self.fadeHeight + solid
         let fadeEnd = Self.fadeHeight / height
-        // An eased ramp, not a straight one: a linear fade that stops dead at solid has a kink
-        // the eye reads as a line across the screen (a Mach band). Smoothstep squared starts and
-        // ends with zero slope, and keeps the lower half of the fade light so the page shows.
-        let steps = 12
-        var stops = (0...steps).map { i -> Gradient.Stop in
-            let t = Double(i) / Double(steps)
-            let eased = pow(t * t * (3 - 2 * t), 2)
-            return .init(color: Tokens.ground.opacity(eased), location: fadeEnd * t)
-        }
-        stops.append(.init(color: Tokens.ground, location: 1))
+        // The app's one bottom ramp (`BottomFade`), drawn here as part of a single gradient
+        // because this fill carries the page row's solid band and the home-indicator inset under
+        // it as well; the sheets get the same curve from the view.
+        let stops = BottomFade.stops(fadeEnd: fadeEnd)
         // Ground only. The rim that goes over it — this fill is opaque exactly where the glow is
         // brightest, and painting under it puts the foot of the light out (owner, 2026-09-12) — is
         // a sibling in `body`, drawn after this.

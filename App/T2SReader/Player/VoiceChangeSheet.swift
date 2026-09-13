@@ -6,11 +6,12 @@ import T2SStore
 /// off the document's voice. Changing invalidates rendered audio because render keys include the
 /// voice identifier — the line above the bar says how much.
 ///
-/// **Two keys, not one** (owner, 2026-09-12). "Done" changes this book and leaves Settings alone.
-/// "Make default" changes this book *and* every book that has not been given a voice of its own —
-/// it moves `defaultVoiceID` and then clears this document's override, so the book goes back to
-/// following Settings rather than pinning a copy of the new default. Choosing the voice that wears
-/// the "Default" tag stores no override either way.
+/// **One key and a scope tick** (owner, 2026-09-12). The key on its own changes this book and
+/// leaves Settings alone. Ticked, it changes this book *and* every book that has not been given a
+/// voice of its own — it moves `defaultVoiceID` and then clears this document's override, so the
+/// book goes back to following Settings rather than pinning a copy of the new default. Choosing the
+/// voice that wears the "Default" tag stores no override either way. It was two keys for a day, and
+/// `VoiceListPage` carries why that was the wrong shape for a question about scope.
 ///
 /// **Both keys resume.** The change pauses the player to throw the rendered audio away and reload;
 /// before today it left it paused, and a listener who swapped voices mid-chapter had to find the
@@ -27,31 +28,34 @@ struct VoiceChangeSheet: View {
     var body: some View {
         VoiceListPage(
             current: summary.document.voiceID,
-            confirmLabel: "Done",
+            // The voice's name, not "Done": the press applies a change and throws rendered audio
+            // away, and the sheet's drag indicator is what closes it without doing either.
+            confirmLabel: { "Use \($0.name)" },
             note: { _ in
                 discardedSeconds > 0
                     ? "Replaces \(DurationFormatter.long(discardedSeconds)) of rendered audio; it renders again with the new voice."
                     : nil
             },
-            onConfirm: { option in
-                let resolved = await resolvedDefaultID()
-                let voiceID: String? = option.id == resolved ? nil : option.id
-                let applied = await env.voiceChange.apply(voiceID: voiceID, to: summary, resumingPlayback: true)
-                if applied { dismiss() }
-                return applied
-            },
-            secondaryLabel: "Make default",
-            onSecondary: { option in
-                env.preferences.defaultVoiceID = option.id
-                // `force`: the override is cleared to nil, and for a book that was already
-                // following the old default that is no change to the stored value — but the voice
-                // it speaks in has changed, so the audio still has to go. The bar is only on screen
-                // when the effective voice is moving, so forcing here is never a wasted eviction.
-                let applied = await env.voiceChange.apply(voiceID: nil, to: summary,
+            onConfirm: { option, alsoDefault in
+                let applied: Bool
+                if alsoDefault {
+                    env.preferences.defaultVoiceID = option.id
+                    // `force`: the override is cleared to nil, and for a book that was already
+                    // following the old default that is no change to the stored value — but the
+                    // voice it speaks in has changed, so the audio still has to go. The bar is only
+                    // on screen when the effective voice is moving, so forcing here is never a
+                    // wasted eviction.
+                    applied = await env.voiceChange.apply(voiceID: nil, to: summary,
                                                           resumingPlayback: true, force: true)
+                } else {
+                    let resolved = await resolvedDefaultID()
+                    let voiceID: String? = option.id == resolved ? nil : option.id
+                    applied = await env.voiceChange.apply(voiceID: voiceID, to: summary, resumingPlayback: true)
+                }
                 if applied { dismiss() }
                 return applied
             },
+            alsoDefaultLabel: { "Also make \($0.name) my default voice" },
             showsFavorites: false
         )
         .background(Tokens.ground)

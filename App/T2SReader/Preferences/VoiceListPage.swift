@@ -7,23 +7,33 @@ import T2SApp
 /// name carries a ♀ / ♂ mark and, on the voice that plays by default, a "Default" tag; the old
 /// "Default" pointer row is gone with it. Three marks at the end of every row, each its own verb:
 /// a waveform (hear), a heart (keep), a radio (choose). Choosing moves the radio and slides a bar
-/// up from the foot — one key, "Make default", in Settings; two, "Make default" and "Done", for a
-/// document — so nothing applies until a key is pressed and nothing needs a mode. Sections by
-/// accent under no group title.
+/// up from the foot, so nothing applies until a key is pressed and nothing needs a mode. Sections
+/// by accent under no group title.
+///
+/// **One key, and a line you can tick** (owner, 2026-09-12). The document's bar carried two keys
+/// for a while — "Done" beside a quieter "Make default" — and they were never a primary and its
+/// secondary: they are two *scopes* of the same press, this book or this book and every book that
+/// follows the default. Two keys put that policy question in front of a reader who only wanted to
+/// hear Alloy, and the quiet key's flat slab is the same slab `RaisedButton` paints a *disabled*
+/// key with, so the wider answer read as unavailable. The scope is a tick over the key now —
+/// "Also make Alloy my default voice" — which is one press either way, undoes with a tap, and
+/// leaves the bar with a single thing to say. The key says which voice it will use rather than
+/// "Done": the sheet has a drag indicator, so "Done" could be read as "close, keep what I had",
+/// and this press throws rendered audio away.
 struct VoiceListPage: View {
     @Environment(AppEnvironment.self) private var env
     /// The id in effect before anything is chosen: the document's voice, or the default.
     var current: String?
-    /// The bar's word — "Make default" / "Done" — and its line above, per choice.
-    var confirmLabel: String
+    /// The key's word, per choice: "Use Alloy" for a document, "Make default" in Settings.
+    var confirmLabel: (VoiceOption) -> String
+    /// The line over the key: what the press costs, per choice.
     var note: (VoiceOption) -> String? = { _ in nil }
-    /// Applies the choice; true dismisses the bar. Async so a document's audio can be discarded.
-    var onConfirm: (VoiceOption) async -> Bool
-    /// A second, quieter key beside the first, when the caller has two answers to offer. The
-    /// Reader's sheet has both: "Done" changes this book's voice, "Make default" changes every
-    /// book's (owner, 2026-09-12). Settings, whose only answer *is* the default, leaves it nil.
-    var secondaryLabel: String? = nil
-    var onSecondary: ((VoiceOption) async -> Bool)? = nil
+    /// Applies the choice; true dismisses the bar. The flag is the scope tick — "and every other
+    /// book too". Async so a document's audio can be discarded.
+    var onConfirm: (VoiceOption, Bool) async -> Bool
+    /// The scope tick's words, when the caller has a wider answer to offer. The Reader's sheet
+    /// does; Settings, whose only answer *is* the default, returns nil and shows no tick.
+    var alsoDefaultLabel: (VoiceOption) -> String? = { _ in nil }
     /// The heart per row. Off in the Reader's sheet (owner, 2026-09-10): there it is hear and
     /// choose only; keeping favorites is Settings' job.
     var showsFavorites: Bool = true
@@ -34,10 +44,10 @@ struct VoiceListPage: View {
     @State private var filter: VoiceFilter = .all
     /// The radio's choice, not yet applied.
     @State private var pending: VoiceOption?
-    /// Which key is spinning, so only the pressed one wears "Applying…" while both are disabled.
-    @State private var applying: Applying?
-
-    private enum Applying { case primary, secondary }
+    /// The scope tick, cleared whenever the bar goes away: a tick left standing from a choice the
+    /// reader backed out of would arm the next press with a decision they never made.
+    @State private var alsoDefault = false
+    @State private var isApplying = false
 
     /// The default voice's id: the Settings pick, else the device's own.
     private var defaultID: String? { env.preferences.defaultVoiceID ?? resolvedDefault }
@@ -89,46 +99,64 @@ struct VoiceListPage: View {
         // warm-up glow is not cut at the bar; in `VoiceChangeSheet` the sheet adds a plain one.
         .safeAreaInset(edge: .bottom) {
             if isChange, let pending {
-                VStack(spacing: 10) {
-                    if let line = note(pending) {
-                        Text(line).typeRole(.meta).foregroundStyle(Tokens.ink2).multilineTextAlignment(.center)
+                // Cost, then scope, then the press. The first two are what the key means, so they
+                // sit together a grid apart; the key stands off twice that, since it is the only
+                // thing here that does anything.
+                VStack(spacing: Spacing.grid * 2) {
+                    VStack(spacing: Spacing.grid) {
+                        if let line = note(pending) {
+                            Text(line).typeRole(.fine).foregroundStyle(Tokens.ink2).multilineTextAlignment(.center)
+                        }
+                        if let label = alsoDefaultLabel(pending) { scopeTick(label) }
                     }
-                    // The quiet key first, reading order matching weight: the wider-reaching answer
-                    // is the one you have to go past to reach the everyday one.
-                    HStack(spacing: 10) {
-                        if let secondaryLabel, let onSecondary {
-                            BarButton(label: secondaryLabel, tone: .quiet,
-                                      busyLabel: applying == .secondary ? "Applying…" : nil,
-                                      isEnabled: applying == nil) {
-                                apply(pending, as: .secondary, using: onSecondary)
-                            }
-                        }
-                        BarButton(label: confirmLabel,
-                                  busyLabel: applying == .primary ? "Applying…" : nil,
-                                  isEnabled: applying == nil) {
-                            apply(pending, as: .primary, using: onConfirm)
-                        }
+                    BarButton(label: confirmLabel(pending),
+                              busyLabel: isApplying ? "Applying…" : nil,
+                              isEnabled: !isApplying) {
+                        apply(pending)
                     }
                 }
                 .padding(.horizontal, Spacing.margin)
-                .padding(.top, 12)
+                .padding(.top, Spacing.grid * 2)
                 .padding(.bottom, Spacing.grid)
-                .background(Tokens.ground)
+                // Not a flat `ground` slab: the list fades out under the bar (`BottomFade`) the way
+                // it does under the root pages' bottom bar, so the bar has no edge to cut a row on.
+                .background { BottomFade() }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .animation(.snappy, value: isChange)
+        .onChange(of: isChange) { _, live in if !live { alsoDefault = false } }
         .onDisappear { env.voicePreview.stop() }
         .task {
             resolvedDefault = await env.voiceRouting.effectiveVoiceID(VoiceOption.systemDefault.id)
+            if RootPage.launchPendingVoice {                                   // screenshots, see `RootPage.launchPendingVoice`
+                pending = env.voices.voices().first { !$0.isDefault && $0.id != selectedID }
+            }
         }
     }
 
-    private func apply(_ option: VoiceOption, as key: Applying, using action: @escaping (VoiceOption) async -> Bool) {
-        applying = key
+    /// The wider scope as a line over the key rather than a key of its own. The whole row is the
+    /// button, at a full 44 pt, so the tick never has to be hit at its own 22.
+    private func scopeTick(_ label: String) -> some View {
+        Button { alsoDefault.toggle() } label: {
+            HStack(spacing: Spacing.grid + 2) {
+                CheckMark(isOn: alsoDefault)
+                Text(label).typeRole(.pill).foregroundStyle(Tokens.ink).lineLimit(2)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isApplying)
+        .accessibilityAddTraits(alsoDefault ? [.isSelected] : [])
+        .accessibilityHint("Uses this voice for every book that has no voice of its own")
+    }
+
+    private func apply(_ option: VoiceOption) {
+        isApplying = true
         Task {
-            if await action(option) { pending = nil }
-            applying = nil
+            if await onConfirm(option, alsoDefault) { pending = nil; alsoDefault = false }
+            isApplying = false
         }
     }
 

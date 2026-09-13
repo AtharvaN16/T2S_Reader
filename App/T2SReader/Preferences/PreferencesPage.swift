@@ -15,8 +15,7 @@ struct PreferencesPage: View {
     /// returns at once — so the subtitle is settled a redraw after the page appears. The MLX probe
     /// is not on this path; it is only ever woken by an MLX voice ID.
     @State private var resolvedDefaultVoiceID: String?
-    /// `T2S_OPEN=voices` (screenshots): the page opens with the voice list pushed.
-    @State private var showVoices = RootPage.launchOpen == "voices"
+    @State private var showVoices = false
 
     var body: some View {
         @Bindable var preferences = env.preferences

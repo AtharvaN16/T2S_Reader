@@ -13,14 +13,12 @@ struct ReaderPage: View {
     @State private var text: ReaderText?
     @State private var error: String?
     @State private var chromeVisible = true
-    @State private var showChapters = RootPage.launchOpen == "chapters"      // screenshots, see `RootPage.launchOpen`
+    @State private var showChapters = false
     @State private var showAppearance = false
     @State private var showSpeed = false
-    /// `T2S_OPEN=bookmarks` opens the page at launch — a scripted simulator cannot reach it through
-    /// the overflow menu, and this is the only way to photograph it (`RootPage.launchOpen`).
-    @State private var showBookmarks = RootPage.launchOpensBookmarks
+    @State private var showBookmarks = false
     @State private var showSleepTimer = false
-    @State private var showVoiceChange = RootPage.launchOpen == "voice"       // screenshots, see `RootPage.launchOpen`
+    @State private var showVoiceChange = false
     @State private var showDetails = false
     @State private var voiceName = "Voice"
     /// Where the book proper starts, for the "Skip to Chapter 1" pill; nil when there is no front

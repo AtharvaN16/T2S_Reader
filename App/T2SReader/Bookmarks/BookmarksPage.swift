@@ -27,10 +27,8 @@ struct BookmarksPage: View {
     @State private var model: BookmarkListModel?
     @State private var editing: BookmarkEntry?
     @State private var opened: BookmarkEntry?
-    /// Whether the order menu is down. `T2S_OPEN=bookmarks-order` has it down at launch — the
-    /// Collection's `kinds`, for the same reason: a scripted simulator cannot tap the mark, and
-    /// this is the only way to photograph the card where it lands.
-    @State private var picking = RootPage.launchOpen == "bookmarks-order"
+    /// Whether the order menu is down.
+    @State private var picking = false
 
     /// The air between two bookmarks. Generous on the owner's word (2026-09-12): a bookmark is up
     /// to four lines of the book plus a note plus two buttons, and at 18 two of them ran together
@@ -84,14 +82,6 @@ struct BookmarksPage: View {
             let model = self.model ?? BookmarkListModel(library: env.library, player: env.player)
             self.model = model
             await model.load(summary)
-            // `T2S_OPEN=bookmarks-detail`: the first bookmark, opened, for the same reason the order
-            // menu can be asked for at launch — nothing here can be tapped by a script. A beat
-            // after this page has settled: a cover presented from inside one that is itself still
-            // arriving is dropped on the floor.
-            if RootPage.launchOpen == "bookmarks-detail", let first = model.entries.first {
-                try? await Task.sleep(for: .milliseconds(500))
-                opened = first
-            }
         }
     }
 

@@ -19,64 +19,6 @@ enum RootPage: Hashable, CaseIterable {
         case .preferences: return "Settings"
         }
     }
-
-    /// The page the app opens on: Queue (spec §2.4.4), unless `T2S_PAGE` in the environment names
-    /// another — `collection` or `preferences`. A simulator driven by script cannot tap the
-    /// indicator, so this is how a screenshot of another page is taken:
-    /// `SIMCTL_CHILD_T2S_PAGE=collection xcrun simctl launch <udid> com.t2s.reader`.
-    static var launchPage: RootPage {
-        switch ProcessInfo.processInfo.environment["T2S_PAGE"] {
-        case "collection": return .collection
-        case "preferences": return .preferences
-        default: return .queue
-        }
-    }
-
-    /// `T2S_OPEN`, the same idea one step further: `reader` opens the Reader, `chapters` the Reader
-    /// with its chapter list up, `bookmarks` the Reader with its bookmarks page over it — on a
-    /// sample seeded with bookmarks, since a bookmark is a position in a timeline and cannot be
-    /// written by a script — `kinds` the Collection title's kind menu, `book` its book sheet —
-    /// on the first document whose
-    /// title contains `T2S_BOOK`, else the first document. Screenshots only.
-    static var launchOpen: String? { ProcessInfo.processInfo.environment["T2S_OPEN"] }
-
-    /// Whether the launch opens the Bookmarks page: `bookmarks`, `bookmarks-order` for the same
-    /// page with its order menu down, `bookmarks-detail` for its first bookmark opened — as with
-    /// `kinds` on the Collection, a scripted simulator cannot tap a mark, so anything that is
-    /// normally opened by a finger has to be asked for at launch.
-    static var launchOpensBookmarks: Bool { launchOpen?.hasPrefix("bookmarks") == true }
-
-    /// `T2S_VOICE=pending`: the voice list opens with a radio already moved off the voice in
-    /// effect, which is the only way a script-driven simulator can see the commit bar — the bar is
-    /// raised by a tap, and nothing here can tap. Screenshots only, like the rest.
-    static var launchPendingVoice: Bool { ProcessInfo.processInfo.environment["T2S_VOICE"] == "pending" }
-
-    /// `T2S_SEED=1`: at launch, when the library holds no web page and no pasted text, import one
-    /// of each (built in place, no network) and put them on Home — a script-driven simulator
-    /// cannot type into the Import steps, and the sheet placeholders need something to stand for.
-    /// Screenshots only, like the rest.
-    static var launchSeeds: Bool { ProcessInfo.processInfo.environment["T2S_SEED"] == "1" }
-
-    /// `T2S_OPEN=import`, `link`, `text` or `files`: the Import cover, on its hub or straight on
-    /// that step (screenshots, like the rest of `launchOpen`).
-    static var launchImportPath: ImportPage.Path? {
-        switch launchOpen {
-        case "link": return .link
-        case "text": return .text
-        case "files": return .files
-        default: return nil
-        }
-    }
-    static var launchOpensImport: Bool { launchOpen == "import" || launchImportPath != nil }
-
-    static func launchDocument(in summaries: [DocumentSummary]) -> DocumentSummary? {
-        guard launchOpen != nil else { return nil }
-        if let title = ProcessInfo.processInfo.environment["T2S_BOOK"],
-           let hit = summaries.first(where: { $0.document.title.localizedCaseInsensitiveContains(title) }) {
-            return hit
-        }
-        return summaries.first
-    }
 }
 
 /// Every Reader entry point goes through this closure (spec §2.4.5 lists Queue, book chapters,
@@ -102,7 +44,7 @@ extension EnvironmentValues {
 struct RootPager: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
-    @State private var page: RootPage = RootPage.launchPage
+    @State private var page: RootPage = .queue
     /// A file handed to us by another app (`onOpenURL`), shown through the Import page like any other
     /// import rather than imported invisibly.
     @State private var openedFiles: [URL]?
@@ -206,15 +148,7 @@ struct RootPager: View {
         }
         .fullScreenCover(item: $readerDocument, onDismiss: refreshHome) { ReaderPage(summary: $0) }
         .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation, nowPlaying: env.nowPlaying)
-        .task {
-            if RootPage.launchSeeds { await seedSamples() }
-            if RootPage.launchOpensBookmarks { await seedBookmarks() }
-            await env.libraryModel.refresh()
-            if ["reader", "chapters", "voice"].contains(RootPage.launchOpen ?? "") || RootPage.launchOpensBookmarks,
-               let document = RootPage.launchDocument(in: env.libraryModel.summaries) {
-                readerDocument = document
-            }
-        }
+        .task { await env.libraryModel.refresh() }
         .onChange(of: env.deviceMonitor.deviceState, initial: true) { _, state in
             updatePrepareDeviceState(state)
         }
@@ -333,73 +267,6 @@ struct RootPager: View {
                 break
             }
         }
-    }
-
-    /// The `T2S_SEED` fixtures: a pasted text and a web page, a paragraph or two each, imported
-    /// once (matched by title after that) and noted as played, so they stand at the top of Home.
-    private func seedSamples() async {
-        let samples = [
-            PlainTextArticle.content(
-                title: "Notes from the reading group",
-                body: "We agreed to read the middle third slowly, a chapter a week.\n\nThe whole argument turns on one footnote in chapter nine."),
-            ArticleContent(
-                title: "Why the most useful books are the weird ones", byline: "A. Reader", siteName: "Example",
-                sourceURL: URL(string: "https://www.example.com/essays/weirdly-useful-books"),
-                bodyXHTML: "<p>It is ostensibly about architecture, but the ideas around patterns reach much further than buildings.</p>"),
-        ]
-        await env.libraryModel.refresh()
-        for content in samples where !env.libraryModel.summaries.contains(where: { $0.document.title == content.title }) {
-            _ = try? await env.library.importArticle(content, originalHTML: "")
-        }
-        await env.libraryModel.refresh()                                       // `notePlaying` finds a book in `summaries`
-        for content in samples {
-            if let hit = env.libraryModel.summaries.first(where: { $0.document.title == content.title }) {
-                await env.libraryModel.notePlaying(hit.id)
-            }
-        }
-    }
-
-    /// The bookmarks screenshot's book: a few paragraphs, so the page has passages of a real
-    /// length to draw rather than one line each.
-    private static let bookmarkSample = PlainTextArticle.content(
-        title: "Pride and Prejudice",
-        body: """
-        It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.
-
-        "Impossible, Mr. Bennet, impossible, when I am not acquainted with him myself; how can you be so teasing?"
-
-        "You are over scrupulous surely. I dare say Mr. Bingley will be very glad to see you; and I will send a few lines by you to assure him of my hearty consent to his marrying whichever he chooses of the girls."
-
-        Mr. Bennet was so odd a mixture of quick parts, sarcastic humour, reserve, and caprice, that the experience of three and twenty years had been insufficient to make his wife understand his character.
-        """)
-
-    /// `T2S_OPEN=bookmarks` (screenshots): the sample above, with bookmarks on it. They cannot be
-    /// written flat the way the sample articles are — a bookmark is a position in a timeline — so
-    /// they are made the way a reader's are, against the timeline the import derives, and only when
-    /// the document has none. One of them carries a note, since a note changes the shape of a row.
-    private func seedBookmarks() async {
-        let sample = Self.bookmarkSample
-        await env.libraryModel.refresh()
-        if !env.libraryModel.summaries.contains(where: { $0.document.title == sample.title }) {
-            _ = try? await env.library.importArticle(sample, originalHTML: "")
-            await env.libraryModel.refresh()
-        }
-        guard let summary = env.libraryModel.summaries.first(where: { $0.document.title == sample.title }),
-              let existing = try? await env.library.store.bookmarks(for: summary.id), existing.isEmpty,
-              let timeline = try? await env.library.timelineForPlayback(summary.id), timeline.utteranceCount > 0
-        else { return }
-        let notes = ["The line the whole argument turns on — come back to it before the reading group."]
-        // From the second utterance: the first is the title, and a bookmark on the title of the
-        // thing you are reading tells a screenshot nothing.
-        for (n, index) in (1..<min(timeline.utteranceCount, 6)).enumerated() {
-            let position = PositionResolver.position(for: Playhead(utteranceIndex: index), in: timeline)
-            let bookmark = Bookmark(documentID: summary.id, position: position,
-                                    passageText: timeline[utterance: index].source,
-                                    userNote: n < notes.count ? notes[n] : nil,
-                                    createdAt: Date().addingTimeInterval(Double(-n) * 600))
-            try? await env.library.store.add(bookmark)
-        }
-        await env.libraryModel.notePlaying(summary.id)
     }
 
     private func openPending() {

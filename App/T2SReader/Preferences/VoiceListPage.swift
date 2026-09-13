@@ -129,9 +129,6 @@ struct VoiceListPage: View {
         .onDisappear { env.voicePreview.stop() }
         .task {
             resolvedDefault = await env.voiceRouting.effectiveVoiceID(VoiceOption.systemDefault.id)
-            if RootPage.launchPendingVoice {                                   // screenshots, see `RootPage.launchPendingVoice`
-                pending = env.voices.voices().first { !$0.isDefault && $0.id != selectedID }
-            }
         }
     }
 

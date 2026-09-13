@@ -21,7 +21,7 @@ struct ImportPage: View {
     var initialFiles: [URL] = []
 
     enum Path { case link, text, files }
-    @State private var path: Path? = RootPage.launchImportPath                // screenshots: `T2S_OPEN=link` and friends
+    @State private var path: Path?
     @State private var showFilePicker = false
 
     private let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]

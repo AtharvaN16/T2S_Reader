@@ -43,7 +43,6 @@ struct CollectionPage: View {
     /// state rather than a flag beside `selected`: the two are different ways in, and one of them
     /// must not change what the other opens.
     @State private var renderTarget: DocumentSummary?
-    @State private var launchOpened = false
     @State private var details: DocumentSummary?
     @State private var voiceChange: DocumentSummary?
     /// The book a menu's Delete named; the confirmation dialog presents it and clears it.
@@ -56,9 +55,8 @@ struct CollectionPage: View {
     @State private var searchText = ""
     @State private var isSearching = false
     @State private var filter: Filter = .all
-    /// Whether the title's kind menu is down. `T2S_OPEN=kinds` opens it at launch — a scripted
-    /// simulator cannot tap a title, and this is the only way to photograph the menu.
-    @State private var isPickingKind = RootPage.launchOpen == "kinds"
+    /// Whether the title's kind menu is down.
+    @State private var isPickingKind = false
 
     /// Cells align at the top so every book in a row stands on the same shelf line — the cover
     /// slot is a fixed proportion of the width, and only the text below it varies in height.
@@ -129,17 +127,6 @@ struct CollectionPage: View {
         .fullScreenCover(isPresented: $showAdd, onDismiss: openPending) { ImportPage(imported: $pendingOpen) }
         .sheet(item: $selected) { BookSheet(summary: $0) }
         .sheet(item: $renderTarget) { BookSheet(summary: $0, startInRenderMode: true) }
-        .onChange(of: env.libraryModel.summaries.map(\.id), initial: true) { _, _ in
-            // `T2S_OPEN=book` (screenshots, see `RootPage.launchOpen`): the book sheet, once.
-            if RootPage.launchOpen == "book", !launchOpened,
-               let document = RootPage.launchDocument(in: env.libraryModel.summaries) {
-                launchOpened = true
-                selected = document
-            } else if RootPage.launchOpensImport, !launchOpened {
-                launchOpened = true
-                showAdd = true
-            }
-        }
         .sheet(item: $details) { DetailsSheet(summary: $0) }
         .sheet(item: $voiceChange) { VoiceChangeSheet(summary: $0) }
         // The menu's two taps, felt: a light knock as it drops, the selection tick when a kind is

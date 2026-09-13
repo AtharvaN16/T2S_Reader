@@ -1,7 +1,7 @@
 import Foundation
 import T2SCore
 
-/// Spec §2.4.5 speed picker: every rate 0.5x–4.0x, unavailable ones (spec §3.6) marked with a footnote.
+/// Spec §2.4.5 speed picker: the curated rate list, unavailable ones (spec §3.6) marked with a footnote.
 public struct SpeedPickerModel: Hashable, Sendable {
     public struct Row: Hashable, Sendable, Identifiable {
         public var rate: Double
@@ -27,8 +27,8 @@ public struct SpeedPickerModel: Hashable, Sendable {
         self.footnote = footnote
     }
 
-    /// 0.5x…4.0x in 0.1x steps (spec §2.4.5), built once so 0.1-step arithmetic never drifts.
-    public static let rates: [Double] = (5...40).map { Double($0) / 10 }
+    /// The curated rate list (spec §2.4.5) — fewer, deliberately chosen stops instead of every 0.1x step.
+    public static let rates: [Double] = [0.8, 0.9, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25]
 
     /// `maxRate` is the coordinator's `availableRates.max()` (the highest sustainable rate, spec §3.6).
     public static func make(current: Double, maxRate: Double) -> SpeedPickerModel {
@@ -47,9 +47,14 @@ public struct SpeedPickerModel: Hashable, Sendable {
         return SpeedPickerModel(rows: rows, footnote: footnote)
     }
 
-    /// "1x", "1.5x", "0.5x" — one decimal at most, the bare number of spec §2.4.5.
+    /// "1x", "1.5x", "1.25x" — no trailing zeros, the bare number of spec §2.4.5.
     public static func label(for rate: Double) -> String {
-        let rounded = (rate * 10).rounded() / 10
-        return rounded == rounded.rounded() ? "\(Int(rounded))x" : String(format: "%.1fx", rounded)
+        if rate == rate.rounded() {
+            return "\(Int(rate))x"
+        }
+        var digits = String(format: "%.2f", rate)
+        while digits.hasSuffix("0") { digits.removeLast() }
+        if digits.hasSuffix(".") { digits.removeLast() }
+        return "\(digits)x"
     }
 }

@@ -4,7 +4,8 @@ import SwiftUI
 /// Spec §2.4.1 type roles: Inter with tight tracking on display and label text, normal tracking on
 /// meta, monospaced digits for anything that counts. Sizes are Dynamic Type relative.
 enum TypeRole {
-    case pageTitle, playerTitle, groupTitle, sectionHeader, rowTitle, settingsRow, pill, meta, metaStrong, caption, fine, mono
+    case pageTitle, playerTitle, groupTitle, sectionHeader, rowTitle, settingsRow, pill, pillSmall, meta,
+         metaStrong, caption, fine, mono
 
     var font: Font {
         switch self {
@@ -18,6 +19,10 @@ enum TypeRole {
         /// the lists elsewhere without shrinking those too.
         case .settingsRow: return .custom("Inter-Medium", size: 16, relativeTo: .callout)
         case .pill: return .custom("Inter-Medium", size: 15, relativeTo: .subheadline)
+        /// `pill`'s cut two sizes down, for a capsule that has to hold a phrase in half the width
+        /// of a toast — "Go to bookmark" was arriving as "Go to book…" (owner, 2026-09-13). The
+        /// label is what gives, not the words in it: a truncated action is a guess.
+        case .pillSmall: return .custom("Inter-Medium", size: 13, relativeTo: .footnote)
         case .meta: return .custom("Inter-Regular", size: 13, relativeTo: .footnote)
         /// `meta`'s size in a heavier cut, for the half of a small line that should lead it — a
         /// bookmark's clock against the chapter it sits in (owner, 2026-09-12: "use different
@@ -45,6 +50,7 @@ enum TypeRole {
         case .sectionHeader, .rowTitle: return -0.01 * 17
         case .settingsRow: return -0.01 * 16
         case .pill: return -0.01 * 15
+        case .pillSmall: return -0.01 * 13
         case .meta, .metaStrong, .caption, .mono: return 0
         /// The one role that opens up rather than tightens: at 10 pt the counters are small enough
         /// that the default fit closes the words into a grey band.

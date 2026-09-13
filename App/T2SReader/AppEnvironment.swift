@@ -29,8 +29,6 @@ final class AppEnvironment {
     let importModel: ImportModel
     let syncModel: SyncModel
     let preferences: ReaderPreferences
-    let cloudVoiceSettings: CloudVoiceSettings
-    let cloudVoiceSecrets: any SecretStoring
     let cloudRouter: RoutedEngine
     let voices: any VoiceCatalog
     /// Renders and plays one sample sentence for whichever voice a picker row previews (spec:
@@ -77,8 +75,8 @@ final class AppEnvironment {
 
     init(paths: LibraryPaths, store: LibraryStore, audioStore: any AudioStore, library: Library,
          importModel: ImportModel, coordinator: PlaybackCoordinator, engine: any SynthesisEngine,
-         renderArbiter: RenderArbiter, cloudVoiceSettings: CloudVoiceSettings,
-         cloudVoiceSecrets: any SecretStoring, cloudRouter: RoutedEngine,
+         renderArbiter: RenderArbiter, cloudRoute: CloudVoiceConfigurationStore,
+         cloudRouter: RoutedEngine,
          kokoro: KokoroComposition, foregroundGate: ForegroundGate, cpuBudget: CPUBudget?, syncModel: SyncModel) {
         self.paths = paths
         self.syncModel = syncModel
@@ -92,11 +90,9 @@ final class AppEnvironment {
         libraryModel = LibraryModel(library: library)
         player = PlayerModel(coordinator: coordinator, library: library)
         preferences = ReaderPreferences()
-        self.cloudVoiceSettings = cloudVoiceSettings
-        self.cloudVoiceSecrets = cloudVoiceSecrets
         self.cloudRouter = cloudRouter
         voices = kokoro.catalog(wrapping: CloudVoiceCatalog(base: SystemVoiceCatalog(),
-                                                            configurationStore: cloudVoiceSettings.configurationStore))
+                                                            configurationStore: cloudRoute))
         kokoroStatus = kokoro.status
         kokoroModel = kokoro.modelStore
         voiceRouting = kokoro.voiceRouting
@@ -173,13 +169,13 @@ final class AppEnvironment {
         let shared = try SharedLibraryFactory.make(capacityBytes: capacity)
         let storedBudget = UserDefaults.standard.object(forKey: AppPaths.prepareBudgetKey) as? Double ?? 3 * 3600
         let prepareBudget = storedBudget.isFinite ? storedBudget : 365 * 24 * 3600
-        let cloudVoiceSettings = CloudVoiceSettings(shipped: .pilot)
         let cloudVoiceSecrets = KeychainSecretStore()
         // The build's key into the Keychain, once (cloud-first bootstrap spec). A failure to store
-        // is not fatal: the route then waits for a key typed in Cloud voices, as before.
+        // is not fatal: the hosted voice simply never opens, and the on-device route still plays.
         _ = try? CloudVoiceKeySeeder.seed(infoValue: Bundle.main.infoDictionary?["T2SCloudVoiceKey"] as? String,
                                           into: cloudVoiceSecrets)
-        let configurationStore = cloudVoiceSettings.configurationStore
+        // The route is the build's own constant; there is nothing for a reader to configure.
+        let configurationStore = CloudVoiceConfigurationStore(configuration: try? CloudVoiceDefaults.pilot.configuration())
         let systemEngine = SystemSpeechEngine()
         // Closed until the scene reports itself active; a process launched for a background task
         // never opens it, so nothing that needs the foreground ever starts there.
@@ -193,7 +189,7 @@ final class AppEnvironment {
         cpuBudget.report = { KokoroCoreMLEngine.timing("kokoro budget: " + $0) }
         #endif
         // Hosted Heart stands in for the default wherever the on-device route is not yet open —
-        // while a route is configured and the Keychain holds its key.
+        // while the shipped route parsed and the Keychain holds its key.
         let standIn: @Sendable () -> String? = {
             guard let configuration = configurationStore.current(),
                   let key = try? cloudVoiceSecrets.load(), !key.isEmpty
@@ -230,8 +226,7 @@ final class AppEnvironment {
         return AppEnvironment(paths: shared.paths, store: shared.store, audioStore: shared.audioStore,
                               library: shared.library, importModel: shared.importModel, coordinator: coordinator,
                               engine: cloudRouter, renderArbiter: renderArbiter,
-                              cloudVoiceSettings: cloudVoiceSettings,
-                              cloudVoiceSecrets: cloudVoiceSecrets, cloudRouter: cloudRouter,
+                              cloudRoute: configurationStore, cloudRouter: cloudRouter,
                               kokoro: kokoro, foregroundGate: foregroundGate, cpuBudget: cpuBudget, syncModel: syncModel)
     }
 }

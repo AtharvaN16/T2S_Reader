@@ -340,11 +340,6 @@ struct ReaderPage: View {
         Task { await renderer.enqueue(documentID: id, chapters: [chapter]) }
     }
 
-    /// Where a tap on a bookmark toast goes, and what makes it look tappable: the toast carries the
-    /// chevron and this hint whenever it is set (`ToastContent.tapHint`). Only the two toasts that
-    /// saved something have it — "could not save a bookmark" opens nothing.
-    static let bookmarkTapHint = "Opens this book's bookmarks"
-
     /// Saves, says so, and offers the note there and then.
     private func saveBookmark() async {
         let result = await env.player.saveBookmark()
@@ -355,11 +350,11 @@ struct ReaderPage: View {
         case .saved(let bookmark):
             toastBookmark = bookmark
             show(ToastContent(title: "Bookmark saved", detail: detail, actionLabel: "Add a note",
-                              tapHint: Self.bookmarkTapHint))
+                               secondaryActionLabel: "Go to bookmark", icon: "checkmark"))
         case .alreadyBookmarked(let bookmark):
             toastBookmark = bookmark
             show(ToastContent(title: "Already bookmarked", detail: detail, actionLabel: "Edit note",
-                              tapHint: Self.bookmarkTapHint))
+                               secondaryActionLabel: "Go to bookmark", icon: "checkmark"))
         case .failed:
             toastBookmark = nil
             show(ToastContent(title: "Could not save a bookmark", detail: nil, actionLabel: nil))
@@ -512,11 +507,11 @@ struct ReaderPage: View {
             case .saved(let bookmark):
                 toastBookmark = bookmark
                 show(ToastContent(title: "Bookmark saved", detail: stamp, actionLabel: "Add a note",
-                                  tapHint: Self.bookmarkTapHint))
+                                  secondaryActionLabel: "Go to bookmark", icon: "checkmark"))
             case .alreadyBookmarked(let bookmark):
                 toastBookmark = bookmark
                 show(ToastContent(title: "Already bookmarked", detail: stamp, actionLabel: "Edit note",
-                                  tapHint: Self.bookmarkTapHint))
+                                  secondaryActionLabel: "Go to bookmark", icon: "checkmark"))
             case .failed:
                 toastBookmark = nil
                 show(ToastContent(title: "Could not save a bookmark", detail: nil, actionLabel: nil))

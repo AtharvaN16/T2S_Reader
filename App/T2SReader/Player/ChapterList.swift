@@ -99,6 +99,9 @@ struct ChapterListView: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(Tokens.accent.opacity(chapter.index == pulsing ? 0.3 : 0))
                 )
+                // An open chapter's fill runs edge to edge; without air around it, two opened next
+                // to each other read as one frame rather than two (owner, 2026-09-12).
+                .padding(.vertical, isOpen ? Spacing.grid : 0)
             }
         }
     }

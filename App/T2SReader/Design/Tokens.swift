@@ -10,6 +10,13 @@ enum Tokens {
     // Dark's grey is lifted well clear of `ground` and `raised` (owner, 2026-09-12): a filled
     // control has to read as a fill, without an outline drawn round it to rescue it.
     static let surface = dynamic(light: 0xEEEEEC, dark: 0x2F2F2F)
+    /// `surface`'s grey for a control standing on an *inverted* card — the toast, which is `ink`
+    /// with `ground` lettering, so the page's own greys run the wrong way on it. Each mode takes
+    /// the other's family: in the dark the toast is near-white, so its buttons are a light grey
+    /// (owner, 2026-09-13: "use light gray buttons"); in the light the toast is near-black, so
+    /// they are the dark grey the page uses at night. Either way the button sits the same short
+    /// step off the card it is on, as `surface` does off `ground`.
+    static let surfaceOnInk = dynamic(light: 0x2F2F2F, dark: 0xE2E2E0)
     static let raised = dynamic(light: 0xFFFFFF, dark: 0x1A1A1A)
     static let ink = dynamic(light: 0x111111, dark: 0xF2F2F2)
     /// The Reader's text that has not been read out yet (owner, 2026-09-12): `ink`, dimmed, so the

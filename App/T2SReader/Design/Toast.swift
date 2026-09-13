@@ -31,8 +31,9 @@ struct ToastContent: Equatable, Identifiable {
 
 /// A transient message over the page (2026-09-11 spec §5). `ink` with `ground` lettering — the same
 /// pairing as `Pill(.selected)` — so it reads as a message rather than a surface that can be
-/// scrolled or swiped. The one action sits inside it as a `soft` pill, which on `ink` is the
-/// `surface` capsule the rest of the app uses.
+/// scrolled or swiped. Its actions are `Pill(.softOnInk)`: the app's soft grey capsule, with the
+/// grey taken from the other theme's family so it lifts off the inverted card rather than sinking
+/// into it (`Tokens.surfaceOnInk`).
 ///
 /// It is not a sheet and never takes focus: the transport underneath stays live while it shows.
 struct Toast: View {
@@ -68,9 +69,9 @@ struct Toast: View {
     /// own row below — "Add a note" and the way back to the list, side by side rather than one
     /// pill trailing the title on a single cramped baseline (owner, 2026-09-12).
     private func card(icon: String) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 12) {
-                CircleGlyph(systemName: icon)
+                CircleGlyph(systemName: icon, tint: Tokens.ground, fill: Tokens.surfaceOnInk)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(content.title).typeRole(.pill).foregroundStyle(Tokens.ground)
                     if let detail = content.detail {
@@ -79,11 +80,16 @@ struct Toast: View {
                 }
             }
             if let label = content.actionLabel {
+                // `.softOnInk`, not `.soft`: the card is `ink`, so the page's grey arrives inverted
+                // on it — a near-black button on a near-white toast in the dark. This pair takes
+                // the grey the right way round for the card they stand on, and at the shorter
+                // height (owner, 2026-09-13), so the message stays a message.
                 HStack(spacing: 8) {
-                    Pill(label: label, glyph: content.actionGlyph, style: .soft, fillsWidth: true, action: onAction)
+                    Pill(label: label, glyph: content.actionGlyph, style: .softOnInk, fillsWidth: true,
+                         compact: true, action: onAction)
                     if let secondaryLabel = content.secondaryActionLabel {
-                        Pill(label: secondaryLabel, glyph: content.secondaryActionGlyph, style: .soft,
-                             fillsWidth: true, action: onTap)
+                        Pill(label: secondaryLabel, glyph: content.secondaryActionGlyph, style: .softOnInk,
+                             fillsWidth: true, compact: true, action: onTap)
                     }
                 }
             }

@@ -20,8 +20,9 @@ import T2SStore
 struct BookmarkDetail: View {
     @Environment(\.dismiss) private var dismiss
     var entry: BookmarkEntry
-    /// The book the bookmark belongs to, centered over the two buttons — the chapter stays with
-    /// the clock below (`BookmarkMeta`), so the header carries only the one name.
+    /// The book the bookmark belongs to, centered in the header, with the chapter under it
+    /// (owner, 2026-09-13). The two are one address — book, then where in the book — so they read
+    /// as one stacked label rather than a name up here and a chapter in the small print below.
     var bookTitle: String
     var onListen: () -> Void
     var onEditNote: () -> Void
@@ -45,7 +46,7 @@ struct BookmarkDetail: View {
                     // tighter than the gap to the note: the line belongs to those words, where the
                     // note answers them.
                     VStack(alignment: .leading, spacing: 14) {
-                        BookmarkMeta(entry: entry, emphasized: true)
+                        BookmarkMeta(entry: entry, emphasized: true, showsChapter: false)
                         // The passage whole (`fullPassage`), not the row's 90-character snippet:
                         // this screen exists to show a long bookmark, and it was printing the same
                         // clipped words as the row it was opened from, ellipsis and all.
@@ -111,9 +112,21 @@ struct BookmarkDetail: View {
                 .accessibilityLabel("Back")
             Spacer()
             if !bookTitle.isEmpty {
-                Text(bookTitle)
-                    .typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
-                    .lineLimit(1)
+                // The book's name, and under it in small grey type the chapter this bookmark
+                // falls in — moved up out of the meta line below the passage (owner, 2026-09-13).
+                // Quieter and a size down, so the stack still reads as one title with an address
+                // under it rather than two headings fighting over the middle of the row.
+                VStack(spacing: 1) {
+                    Text(bookTitle)
+                        .typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
+                        .lineLimit(1)
+                    if !entry.chapterTitle.isEmpty {
+                        Text(entry.chapterTitle)
+                            .typeRole(.meta).foregroundStyle(Tokens.ink2)
+                            .lineLimit(1)
+                    }
+                }
+                .accessibilityElement(children: .combine)
             }
             Spacer()
             Button { confirmingDelete = true } label: {

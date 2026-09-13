@@ -7,9 +7,10 @@ import T2SCore
 import T2SLibrary
 
 /// Fully rounded pill (spec §2.4.3). `.accent` is the one primary action per screen; `.selected`
-/// is solid `ink` with `ground` text (chips); `.soft` and `.destructiveSoft` sit on `surface`.
+/// is solid `ink` with `ground` text (chips); `.soft` and `.destructiveSoft` sit on `surface`, and
+/// `.softOnInk` is that same soft pill for a card that is itself `ink` — the toast.
 struct Pill: View {
-    enum Style { case soft, selected, accent, destructiveSoft }
+    enum Style { case soft, selected, accent, destructiveSoft, softOnInk }
 
     var label: String
     /// A quieter second word after the label — the Play pill's "2h 28m" — in the same type, dimmed.
@@ -20,6 +21,12 @@ struct Pill: View {
     /// of a sheet (the sleep timer's Start), where a capsule the width of its two words reads as an
     /// afterthought under a full-width card. Taller too, the way a bar key is.
     var fillsWidth: Bool = false
+    /// A full-width pill at a shorter height. The bar key's 16pt of padding is right at the foot of
+    /// a sheet, where the pill is the last word on the screen; inside a toast — a message that
+    /// covers the page for four seconds — two of them at that height read as a dialog (owner,
+    /// 2026-09-13: "make the button height smaller"). Ignored unless `fillsWidth`, since a hugging
+    /// pill is already this height.
+    var compact: Bool = false
     var action: () -> Void
 
     var body: some View {
@@ -36,7 +43,7 @@ struct Pill: View {
             .lineLimit(1)
             .fixedSize(horizontal: !fillsWidth, vertical: false)
             .padding(.horizontal, 14)
-            .padding(.vertical, fillsWidth ? 16 : 9)
+            .padding(.vertical, fillsWidth ? (compact ? 10 : 16) : 9)
             .frame(maxWidth: fillsWidth ? .infinity : nil)
             .foregroundStyle(foreground)
             .background(background, in: Capsule())
@@ -50,6 +57,8 @@ struct Pill: View {
         case .selected: return Tokens.ground
         case .accent: return Tokens.onAccent
         case .destructiveSoft: return Tokens.destructive
+        // The card's own lettering colour: `ground` is to `ink` what `ink` is to the page.
+        case .softOnInk: return Tokens.ground
         }
     }
 
@@ -59,6 +68,7 @@ struct Pill: View {
         case .selected: return Tokens.ink
         case .accent: return Tokens.accent
         case .destructiveSoft: return Tokens.surface
+        case .softOnInk: return Tokens.surfaceOnInk
         }
     }
 }
@@ -70,13 +80,17 @@ struct CircleGlyph: View {
     /// The glyph's colour. `ink` for the ordinary marks; a Delete passes `destructive`, so the one
     /// mark on a screen that destroys something is the one mark that is red (owner, 2026-09-12).
     var tint: Color = Tokens.ink
+    /// The disc behind it. `surface` on a page; the toast passes `surfaceOnInk` with a `ground`
+    /// tint, since its card is `ink` and the page's grey would arrive inverted on it — the circle
+    /// follows the buttons under it rather than being the one dark thing left on a pale card.
+    var fill: Color = Tokens.surface
 
     var body: some View {
         Image(systemName: systemName)
             .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(tint)
             .frame(width: 36, height: 36)
-            .background(Tokens.surface, in: Circle())
+            .background(fill, in: Circle())
     }
 }
 

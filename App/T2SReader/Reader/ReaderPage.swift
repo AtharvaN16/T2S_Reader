@@ -240,32 +240,52 @@ struct ReaderPage: View {
             // scrubber, further from the text it hangs under (owner, 2026-09-10).
             chapterRow
                 .padding(.bottom, 2)
-            VStack(spacing: 2) {
+                // Clear of the controls, over the tail of the text fade, its foot `statusLineGap`
+                // above the picker (owner, 2026-09-13) — hung off the picker itself so that is the
+                // thing the gap is measured from. An overlay rather than a row in the stack: it
+                // comes and goes mid-sentence, and a row would push the whole transport down and
+                // back every time it did.
+                .overlay(alignment: .top) {
+                    if let status = statusText {
+                        // Lifted by its own full height plus the gap, so adding the dots on top
+                        // cannot eat into the space below them.
+                        PlayerStatusLine(text: status)
+                            .frame(height: Self.statusLineHeight, alignment: .bottom)
+                            .offset(y: -(Self.statusLineHeight + Self.statusLineGap))
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.25), value: statusText)
+            // 10 pt under the bar rather than 2 (owner, 2026-09-13): the scrubber's hit area is the
+            // full 40 pt frame and the chip below is a target of its own, so the two need air
+            // between them or a thumb aiming at one finds the other. The rest of that air is made
+            // inside `ThinScrubber`, which lifts the bar within the same 40 pt frame.
+            VStack(spacing: 10) {
                 ThinScrubber(model: player.scrubber, segments: chapterSegments,
                              bookmarkFractions: player.bookmarkFractions,
+                             scope: scrubberScope, currentChapter: player.chapterIndex,
                              onSeek: { fraction in Task { await player.seek(fraction: fraction) } },
                              onScrub: { scrubChapter = $0 })
                 // Elapsed on the left, time left on the right (Apple Music's "-1:02:33"), in the
-                // app's own face with tabular digits rather than the system monospace.
+                // app's own face with tabular digits rather than the system monospace. In chapter
+                // scope both read the chapter instead: a bar that spans one chapter with the
+                // book's own 24-hour countdown under it is two different questions on one line.
                 //
-                // The state line is an overlay across the whole row rather than a third item
-                // between two `Spacer()`s, because two spacers centre a word between its
-                // *neighbours*, not on the row: "0:07" and "-1:02:33" are different widths, so
-                // "catching up…" sat left of centre by half that difference — and the ellipsis,
-                // which the eye does not count as part of the word, pulled it further still
-                // (owner, 2026-09-12). An overlay is centred on the row itself and cannot drift.
-                // It is allowed to sit over the clocks: it only ever appears before the first
-                // sound, when the left one reads 0:00 and has nothing to lose.
+                // The chip is an overlay across the whole row rather than a third item between two
+                // `Spacer()`s, because two spacers centre a thing between its *neighbours*, not on
+                // the row: the clocks are different widths, and changing scope changes them again
+                // (the remaining side loses a whole hour field), so a spacer-centred chip would
+                // lurch sideways on every tap. This is the same fix the state line needed here on
+                // 2026-09-12, and the chip has inherited that slot along with its lesson. An
+                // overlay is also outside layout, so the chip cannot push the transport down.
                 HStack {
-                    Text(player.elapsedText).monospacedDigit()
+                    Text(scopedClocks.elapsed).monospacedDigit()
                     Spacer()
-                    Text("-" + DurationFormatter.clock(max(0, player.total - player.elapsed))).monospacedDigit()
+                    Text(scopedClocks.remaining).monospacedDigit()
                 }
                 .overlay {
-                    if env.isWarmingUp {
-                        Text("preparing the voice…").foregroundStyle(Tokens.glow)
-                    } else if player.isCatchingUp {
-                        Text("catching up…")
+                    if chapterSegments.count > 1 {
+                        ScopeChip(scope: scrubberScope) { env.preferences.scrubberScope = $0 }
                     }
                 }
                 .typeRole(.meta).foregroundStyle(Tokens.ink2)
@@ -286,14 +306,19 @@ struct ReaderPage: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .padding(.bottom, 10)
+            // 22 pt between the chip row and the transport (owner, 2026-09-13). The block is
+            // bottom-anchored, so the air has to be made here and paid for at the foot: most of
+            // the gap comes from pushing the scrubber group up, the rest from the six points taken
+            // off the bottom padding below, which is what actually moves the transport and the
+            // tool row down rather than merely apart.
+            .padding(.bottom, 22)
             ReaderControls(onSleepTimer: { showSleepTimer = true }, onSpeed: { showSpeed = true })
                 .padding(.bottom, 10)
             toolRow
         }
         .padding(.horizontal, Spacing.margin)
         .padding(.top, 12)
-        .padding(.bottom, Spacing.grid)
+        .padding(.bottom, 2)                                               // was `Spacing.grid`; see the gap above
         .overlay(alignment: .top) {
             // One slot, and the Reader's own toast has it: a bookmark saved here is answered here.
             // An app-wide message (`ToastCenter` — the voice model removed under a play) uses the
@@ -395,6 +420,48 @@ struct ReaderPage: View {
             let start = min(1, max(0, chapter.startSeconds / total))
             return start..<min(1, max(start, (chapter.startSeconds + chapter.durationSeconds) / total))
         }
+    }
+
+    /// Clear space between the state line's foot and the chapter picker (owner, 2026-09-13). It
+    /// has to stay inside the `ground` fade: the line is tinted and carries no background of its
+    /// own, so over the opaque body text above the fade it is a blue sentence written through a
+    /// black one. The fade starts 64 pt above the block, which is the ceiling here whatever this
+    /// number says.
+    private static let statusLineGap: CGFloat = 20
+    /// The line's own height — a row of 5 pt dots over 5 pt of air over one `pill` line. Stated
+    /// rather than measured so the gap below is exactly `statusLineGap` and did not change when
+    /// the dots moved above the words: the frame is bottom-aligned and does not clip, so a Dynamic
+    /// Type size needing more room grows upward into the fade, not down into the picker.
+    private static let statusLineHeight: CGFloat = 30
+
+    /// The scope the bar and the clocks are in. A document with one chapter or none has nothing to
+    /// zoom to, so it reads `.book` however the preference is set — the chip is hidden there too.
+    private var scrubberScope: ScrubberScope {
+        chapterSegments.count > 1 ? env.preferences.scrubberScope : .book
+    }
+
+    /// The pair under the bar. Chapter scope measures the chapter the playhead is in; without one
+    /// it falls back to the book rather than showing two zeroes.
+    private var scopedClocks: (elapsed: String, remaining: String) {
+        let player = env.player
+        if scrubberScope == .chapter, let index = player.chapterIndex {
+            let chapters = player.chapters
+            if chapters.indices.contains(index) {
+                let chapter = chapters[index]
+                return (DurationFormatter.clock(chapter.playedSeconds),
+                        "-" + DurationFormatter.clock(chapter.remainingSeconds))
+            }
+        }
+        return (player.elapsedText,
+                "-" + DurationFormatter.clock(max(0, player.total - player.elapsed)))
+    }
+
+    /// What the state line says, or nil when the engine has nothing to report. Warming wins: it is
+    /// the one the reader is waiting on before any sound at all.
+    private var statusText: String? {
+        if env.isWarmingUp { return "Preparing The Voice" }
+        if env.player.isCatchingUp { return "Catching Up" }
+        return nil
     }
 
     /// "Chapter title ▾" on the left opens the chapter list (after the reference the owner sent,

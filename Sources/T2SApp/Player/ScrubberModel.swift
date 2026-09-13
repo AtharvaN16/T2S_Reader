@@ -7,20 +7,30 @@ import T2SCore
 public struct ScrubberModel: Hashable, Sendable {
     public var tickCount: Int
     public var renderedTicks: [Bool]
+    /// The current chapter's own frontier at the full tick count, for chapter scope (2026-09-13).
+    /// The book pass cannot be reused there: chapter 2 of a 24-hour book owns about five of the 48
+    /// ticks, and stretched over 360 pt five ticks are a smear rather than a frontier. Empty when
+    /// there is no current chapter.
+    public var chapterTicks: [Bool]
     /// Playhead position 0…1 along the total (estimated) duration.
     public var fraction: Double
 
-    public init(tickCount: Int, renderedTicks: [Bool], fraction: Double) {
+    public init(tickCount: Int, renderedTicks: [Bool], chapterTicks: [Bool] = [], fraction: Double) {
         self.tickCount = tickCount
         self.renderedTicks = renderedTicks
+        self.chapterTicks = chapterTicks
         self.fraction = fraction
     }
 
     public static func make(timeline: Timeline, timeIndex: TimeIndex, playhead: Playhead, tickCount: Int = 48) -> ScrubberModel {
         let total = timeIndex.totalDuration
         let fraction = total > 0 ? min(1, max(0, timeIndex.time(at: playhead) / total)) : 0
+        let chapter = timeline.chapterIndex(forUtterance: playhead.utteranceIndex)
         return ScrubberModel(tickCount: tickCount,
                              renderedTicks: renderedTicks(timeline: timeline, timeIndex: timeIndex, tickCount: tickCount),
+                             chapterTicks: chapter.map {
+                                 chapterTicks(timeline: timeline, timeIndex: timeIndex, chapterIndex: $0, tickCount: tickCount)
+                             } ?? [],
                              fraction: fraction)
     }
 
@@ -50,6 +60,44 @@ public struct ScrubberModel: Hashable, Sendable {
                 start = end
                 index += 1
             }
+        }
+        return ticks
+    }
+
+    /// One chapter's frontier, `tickCount` ticks across that chapter alone. Same rule as the book
+    /// pass — a tick counts as rendered only when every utterance overlapping its span has audio —
+    /// but the running start is the chapter's, so the whole bar is the chapter. A chapter that is
+    /// not there, or has no utterances, reads as entirely unrendered rather than entirely ready:
+    /// an empty bar is the honest answer to "how much of this is on the device".
+    public static func chapterTicks(timeline: Timeline, timeIndex: TimeIndex, chapterIndex: Int,
+                                    tickCount: Int = 48) -> [Bool] {
+        let count = max(0, tickCount)
+        guard count > 0, timeline.chapters.indices.contains(chapterIndex) else {
+            return Array(repeating: false, count: count)
+        }
+        // The chapter's first utterance on the flat index `timeIndex` is built over, counted the
+        // same way `ChapterEntry.axis` counts it rather than through `utteranceRange(ofChapter:)`,
+        // which is O(chapters) per call.
+        var first = 0
+        for c in 0..<chapterIndex { first += timeline.chapters[c].utterances.count }
+        let chapter = timeline.chapters[chapterIndex]
+        let span = timeIndex.startTime(ofUtterance: first + chapter.utterances.count)
+            - timeIndex.startTime(ofUtterance: first)
+        guard span > 0 else { return Array(repeating: false, count: count) }
+
+        var ticks = Array(repeating: true, count: count)
+        let width = span / Double(count)
+        var start: TimeInterval = 0
+        for u in chapter.utterances.indices {
+            let index = first + u
+            let seconds = index < timeIndex.durations.count ? timeIndex.durations[index] : chapter.utterances[u].duration.seconds
+            let end = start + seconds
+            if chapter.utterances[u].audioRef == nil {
+                let lo = min(count - 1, max(0, Int((start / width).rounded(.down))))
+                let hi = min(count - 1, max(lo, Int((end / width).rounded(.up)) - 1))
+                for t in lo...hi { ticks[t] = false }
+            }
+            start = end
         }
         return ticks
     }

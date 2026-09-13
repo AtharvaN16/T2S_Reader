@@ -41,6 +41,14 @@ public struct ChapterEntry: Hashable, Sendable, Identifiable {
     static func fraction(of elapsed: TimeInterval, in span: ChapterSpan) -> Double {
         span.duration > 0 ? min(1, max(0, (elapsed - span.start) / span.duration)) : 0
     }
+
+    /// The chapter-scoped clocks under the scrubber (2026-09-13): with the bar zoomed to one
+    /// chapter the times read that chapter rather than the book. Both are `fraction` scaled by the
+    /// chapter, not a subtraction of `elapsed` and `startSeconds`, so the clamp `fraction` already
+    /// applies carries through — a playhead outside the chapter reads 0 or the whole chapter
+    /// instead of a negative clock, and the pair always sums to `durationSeconds`.
+    public var playedSeconds: TimeInterval { durationSeconds * fraction }
+    public var remainingSeconds: TimeInterval { durationSeconds * (1 - fraction) }
 }
 
 /// A chapter's place on the time axis, the part of a `ChapterEntry` that only a timeline change moves.
@@ -92,6 +100,9 @@ public final class PlayerModel {
     /// `@ObservationIgnored`: filling it from `scrubber`'s getter must not invalidate the body that
     /// is reading it.
     @ObservationIgnored private var tickCache: (revision: Int, ticks: [Bool])?
+    /// Keyed on the chapter as well as the revision: walking into the next chapter has to redo the
+    /// pass even though the timeline has not changed.
+    @ObservationIgnored private var chapterTickCache: (revision: Int, chapter: Int, ticks: [Bool])?
     /// The other O(timeline) facts the 10 Hz bodies read — whether every utterance is rendered, and
     /// each chapter's place on the time axis — cached against `timelineRevision` like the ticks
     /// (Plan 17, audit §7). `chapterIndexCache` is keyed on the playhead's utterance as well.
@@ -172,9 +183,22 @@ public final class PlayerModel {
             ticks = ScrubberModel.renderedTicks(timeline: timeline, timeIndex: coordinator.timeIndex, tickCount: tickCount)
             tickCache = (revision, ticks)
         }
+        // The chapter pass is a second, finer frontier over the current chapter alone — what
+        // chapter scope draws across the full width. Cached beside the book pass for the same
+        // reason: this property is read from a view body that runs at 10 Hz while playing.
+        var chapterTicks: [Bool] = []
+        if let chapter = chapterIndex {
+            if let cache = chapterTickCache, cache.revision == revision, cache.chapter == chapter {
+                chapterTicks = cache.ticks
+            } else {
+                chapterTicks = ScrubberModel.chapterTicks(timeline: timeline, timeIndex: coordinator.timeIndex,
+                                                          chapterIndex: chapter, tickCount: tickCount)
+                chapterTickCache = (revision, chapter, chapterTicks)
+            }
+        }
         let total = coordinator.timeIndex.totalDuration
         let fraction = total > 0 ? min(1, max(0, coordinator.timeIndex.time(at: coordinator.playhead) / total)) : 0
-        return ScrubberModel(tickCount: tickCount, renderedTicks: ticks, fraction: fraction)
+        return ScrubberModel(tickCount: tickCount, renderedTicks: ticks, chapterTicks: chapterTicks, fraction: fraction)
     }
 
     /// The loaded document's bookmarks as fractions along the whole duration — the scrubber's dots.

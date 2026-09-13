@@ -24,6 +24,16 @@ public enum HighlightTheme: String, CaseIterable, Sendable, Identifiable {
     }
 }
 
+/// What the Reader's progress bar spans (2026-09-13): the whole book as one bar per chapter, or
+/// the chapter you are in as a single unbroken bar. The choice rides in preferences rather than in
+/// the Reader's `@State` so it survives closing the page, and it is global rather than per book —
+/// it is a way of reading, not a fact about a title.
+public enum ScrubberScope: String, CaseIterable, Sendable {
+    case book, chapter
+
+    public var other: ScrubberScope { self == .book ? .chapter : .book }
+}
+
 /// How the Collection page lays its books out (2026-09-09): the spec's cover grid, or one book per
 /// row with a menu button. Remembered across launches like any other preference.
 public enum CollectionLayout: String, CaseIterable, Sendable {
@@ -67,6 +77,7 @@ public final class ReaderPreferences {
         static let theme = "reader.theme"
         static let highlightTheme = "reader.highlightTheme"
         static let collectionLayout = "collection.layout"
+        static let scrubberScope = "reader.scrubberScope"
         static let skipBack = "playback.skipBack"
         static let skipForward = "playback.skipForward"
         static let rate = "playback.defaultRate"
@@ -103,6 +114,11 @@ public final class ReaderPreferences {
     /// The grid is the spec's Collection, so it stays the default.
     public var collectionLayout: CollectionLayout {
         didSet { defaults.set(collectionLayout.rawValue, forKey: Key.collectionLayout) }
+    }
+
+    /// The segmented book bar is what the app has always drawn, so it stays the default.
+    public var scrubberScope: ScrubberScope {
+        didSet { defaults.set(scrubberScope.rawValue, forKey: Key.scrubberScope) }
     }
 
     public var skipBackSeconds: Int {
@@ -149,6 +165,7 @@ public final class ReaderPreferences {
         theme = ReaderTheme(rawValue: defaults.string(forKey: Key.theme) ?? "") ?? .system
         highlightTheme = HighlightTheme(rawValue: defaults.string(forKey: Key.highlightTheme) ?? "") ?? .amber
         collectionLayout = CollectionLayout(rawValue: defaults.string(forKey: Key.collectionLayout) ?? "") ?? .grid
+        scrubberScope = ScrubberScope(rawValue: defaults.string(forKey: Key.scrubberScope) ?? "") ?? .book
         skipBackSeconds = defaults.object(forKey: Key.skipBack) as? Int ?? 15
         skipForwardSeconds = defaults.object(forKey: Key.skipForward) as? Int ?? 30
         defaultRate = defaults.object(forKey: Key.rate) as? Double ?? 1.0
@@ -164,6 +181,7 @@ public final class ReaderPreferences {
         theme = .system
         highlightTheme = .amber
         collectionLayout = .grid
+        scrubberScope = .book
         skipBackSeconds = 15
         skipForwardSeconds = 30
         defaultRate = 1.0

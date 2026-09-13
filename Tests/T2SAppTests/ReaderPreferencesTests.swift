@@ -11,6 +11,23 @@ import Testing
         return defaults
     }
 
+    /// The scrubber's scope (2026-09-13) is global and remembered: it is a way of reading rather
+    /// than a fact about one book, and closing the Reader must not put the bar back.
+    @Test func scrubberScopeDefaultsToTheBookAndPersists() {
+        let defaults = fresh()
+        #expect(ReaderPreferences(defaults: defaults).scrubberScope == .book)
+        let preferences = ReaderPreferences(defaults: defaults)
+        preferences.scrubberScope = .chapter
+        #expect(ReaderPreferences(defaults: defaults).scrubberScope == .chapter)
+        preferences.reset()
+        #expect(ReaderPreferences(defaults: defaults).scrubberScope == .book)
+    }
+
+    @Test func scopeFlipsToTheOther() {
+        #expect(ScrubberScope.book.other == .chapter)
+        #expect(ScrubberScope.chapter.other == .book)
+    }
+
     @Test func defaultsMatchTheSpec() {
         let preferences = ReaderPreferences(defaults: fresh())
         #expect(preferences.textScale == 1.0 && preferences.lineHeight == 1.5 && preferences.theme == .system)

@@ -32,7 +32,7 @@ struct PlayerStatusLine: View {
         // side on the curve, so 16 pt of padding left the words sitting in the bend rather than on
         // the flat of the pill.
         .padding(.horizontal, 28)
-        .padding(.vertical, 9)
+        .padding(.vertical, 13)
         // A `surface` capsule, the same fill and the same fully-rounded shape as the voice chip
         // and the tool circles a few rows below, so the line reads as one of the app's own objects
         // rather than as a card dropped on the page. Fully rounded rather than a rounded rectangle

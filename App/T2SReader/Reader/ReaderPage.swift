@@ -374,8 +374,13 @@ struct ReaderPage: View {
             // bottom-anchored, so air made here pushes the scrubber group up rather than the
             // transport down; the foot is set by the block's own bottom padding below.
             .padding(.bottom, 22)
+            // 20 pt under the transport rather than 10 (owner, 2026-09-13): the tool row is a
+            // different kind of thing from the keys above it — type size, voice, bookmark, none of
+            // them playback — and at 10 it read as a fourth row of the transport. The block is
+            // bottom-anchored, so most of this air lifts the transport rather than lowering the
+            // row; the few points the row itself drops come from the foot below.
             ReaderControls(onSleepTimer: { showSleepTimer = true }, onSpeed: { showSpeed = true })
-                .padding(.bottom, 10)
+                .padding(.bottom, 20)
             toolRow
         }
         .padding(.horizontal, Spacing.margin)
@@ -385,11 +390,12 @@ struct ReaderPage: View {
         // leaving the controls to climb out of their own gradient. The state-line overlay rides up
         // too — it hangs off the chapter picker.
         //
-        // `2 * Spacing.grid` rather than the bare `grid` it was, and rather than the 2 pt it was
-        // cut to earlier today (owner, 2026-09-13): it is the top bar's own band padding, so the
-        // block's foot and the header's band keep one rhythm, and it stands the tool row clear of
-        // the safe area instead of on its edge.
-        .padding(.bottom, 2 * Spacing.grid)
+        // 12 pt: a shade under `2 * Spacing.grid`, which is the top bar's band and was this foot
+        // until the owner asked for the row to sit lower (2026-09-13) — "but don't move too much
+        // towards bottom safe area", so it gives up 4 pt and no more. The home-indicator inset is
+        // still whole underneath, and the row keeps a margin of its own above it rather than
+        // standing on the edge.
+        .padding(.bottom, 12)
         .overlay(alignment: .top) {
             // One slot, and the Reader's own toast has it: a bookmark saved here is answered here.
             // An app-wide message (`ToastCenter` — the voice model removed under a play) uses the

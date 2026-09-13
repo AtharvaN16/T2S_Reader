@@ -1,7 +1,7 @@
 import T2SAudio
 
-/// Adds the one active BYO cloud route to the platform voice catalog. A stored endpoint alone is
-/// not enough: invalid/unsaved edits never become a selectable route.
+/// Adds the one hosted cloud route to the platform voice catalog. A route only appears once it has
+/// parsed and validated, so a broken build constant never becomes a selectable voice.
 public struct CloudVoiceCatalog: VoiceCatalog {
     private let base: any VoiceCatalog
     private let configurationStore: CloudVoiceConfigurationStore

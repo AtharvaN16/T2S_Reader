@@ -79,13 +79,6 @@ struct PreferencesPage: View {
                             )
                         }
                     }
-                    section("Cloud voices") {
-                        NavigationLink {
-                            CloudVoicesPage()
-                        } label: {
-                            row("Bring your own key")
-                        }
-                    }
                     section("iCloud sync") {
                         row("Sync positions and bookmarks", subtitle: env.syncModel.unavailableReason ?? env.syncModel.statusText) {
                             Toggle("", isOn: Binding(get: { env.syncModel.isEnabled },

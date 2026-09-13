@@ -7,6 +7,26 @@ older and dated as marked. The dated per-session entries that used to stack here
 for the lot, `git log` for the rest), and what mattered from them lives in `crashreport.md`,
 `docs/research/` and the specs._
 
+## The cloud route is the build's, not the reader's (2026-09-13)
+
+Settings → Cloud voices → "Bring your own key" is gone, and with it `CloudVoicesPage` and
+`CloudVoiceSettings`. The cloud-first bootstrap had already made the route and the key ship with the
+app, so the page's only remaining power over a working install was to break it: an edited endpoint or
+an overwritten key took the hosted voice away with nothing to put back. The route now comes straight
+from `CloudVoiceDefaults.pilot.configuration()` in `AppEnvironment.live()`; `CloudVoiceKeySeeder`,
+`KeychainSecretStore`, `CloudVoiceCatalog` and `HTTPVoiceEngine` are untouched in behaviour, and
+"Heart · Cloud" appears in the voice picker exactly as before. What went with the page: the
+`cloudVoice.*` `UserDefaults` keys (left orphaned on existing installs, as the pronunciation removal
+left its model), the shipped-endpoint marker and `CloudVoiceDefaults.superseded` that upgraded an
+unedited route across builds, and `AppEnvironment`'s `cloudVoiceSettings`/`cloudVoiceSecrets`
+properties — the secret store is now a local in `live()`. `HTTPVoiceError`'s messages no longer name
+a screen that does not exist or call the mirrors "your provider".
+
+**The trade this makes:** a mirror URL change or a key rotation now needs a new build. That was
+already true of the key, which has only ever shipped in `Local.xcconfig` → Info.plist; it is newly
+true of the endpoints. If a reader ever needs to point the app somewhere else, this is the commit to
+read back.
+
 ## Heroku Kokoro Eco pilot (2026-09-11 evening)
 
 The owner purchased Heroku's $5 Eco plan for a server-side Kokoro feasibility run. The approved

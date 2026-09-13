@@ -115,21 +115,21 @@ public enum HTTPVoiceError: Error, Equatable, Sendable, LocalizedError, CustomSt
     public var errorDescription: String? {
         switch self {
         case .notConfigured:
-            return "This cloud voice is no longer configured. Choose it again in Cloud voices."
+            return "This cloud voice is unavailable. Choose another voice."
         case .missingKey:
-            return "Add an API key in Cloud voices to use this voice."
+            return "This cloud voice is unavailable on this install. Choose another voice."
         case .invalidConfiguration:
-            return "Check the Cloud voices endpoint, model, voice, and rate limit."
+            return "This cloud voice is misconfigured. Choose another voice."
         case .rateLimited(let retryAfter):
-            if let retryAfter { return "Your provider is rate limiting requests. Try again in \(Int(retryAfter.rounded(.up))) seconds." }
-            return "Your provider is rate limiting requests. Try again shortly."
+            if let retryAfter { return "The cloud voice service is busy. Try again in \(Int(retryAfter.rounded(.up))) seconds." }
+            return "The cloud voice service is busy. Try again shortly."
         case .server(let status, _):
-            if status == 401 || status == 403 { return "Your cloud voice key was rejected. Check it in Cloud voices." }
-            return "Your cloud voice provider rejected this request (HTTP \(status))."
+            if status == 401 || status == 403 { return "The cloud voice service rejected this request. Choose another voice." }
+            return "The cloud voice service rejected this request (HTTP \(status))."
         case .malformedResponse:
-            return "Your cloud voice provider returned unsupported audio."
+            return "The cloud voice service returned unsupported audio."
         case .transport:
-            return "Couldn’t reach your cloud voice provider. Check your connection and try again."
+            return "Couldn’t reach the cloud voice service. Check your connection and try again."
         }
     }
 

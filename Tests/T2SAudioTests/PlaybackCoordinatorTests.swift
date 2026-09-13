@@ -441,7 +441,7 @@ import T2SCore
         coordinator.load(doc, timeline: timeline)
         await coordinator.waitForRenderIdle()
 
-        #expect(coordinator.lastRenderError?.contains("key was rejected") == true)
+        #expect(coordinator.lastRenderError?.contains("rejected this request") == true)
     }
 
     // MARK: Plan 14 — the head streams

@@ -98,7 +98,7 @@ import T2SCore
         await #expect(throws: HTTPVoiceError.server(status: 401, message: "key rejected")) {
             try await invalidKey.synthesize(.init(spoken: "x", voiceID: "cloud:v1:v"))
         }
-        #expect(HTTPVoiceError.server(status: 401, message: "key rejected").description.contains("key was rejected"))
+        #expect(HTTPVoiceError.server(status: 401, message: "key rejected").description.contains("rejected this request"))
     }
 
     @Test func rejectsMalformedAndUnsafeResponses() async {

@@ -38,8 +38,8 @@ public enum CollectionLayout: String, CaseIterable, Sendable {
 public final class ReaderPreferences {
     public static let textScaleRange: ClosedRange<Double> = 0.8...1.6
     public static let lineHeightRange: ClosedRange<Double> = 1.3...1.8
-    public static let skipBackOptions = [10, 15, 30]
-    public static let skipForwardOptions = [15, 30, 45]
+    public static let skipBackOptions = [10, 15, 30, 45, 60]
+    public static let skipForwardOptions = [10, 15, 30, 45, 60]
 
     public struct BudgetOption: Hashable, Sendable {
         public var label: String

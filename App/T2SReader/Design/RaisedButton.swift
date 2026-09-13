@@ -16,6 +16,13 @@ import SwiftUI
 /// `Tokens.keyInkTop`. Three sizes: `.bar` fills its width at 56 pt (what `BarButton` is),
 /// `.key` hugs its label at 56, `.compact` hugs it at 40 for a pill in the Reader.
 ///
+/// There was a third, `.quiet`, for the second key in a pair: a flat `surface` slab, so two keys
+/// in one bar would not compete for the same press. It is gone with the only bar that carried two
+/// (`VoiceListPage`, 2026-09-12), and the reason is worth keeping — a `surface` slab is exactly
+/// what the disabled state below paints, so a live quiet key and a dead one were the same picture.
+/// A second answer that has to be told apart from "you cannot press this" is not a second key: it
+/// is a different control, and the voice bar makes it a tick.
+///
 /// Disabled it is not a key at all but the flat `surface` slab `BarButton` always showed while
 /// there was nothing to act on — a raised key that cannot be pressed would be a lie; `busyLabel`
 /// puts a spinner in front of the words while the model works and disables it the same way.
@@ -43,7 +50,11 @@ struct RaisedButton: View {
             .lineLimit(1)
             .fixedSize(horizontal: size != .bar, vertical: false)
             .foregroundStyle(enabled ? face.text : Tokens.ink2)
-            .padding(.horizontal, size == .compact ? 18 : 36)
+            // A `.bar` key is `maxWidth: .infinity` with its label centred, so this padding never
+            // shows there — it only sets the width below which the label starts truncating. 20 pt
+            // rather than 36 so two bar keys can share a row ("Make default" · "Done") at phone
+            // width without either losing a letter.
+            .padding(.horizontal, size == .compact ? 18 : size == .bar ? 20 : 36)
             .frame(maxWidth: size == .bar ? .infinity : nil)
             .frame(minHeight: size == .compact ? 40 : 56)
             .contentShape(Capsule())
@@ -72,7 +83,7 @@ private struct RaisedFace {
 
 private struct RaisedStyle: ButtonStyle {
     var face: RaisedFace
-    /// False while disabled: the flat slab, no bevel, no shadow, no press.
+    /// False while disabled: the flat slab, no bevel, no shadow.
     var raised: Bool
 
     func makeBody(configuration: Configuration) -> some View {

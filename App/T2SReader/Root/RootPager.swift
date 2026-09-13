@@ -46,6 +46,11 @@ enum RootPage: Hashable, CaseIterable {
     /// normally opened by a finger has to be asked for at launch.
     static var launchOpensBookmarks: Bool { launchOpen?.hasPrefix("bookmarks") == true }
 
+    /// `T2S_VOICE=pending`: the voice list opens with a radio already moved off the voice in
+    /// effect, which is the only way a script-driven simulator can see the commit bar — the bar is
+    /// raised by a tap, and nothing here can tap. Screenshots only, like the rest.
+    static var launchPendingVoice: Bool { ProcessInfo.processInfo.environment["T2S_VOICE"] == "pending" }
+
     /// `T2S_SEED=1`: at launch, when the library holds no web page and no pasted text, import one
     /// of each (built in place, no network) and put them on Home — a script-driven simulator
     /// cannot type into the Import steps, and the sheet placeholders need something to stand for.
@@ -144,7 +149,14 @@ struct RootPager: View {
                 // one to two through its fade (owner, 2026-09-12: "there is a top fade messing with
                 // the glow"). The warm-up's line is not gated: it belongs wherever the reader is.
                 if !chrome.isSubpageOpen {
-                    TopFade(inset: geo.safeAreaInsets.top)
+                    // The fade grows to hold the warm-up's rows while they are up, and eases back
+                    // on the glow's own timing so the two leave together rather than the ground
+                    // snapping out from under a line that is still fading.
+                    let warming = WarmUpVeil.isShowing(env)
+                    TopFade(inset: geo.safeAreaInsets.top,
+                            extra: warming ? TopFade.warmSolid : 0,
+                            fade: warming ? TopFade.warmFade : TopFade.fadeHeight)
+                        .animation(.easeInOut(duration: WarmUpVeil.fadeOut), value: warming)
                     WarmRim(edge: .top)
                     // The foot's rim is a sibling of the head's, not a passenger on `bottomFill`.
                     // It rode on the fill while the fill was the only thing that reached past the
@@ -411,16 +423,10 @@ struct RootPager: View {
         let solid = PageIndicator.height + Spacing.grid + inset
         let height = Self.fadeHeight + solid
         let fadeEnd = Self.fadeHeight / height
-        // An eased ramp, not a straight one: a linear fade that stops dead at solid has a kink
-        // the eye reads as a line across the screen (a Mach band). Smoothstep squared starts and
-        // ends with zero slope, and keeps the lower half of the fade light so the page shows.
-        let steps = 12
-        var stops = (0...steps).map { i -> Gradient.Stop in
-            let t = Double(i) / Double(steps)
-            let eased = pow(t * t * (3 - 2 * t), 2)
-            return .init(color: Tokens.ground.opacity(eased), location: fadeEnd * t)
-        }
-        stops.append(.init(color: Tokens.ground, location: 1))
+        // The app's one bottom ramp (`BottomFade`), drawn here as part of a single gradient
+        // because this fill carries the page row's solid band and the home-indicator inset under
+        // it as well; the sheets get the same curve from the view.
+        let stops = BottomFade.stops(fadeEnd: fadeEnd)
         // Ground only. The rim that goes over it — this fill is opaque exactly where the glow is
         // brightest, and painting under it puts the foot of the light out (owner, 2026-09-12) — is
         // a sibling in `body`, drawn after this.

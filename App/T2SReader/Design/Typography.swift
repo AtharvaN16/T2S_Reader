@@ -4,7 +4,7 @@ import SwiftUI
 /// Spec §2.4.1 type roles: Inter with tight tracking on display and label text, normal tracking on
 /// meta, monospaced digits for anything that counts. Sizes are Dynamic Type relative.
 enum TypeRole {
-    case pageTitle, playerTitle, groupTitle, sectionHeader, rowTitle, settingsRow, pill, meta, metaStrong, caption, mono
+    case pageTitle, playerTitle, groupTitle, sectionHeader, rowTitle, settingsRow, pill, meta, metaStrong, caption, fine, mono
 
     var font: Font {
         switch self {
@@ -27,6 +27,11 @@ enum TypeRole {
         /// A step under `meta`: the Collection grid's author line, where `meta` itself is now the
         /// title's weight and needs something quieter under it.
         case .caption: return .custom("Inter-Regular", size: 11, relativeTo: .caption2)
+        /// The foot of the ladder: the consequence line over a commit bar — what the press will
+        /// cost, in the voice sheet's case ten minutes of rendered audio (owner, 2026-09-12: make
+        /// it extremely small). It is there to be read once and then ignored, so it is sized to sit
+        /// under the decision rather than compete with it. Nothing a reader must act on goes here.
+        case .fine: return .custom("Inter-Regular", size: 10, relativeTo: .caption2)
         case .mono: return .system(.footnote, design: .monospaced)
         }
     }
@@ -41,6 +46,9 @@ enum TypeRole {
         case .settingsRow: return -0.01 * 16
         case .pill: return -0.01 * 15
         case .meta, .metaStrong, .caption, .mono: return 0
+        /// The one role that opens up rather than tightens: at 10 pt the counters are small enough
+        /// that the default fit closes the words into a grey band.
+        case .fine: return 0.01 * 10
         }
     }
 

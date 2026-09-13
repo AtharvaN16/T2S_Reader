@@ -55,6 +55,23 @@ work already there, and was merged the same night with every check green:
 https://github.com/AtharvaN16/T2S_Reader/pull/17. `dev` merged `main` afterwards (two handoff
 commits had landed on `dev` after the merge, so it could not fast-forward); they ride in the next PR.
 
+**The theme reaches the whole app (2026-09-12).** A Settings subpage — Voice, Cloud voices, Storage,
+Dictionary — kept its old colours when the theme changed, and so did the next one pushed, which is
+the bug the owner had had two half-goes at. `preferredColorScheme` is a *preference*: it colours the
+presentation it is declared in, and a page pushed by `NavigationStack` is not in that presentation —
+SwiftUI hosts the stack in a `UINavigationController` of its own and pins that controller's traits
+with `setOverrideTraitCollection(_:forChild:)` at the moment the stack is built, then leaves them.
+Measured on the simulator with a cut-down copy of the same hierarchy: with the theme on dark, the
+root hosting controller read `userInterfaceStyle = dark` and the navigation controller under it
+still read `light`, with the pin on it. Declaring the theme on the pushed page does not help — that
+preference travels up past the pin to the same root. `appTheme()` now also writes the style onto the
+window and, below the pin, onto each view controller's own view (`traitOverrides`), which UIKit
+applies after everything inherited and passes to every subview. One call, at the root of the window
+(`RootPager`), is the whole of it: the three copies the Reader, the Import cover and the Appearance
+sheet each carried are gone, and a new screen needs to remember nothing. Verified on the simulator
+in both directions and back to `system` — the Voice page while it is open, the next push, the
+Appearance sheet, and the Reader with its UIKit text view.
+
 ## Resume here (2026-09-11, morning) — for Harsh: where things stand, the crash fixes, what's next
 
 _Written 03:20 by the owner's session as it handed over. `dev` is pushed; the owner's iPhone 11 Pro runs

@@ -130,12 +130,14 @@ extension PageTitle where Menu == EmptyView {
 /// so it rides above the keyboard.
 struct BarButton: View {
     var label: String
+    /// `ink` is the confirm key everywhere; a bar carries one, and its scope lives in the line above.
+    var tone: RaisedButton.Tone = .ink
     var busyLabel: String? = nil
     var isEnabled: Bool = true
     var action: () -> Void
 
     var body: some View {
-        RaisedButton(label: label, tone: .ink, size: .bar, busyLabel: busyLabel, isEnabled: isEnabled, action: action)
+        RaisedButton(label: label, tone: tone, size: .bar, busyLabel: busyLabel, isEnabled: isEnabled, action: action)
     }
 }
 
@@ -155,6 +157,29 @@ struct RadioMark: View {
             }
         }
         .frame(width: 24, height: 24)
+        .animation(.snappy, value: isOn)
+        .accessibilityHidden(true)
+    }
+}
+
+/// A check mark: `RadioMark`'s ink disc, squared off, for the choice that is not one of a set but a
+/// yes / no riding along with something else — "Also make Alloy my default voice" over the voice
+/// sheet's commit bar. Square on purpose: a second round mark under a list of radios would read as
+/// one more row of the same question. Visual only, like the radio — the row it sits in is the
+/// button — so it can never be tapped past.
+struct CheckMark: View {
+    var isOn: Bool
+
+    var body: some View {
+        ZStack {
+            if isOn {
+                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Tokens.ink)
+                Image(systemName: "checkmark").font(.system(size: 11, weight: .heavy)).foregroundStyle(Tokens.ground)
+            } else {
+                RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Tokens.ink2, lineWidth: 2)
+            }
+        }
+        .frame(width: 22, height: 22)
         .animation(.snappy, value: isOn)
         .accessibilityHidden(true)
     }

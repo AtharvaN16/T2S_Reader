@@ -46,8 +46,6 @@ struct ImportPage: View {
             }
         }
         .background(Tokens.ground)
-        // A full-screen cover is its own presentation, so the theme is applied here as on the Reader.
-        .appTheme()
         .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.epub, .pdf], allowsMultipleSelection: true) { result in
             switch result {
             case .success(let urls): Task { await model.importFiles(urls) }

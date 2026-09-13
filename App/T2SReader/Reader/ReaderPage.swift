@@ -132,7 +132,6 @@ struct ReaderPage: View {
             if let id = env.player.current?.id { Task { await env.syncModel.dismissOffer(for: id) } }
             syncOffer = nil
         }
-        .appTheme()
         .onChange(of: shownVoiceID, initial: true) { _, id in resolveVoiceName(id) }
         .onDisappear {
             Task { await env.player.persistRenderedChapters() }
@@ -248,16 +247,26 @@ struct ReaderPage: View {
                              onScrub: { scrubChapter = $0 })
                 // Elapsed on the left, time left on the right (Apple Music's "-1:02:33"), in the
                 // app's own face with tabular digits rather than the system monospace.
+                //
+                // The state line is an overlay across the whole row rather than a third item
+                // between two `Spacer()`s, because two spacers centre a word between its
+                // *neighbours*, not on the row: "0:07" and "-1:02:33" are different widths, so
+                // "catching up…" sat left of centre by half that difference — and the ellipsis,
+                // which the eye does not count as part of the word, pulled it further still
+                // (owner, 2026-09-12). An overlay is centred on the row itself and cannot drift.
+                // It is allowed to sit over the clocks: it only ever appears before the first
+                // sound, when the left one reads 0:00 and has nothing to lose.
                 HStack {
                     Text(player.elapsedText).monospacedDigit()
                     Spacer()
+                    Text("-" + DurationFormatter.clock(max(0, player.total - player.elapsed))).monospacedDigit()
+                }
+                .overlay {
                     if env.isWarmingUp {
                         Text("preparing the voice…").foregroundStyle(Tokens.glow)
                     } else if player.isCatchingUp {
                         Text("catching up…")
                     }
-                    Spacer()
-                    Text("-" + DurationFormatter.clock(max(0, player.total - player.elapsed))).monospacedDigit()
                 }
                 .typeRole(.meta).foregroundStyle(Tokens.ink2)
                 if let error = player.renderError {

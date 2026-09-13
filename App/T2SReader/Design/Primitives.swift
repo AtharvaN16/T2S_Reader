@@ -67,11 +67,14 @@ struct Pill: View {
 /// `⋯`, the Reader bar's circles. A label, not a button, so a `Button` and a `Menu` can both wear it.
 struct CircleGlyph: View {
     var systemName: String
+    /// The glyph's colour. `ink` for the ordinary marks; a Delete passes `destructive`, so the one
+    /// mark on a screen that destroys something is the one mark that is red (owner, 2026-09-12).
+    var tint: Color = Tokens.ink
 
     var body: some View {
         Image(systemName: systemName)
             .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(Tokens.ink)
+            .foregroundStyle(tint)
             .frame(width: 36, height: 36)
             .background(Tokens.surface, in: Circle())
     }
@@ -91,6 +94,11 @@ struct SectionHeader: View {
 struct PageTitle<Menu: View>: View {
     var text: String
     var subtitle: String? = nil
+    /// How far below the top of the page the title sits. `Spacing.titleTop` on a root page, which
+    /// has nothing above it; a page that draws its own back row first passes the smaller gap it
+    /// needs, or the title lands a whole row and a half down the screen (owner, 2026-09-12:
+    /// "bookmarks title and page start is too low").
+    var topPadding: CGFloat = Spacing.titleTop
     @ViewBuilder var menu: () -> Menu
 
     var body: some View {
@@ -103,14 +111,14 @@ struct PageTitle<Menu: View>: View {
                 Text(subtitle).typeRole(.meta).foregroundStyle(Tokens.ink2)
             }
         }
-        .padding(.top, Spacing.titleTop)
+        .padding(.top, topPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 extension PageTitle where Menu == EmptyView {
-    init(text: String, subtitle: String? = nil) {
-        self.init(text: text, subtitle: subtitle, menu: { EmptyView() })
+    init(text: String, subtitle: String? = nil, topPadding: CGFloat = Spacing.titleTop) {
+        self.init(text: text, subtitle: subtitle, topPadding: topPadding, menu: { EmptyView() })
     }
 }
 
@@ -122,12 +130,14 @@ extension PageTitle where Menu == EmptyView {
 /// so it rides above the keyboard.
 struct BarButton: View {
     var label: String
+    /// `ink` is the confirm key everywhere; a bar carries one, and its scope lives in the line above.
+    var tone: RaisedButton.Tone = .ink
     var busyLabel: String? = nil
     var isEnabled: Bool = true
     var action: () -> Void
 
     var body: some View {
-        RaisedButton(label: label, tone: .ink, size: .bar, busyLabel: busyLabel, isEnabled: isEnabled, action: action)
+        RaisedButton(label: label, tone: tone, size: .bar, busyLabel: busyLabel, isEnabled: isEnabled, action: action)
     }
 }
 
@@ -147,6 +157,29 @@ struct RadioMark: View {
             }
         }
         .frame(width: 24, height: 24)
+        .animation(.snappy, value: isOn)
+        .accessibilityHidden(true)
+    }
+}
+
+/// A check mark: `RadioMark`'s ink disc, squared off, for the choice that is not one of a set but a
+/// yes / no riding along with something else — "Also make Alloy my default voice" over the voice
+/// sheet's commit bar. Square on purpose: a second round mark under a list of radios would read as
+/// one more row of the same question. Visual only, like the radio — the row it sits in is the
+/// button — so it can never be tapped past.
+struct CheckMark: View {
+    var isOn: Bool
+
+    var body: some View {
+        ZStack {
+            if isOn {
+                RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Tokens.ink)
+                Image(systemName: "checkmark").font(.system(size: 11, weight: .heavy)).foregroundStyle(Tokens.ground)
+            } else {
+                RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Tokens.ink2, lineWidth: 2)
+            }
+        }
+        .frame(width: 22, height: 22)
         .animation(.snappy, value: isOn)
         .accessibilityHidden(true)
     }

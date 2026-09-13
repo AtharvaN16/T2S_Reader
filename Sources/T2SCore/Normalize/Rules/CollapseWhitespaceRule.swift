@@ -1,4 +1,4 @@
-/// Runs after every content rule and before the pronunciation dictionary.
+/// Runs last, after every content rule.
 public struct CollapseWhitespaceRule: NormalizerRule {
     static let runs = Pattern("\\s+")
     static let edges = Pattern("^\\s+|\\s+$")

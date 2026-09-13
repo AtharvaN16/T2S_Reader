@@ -33,10 +33,23 @@ enum RootPage: Hashable, CaseIterable {
     }
 
     /// `T2S_OPEN`, the same idea one step further: `reader` opens the Reader, `chapters` the Reader
-    /// with its chapter list up, `kinds` the Collection title's kind menu, `book` its book sheet —
+    /// with its chapter list up, `bookmarks` the Reader with its bookmarks page over it — on a
+    /// sample seeded with bookmarks, since a bookmark is a position in a timeline and cannot be
+    /// written by a script — `kinds` the Collection title's kind menu, `book` its book sheet —
     /// on the first document whose
     /// title contains `T2S_BOOK`, else the first document. Screenshots only.
     static var launchOpen: String? { ProcessInfo.processInfo.environment["T2S_OPEN"] }
+
+    /// Whether the launch opens the Bookmarks page: `bookmarks`, `bookmarks-order` for the same
+    /// page with its order menu down, `bookmarks-detail` for its first bookmark opened — as with
+    /// `kinds` on the Collection, a scripted simulator cannot tap a mark, so anything that is
+    /// normally opened by a finger has to be asked for at launch.
+    static var launchOpensBookmarks: Bool { launchOpen?.hasPrefix("bookmarks") == true }
+
+    /// `T2S_VOICE=pending`: the voice list opens with a radio already moved off the voice in
+    /// effect, which is the only way a script-driven simulator can see the commit bar — the bar is
+    /// raised by a tap, and nothing here can tap. Screenshots only, like the rest.
+    static var launchPendingVoice: Bool { ProcessInfo.processInfo.environment["T2S_VOICE"] == "pending" }
 
     /// `T2S_SEED=1`: at launch, when the library holds no web page and no pasted text, import one
     /// of each (built in place, no network) and put them on Home — a script-driven simulator
@@ -136,7 +149,14 @@ struct RootPager: View {
                 // one to two through its fade (owner, 2026-09-12: "there is a top fade messing with
                 // the glow"). The warm-up's line is not gated: it belongs wherever the reader is.
                 if !chrome.isSubpageOpen {
-                    TopFade(inset: geo.safeAreaInsets.top)
+                    // The fade grows to hold the warm-up's rows while they are up, and eases back
+                    // on the glow's own timing so the two leave together rather than the ground
+                    // snapping out from under a line that is still fading.
+                    let warming = WarmUpVeil.isShowing(env)
+                    TopFade(inset: geo.safeAreaInsets.top,
+                            extra: warming ? TopFade.warmSolid : 0,
+                            fade: warming ? TopFade.warmFade : TopFade.fadeHeight)
+                        .animation(.easeInOut(duration: WarmUpVeil.fadeOut), value: warming)
                     WarmRim(edge: .top)
                     // The foot's rim is a sibling of the head's, not a passenger on `bottomFill`.
                     // It rode on the fill while the fill was the only thing that reached past the
@@ -188,8 +208,9 @@ struct RootPager: View {
         .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation, nowPlaying: env.nowPlaying)
         .task {
             if RootPage.launchSeeds { await seedSamples() }
+            if RootPage.launchOpensBookmarks { await seedBookmarks() }
             await env.libraryModel.refresh()
-            if ["reader", "chapters", "voice"].contains(RootPage.launchOpen ?? ""),
+            if ["reader", "chapters", "voice"].contains(RootPage.launchOpen ?? "") || RootPage.launchOpensBookmarks,
                let document = RootPage.launchDocument(in: env.libraryModel.summaries) {
                 readerDocument = document
             }
@@ -338,6 +359,49 @@ struct RootPager: View {
         }
     }
 
+    /// The bookmarks screenshot's book: a few paragraphs, so the page has passages of a real
+    /// length to draw rather than one line each.
+    private static let bookmarkSample = PlainTextArticle.content(
+        title: "Pride and Prejudice",
+        body: """
+        It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.
+
+        "Impossible, Mr. Bennet, impossible, when I am not acquainted with him myself; how can you be so teasing?"
+
+        "You are over scrupulous surely. I dare say Mr. Bingley will be very glad to see you; and I will send a few lines by you to assure him of my hearty consent to his marrying whichever he chooses of the girls."
+
+        Mr. Bennet was so odd a mixture of quick parts, sarcastic humour, reserve, and caprice, that the experience of three and twenty years had been insufficient to make his wife understand his character.
+        """)
+
+    /// `T2S_OPEN=bookmarks` (screenshots): the sample above, with bookmarks on it. They cannot be
+    /// written flat the way the sample articles are — a bookmark is a position in a timeline — so
+    /// they are made the way a reader's are, against the timeline the import derives, and only when
+    /// the document has none. One of them carries a note, since a note changes the shape of a row.
+    private func seedBookmarks() async {
+        let sample = Self.bookmarkSample
+        await env.libraryModel.refresh()
+        if !env.libraryModel.summaries.contains(where: { $0.document.title == sample.title }) {
+            _ = try? await env.library.importArticle(sample, originalHTML: "")
+            await env.libraryModel.refresh()
+        }
+        guard let summary = env.libraryModel.summaries.first(where: { $0.document.title == sample.title }),
+              let existing = try? await env.library.store.bookmarks(for: summary.id), existing.isEmpty,
+              let timeline = try? await env.library.timelineForPlayback(summary.id), timeline.utteranceCount > 0
+        else { return }
+        let notes = ["The line the whole argument turns on — come back to it before the reading group."]
+        // From the second utterance: the first is the title, and a bookmark on the title of the
+        // thing you are reading tells a screenshot nothing.
+        for (n, index) in (1..<min(timeline.utteranceCount, 6)).enumerated() {
+            let position = PositionResolver.position(for: Playhead(utteranceIndex: index), in: timeline)
+            let bookmark = Bookmark(documentID: summary.id, position: position,
+                                    passageText: timeline[utterance: index].source,
+                                    userNote: n < notes.count ? notes[n] : nil,
+                                    createdAt: Date().addingTimeInterval(Double(-n) * 600))
+            try? await env.library.store.add(bookmark)
+        }
+        await env.libraryModel.notePlaying(summary.id)
+    }
+
     private func openPending() {
         guard let doc = pendingOpen else { return }
         pendingOpen = nil
@@ -359,16 +423,10 @@ struct RootPager: View {
         let solid = PageIndicator.height + Spacing.grid + inset
         let height = Self.fadeHeight + solid
         let fadeEnd = Self.fadeHeight / height
-        // An eased ramp, not a straight one: a linear fade that stops dead at solid has a kink
-        // the eye reads as a line across the screen (a Mach band). Smoothstep squared starts and
-        // ends with zero slope, and keeps the lower half of the fade light so the page shows.
-        let steps = 12
-        var stops = (0...steps).map { i -> Gradient.Stop in
-            let t = Double(i) / Double(steps)
-            let eased = pow(t * t * (3 - 2 * t), 2)
-            return .init(color: Tokens.ground.opacity(eased), location: fadeEnd * t)
-        }
-        stops.append(.init(color: Tokens.ground, location: 1))
+        // The app's one bottom ramp (`BottomFade`), drawn here as part of a single gradient
+        // because this fill carries the page row's solid band and the home-indicator inset under
+        // it as well; the sheets get the same curve from the view.
+        let stops = BottomFade.stops(fadeEnd: fadeEnd)
         // Ground only. The rim that goes over it — this fill is opaque exactly where the glow is
         // brightest, and painting under it puts the foot of the light out (owner, 2026-09-12) — is
         // a sibling in `body`, drawn after this.

@@ -17,13 +17,9 @@ struct BookmarkRow: View {
     var onEditNote: () -> Void
     var onDelete: () -> Void
 
-    private var meta: String {
-        entry.chapterTitle.isEmpty ? entry.rangeText : "\(entry.rangeText) · \(entry.chapterTitle)"
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(meta).typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(1)
+            BookmarkMeta(entry: entry)
             Text(entry.lead).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
                 .lineLimit(4).multilineTextAlignment(.leading)
             if let note = entry.note {
@@ -54,7 +50,7 @@ struct BookmarkRow: View {
             Button(role: .destructive, action: onDelete) { Label("Delete bookmark", systemImage: "trash") }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(entry.lead), \(meta)")
+        .accessibilityLabel("\(entry.lead), \(BookmarkMeta.label(for: entry))")
         .accessibilityHint("Opens the bookmark")
         .accessibilityAction(named: "Listen", onJump)
         .accessibilityAction(named: "Delete bookmark", onDelete)

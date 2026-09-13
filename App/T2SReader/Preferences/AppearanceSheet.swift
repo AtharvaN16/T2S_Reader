@@ -2,15 +2,20 @@ import SwiftUI
 import T2SApp
 
 /// Reader-specific appearance controls, also reached from the Reader overflow menu. Text size and
-/// line height only apply while reading, so the Settings presentation hides them and shows the
-/// app-wide theme picker and the read-along highlight.
+/// line height only apply while reading, so the Settings presentation hides them and shows only the
+/// app-wide theme picker.
+///
+/// The read-along highlight used to be picked here, in both presentations. The swatches are gone
+/// (owner, 2026-09-12: "remove the highlight section ... we no longer have it"); `highlightTheme`
+/// stays as the reader's fixed tint, on its stored value or the `.amber` default.
 struct AppearanceSheet: View {
     @Environment(AppEnvironment.self) private var env
     var showsTextControls: Bool = true
 
     var body: some View {
         @Bindable var preferences = env.preferences
-        // The sliders plus two rows outgrow a medium detent, so the sheet scrolls and can be pulled to large.
+        // The sliders plus the theme row can outgrow a medium detent at the larger text sizes, so the
+        // sheet scrolls and can be pulled to large.
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 Text("Appearance")
@@ -39,20 +44,6 @@ struct AppearanceSheet: View {
                         }
                     }
                 }
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Highlight · the sentence and word being read").typeRole(.meta).foregroundStyle(Tokens.ink2)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            ForEach(HighlightTheme.allCases) { theme in
-                                HighlightSwatch(theme: theme, selected: preferences.highlightTheme == theme) {
-                                    preferences.highlightTheme = theme
-                                }
-                            }
-                        }
-                    }
-                    // Swatches scroll out under the page margin instead of being cut off at it.
-                    .scrollClipDisabled()
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Spacing.margin)
@@ -61,57 +52,5 @@ struct AppearanceSheet: View {
         .presentationBackground(Tokens.raised)
         .presentationDetents([.medium, .large])
         .presentationCornerRadius(Spacing.sheetCorner)
-        // A sheet is its own presentation: it takes the root's colour scheme when it opens but does
-        // not follow a change made while it is up — and this is the sheet the change is made from.
-        .appTheme()
-    }
-}
-
-/// One `HighlightTheme` as a miniature page: three text lines, the middle one on the sentence tint
-/// with the word mark over it. Shapes, not text, so it reads at a glance and never wraps.
-private struct HighlightSwatch: View {
-    var theme: HighlightTheme
-    var selected: Bool
-    var action: () -> Void
-
-    private static let corner = RoundedRectangle(cornerRadius: 12, style: .continuous)
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 8) {
-                preview
-                Text(theme.label).typeRole(.meta).foregroundStyle(selected ? Tokens.ink : Tokens.ink2)
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(theme.label) highlight")
-        .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
-    private var preview: some View {
-        // 5 pt plus the band's 5 pt reach past its line keeps the three lines 10 pt apart.
-        VStack(alignment: .leading, spacing: 5) {
-            line(70)
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Tokens.highlightTint(theme))
-                line(60)
-            }
-            .frame(height: 16)
-            .overlay {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Tokens.highlightWord(theme))
-                    .frame(width: 28, height: 16)
-            }
-            line(64)
-        }
-        .padding(.horizontal, 10)
-        .frame(width: 92, height: 72)
-        .background(Tokens.raised, in: Self.corner)
-        // Stroked inside the shape: a centred stroke would lose its top pixel to the scroll view's edge.
-        .overlay(Self.corner.strokeBorder(selected ? Tokens.ink : Tokens.ink3, lineWidth: selected ? 2 : 1))
-    }
-
-    private func line(_ width: CGFloat) -> some View {
-        Capsule().fill(Tokens.ink3).frame(width: width, height: 6)
     }
 }

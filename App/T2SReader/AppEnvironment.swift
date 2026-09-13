@@ -40,7 +40,6 @@ final class AppEnvironment {
     /// The same resolver the player and Prepare use, so Preferences can show what "default" means
     /// on this device rather than guessing (spec §6).
     let voiceRouting: any VoiceRouteResolving
-    let pronunciation: PronunciationModel
     let storage: StorageModel
     let prepareRunner: PrepareRunner
     /// The reader-initiated "render this chapter" queue, one for the whole app (chapter-rendering
@@ -101,7 +100,6 @@ final class AppEnvironment {
         kokoroStatus = kokoro.status
         kokoroModel = kokoro.modelStore
         voiceRouting = kokoro.voiceRouting
-        pronunciation = PronunciationModel(store: store)
         storage = StorageModel(library: library, audioStore: audioStore, player: player, libraryModel: libraryModel)
         prepareRunner = PrepareRunner(library: library, store: store, audioStore: audioStore,
                                       engine: engine, arbiter: renderArbiter, budget: cpuBudget)

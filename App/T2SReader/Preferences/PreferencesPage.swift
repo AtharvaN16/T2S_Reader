@@ -66,13 +66,6 @@ struct PreferencesPage: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    section("Pronunciation") {
-                        NavigationLink {
-                            PronunciationPage()
-                        } label: {
-                            row("Dictionary", subtitle: "\(env.pronunciation.entries.count) words")
-                        }
-                    }
                     section("Storage") {
                         NavigationLink {
                             StoragePage()
@@ -122,7 +115,6 @@ struct PreferencesPage: View {
         .sheet(isPresented: $showAppearance) { AppearanceSheet(showsTextControls: false) }
         .task {
             resolvedDefaultVoiceID = await env.voiceRouting.effectiveVoiceID(VoiceOption.systemDefault.id)
-            await env.pronunciation.refresh()
             await env.storage.refresh()
         }
         .task { await env.syncModel.refreshAvailability() }
@@ -137,10 +129,11 @@ struct PreferencesPage: View {
 
     /// The default voice: the radio moves, "Make default" applies.
     private var voiceList: some View {
-        VoiceListPage(current: nil, confirmLabel: "Make default") { option in
+        // No scope tick here: the default *is* this page's only answer, so the key says so.
+        VoiceListPage(current: nil, confirmLabel: { _ in "Make default" }, onConfirm: { option, _ in
             env.preferences.defaultVoiceID = option.id
             return true
-        }
+        })
         .settingsSubpage()
     }
 

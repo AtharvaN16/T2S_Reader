@@ -19,6 +19,12 @@ struct ToastContent: Equatable, Identifiable {
     /// it always was; only the bookmark toasts, which now carry actions below the text rather than
     /// beside it, set this.
     var icon: String? = nil
+    /// What a tap on the body of the message opens, when it opens anything. Non-nil is what draws
+    /// the chevron that says the message can be tapped (owner, 2026-09-12: the toast went
+    /// somewhere and nothing on it said so) and is the VoiceOver hint; nil leaves a tap as what it
+    /// was, a way of getting the message out of the way. Only `bar`-shaped toasts use it — a
+    /// `card` toast says where it goes with its own "Go to bookmark" pill instead.
+    var tapHint: String? = nil
 
     static func == (a: ToastContent, b: ToastContent) -> Bool { a.id == b.id }
 }
@@ -52,7 +58,10 @@ struct Toast: View {
         .transition(.move(edge: .bottom).combined(with: .opacity))
         .accessibilityElement(children: .combine)
         .accessibilityLabel([content.title, content.detail].compactMap { $0 }.joined(separator: ", "))
-        .accessibilityAddTraits(.isStaticText)
+        // A message that goes somewhere is a button, and says where; one that only dismisses is
+        // still what it was, a line of text that has appeared.
+        .accessibilityAddTraits(content.tapHint == nil ? .isStaticText : .isButton)
+        .accessibilityHint(content.tapHint ?? "")
     }
 
     /// The bookmark toasts: a status line with a glyph, and up to two full-width actions on their
@@ -88,7 +97,19 @@ struct Toast: View {
     private var bar: some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(content.title).typeRole(.pill).foregroundStyle(Tokens.ground)
+                HStack(spacing: 5) {
+                    Text(content.title).typeRole(.pill).foregroundStyle(Tokens.ground)
+                    // The signifier: the disclosure chevron a row wears when tapping it goes
+                    // somewhere. On the title rather than at the far edge, where the action pill
+                    // lives — it belongs to the words it opens, and two marks on the right edge
+                    // would read as one control with two parts.
+                    if content.tapHint != nil {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Tokens.ground.opacity(0.6))
+                            .accessibilityHidden(true)
+                    }
+                }
                 if let detail = content.detail {
                     Text(detail).typeRole(.meta).foregroundStyle(Tokens.ground.opacity(0.65)).lineLimit(1)
                 }

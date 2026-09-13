@@ -11,7 +11,12 @@ enum Spacing {
     /// as cramped between one book's pill and the next book's cover.
     static let homeRowGap: CGFloat = 40
     static let section: CGFloat = 40
-    static let titleTop: CGFloat = 56
+    /// 40 since 2026-09-12 (owner: "the page starts slightly higher on every page"). It was 56,
+    /// which was not a rhythm so much as a clearance: the warm-up's three rows reach `inset + 54`
+    /// and 56 was the smallest number that kept a page title out from under them. `TopFade` holds
+    /// that clearance now — it grows its own ground to `WarmUpLine.bandHeight` while the glow is up
+    /// — so the title is free to sit where it looks right rather than where the warm-up allows.
+    static let titleTop: CGFloat = 40
     static let sheetCorner: CGFloat = 28
     static let artworkSmall: CGFloat = 8
     /// Trailing space on the root pages so their last row scrolls clear of the bottom bar's fill

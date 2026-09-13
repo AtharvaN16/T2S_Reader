@@ -207,9 +207,11 @@ struct CollectionPage: View {
             .accessibilityHint("Chooses which kind of thing the page shows")
             Spacer(minLength: 12)
             HStack(spacing: 8) {
-                Button { showAdd = true } label: { CircleGlyph(systemName: "plus") }
+                Button {
+                    withAnimation(.snappy) { isSearching.toggle(); if !isSearching { searchText = "" } }
+                } label: { CircleGlyph(systemName: "magnifyingglass") }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Import")                          // Home's word for the same door
+                    .accessibilityLabel(isSearching ? "Hide search" : "Search")
                 if !all.isEmpty {
                     Button {
                         withAnimation(.snappy) { env.preferences.collectionLayout = layout == .grid ? .list : .grid }
@@ -219,9 +221,8 @@ struct CollectionPage: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(layout == .grid ? "Show as list" : "Show as grid")
                 }
-                Pill(label: isSearching ? "Done" : "Search", style: isSearching ? .selected : .soft) {
-                    withAnimation(.snappy) { isSearching.toggle(); if !isSearching { searchText = "" } }
-                }
+                Pill(label: "Import", glyph: "plus", style: .soft) { showAdd = true }
+                    .accessibilityLabel("Import")
             }
             .padding(.top, Spacing.titleTop + 4)
         }
@@ -238,7 +239,7 @@ struct CollectionPage: View {
                 withAnimation(TitleMenuMotion.close) { filter = kind; isPickingKind = false }
             }
             .offset(x: title.minX, y: title.maxY + Spacing.grid)
-            .transition(TitleMenuMotion.transition)
+            .transition(TitleMenuMotion.transition())
         }
     }
 

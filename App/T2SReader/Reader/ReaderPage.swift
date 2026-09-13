@@ -16,7 +16,9 @@ struct ReaderPage: View {
     @State private var showChapters = RootPage.launchOpen == "chapters"      // screenshots, see `RootPage.launchOpen`
     @State private var showAppearance = false
     @State private var showSpeed = false
-    @State private var showBookmarks = false
+    /// `T2S_OPEN=bookmarks` opens the page at launch — a scripted simulator cannot reach it through
+    /// the overflow menu, and this is the only way to photograph it (`RootPage.launchOpen`).
+    @State private var showBookmarks = RootPage.launchOpensBookmarks
     @State private var showSleepTimer = false
     @State private var showVoiceChange = RootPage.launchOpen == "voice"       // screenshots, see `RootPage.launchOpen`
     @State private var showDetails = false
@@ -130,7 +132,6 @@ struct ReaderPage: View {
             if let id = env.player.current?.id { Task { await env.syncModel.dismissOffer(for: id) } }
             syncOffer = nil
         }
-        .appTheme()
         .onChange(of: shownVoiceID, initial: true) { _, id in resolveVoiceName(id) }
         .onDisappear {
             Task { await env.player.persistRenderedChapters() }
@@ -246,16 +247,26 @@ struct ReaderPage: View {
                              onScrub: { scrubChapter = $0 })
                 // Elapsed on the left, time left on the right (Apple Music's "-1:02:33"), in the
                 // app's own face with tabular digits rather than the system monospace.
+                //
+                // The state line is an overlay across the whole row rather than a third item
+                // between two `Spacer()`s, because two spacers centre a word between its
+                // *neighbours*, not on the row: "0:07" and "-1:02:33" are different widths, so
+                // "catching up…" sat left of centre by half that difference — and the ellipsis,
+                // which the eye does not count as part of the word, pulled it further still
+                // (owner, 2026-09-12). An overlay is centred on the row itself and cannot drift.
+                // It is allowed to sit over the clocks: it only ever appears before the first
+                // sound, when the left one reads 0:00 and has nothing to lose.
                 HStack {
                     Text(player.elapsedText).monospacedDigit()
                     Spacer()
+                    Text("-" + DurationFormatter.clock(max(0, player.total - player.elapsed))).monospacedDigit()
+                }
+                .overlay {
                     if env.isWarmingUp {
                         Text("preparing the voice…").foregroundStyle(Tokens.glow)
                     } else if player.isCatchingUp {
                         Text("catching up…")
                     }
-                    Spacer()
-                    Text("-" + DurationFormatter.clock(max(0, player.total - player.elapsed))).monospacedDigit()
                 }
                 .typeRole(.meta).foregroundStyle(Tokens.ink2)
                 if let error = player.renderError {
@@ -495,10 +506,12 @@ struct ReaderPage: View {
             switch result {
             case .saved(let bookmark):
                 toastBookmark = bookmark
-                show(ToastContent(title: "Bookmark saved", detail: stamp, actionLabel: "Add a note"))
+                show(ToastContent(title: "Bookmark saved", detail: stamp, actionLabel: "Add a note",
+                                  secondaryActionLabel: "Go to bookmark", icon: "checkmark"))
             case .alreadyBookmarked(let bookmark):
                 toastBookmark = bookmark
-                show(ToastContent(title: "Already bookmarked", detail: stamp, actionLabel: "Edit note"))
+                show(ToastContent(title: "Already bookmarked", detail: stamp, actionLabel: "Edit note",
+                                  secondaryActionLabel: "Go to bookmark", icon: "checkmark"))
             case .failed:
                 toastBookmark = nil
                 show(ToastContent(title: "Could not save a bookmark", detail: nil, actionLabel: nil))

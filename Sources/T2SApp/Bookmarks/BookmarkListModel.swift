@@ -16,7 +16,7 @@ public enum BookmarkSort: String, CaseIterable, Sendable {
 
     public var title: String {
         switch self {
-        case .book: return "In book order"
+        case .book: return "By chapters"
         case .recent: return "Recently added"
         }
     }

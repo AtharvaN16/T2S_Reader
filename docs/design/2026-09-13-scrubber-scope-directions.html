@@ -1,0 +1,424 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scrubber Scope — Book vs. Chapter</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&display=swap">
+<style>
+:root{
+  --ground:#F8F8F7; --paper:#FFFFFF; --rail:#F0F1F4;
+  --ink:#111111; --ink2:#6E7076; --ink3:#C9C9C7; --hair:#E2E3E8;
+  --glow:#0066FF; --ready:#12A150; --warn:#C25A00; --no:#C0392B;
+  --serif:"Newsreader",Georgia,"Times New Roman",serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --app-face:"Inter",-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0E0F12; --paper:#16171B; --rail:#131418;
+  --ink:#ECEDF0; --ink2:#94969E; --ink3:#3A3A3A; --hair:#26272D;
+  --glow:#5F84FF; --ready:#37D97C; --warn:#FFA24D; --no:#FF6B5E;
+}}
+:root[data-theme="dark"]{
+  --ground:#0E0F12; --paper:#16171B; --rail:#131418;
+  --ink:#ECEDF0; --ink2:#94969E; --ink3:#3A3A3A; --hair:#26272D;
+  --glow:#5F84FF; --ready:#37D97C; --warn:#FFA24D; --no:#FF6B5E;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--serif);font-size:17px;line-height:1.6;
+     margin:0;padding:0 20px 110px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto}
+.col{max-width:68ch}
+h1,h2,h3{text-wrap:balance;margin:0;font-weight:400}
+h1{font-size:clamp(34px,6vw,52px);line-height:1.05;letter-spacing:-.02em}
+h2{font-size:clamp(24px,3.4vw,31px);letter-spacing:-.01em;line-height:1.15}
+h3{font-size:20px;letter-spacing:-.005em}
+p{margin:0}
+ul{margin:0;padding-left:1.15em}
+li{margin:.18em 0}
+code{font-family:var(--mono);font-size:.78em;background:color-mix(in srgb,var(--ink) 8%,transparent);padding:.14em .4em;border-radius:3px}
+.eyebrow{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2)}
+.lede{font-size:20px;line-height:1.5;color:var(--ink2);font-weight:300}
+header{padding-block:72px 0}
+header .col{display:flex;flex-direction:column;gap:20px}
+.meta{font-family:var(--mono);font-size:12px;color:var(--ink2);line-height:2;border-top:1px solid var(--hair);padding-top:16px}
+.meta b{color:var(--ink);font-weight:500}
+section{padding-block:66px 0;display:flex;flex-direction:column;gap:26px}
+.shead{display:flex;flex-direction:column;gap:12px;max-width:68ch}
+.snum{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--glow);letter-spacing:.1em}
+.stack{display:flex;flex-direction:column;gap:16px;max-width:68ch}
+.rail{display:flex;flex-wrap:wrap;gap:30px 34px;align-items:flex-start}
+.unit{display:flex;flex-direction:column;gap:13px;margin:0;max-width:100%}
+.unit>figcaption{display:flex;flex-direction:column;gap:7px;max-width:400px}
+.cname{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.04em;color:var(--ink);display:flex;gap:9px;align-items:baseline}
+.cname .tag{font-weight:500;letter-spacing:.08em;font-size:10px;padding:2px 6px;border-radius:3px;text-transform:uppercase}
+.tag.rec{background:color-mix(in srgb,var(--ready) 18%,transparent);color:var(--ready)}
+.tag.alt{background:color-mix(in srgb,var(--glow) 16%,transparent);color:var(--glow)}
+.tag.no{background:color-mix(in srgb,var(--no) 15%,transparent);color:var(--no)}
+.cnote{font-size:15.5px;line-height:1.45;color:var(--ink2)}
+.cnote b{color:var(--ink);font-weight:500}
+.spec{font-family:var(--mono);font-size:10.5px;color:var(--ink2);line-height:1.7}
+.spec .y{color:var(--ready)} .spec .n{color:var(--no)}
+.hint{font-family:var(--mono);font-size:10.5px;color:var(--glow);letter-spacing:.02em}
+
+/* ── phone mock ─────────────────────────────────────────────── */
+.phone{position:relative;width:400px;max-width:100%;background:#101010;border-radius:46px 46px 16px 16px;
+       overflow:hidden;border:1px solid var(--hair);font-family:var(--app-face);color:#F2F2F2;
+       padding:26px 20px 20px;display:flex;flex-direction:column;gap:0;user-select:none}
+.phone .fadeText{font-family:var(--serif);font-size:17px;line-height:1.62;color:#F2F2F2;
+       padding:0 0 20px;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 62%,transparent 100%);
+       mask-image:linear-gradient(to bottom,transparent 0,#000 62%,transparent 100%);height:96px;overflow:hidden}
+.phone .fadeText span{opacity:.34}
+.bar{display:flex;flex-direction:column}
+.chapRow{display:flex;align-items:center;gap:7px;min-height:30px;padding-bottom:2px}
+.chapRow .t{font-size:17px;font-weight:500;letter-spacing:-.01em}
+.chapRow .chev{font-size:15px;color:#F2F2F2;opacity:.85}
+.chapRow .sp{flex:1}
+.scrubHit{padding:11px 0 6px;cursor:pointer}
+.track{display:flex;gap:3px;align-items:center;height:12px}
+.seg{height:6px;display:flex;overflow:hidden;position:relative;transition:height .2s,border-radius .2s,opacity .2s,flex-grow .28s cubic-bezier(.2,.9,.25,1)}
+.seg .ticks{display:flex;width:100%;height:100%}
+.seg .ticks i{flex:1 1 0}
+.seg .ticks i.r{background:#8E8E8E} .seg .ticks i.u{background:#3A3A3A}
+.seg .played{position:absolute;inset:0 auto 0 0;background:#F2F2F2}
+.seg.zoom{height:12px;border-radius:6px}
+.seg.dull{opacity:.5}
+.clockRow{display:flex;align-items:center;font-size:12px;color:#8E8E8E;font-variant-numeric:tabular-nums;
+          letter-spacing:.01em;padding:1px 0;cursor:pointer;border-radius:6px}
+.clockRow .sp{flex:1}
+.clockRow .scope{font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:2px 7px;border-radius:20px;
+          background:#1E1E1E;color:#8E8E8E}
+.transport{display:flex;align-items:center;padding-top:12px;height:66px}
+.transport .glyph{display:flex;align-items:center;justify-content:center}
+.transport .sp{flex:1}
+.small{font-size:19px;color:#8E8E8E}
+.mid{display:flex;align-items:center;gap:12px}
+.toolRow{display:flex;align-items:center;padding-top:10px}
+.circ{width:44px;height:44px;border-radius:50%;background:#1C1C1C;display:flex;align-items:center;justify-content:center;font-size:14px;color:#F2F2F2}
+.heart{height:40px;padding:0 20px;border-radius:20px;background:#1C1C1C;display:flex;align-items:center;gap:9px;font-size:16px}
+.kbd{font-size:10px;width:18px;height:18px;border-radius:4px;background:#2E2E2E;display:flex;align-items:center;justify-content:center;color:#BBB}
+.chip{font-size:11px;font-weight:500;letter-spacing:.02em;padding:4px 10px;border-radius:20px;background:#1E1E1E;color:#8E8E8E;cursor:pointer;white-space:nowrap}
+.chip.on{background:#2B2B2B;color:#F2F2F2}
+.segctl{display:flex;background:#1A1A1A;border-radius:20px;padding:2px;cursor:pointer}
+.segctl b{font-size:11px;font-weight:500;padding:4px 11px;border-radius:18px;color:#8E8E8E;transition:.18s}
+.segctl b.on{background:#323232;color:#F2F2F2}
+.press{position:absolute;border-radius:50%;background:rgba(255,255,255,.1);pointer-events:none;
+       animation:pulse 1.8s ease-out infinite}
+@keyframes pulse{0%{transform:scale(.55);opacity:.85}70%{transform:scale(1.25);opacity:0}100%{opacity:0}}
+.sheet{position:absolute;left:14px;right:14px;bottom:14px;background:#1C1C1C;border-radius:18px;padding:6px;
+       display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.6)}
+.sheet div{padding:11px 14px;font-size:15px;display:flex;gap:10px;align-items:center;border-radius:13px}
+.sheet div.on{background:#2C2C2C}
+.sheet div .ck{margin-left:auto;color:#FF8C3A}
+.settings{width:400px;max-width:100%;background:#101010;border:1px solid var(--hair);border-radius:22px;
+          padding:16px;font-family:var(--app-face);color:#F2F2F2}
+.settings .grp{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#8E8E8E;padding:4px 6px 10px}
+.settings .row{display:flex;align-items:center;padding:12px 8px;font-size:15px;border-radius:12px;cursor:pointer}
+.settings .row+.row{border-top:1px solid #1E1E1E}
+.settings .row .sp{flex:1}
+.settings .row .v{color:#8E8E8E;font-size:14px}
+.settings .row .ck{color:#FF8C3A}
+.settings .foot{font-size:12px;color:#8E8E8E;padding:10px 8px 2px;line-height:1.5}
+
+table{border-collapse:collapse;font-family:var(--app-face);font-size:14px;width:100%;max-width:960px}
+th,td{text-align:left;padding:11px 13px;border-bottom:1px solid var(--hair);vertical-align:top}
+th{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);font-weight:500}
+td b{font-weight:600}
+td.y{color:var(--ready)} td.n{color:var(--no)} td.m{color:var(--warn)}
+.scroll{overflow-x:auto}
+.callout{border-left:2px solid var(--glow);padding:2px 0 2px 18px;color:var(--ink2);max-width:68ch}
+.callout b{color:var(--ink);font-weight:500}
+.themer{position:fixed;right:16px;top:16px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+        background:var(--paper);border:1px solid var(--hair);color:var(--ink2);border-radius:20px;
+        padding:7px 13px;cursor:pointer;z-index:9}
+</style>
+
+<button class="themer" id="themer">THEME</button>
+<div class="wrap">
+
+<header><div class="col">
+  <div class="eyebrow">t2s_reader · reader page · spec §2.4.5</div>
+  <h1>Book bar, chapter bar</h1>
+  <p class="lede">Six ways to let the scrubber change scope — and an argument for which one the app should take. Every mock below is live: click the highlighted target to see the switch.</p>
+  <div class="meta">
+    <b>Today</b> one segmented bar spans the whole book — one flat bar per chapter, 3&nbsp;pt gaps, 48 ticks carrying the render frontier.<br>
+    <b>Wanted</b> an option to scope that bar to the current chapter instead.<br>
+    <b>Open</b> what the control is, and where it lives.
+  </div>
+</div></header>
+
+<section>
+  <div class="shead">
+    <div class="snum">01</div>
+    <h2>What the two bars actually are</h2>
+    <p>The difference is smaller than it sounds on the bar and bigger than it sounds in the clocks. Scoping to the chapter turns a 24-hour bar into a 2&frac12;-hour one: the same 6&nbsp;pt of pixels now spans a tenth of what it did, so a thumb-width finally means something. But the loudest change is underneath &mdash; <code>2:43:40 / -21:37:14</code> becomes <code>1:43:40 / -46:20</code>, which is the number people are usually after when they reach for this.</p>
+  </div>
+  <div class="rail">
+    <figure class="unit">
+      <div class="phone" data-mock="plain" data-scope="book"></div>
+      <figcaption>
+        <div class="cname">BOOK SCOPE — today</div>
+        <p class="cnote">Chapters are readable as shape; position inside one is not. The clocks are the whole book.</p>
+        <div class="spec">48 ticks · 6 pt · 3 pt gaps · played = ink</div>
+      </figcaption>
+    </figure>
+    <figure class="unit">
+      <div class="phone" data-mock="plain" data-scope="chapter"></div>
+      <figcaption>
+        <div class="cname">CHAPTER SCOPE — proposed</div>
+        <p class="cnote">One unbroken rounded bar for chapter 2 alone. Position is legible; the book is not.</p>
+        <div class="spec">ticks resampled to this chapter · rounded ends · clocks rescoped</div>
+      </figcaption>
+    </figure>
+  </div>
+  <div class="callout"><b>A consequence worth pricing now:</b> ticks are computed book-wide in <code>ScrubberModel.renderedTicks</code>. Zoomed to one chapter you would be stretching maybe two of the 48 across the whole bar — a smear, not a frontier. Chapter scope needs its own tick pass over that chapter's utterances, which means <code>ScrubberModel</code> grows a scope, not just <code>ThinScrubber</code>.</div>
+</section>
+
+<section>
+  <div class="shead">
+    <div class="snum">02</div>
+    <h2>Six directions</h2>
+    <p>Ordered roughly from least new chrome to most. Each mock is clickable at the spot described.</p>
+  </div>
+
+  <div class="rail">
+
+    <figure class="unit">
+      <div class="phone" data-mock="clocks" data-scope="book"></div>
+      <figcaption>
+        <div class="cname">A · TAP THE CLOCKS <span class="tag rec">recommended</span></div>
+        <p class="cnote">The time row under the bar <b>is</b> the control. Tap it and the bar and both numbers change scope together; a small <b>BOOK</b>/<b>CHAPTER</b> word on the right says which you are in. Nothing new is added to the layout — a row that was inert becomes the switch, and the thing it switches is the thing it displays.</p>
+        <div class="spec"><span class="y">+</span> zero new chrome · payoff lands where the finger already is<br><span class="y">+</span> Apple Music trained the tap-the-time-to-change-it reflex<br><span class="n">−</span> undiscoverable until the scope word is noticed</div>
+        <div class="hint">↓ click the time row</div>
+      </figcaption>
+    </figure>
+
+    <figure class="unit">
+      <div class="phone" data-mock="chip" data-scope="book"></div>
+      <figcaption>
+        <div class="cname">B · SCOPE CHIP IN THE CHAPTER ROW <span class="tag alt">runner-up</span></div>
+        <p class="cnote">A small pill parked at the right end of the chapter row, opposite the title. Fully visible, labelled, one tap. The cost is that the chapter row stops being one clean sentence with a chevron and becomes a row with a widget on it — and it is the row directly under the text, where the app has been most protective of quiet.</p>
+        <div class="spec"><span class="y">+</span> discoverable without instruction · states its own name<br><span class="n">−</span> permanent chrome for a rarely-flipped preference<br><span class="n">−</span> competes with the chapter title's own tap target</div>
+        <div class="hint">↓ click the chip</div>
+      </figcaption>
+    </figure>
+
+    <figure class="unit">
+      <div class="phone" data-mock="hold" data-scope="book"></div>
+      <figcaption>
+        <div class="cname">C · LONG-PRESS THE BAR</div>
+        <p class="cnote">Hold the bar for ~450&nbsp;ms and a two-item menu rises: <b>Whole book</b> / <b>This chapter</b>. Contextual — the menu is attached to the object it changes — and it costs nothing at rest. The problem is that the bar is <em>already</em> a press target: <code>DragGesture(minimumDistance: 0)</code> fires on touch-down and starts scrubbing immediately, so a long-press has to be arbitrated against a scrub that has already begun moving the playhead.</p>
+        <div class="spec"><span class="y">+</span> invisible at rest · contextual<br><span class="n">−</span> gesture conflict with the existing zero-distance drag<br><span class="n">−</span> essentially undiscoverable; needs a one-time hint</div>
+        <div class="hint">↓ press and hold the bar</div>
+      </figcaption>
+    </figure>
+
+    <figure class="unit">
+      <div class="settings" data-mock="settings"></div>
+      <figcaption>
+        <div class="cname">D · A SETTING, AND ONLY A SETTING</div>
+        <p class="cnote">One row in Appearance → Reading: <b>Progress bar — Whole book / Current chapter</b>. The player never changes. This is the cheapest thing to build and the right home for the <em>persistence</em>, but as the only control it is wrong: scope is not a taste you set once like type size, it is something you want differently depending on whether you are asking "how far into the book am I" or "can I finish this chapter before my stop".</p>
+        <div class="spec"><span class="y">+</span> no player chrome at all · trivially cheap<br><span class="n">−</span> five taps away from the moment you want it<br><span class="n">−</span> treats a momentary question as a standing preference</div>
+        <div class="hint">↓ click a row</div>
+      </figcaption>
+    </figure>
+
+    <figure class="unit">
+      <div class="phone" data-mock="auto" data-scope="book"></div>
+      <figcaption>
+        <div class="cname">E · NO TOGGLE — THE BAR ZOOMS ITSELF <span class="tag alt">worth a spike</span></div>
+        <p class="cnote">Half of this already ships: pressing the bar widens the chapter under the finger to 45% and scrubs inside it. Direction E says <b>don't let it snap back</b> — after release, hold the zoom for ~4&nbsp;s with the clocks rescoped to the chapter, then ease out to the book. No mode, no control, no setting; the chapter view appears exactly when you were touching the chapter and leaves when you stop caring.</p>
+        <div class="spec"><span class="y">+</span> no chrome, no mode, no preference to store<br><span class="y">+</span> continuous with a gesture already built<br><span class="n">−</span> cannot be asked for — only stumbled into<br><span class="n">−</span> a bar that animates on its own can read as unstable</div>
+        <div class="hint">↓ click the bar, then wait</div>
+      </figcaption>
+    </figure>
+
+    <figure class="unit">
+      <div class="phone" data-mock="pinch" data-scope="book"></div>
+      <figcaption>
+        <div class="cname">F · PINCH THE BAR <span class="tag no">not this</span></div>
+        <p class="cnote">Pinch out on the bar to zoom from book to chapter, pinch in to go back — the literal spatial metaphor, and a genuinely lovely idea on a map. On a 6&nbsp;pt bar at the bottom of a phone held one-handed it is a two-finger gesture in the worst place for two fingers, and it is stacked on top of a control that already interprets touch-down as a seek.</p>
+        <div class="spec"><span class="n">−</span> two-handed, at the bottom edge<br><span class="n">−</span> worst gesture conflict of the six<br><span class="n">−</span> accessibility: no keyboard or VoiceOver equivalent without a fallback control anyway</div>
+        <div class="hint">↓ click to see the zoom it implies</div>
+      </figcaption>
+    </figure>
+
+  </div>
+</section>
+
+<section>
+  <div class="shead">
+    <div class="snum">03</div>
+    <h2>Side by side</h2>
+  </div>
+  <div class="scroll"><table>
+    <tr><th>Direction</th><th>New chrome</th><th>Discoverable</th><th>Gesture conflict</th><th>Cost</th><th>Fits the app's quiet</th></tr>
+    <tr><td><b>A</b> Tap the clocks</td><td class="y">none</td><td class="m">medium — via the scope word</td><td class="y">none</td><td class="y">small</td><td class="y">yes</td></tr>
+    <tr><td><b>B</b> Scope chip</td><td class="n">a pill, always on</td><td class="y">high</td><td class="m">near the title target</td><td class="y">small</td><td class="m">borderline</td></tr>
+    <tr><td><b>C</b> Long-press bar</td><td class="y">none</td><td class="n">low</td><td class="n">high</td><td class="m">medium</td><td class="y">yes</td></tr>
+    <tr><td><b>D</b> Setting only</td><td class="y">none in player</td><td class="m">medium, but far away</td><td class="y">none</td><td class="y">tiny</td><td class="y">yes</td></tr>
+    <tr><td><b>E</b> Self-zoom</td><td class="y">none</td><td class="n">low</td><td class="y">none — it is the gesture</td><td class="m">medium</td><td class="m">motion at rest</td></tr>
+    <tr><td><b>F</b> Pinch</td><td class="y">none</td><td class="n">very low</td><td class="n">very high</td><td class="n">high</td><td class="n">no</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <div class="shead">
+    <div class="snum">04</div>
+    <h2>What I'd build</h2>
+  </div>
+  <div class="stack">
+    <p><b>A, with D behind it.</b> Tapping the clock row flips scope, and the choice persists in preferences so it survives the sheet closing — with the same setting exposed in Appearance → Reading for anyone who never finds the tap. That is one gesture, one stored preference, and zero pixels added to the player.</p>
+    <p>The reason to put the control on the clocks rather than anywhere else is that <em>the clocks are the payoff</em>. The bar already solves precision scrubbing inside a chapter — pressing it widens the active chapter to 45% and maps the finger's travel onto that chapter alone. What chapter scope actually adds is the answer to "how long is left in this chapter", and that answer is a number, printed in the row you are about to tap. Control and effect are the same object.</p>
+    <p>Keep the scope word on the right of that row permanently, in <code>ink2</code> at meta size: it is the only discoverability affordance A has, and without it the feature is a secret.</p>
+    <p><b>E is the interesting rival</b> and worth a cheap spike before committing, because it deletes the mode entirely. If holding the existing zoom for a few seconds after release turns out to feel good rather than twitchy, the whole preference disappears and nothing needs a home. The risk is purely feel, which means it's a build-and-try, not an argue.</p>
+  </div>
+</section>
+
+<section>
+  <div class="shead">
+    <div class="snum">05</div>
+    <h2>Open questions</h2>
+  </div>
+  <div class="stack">
+    <ul>
+      <li><b>Bookmarks.</b> Today the dots draw only while pressed, and only for the chapter under the finger, because a dulled 11 pt bar would smear them. In chapter scope there is room — should they be permanently visible there?</li>
+      <li><b>Sleep timer.</b> With a sleep timer running, is the right-hand number the chapter's remainder or the timer's? Chapter scope makes that collision more likely, not less.</li>
+      <li><b>Books with no chapters</b> (PDF, plain text) already draw one unbroken bar. Does the control hide entirely, or show disabled?</li>
+      <li><b>Does scope persist per book or globally?</b> Per book is more correct and more state; global is simpler and probably what anyone expects.</li>
+      <li><b>VoiceOver.</b> The scrubber is one element with a percent value. Scope changes what that percent means, so the accessibility value needs the scope in it — "42 percent of chapter 2" rather than "42 percent".</li>
+    </ul>
+  </div>
+</section>
+
+</div>
+
+<script>
+/* ── fake book ─────────────────────────────────────────────── */
+const W = [3600,9000,5400,7200,4200,6600,5100,8400,3900,7800,6000,5700,9300,5454];
+const TOTAL = W.reduce((a,b)=>a+b,0);           // 87654 s = 24:20:54
+const PLAYHEAD = 9820;                          // 2:43:40, inside chapter 2
+const SPANS = (()=>{ let t=0; return W.map(w=>{const s=t/TOTAL; t+=w; return [s,t/TOTAL];}); })();
+const CUR = SPANS.findIndex(([a,b])=>PLAYHEAD/TOTAL>=a && PLAYHEAD/TOTAL<b);
+const TICKS = 48;
+/* render frontier: the opening, plus a patch the reader jumped ahead to */
+const rendered = f => (f < 0.132) || (f > 0.615 && f < 0.672) || (f > 0.79 && f < 0.806);
+const clock = s => { s=Math.round(Math.abs(s)); const h=(s/3600)|0,m=((s%3600)/60)|0,x=s%60;
+  const p=n=>String(n).padStart(2,'0'); return h? `${h}:${p(m)}:${p(x)}` : `${m}:${p(x)}`; };
+
+/* ── bar rendering ─────────────────────────────────────────── */
+function segHTML(a,b,frac,n){
+  const len = Math.max(b-a,1e-9), played = Math.min(1,Math.max(0,(frac-a)/len));
+  let ticks=''; for(let i=0;i<n;i++){ const f=a+(i+0.5)/n*len; ticks+=`<i class="${rendered(f)?'r':'u'}"></i>`; }
+  return `<div class="ticks">${ticks}</div><div class="played" style="width:${played*100}%"></div>`;
+}
+function track(scope,opts={}){
+  const frac = PLAYHEAD/TOTAL;
+  if(scope==='chapter'){
+    const [a,b]=SPANS[CUR];
+    return `<div class="track"><div class="seg zoom" style="flex:1">${segHTML(a,b,frac,TICKS)}</div></div>`;
+  }
+  const zoom = opts.zoom;   // index to widen, or undefined
+  const inner = SPANS.map(([a,b],i)=>{
+    let grow = b-a;
+    if(zoom!==undefined){ const s=0.45; grow = i===zoom ? s : (b-a)*((1-s)/(1-(SPANS[zoom][1]-SPANS[zoom][0]))); }
+    const isZ = i===zoom;
+    const n = Math.max(1, Math.round((b-a)*TICKS*(isZ?8:1)));
+    return `<div class="seg ${isZ?'zoom':''} ${zoom!==undefined&&!isZ?'dull':''}" style="flex:${grow} 1 0">${segHTML(a,b,frac,n)}</div>`;
+  }).join('');
+  return `<div class="track">${inner}</div>`;
+}
+function clocks(scope,{chip,segctl,plain}={}){
+  let L,R;
+  if(scope==='chapter'){ const [a,b]=SPANS[CUR]; L=clock(PLAYHEAD-a*TOTAL); R='-'+clock(b*TOTAL-PLAYHEAD); }
+  else { L=clock(PLAYHEAD); R='-'+clock(TOTAL-PLAYHEAD); }
+  const right = plain ? '' :
+    segctl ? `<span class="segctl"><b class="${scope==='book'?'on':''}">Book</b><b class="${scope==='chapter'?'on':''}">Chapter</b></span>`
+           : `<span class="scope">${scope}</span>`;
+  return `<div class="clockRow">${L}<span class="sp"></span>${right?right+'<span class="sp"></span>':''}${R}</div>`;
+}
+const TEXT = `on the far side of the argument, where the noise of the market could no longer reach them, <span>the two of them kept walking until the road turned to sand and the sand to nothing at all.</span>`;
+
+function chapRow(extra=''){ return `<div class="chapRow"><span class="t">Chp 2: Believers and Infidels</span><span class="chev">›</span><span class="sp"></span>${extra}</div>`; }
+function transport(){ return `<div class="transport"><span class="small">☾</span><span class="sp"></span><span class="mid">
+  <span style="font-size:26px;color:#F2F2F2">↺15</span><span class="glyph" style="font-size:38px">▶</span><span style="font-size:26px;color:#F2F2F2">↻30</span>
+</span><span class="sp"></span><span class="small" style="font-size:16px">1x</span></div>`; }
+function toolRow(){ return `<div class="toolRow"><span class="circ">AA</span><span class="sp"></span>
+  <span class="heart"><span class="kbd">H</span>Heart</span><span class="sp"></span><span class="circ">🔖</span></div>`; }
+
+/* ── mocks ─────────────────────────────────────────────────── */
+function paint(el){
+  const scope = el.dataset.scope, kind = el.dataset.mock;
+  const zoom  = el.dataset.zoom!==undefined && el.dataset.zoom!=='' ? +el.dataset.zoom : undefined;
+  const head  = `<div class="fadeText">${TEXT}</div>`;
+  if(kind==='plain'){
+    el.innerHTML = head + `<div class="bar">${chapRow()}<div class="scrubHit">${track(scope)}</div>${clocks(scope,{plain:true})}${transport()}${toolRow()}</div>`;
+    return;
+  }
+  if(kind==='chip'){
+    const chip = `<span class="chip ${scope==='chapter'?'on':''}" data-act="chip">${scope==='chapter'?'Chapter':'Book'}</span>`;
+    el.innerHTML = head + `<div class="bar">${chapRow(chip)}<div class="scrubHit">${track(scope)}</div>${clocks(scope,{plain:true})}${transport()}${toolRow()}</div>`;
+    return;
+  }
+  if(kind==='clocks'){
+    el.innerHTML = head + `<div class="bar">${chapRow()}<div class="scrubHit">${track(scope)}</div>${clocks(scope)}${transport()}${toolRow()}</div>`;
+    el.querySelector('.clockRow').dataset.act='clocks';
+    el.querySelector('.clockRow').style.background = '#181818';
+    return;
+  }
+  if(kind==='hold'){
+    const menu = el.dataset.menu==='1' ? `<div class="sheet">
+        <div class="${scope==='book'?'on':''}" data-pick="book">Whole book <span class="ck">${scope==='book'?'✓':''}</span></div>
+        <div class="${scope==='chapter'?'on':''}" data-pick="chapter">This chapter <span class="ck">${scope==='chapter'?'✓':''}</span></div>
+      </div>` : '';
+    el.style.position='relative';
+    el.innerHTML = head + `<div class="bar">${chapRow()}<div class="scrubHit" data-act="hold" style="position:relative">${track(scope)}
+      <span class="press" style="left:26%;top:2px;width:26px;height:26px"></span></div>${clocks(scope,{plain:true})}${transport()}${toolRow()}</div>` + menu;
+    return;
+  }
+  if(kind==='auto'){
+    el.innerHTML = head + `<div class="bar">${chapRow()}<div class="scrubHit" data-act="auto">${track(el.dataset.zoom?'book':'book',{zoom: el.dataset.zoom? CUR : undefined})}</div>${clocks(el.dataset.zoom?'chapter':'book',{plain:true})}${transport()}${toolRow()}</div>`;
+    return;
+  }
+  if(kind==='pinch'){
+    el.innerHTML = head + `<div class="bar">${chapRow()}<div class="scrubHit" data-act="pinch">${track(scope)}</div>${clocks(scope,{plain:true})}${transport()}${toolRow()}</div>`;
+    return;
+  }
+}
+function paintSettings(el){
+  const v = el.dataset.scope||'book';
+  el.innerHTML = `<div class="grp">Reading</div>
+    <div class="row" data-set="book">Progress bar <span class="sp"></span><span class="v">${v==='book'?'Whole book':'Current chapter'}</span></div>
+    <div class="row" data-set="book"><span style="opacity:${v==='book'?1:.6}">Whole book</span><span class="sp"></span><span class="ck">${v==='book'?'✓':''}</span></div>
+    <div class="row" data-set="chapter"><span style="opacity:${v==='chapter'?1:.6}">Current chapter</span><span class="sp"></span><span class="ck">${v==='chapter'?'✓':''}</span></div>
+    <div class="foot">Chapter scope also rescopes the times under the bar to the chapter you are in.</div>`;
+}
+
+document.querySelectorAll('[data-mock]').forEach(el=>{
+  if(el.dataset.mock==='settings'){ el.dataset.scope='book'; paintSettings(el); } else paint(el);
+});
+
+document.addEventListener('click', e=>{
+  const host = e.target.closest('[data-mock]'); if(!host) return;
+  const k = host.dataset.mock;
+  const flip = () => host.dataset.scope = host.dataset.scope==='chapter' ? 'book' : 'chapter';
+
+  if(k==='settings'){ const r=e.target.closest('[data-set]'); if(r){ host.dataset.scope=r.dataset.set; paintSettings(host);} return; }
+  if(k==='chip'   && e.target.closest('[data-act="chip"]'))   { flip(); paint(host); return; }
+  if(k==='clocks' && e.target.closest('[data-act="clocks"]')) { flip(); paint(host); return; }
+  if(k==='pinch'  && e.target.closest('[data-act="pinch"]'))  { flip(); paint(host); return; }
+  if(k==='hold'){
+    const pick = e.target.closest('[data-pick]');
+    if(pick){ host.dataset.scope=pick.dataset.pick; host.dataset.menu=''; paint(host); return; }
+    if(e.target.closest('[data-act="hold"]')){ host.dataset.menu = host.dataset.menu==='1'?'':'1'; paint(host); return; }
+  }
+  if(k==='auto' && e.target.closest('[data-act="auto"]')){
+    host.dataset.zoom='1'; paint(host);
+    clearTimeout(host._t); host._t=setTimeout(()=>{ host.dataset.zoom=''; paint(host); }, 4000);
+    return;
+  }
+});
+
+const themer=document.getElementById('themer');
+themer.onclick=()=>{ const r=document.documentElement;
+  r.dataset.theme = r.dataset.theme==='dark' ? 'light' : 'dark'; };
+</script>

@@ -142,11 +142,31 @@ enum WarmRamp {
         return 0.05 + 0.95 * (0.5 + 0.5 * cos(2 * .pi * phase))
     }
 
-    /// The screen's corner radius, which the bezel follows. Not asked of the system — `UIScreen`
-    /// does not say — so this is the iPhone 14 to 16's 55 pt, within a few points of the phones
-    /// either side (12 and 13: 47; 16 Pro: 62), and the rim is blurred enough that those few points
-    /// do not show as an arc leaving the corner.
-    static let bezelRadius: CGFloat = 55
+    /// The screen's corner radius, which the bezel follows — the real one where the system will
+    /// say (owner, 2026-09-13: "the glow radius should match the phone screen radius").
+    ///
+    /// UIKit has no public accessor for it. `UIScreen` keeps the number under a private key, and
+    /// this reads it through KVC: a plain `value(forKey:)`, on purpose, rather than a name spelled
+    /// out of fragments to get it past a scanner — if it is not a thing we are willing to be seen
+    /// doing, it is not a thing to do. **It is private API, and App Store review can object to
+    /// it**; the fallback below is what ships if it ever has to be dropped.
+    ///
+    /// That fallback is what this constant was until today: the iPhone 14 to 16's 55 pt, within a
+    /// few points of the phones either side and blurred enough that the difference did not show as
+    /// an arc leaving the corner. It is still not far off — but the 11 Pro this app is tested on is
+    /// 39, and at 16 points over, the lit corner did leave the glass.
+    /// Main-actor because reading it touches `UIApplication`; every caller is a view body.
+    @MainActor static let bezelRadius: CGFloat = {
+        let screen = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first { $0.isKeyWindow }?
+            .screen ?? UIScreen.main
+        if let radius = screen.value(forKey: "_displayCornerRadius") as? CGFloat, radius > 0 {
+            return radius
+        }
+        return 55
+    }()
 
     /// The faint wash the bezel sits on: a breath of the accent under the top edge, gone by a
     /// fifth of the height, so the rim does not end in a hard line against the page. Kept low
@@ -166,7 +186,7 @@ enum WarmRamp {
     /// stroke is the same the whole way round, so the top and the corners are one lit edge. A
     /// vertical mask lets the sides fade from a third of the height and be gone before the ramp
     /// ends, so nothing of the halo reaches the ramp's foot.
-    static func bezel(pulse: Double, light: Color) -> some View {
+    @MainActor static func bezel(pulse: Double, light: Color) -> some View {
         let shape = RoundedRectangle(cornerRadius: bezelRadius, style: .continuous)
         return ZStack {
             // The halo reaches about 30 pt in (half its width plus the blur); wider and softer,

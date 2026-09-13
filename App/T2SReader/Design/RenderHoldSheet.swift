@@ -44,29 +44,54 @@ struct RenderHoldHost: View {
     }
 }
 
-/// The red light on the held-queue sheet's top edge: the warm-up's own rim (`WarmRamp`), lit in
-/// `glowHot`. Drawn head-up and clipped to the card, so the bright edge lands on the card's top and
-/// the wash falls away down into it.
+/// The red light a held queue puts on the screen: `WarmRim`'s arrangement exactly — the warm-up's
+/// wash and lit bezel with no ground under them — at the head of the screen, in `glowHot`.
+///
+/// **At the top, and nowhere near the card** (owner, 2026-09-13). It was tried at the foot, where
+/// it lit the keys and read as a glowing button, and then on the card's own top edge, where the two
+/// were one object and the light had to be clipped to keep it off the page behind. This is the
+/// place the app already keeps a light that means "the phone is busy with something": the same edge
+/// the blue warm-up rim uses, so red there is read the same way and needs no explaining.
 ///
 /// **It does not breathe.** The warm-up pulses because something is working; a held queue is the
 /// opposite, and `WarmRamp` already knows this — a failed warm-up settles its light to two thirds
 /// and holds it there, because "a warning that keeps breathing at full reads as something still
 /// working on it, and nothing is". This is that ending state from the start, so there is no
 /// `TimelineView` here and nothing for Reduce Motion to turn off.
-private struct HoldGlow: View {
+///
+/// Only a surface whose frame begins at the window's top edge can draw it — the root pager and the
+/// Reader over it. Not the book sheet: a `.sheet` starts a little way down the screen, and a copy
+/// in there would put a second rim on the sheet's own top edge, which is the thing that was just
+/// taken off it. The strip the sheet leaves uncovered is where the root's copy shows through.
+struct RenderHoldGlowHost: View {
+    @Environment(AppEnvironment.self) private var env
+
     /// Below `WarmRamp`'s own held strength of 0.66 (owner, 2026-09-13: "slightly less intense").
     /// The warm-up's light is the app's headline event and can afford to be; this one is a notice
     /// that will sit there until the phone cools, and has to be liveable with for that long.
     private static let settled: Double = 0.45
 
+    private var isHeld: Bool {
+        !env.chapterRenderer.holdNoticeDismissed && env.chapterRenderer.hold != nil
+    }
+
     var body: some View {
         ZStack {
-            WarmRamp.wash(pulse: Self.settled, light: Tokens.glowHot)
-            WarmRamp.bezel(pulse: Self.settled, light: Tokens.glowHot)
+            if isHeld {
+                ZStack {
+                    WarmRamp.wash(pulse: Self.settled, light: Tokens.glowHot)
+                    WarmRamp.bezel(pulse: Self.settled, light: Tokens.glowHot)
+                }
+                .frame(height: WarmRamp.height)
+                .transition(.opacity)
+            }
         }
         .frame(height: WarmRamp.height)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .ignoresSafeArea(edges: .top)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+        .animation(.easeInOut(duration: 0.3), value: isHeld)
     }
 }
 
@@ -114,24 +139,18 @@ struct RenderHoldSheet: View {
         // The home indicator's strip is the card's, not the page's: a sheet that stops above it
         // leaves a sliver of the dimmed page under its foot.
         .padding(.bottom, 36)
+        // Plain ground, and no light on it: the glow is `RenderHoldGlow` at the top of the screen
+        // now (owner, 2026-09-13). Clipping a glow to this card is also what left its foot short —
+        // a `clipShape` fixes the drawing to the frame it was applied on, so the `ignoresSafeArea`
+        // outside it expanded the layout into the home-indicator strip and then had the fill
+        // clipped away again, and the dimmed page showed through under the keys (owner: "the bottom
+        // sheet bottom is not filled"). Nothing clips here, so the fill reaches the glass.
         .background {
             let shape = UnevenRoundedRectangle(topLeadingRadius: Spacing.sheetCorner,
                                                topTrailingRadius: Spacing.sheetCorner, style: .continuous)
-            // The light is *inside* the card, clipped to it (owner, 2026-09-13: "I can see the glow
-            // in the booksheet, that's not where I want it"). Hung above the top edge it washed up
-            // over the book sheet behind, which is the page the sheet is covering and has nothing to
-            // do with the heat. Clipped, the lit edge is the card's own top and the wash falls into
-            // the card — the sheet is what glows, and only the sheet.
-            //
-            // Over the fill and under the words: a glow drawn over the text would tint the sentence
-            // it is there to let you read.
-            ZStack(alignment: .top) {
-                shape.fill(Tokens.raised)
-                HoldGlow().frame(maxHeight: .infinity, alignment: .top)
-            }
-            .clipShape(shape)
-            .overlay(shape.strokeBorder(Tokens.edge, lineWidth: 1))
-            .ignoresSafeArea(edges: .bottom)
+            shape.fill(Tokens.raised)
+                .overlay(shape.strokeBorder(Tokens.edge, lineWidth: 1))
+                .ignoresSafeArea(edges: .bottom)
         }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
@@ -153,5 +172,11 @@ extension View {
     /// the root pager, the Reader over it, and the book sheet over that.
     func renderHoldSheet() -> some View {
         overlay { RenderHoldHost() }
+    }
+
+    /// Draws the held-queue light at the head of the screen. Only for a surface that reaches the
+    /// window's top edge — see `RenderHoldGlowHost` for why the book sheet is not one.
+    func renderHoldGlow() -> some View {
+        overlay { RenderHoldGlowHost() }
     }
 }

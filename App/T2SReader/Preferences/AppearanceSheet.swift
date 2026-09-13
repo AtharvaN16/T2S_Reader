@@ -61,9 +61,6 @@ struct AppearanceSheet: View {
         .presentationBackground(Tokens.raised)
         .presentationDetents([.medium, .large])
         .presentationCornerRadius(Spacing.sheetCorner)
-        // A sheet is its own presentation: it takes the root's colour scheme when it opens but does
-        // not follow a change made while it is up — and this is the sheet the change is made from.
-        .appTheme()
     }
 }
 

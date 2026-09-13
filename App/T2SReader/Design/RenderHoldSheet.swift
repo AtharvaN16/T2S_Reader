@@ -60,11 +60,12 @@ struct RenderHoldHost: View {
 /// working on it, and nothing is". This is that ending state from the start, so there is no
 /// `TimelineView` here and nothing for Reduce Motion to turn off.
 struct RenderHoldGlow: View {
-    /// A shade under `WarmRamp`'s own held strength of 0.66. The owner walked this down to 0.45 and
-    /// back up a notch once it was at the top of the screen instead of round the card — the light
-    /// had further to travel and less to sit against there (2026-09-13, "slightly less intense",
-    /// then "very slightly more intense").
-    static let settled: Double = 0.55
+    /// Well under `WarmRamp`'s own held strength of 0.66. The owner walked this down to 0.45, up to
+    /// 0.55 once the light moved from round the card to the top of the screen, and finally to 0.40
+    /// with it there (2026-09-13). It is a notice that sits on screen until the phone cools, so it
+    /// has to be liveable with for as long as that takes; the blue warm-up, which is over in a
+    /// minute, is the one that can afford to be bright.
+    static let settled: Double = 0.40
 
     var body: some View {
         ZStack {

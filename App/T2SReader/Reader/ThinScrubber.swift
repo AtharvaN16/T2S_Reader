@@ -42,6 +42,10 @@ struct ThinScrubber: View {
     private static let gap: CGFloat = 3
     /// The pressed chapter's share of the bar, at least: room to scrub inside it.
     private static let activeShare: Double = 0.45
+    /// The bookmark marks above the bar: small enough to read as punctuation over a 6 pt bar
+    /// rather than as a second row of controls.
+    private static let dotSize: CGFloat = 4
+    private static let dotGap: CGFloat = 3
     /// The scope change is slower than the chip that asks for it (0.28), so the bar reads as the
     /// consequence of the tap rather than a co-event.
     private static let scopeSpring = Animation.spring(duration: 0.34, bounce: 0.18)
@@ -81,13 +85,19 @@ struct ThinScrubber: View {
                     let isZoomed = zoom?.index == i
                     segment(span, width: max(1, ranges[i].upperBound - ranges[i].lowerBound - leading - trailing),
                             height: isZoomed ? Self.pressedHeight : Self.restingHeight, rounded: isZoomed,
-                            showBookmarks: activeIndex == i, isCurrent: zoomedChapter == i,
+                            isCurrent: zoomedChapter == i,
                             chapterTicks: isZoomed && isChapterScoped, fraction: fraction)
                         .opacity(opacity(of: i, pressed: pressed))
                         .offset(x: ranges[i].lowerBound + leading)
                 }
             }
             .frame(width: width, height: Self.pressedHeight, alignment: .leading)
+            // Above the bar rather than on it (owner, 2026-09-13). On it they were drawn inside
+            // the segment's own `clipShape`, which is six points tall at rest and twelve pressed,
+            // so a ten-point mark was shaved to a sliver — visible, and covered. Up here nothing
+            // clips them, they need no ground ring to cut themselves out of the fill, and they can
+            // stay up permanently instead of only under a finger.
+            .overlay(alignment: .topLeading) { bookmarkDots(ranges: ranges) }
             .animation(.spring(duration: 0.25), value: activeIndex)
             .animation(Self.scopeSpring, value: scope)
             // Low in the hit area, but not on its floor: 14 pt rather than 4 (owner, 2026-09-13)
@@ -172,8 +182,7 @@ struct ThinScrubber: View {
 
     /// One chapter's bar: its ticks underneath, the played part on top, square-ended unless zoomed.
     private func segment(_ span: Range<Double>, width: CGFloat, height: CGFloat, rounded: Bool,
-                         showBookmarks: Bool, isCurrent: Bool, chapterTicks: Bool,
-                         fraction: Double) -> some View {
+                         isCurrent: Bool, chapterTicks: Bool, fraction: Double) -> some View {
         let length = max(span.upperBound - span.lowerBound, .leastNonzeroMagnitude)
         let played = min(1, max(0, (fraction - span.lowerBound) / length))
         return ZStack(alignment: .leading) {
@@ -197,15 +206,6 @@ struct ThinScrubber: View {
                 .fill(Tokens.ink)
                 .frame(width: width * played)
                 .transaction { $0.animation = nil }
-            if showBookmarks {
-                ForEach(Array(dots(in: span).enumerated()), id: \.offset) { _, local in
-                    Circle()
-                        .fill(Tokens.accent)
-                        .frame(width: 10, height: 10)
-                        .overlay(Circle().strokeBorder(Tokens.ground, lineWidth: 2.5))
-                        .offset(x: width * local - 5)
-                }
-            }
         }
         .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: rounded ? height / 2 : 0, style: .continuous))
@@ -231,6 +231,30 @@ struct ThinScrubber: View {
         let first = min(n - 1, max(0, Int(span.lowerBound * Double(n))))
         let last = min(n - 1, max(first, Int((span.upperBound * Double(n)).rounded(.up)) - 1))
         return TickSlice(ticks: model.renderedTicks, slice: first..<(last + 1))
+    }
+
+    /// Every bookmark the bar can currently show, as a tick of its own above it. A bookmark is
+    /// placed through the same `ranges` the segments are, so the marks travel with the chapters
+    /// under them: in chapter scope they spread across the one bar that is left, and a collapsed
+    /// chapter takes its marks with it rather than stacking them on the seam.
+    @ViewBuilder private func bookmarkDots(ranges: [Range<CGFloat>]) -> some View {
+        let pressed = dragFraction != nil
+        ZStack(alignment: .topLeading) {
+            ForEach(Array(spans.enumerated()), id: \.offset) { i, span in
+                if opacity(of: i, pressed: pressed) > 0 {
+                    let leading: CGFloat = i == 0 ? 0 : gap / 2
+                    let trailing: CGFloat = i == spans.count - 1 ? 0 : gap / 2
+                    let w = max(1, ranges[i].upperBound - ranges[i].lowerBound - leading - trailing)
+                    ForEach(Array(dots(in: span).enumerated()), id: \.offset) { _, local in
+                        Circle()
+                            .fill(Tokens.accent)
+                            .frame(width: Self.dotSize, height: Self.dotSize)
+                            .offset(x: ranges[i].lowerBound + leading + w * local - Self.dotSize / 2,
+                                    y: -(Self.dotSize + Self.dotGap))
+                    }
+                }
+            }
+        }
     }
 
     /// The bookmarks inside this chapter, as 0…1 along the chapter itself.

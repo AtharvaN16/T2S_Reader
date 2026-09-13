@@ -434,11 +434,13 @@ struct BookCover: View {
 
 /// The generated cover for a book with no art of its own: a cloth binding — one of the eight
 /// palette colours, dealt by the title (`CoverStyle.paletteIndex`, so the same book is always the
-/// same colour), or the PDF's light red — a hairline frame stamped a little in from the edge, the
-/// title top-left in display type with the author under it, and at the foot a short rule, or the
-/// badge ("PDF") when there is one — the way a plain hardback is lettered. The type is fixed to the
-/// book's height, not to Dynamic Type: it is lettering on an object, like a real cover. Under
-/// 64 pt there is no room for words, so the cloth carries the badge or the title's first letter.
+/// same colour), or the PDF's light red — with the title set top-left and the author held down at
+/// the foot, the way most trade paperbacks are laid out (owner, 2026-09-13, from the mockup).
+/// Nothing else: the hairline frame and the little rule at the foot that this used to carry both
+/// went, because with the author pushed to the bottom the cover already has a top and a bottom and
+/// did not need a box drawn round it to say so. The type is fixed to the book's height, not to
+/// Dynamic Type: it is lettering on an object, like a real cover. Under 64 pt there is no room for
+/// words, so the cloth carries the badge or the title's first letter.
 private struct ClothCover: View {
     var title: String
     var author: String?
@@ -447,19 +449,11 @@ private struct ClothCover: View {
     /// and `pdfInk` for a PDF.
     var cloth: Color
     var ink: Color
-    /// A word at the foot in place of the rule, and the mark under 64 pt.
+    /// A word over the author at the foot, and the mark under 64 pt.
     var badge: String? = nil
 
     var body: some View {
-        cloth
-            .overlay {
-                RoundedRectangle(cornerRadius: height * 0.012, style: .continuous)
-                    .strokeBorder(ink.opacity(0.32), lineWidth: max(0.5, height * 0.005))
-                    .padding(height * 0.05)
-            }
-            .overlay {
-                if height < 64 { compact } else { lettering }
-            }
+        cloth.overlay { if height < 64 { compact } else { lettering } }
     }
 
     private var compact: some View {
@@ -474,36 +468,35 @@ private struct ClothCover: View {
     }
 
     private var lettering: some View {
-        let titleSize = height * 0.1
-        return VStack(alignment: .leading, spacing: height * 0.035) {
+        let titleSize = height * 0.105
+        return VStack(alignment: .leading, spacing: height * 0.025) {
             Text(title)
-                .font(.custom("InterDisplay-ExtraBold", fixedSize: titleSize))
+                .font(.custom("Inter-SemiBold", fixedSize: titleSize))
                 .tracking(-0.02 * titleSize)
-                .lineLimit(4)
+                .lineLimit(3)
                 .minimumScaleFactor(0.7)
                 .foregroundStyle(ink)
-            if let author, !author.isEmpty {
-                Text(author)
-                    .font(.custom("Inter-Regular", fixedSize: height * 0.068))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
-                    .foregroundStyle(ink.opacity(0.78))
-            }
-            Spacer(minLength: 0)
+            Spacer(minLength: height * 0.05)                                   // the title reads from the top whatever its length
             if let badge {
                 Text(badge)
                     .font(.custom("Inter-Bold", fixedSize: height * 0.07))
                     .tracking(height * 0.07 * 0.1)
                     .foregroundStyle(ink.opacity(0.85))
-            } else {
-                Capsule()
-                    .fill(ink.opacity(0.6))
-                    .frame(width: height * 0.12, height: max(0.75, height * 0.008))
+            }
+            if let author, !author.isEmpty {
+                Text(author)
+                    .font(.custom("Inter-Medium", fixedSize: height * 0.072))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .foregroundStyle(ink.opacity(0.72))
             }
         }
         .multilineTextAlignment(.leading)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(height * 0.1)
+        // Clear of the hinge on the left (it creases 8% of the way across), and a little more air
+        // top and bottom than at the sides, as a printed cover has.
+        .padding(.horizontal, height * 0.075)
+        .padding(.vertical, height * 0.09)
     }
 }
 

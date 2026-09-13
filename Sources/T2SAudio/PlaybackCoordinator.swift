@@ -61,7 +61,10 @@ public final class PlaybackCoordinator {
     /// never left in place until "catching up"). The Reader shows it; `setRate` and `load` clear it.
     public private(set) var rateLoweredTo: Double?
     /// Set from the most recent `.failed` render event; cleared on `load`.
+    /// Shown only once the voice has failed `RenderFailureRun.threshold` utterances in a row, and
+    /// cleared the moment one genuinely renders. Every failure is logged whatever this says.
     public private(set) var lastRenderError: String?
+    private var failureRun = RenderFailureRun()
     public private(set) var document: Document?
     /// Set by `handOff(to:fromChapter:)`; cleared by `load` and `unload`.
     public private(set) var voiceHandoff: VoiceHandoff?
@@ -187,6 +190,7 @@ public final class PlaybackCoordinator {
         manualRequested = false
         lastPlayed = document.id
         lastRenderError = nil
+        failureRun.reset()
         rateLoweredTo = nil
         player.reset()
         playhead = timeIndex.clamp(document.resumePosition.map { PositionResolver.resolve($0, in: timeline) } ?? Playhead(utteranceIndex: 0))
@@ -576,6 +580,9 @@ public final class PlaybackCoordinator {
             timeline![utterance: r.utteranceIndex] = u
             markChanged(utterance: r.utteranceIndex)
             rendered[r.utteranceIndex] = true
+            // A render for any utterance but the one that just failed is the voice working again.
+            failureRun.rendered(utterance: r.utteranceIndex)
+            if !failureRun.isPersistent { lastRenderError = nil }
             timeIndex = TimeIndex(timeline!)
             refreshHighlight()
             // The RTF moves with every render, and a throttling phone shows it here first (§3.6).
@@ -590,7 +597,14 @@ public final class PlaybackCoordinator {
                 }
             }
         case .failed(_, let utteranceIndex, let message):
-            lastRenderError = "utterance \(utteranceIndex): \(message)"   // spec §6: logged; silence follows as .rendered
+            // Spec §6: logged, and silence follows as `.rendered`. One of these costs the reader a
+            // sentence and is not worth a line of red under the scrubber; a run of them means the
+            // voice is not working, and that is (owner, 2026-09-13).
+            Self.log.error("utterance \(utteranceIndex, privacy: .public) failed: \(message, privacy: .public)")
+            failureRun.failed(utterance: utteranceIndex)
+            if failureRun.isPersistent {
+                lastRenderError = "The voice isn’t responding. Sentences are being skipped."
+            }
             if streaming?.index == utteranceIndex { closeStream(utteranceIndex) }
         case .storeFull:
             device.storeFull = true                                 // surfaces the storage manager (spec §6)

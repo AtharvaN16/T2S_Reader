@@ -35,31 +35,30 @@ import UIKit
 /// suspect. Drawing the light over the page instead is a shade less pure — the wash falls on the
 /// top of the content rather than behind it — and cannot break this way.
 ///
-/// **It goes when the phone's own voice sounds.** A book already playing through the system
-/// voice with a pulse over it read as an alarm rather than a wait (owner, 2026-09-10), so the glow
-/// hides the moment that audio flows, even if the Kokoro stages are still loading behind it. The
-/// hosted voice is the exception (owner, 2026-09-12): Heart from the mirrors *is* the wait for
-/// Heart on the phone, and the reader wants to watch the download and the warm-up go by over it,
-/// so the glow stays until green while the hosted voice is the one speaking.
+/// **It stays for whoever is speaking under it.** The glow used to hide the moment audio flowed
+/// from the phone's own voice — a book playing with a pulse over it read as an alarm rather than a
+/// wait (owner, 2026-09-10) — with the hosted voice carved out as an exception a fortnight later
+/// (owner, 2026-09-12: Heart from the mirrors *is* the wait for Heart on the phone). The carve-out
+/// was the tell. A reader who has started a book is precisely the one who wants to know how much
+/// longer the on-device voice will be, and taking the light and the bar away on the first sound
+/// left them reading in the system voice with nothing on screen to say a download was still
+/// running (owner, 2026-09-13: "I need to be aware of the status"). So the rule is now the plain
+/// one: the wait shows for as long as the wait lasts, whichever voice is speaking over it.
+///
+/// The alarm the old rule was avoiding is answered by the words rather than by hiding the light —
+/// `WarmUpLine` names the phase, so a breathing rim over a book that is reading aloud is captioned
+/// "Downloading the voice" and not left to be guessed at.
 @MainActor
 enum WarmUpVeil {
     /// How long the light takes to go, matched to half a breath so it leaves at the pace it moved.
     static let fadeOut: Double = 1.5
 
-    /// Warming, and nothing audible yet. `isCatchingUp` is the stall before the first sound, so a
-    /// tapped Play that is still waiting keeps the glow; a book actually speaking loses it.
+    /// Warming, or holding the beat that ends a warm-up. Nothing about playback: what the reader is
+    /// listening to while the stages load is not what decides whether the wait is on screen (see the
+    /// note above). This is the whole of the rule, and it is the whole of it on purpose — every
+    /// clause this used to carry existed to punch a hole back through a playback gate that is gone.
     static func isShowing(_ env: AppEnvironment) -> Bool {
-        guard env.kokoroStatus.status.isWarming || env.kokoroStatus.isHoldingReadyBeat else { return false }
-        if isFaked { return true }
-        // An amber ending outlasts whatever starts speaking underneath it. The fallback voice
-        // beginning mid-beat is exactly the moment the reader needs the line that explains it, and
-        // the rule below would take it off the screen on that frame.
-        if env.kokoroStatus.endedFailed { return true }
-        // Sound from the phone's own voice means the wait is over. Sound from the hosted voice
-        // means the wait is under way — Heart from the mirrors while Heart installs — and the
-        // owner asked to watch it (cloud-first bootstrap, 2026-09-12), so the glow stays until green.
-        let hostedSpeaking = env.player.routedVoiceID?.hasPrefix("cloud:") == true
-        return hostedSpeaking || !(env.player.isPlaying && !env.player.isCatchingUp)
+        env.kokoroStatus.status.isWarming || env.kokoroStatus.isHoldingReadyBeat
     }
 
     /// Whether the hosted voice is the one speaking through this wait.
@@ -101,9 +100,10 @@ enum WarmUpVeil {
         return t * t * (3 - 2 * t)                                   // smoothstep, as the cosine is at its ends
     }
 
-    /// `T2S_WARMUP=1` fakes a warm-up in the everyday build (`KokoroComposition`). A faked one has
-    /// to show even while the fixture book plays, or there is nothing to screenshot, and it holds
-    /// the pulse still, so two screenshots are comparable.
+    /// `T2S_WARMUP=1` fakes a warm-up in the everyday build (`KokoroComposition`), and holds the
+    /// pulse still so two screenshots are comparable. It used to force ``isShowing`` true as well,
+    /// because the fixture book plays and the playback gate would otherwise have left nothing to
+    /// photograph; the fake sets a real warming status, so with that gate gone it needs no help.
     static let isFaked = ProcessInfo.processInfo.environment["T2S_WARMUP"] != nil
 }
 

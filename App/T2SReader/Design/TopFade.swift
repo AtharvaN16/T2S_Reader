@@ -102,6 +102,10 @@ struct EdgeFade: View {
             .mask(TopFade.shape(solidThrough: 0, fade: height).scaleEffect(y: edge == .bottom ? -1 : 1))
             .frame(height: height)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: edge == .bottom ? .bottom : .top)
+            // Through the home-indicator inset when it backs the screen's own foot (`BottomFade`'s
+            // reasoning): the bookmarks list stops at the inset's top edge, but its ground does not,
+            // so without this a row showed in the strip under the indicator (owner, 2026-09-13).
+            .ignoresSafeArea(edges: edge == .bottom ? .bottom : [])
             .allowsHitTesting(false)
             .accessibilityHidden(true)
     }

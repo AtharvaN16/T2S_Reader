@@ -84,10 +84,13 @@ struct CircleGlyph: View {
     /// The glyph's colour. `ink` for the ordinary marks; a Delete passes `destructive`, so the one
     /// mark on a screen that destroys something is the one mark that is red (owner, 2026-09-12).
     var tint: Color = Tokens.ink
-    /// The disc behind it. `surface` on a page; the toast passes `surfaceOnInk` with a `ground`
-    /// tint, since its card is `ink` and the page's grey would arrive inverted on it — the circle
-    /// follows the buttons under it rather than being the one dark thing left on a pale card.
+    /// The disc behind it. `surface` on a page; the toast passes `discOnInk`, since its card is
+    /// `ink` and the page's grey would arrive inverted on it.
     var fill: Color = Tokens.surface
+    /// A ring round the disc. Nil on a page, where `surface` against `ground` is edge enough; the
+    /// toast draws one, its disc being a step from the card rather than a colour away from it.
+    var stroke: Color? = nil
+    var strokeWidth: CGFloat = 1.5
 
     var body: some View {
         Image(systemName: systemName)
@@ -95,6 +98,9 @@ struct CircleGlyph: View {
             .foregroundStyle(tint)
             .frame(width: 36, height: 36)
             .background(fill, in: Circle())
+            // `strokeBorder`, not `stroke`: the line is drawn inside the 36pt circle, so a ringed
+            // disc and a plain one are the same size in a row.
+            .overlay { if let stroke { Circle().strokeBorder(stroke, lineWidth: strokeWidth) } }
     }
 }
 

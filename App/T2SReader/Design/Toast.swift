@@ -78,7 +78,8 @@ struct Toast: View {
         // the gap is what says the pair below is a choice to make rather than a third line to read.
         VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .center, spacing: 12) {
-                CircleGlyph(systemName: icon, tint: Tokens.onDiscOnInk, fill: Tokens.discOnInk)
+                CircleGlyph(systemName: icon, tint: Tokens.onDiscOnInk, fill: Tokens.discOnInk,
+                            stroke: Tokens.discEdgeOnInk)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(content.title).typeRole(.pill).foregroundStyle(Tokens.ground)
                     if let detail = content.detail {

@@ -86,6 +86,11 @@ enum Tokens {
     /// what carries the news.
     static let discOnInk = dynamic(light: 0x000000, dark: 0xFFFFFF)
     static let onDiscOnInk = dynamic(light: 0xFFFFFF, dark: 0x111111)
+    /// The ring round that disc (owner, 2026-09-13). A disc one step from its card is a disc you
+    /// have to look for; the line is what makes it an object. It cannot be either of the two
+    /// colours already on the card — a grey between them, a little away from the disc it edges so
+    /// it reads in both themes.
+    static let discEdgeOnInk = dynamic(light: 0x3D3D3D, dark: 0xCFCFCD)
     static let destructive = dynamic(light: 0xE5453B, dark: 0xFF5A50)
     /// The voice picker's avatar discs: pink for a female voice, blue for a male one. Categorical,
     /// not accent — they say which of two kinds a row is, never that it is selected or active.

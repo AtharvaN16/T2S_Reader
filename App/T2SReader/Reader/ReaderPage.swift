@@ -130,7 +130,6 @@ struct ReaderPage: View {
             if let id = env.player.current?.id { Task { await env.syncModel.dismissOffer(for: id) } }
             syncOffer = nil
         }
-        .appTheme()
         .onChange(of: shownVoiceID, initial: true) { _, id in resolveVoiceName(id) }
         .onDisappear {
             Task { await env.player.persistRenderedChapters() }

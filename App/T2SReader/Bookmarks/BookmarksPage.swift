@@ -27,8 +27,10 @@ struct BookmarksPage: View {
     @State private var model: BookmarkListModel?
     @State private var editing: BookmarkEntry?
     @State private var opened: BookmarkEntry?
-    /// Whether the order menu is down.
-    @State private var picking = false
+    /// Whether the order menu is down. `T2S_OPEN=bookmarks-order` has it down at launch — the
+    /// Collection's `kinds`, for the same reason: a scripted simulator cannot tap the mark, and
+    /// this is the only way to photograph the card where it lands.
+    @State private var picking = RootPage.launchOpen == "bookmarks-order"
 
     /// The air between two bookmarks. Generous on the owner's word (2026-09-12): a bookmark is up
     /// to four lines of the book plus a note plus two buttons, and at 18 two of them ran together
@@ -58,7 +60,15 @@ struct BookmarksPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Tokens.ground.ignoresSafeArea())
-        .overlay { if picking, let model { orderMenu(model) } }
+        // The card hangs from the mark that opens it, measured, the way the Collection's hangs from
+        // its title (owner, 2026-09-12: "it should open below the button"). The `if` is outside the
+        // reader, not in it: a reader left standing over a closed menu is a page-wide view with
+        // nothing in it, and nothing is what a tap on the list must not hit.
+        .overlayPreferenceValue(FilterAnchorKey.self) { anchor in
+            if picking, let model, let anchor {
+                GeometryReader { page in orderMenu(model, under: page[anchor], in: page.size) }
+            }
+        }
         .fullScreenCover(item: $opened) { entry in
             BookmarkDetail(entry: entry,
                            onListen: { jump(to: entry) },
@@ -73,26 +83,45 @@ struct BookmarksPage: View {
             let model = self.model ?? BookmarkListModel(library: env.library, player: env.player)
             self.model = model
             await model.load(summary)
+            // `T2S_OPEN=bookmarks-detail`: the first bookmark, opened, for the same reason the order
+            // menu can be asked for at launch — nothing here can be tapped by a script. A beat
+            // after this page has settled: a cover presented from inside one that is itself still
+            // arriving is dropped on the floor.
+            if RootPage.launchOpen == "bookmarks-detail", let first = model.entries.first {
+                try? await Task.sleep(for: .milliseconds(500))
+                opened = first
+            }
         }
     }
 
+    /// How far under the back row the title sits, in place of the `Spacing.titleTop` a root page
+    /// uses: that gap assumes nothing above the title, and stacked under a back row it put
+    /// "Bookmarks" a row and a half down an otherwise empty screen (owner, 2026-09-12: "bookmarks
+    /// title and page start is too low"). This lands the word at about the height every root page's
+    /// title sits at, with the back mark above it rather than the air.
+    private static let titleGap: CGFloat = 12
+
     private var header: some View {
-        VStack(alignment: .leading, spacing: Spacing.grid) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Button { dismiss() } label: { CircleGlyph(systemName: "chevron.left") }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Back")
                 Spacer()
             }
-            HStack(alignment: .firstTextBaseline) {
-                PageTitle(text: "Bookmarks")
+            HStack(alignment: .top) {
+                PageTitle(text: "Bookmarks", topPadding: Self.titleGap)
                 Spacer(minLength: 12)
-                if let model, !model.entries.isEmpty { filterButton(model) }
+                // Beside the title rather than on its baseline: a circle has no baseline of its
+                // own, so `.firstTextBaseline` hung it off the bottom of the row.
+                if let model, !model.entries.isEmpty {
+                    filterButton(model).padding(.top, Self.titleGap + 4)
+                }
             }
         }
         .padding(.horizontal, Spacing.margin)
-        .padding(.top, Spacing.grid)
-        .padding(.bottom, Spacing.row)
+        .padding(.top, Spacing.grid + 4)
+        .padding(.bottom, Spacing.grid + 4)
     }
 
     /// The order, behind the Collection's own dropdown rather than two pills across the page (owner,
@@ -106,6 +135,7 @@ struct BookmarksPage: View {
             CircleGlyph(systemName: "line.3.horizontal.decrease")
         }
         .buttonStyle(.plain)
+        .anchorPreference(key: FilterAnchorKey.self, value: .bounds) { $0 }
         .accessibilityLabel("Order")
         .accessibilityValue(model.sort.title)
         .accessibilityHint("Chooses the order the bookmarks are in")
@@ -114,9 +144,12 @@ struct BookmarksPage: View {
         }
     }
 
-    /// The card, hanging from the mark at the top right. Over a full-page catcher, so a tap
-    /// anywhere else closes it without reaching the list underneath.
-    private func orderMenu(_ model: BookmarkListModel) -> some View {
+    /// The card, hanging under the mark at the top right — its trailing edge on the mark's, its top
+    /// a grid below it, both from the mark's measured frame rather than from a guess at where the
+    /// header put it. Over a full-page catcher, so a tap anywhere else closes it without reaching
+    /// the list underneath, and on the Collection's own spring, growing out of the corner it hangs
+    /// from.
+    private func orderMenu(_ model: BookmarkListModel, under mark: CGRect, in page: CGSize) -> some View {
         ZStack(alignment: .topTrailing) {
             Color.clear
                 .contentShape(Rectangle())
@@ -127,8 +160,8 @@ struct BookmarksPage: View {
                     picking = false
                 }
             }
-            .padding(.trailing, Spacing.margin)
-            .padding(.top, Spacing.grid + 44)                              // clear of the mark it hangs from
+            .offset(x: -(page.width - mark.maxX), y: mark.maxY + Spacing.grid)
+            .transition(TitleMenuMotion.transition(anchor: .topTrailing))
         }
         .sensoryFeedback(.selection, trigger: model.sort)
     }
@@ -149,13 +182,20 @@ struct BookmarksPage: View {
                                 onEditNote: { editing = entry },
                                 onDelete: { Task { await model.delete(entry) } })
                         .padding(.horizontal, Spacing.margin)
-                        .padding(.vertical, Self.rowGap)
+                        // `rowGap` is the air *between* two bookmarks; the first one has the title
+                        // above it instead, and owes it nothing like as much.
+                        .padding(.top, position == 0 ? Spacing.grid + 4 : Self.rowGap)
+                        .padding(.bottom, Self.rowGap)
                 }
                 Color.clear.frame(height: Spacing.section)
             }
         }
         .scrollIndicators(.hidden)
         .animation(.snappy, value: model.entries.map(\.id))
+        // Both ends soft (owner, 2026-09-12: "use bottom and top fade"): a row leaves the page
+        // under the title and under the foot rather than being cut off at either.
+        .overlay { EdgeFade(edge: .top, height: 20) }
+        .overlay { EdgeFade(edge: .bottom, height: 44) }
     }
 
     private func jump(to entry: BookmarkEntry) {
@@ -165,5 +205,15 @@ struct BookmarksPage: View {
             dismiss()
             onJumped()
         }
+    }
+}
+
+/// The order mark's frame, carried up to the page that draws the card under it. Its own key rather
+/// than the Collection's `TitleAnchorKey`: that one is the *title*'s frame, and a page that ever
+/// reported both would have the two fight over one value.
+private struct FilterAnchorKey: PreferenceKey {
+    static let defaultValue: Anchor<CGRect>? = nil
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
     }
 }

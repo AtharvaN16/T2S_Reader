@@ -239,7 +239,7 @@ struct CollectionPage: View {
                 withAnimation(TitleMenuMotion.close) { filter = kind; isPickingKind = false }
             }
             .offset(x: title.minX, y: title.maxY + Spacing.grid)
-            .transition(TitleMenuMotion.transition)
+            .transition(TitleMenuMotion.transition())
         }
     }
 

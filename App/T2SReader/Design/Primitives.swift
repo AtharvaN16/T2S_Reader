@@ -67,11 +67,14 @@ struct Pill: View {
 /// `⋯`, the Reader bar's circles. A label, not a button, so a `Button` and a `Menu` can both wear it.
 struct CircleGlyph: View {
     var systemName: String
+    /// The glyph's colour. `ink` for the ordinary marks; a Delete passes `destructive`, so the one
+    /// mark on a screen that destroys something is the one mark that is red (owner, 2026-09-12).
+    var tint: Color = Tokens.ink
 
     var body: some View {
         Image(systemName: systemName)
             .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(Tokens.ink)
+            .foregroundStyle(tint)
             .frame(width: 36, height: 36)
             .background(Tokens.surface, in: Circle())
     }
@@ -91,6 +94,11 @@ struct SectionHeader: View {
 struct PageTitle<Menu: View>: View {
     var text: String
     var subtitle: String? = nil
+    /// How far below the top of the page the title sits. `Spacing.titleTop` on a root page, which
+    /// has nothing above it; a page that draws its own back row first passes the smaller gap it
+    /// needs, or the title lands a whole row and a half down the screen (owner, 2026-09-12:
+    /// "bookmarks title and page start is too low").
+    var topPadding: CGFloat = Spacing.titleTop
     @ViewBuilder var menu: () -> Menu
 
     var body: some View {
@@ -103,14 +111,14 @@ struct PageTitle<Menu: View>: View {
                 Text(subtitle).typeRole(.meta).foregroundStyle(Tokens.ink2)
             }
         }
-        .padding(.top, Spacing.titleTop)
+        .padding(.top, topPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 extension PageTitle where Menu == EmptyView {
-    init(text: String, subtitle: String? = nil) {
-        self.init(text: text, subtitle: subtitle, menu: { EmptyView() })
+    init(text: String, subtitle: String? = nil, topPadding: CGFloat = Spacing.titleTop) {
+        self.init(text: text, subtitle: subtitle, topPadding: topPadding, menu: { EmptyView() })
     }
 }
 

@@ -26,12 +26,6 @@ struct BookmarkDetail: View {
 
     @State private var confirmingDelete = false
 
-    /// Where it is, in the app's own face — `.mono` put the one line of small print on this screen
-    /// in a typeface used nowhere near it (owner, 2026-09-12).
-    private var meta: String {
-        entry.chapterTitle.isEmpty ? entry.rangeText : "\(entry.rangeText) · \(entry.chapterTitle)"
-    }
-
     /// Solid under the buttons, easing to clear above them.
     private static let footSolid: CGFloat = 76
     private static let footFade: CGFloat = 44
@@ -41,12 +35,29 @@ struct BookmarkDetail: View {
             header
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.row) {
-                    Text(meta)
-                        .typeRole(.meta).foregroundStyle(Tokens.ink2)
-                    Text(entry.lead)
-                        .typeRole(.playerTitle).foregroundStyle(Tokens.ink)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // The words first and the small print under them (owner, 2026-09-12: "move the
+                    // time stamp and chapter below"). The passage is what this screen is for, and a
+                    // line of grey type above it made the reader step over a label to reach it;
+                    // under, it reads as the caption to what it describes. The two are one block,
+                    // tighter than the gap to the note: the line belongs to those words, where the
+                    // note answers them.
+                    VStack(alignment: .leading, spacing: 14) {
+                        // The passage whole (`fullPassage`), not the row's 90-character snippet:
+                        // this screen exists to show a long bookmark, and it was printing the same
+                        // clipped words as the row it was opened from, ellipsis and all.
+                        Text(entry.fullPassage)
+                            .typeRole(.playerTitle).foregroundStyle(Tokens.ink)
+                            // `playerTitle` carries a four-line limit for the transport's book
+                            // title (`TypeRole.lineLimit`), and a long bookmark was being cut at
+                            // four lines here too, ellipsis and all, on the one screen that exists
+                            // to show it whole. A limit set outside the role is the one that holds
+                            // — a high number rather than `nil`, which the role reads as "nobody
+                            // has set one" and fills in again.
+                            .lineLimit(500)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                        BookmarkMeta(entry: entry)
+                    }
                     // The reader's note under the passage it is about, against the rule the row
                     // gives it too. In full: the row shows two lines of it, this shows all of it.
                     if let note = entry.note {
@@ -64,9 +75,12 @@ struct BookmarkDetail: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, Spacing.margin)
-                .padding(.top, Spacing.grid)
+                .padding(.top, Spacing.grid + 4)
             }
             .scrollIndicators(.hidden)
+            // The words pass under the header the way they pass under the foot — the same ramp at
+            // both ends, so neither edge of this screen is a cut (owner, 2026-09-12).
+            .overlay { EdgeFade(edge: .top) }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Tokens.ground.ignoresSafeArea())
@@ -84,6 +98,9 @@ struct BookmarkDetail: View {
 
     /// Back on the left as everywhere else in the app, and Delete at the far right — the corner a
     /// destructive thing belongs in, and out of the way of the two buttons you actually came for.
+    /// Red, and the only red on the screen (owner, 2026-09-12): it was an ink glyph like the back
+    /// arrow, which said the two marks did comparable things. `CircleGlyph` takes the colour itself
+    /// now — a `.foregroundStyle` outside it was set again inside and never showed.
     private var header: some View {
         HStack {
             Button { dismiss() } label: { CircleGlyph(systemName: "chevron.left") }
@@ -91,8 +108,7 @@ struct BookmarkDetail: View {
                 .accessibilityLabel("Back")
             Spacer()
             Button { confirmingDelete = true } label: {
-                CircleGlyph(systemName: "trash")
-                    .foregroundStyle(Tokens.destructive)
+                CircleGlyph(systemName: "trash", tint: Tokens.destructive)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Delete bookmark")

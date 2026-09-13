@@ -33,10 +33,18 @@ enum RootPage: Hashable, CaseIterable {
     }
 
     /// `T2S_OPEN`, the same idea one step further: `reader` opens the Reader, `chapters` the Reader
-    /// with its chapter list up, `kinds` the Collection title's kind menu, `book` its book sheet —
+    /// with its chapter list up, `bookmarks` the Reader with its bookmarks page over it — on a
+    /// sample seeded with bookmarks, since a bookmark is a position in a timeline and cannot be
+    /// written by a script — `kinds` the Collection title's kind menu, `book` its book sheet —
     /// on the first document whose
     /// title contains `T2S_BOOK`, else the first document. Screenshots only.
     static var launchOpen: String? { ProcessInfo.processInfo.environment["T2S_OPEN"] }
+
+    /// Whether the launch opens the Bookmarks page: `bookmarks`, `bookmarks-order` for the same
+    /// page with its order menu down, `bookmarks-detail` for its first bookmark opened — as with
+    /// `kinds` on the Collection, a scripted simulator cannot tap a mark, so anything that is
+    /// normally opened by a finger has to be asked for at launch.
+    static var launchOpensBookmarks: Bool { launchOpen?.hasPrefix("bookmarks") == true }
 
     /// `T2S_VOICE=pending`: the voice list opens with a radio already moved off the voice in
     /// effect, which is the only way a script-driven simulator can see the commit bar — the bar is
@@ -200,8 +208,9 @@ struct RootPager: View {
         .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation, nowPlaying: env.nowPlaying)
         .task {
             if RootPage.launchSeeds { await seedSamples() }
+            if RootPage.launchOpensBookmarks { await seedBookmarks() }
             await env.libraryModel.refresh()
-            if ["reader", "chapters", "voice"].contains(RootPage.launchOpen ?? ""),
+            if ["reader", "chapters", "voice"].contains(RootPage.launchOpen ?? "") || RootPage.launchOpensBookmarks,
                let document = RootPage.launchDocument(in: env.libraryModel.summaries) {
                 readerDocument = document
             }
@@ -348,6 +357,49 @@ struct RootPager: View {
                 await env.libraryModel.notePlaying(hit.id)
             }
         }
+    }
+
+    /// The bookmarks screenshot's book: a few paragraphs, so the page has passages of a real
+    /// length to draw rather than one line each.
+    private static let bookmarkSample = PlainTextArticle.content(
+        title: "Pride and Prejudice",
+        body: """
+        It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.
+
+        "Impossible, Mr. Bennet, impossible, when I am not acquainted with him myself; how can you be so teasing?"
+
+        "You are over scrupulous surely. I dare say Mr. Bingley will be very glad to see you; and I will send a few lines by you to assure him of my hearty consent to his marrying whichever he chooses of the girls."
+
+        Mr. Bennet was so odd a mixture of quick parts, sarcastic humour, reserve, and caprice, that the experience of three and twenty years had been insufficient to make his wife understand his character.
+        """)
+
+    /// `T2S_OPEN=bookmarks` (screenshots): the sample above, with bookmarks on it. They cannot be
+    /// written flat the way the sample articles are — a bookmark is a position in a timeline — so
+    /// they are made the way a reader's are, against the timeline the import derives, and only when
+    /// the document has none. One of them carries a note, since a note changes the shape of a row.
+    private func seedBookmarks() async {
+        let sample = Self.bookmarkSample
+        await env.libraryModel.refresh()
+        if !env.libraryModel.summaries.contains(where: { $0.document.title == sample.title }) {
+            _ = try? await env.library.importArticle(sample, originalHTML: "")
+            await env.libraryModel.refresh()
+        }
+        guard let summary = env.libraryModel.summaries.first(where: { $0.document.title == sample.title }),
+              let existing = try? await env.library.store.bookmarks(for: summary.id), existing.isEmpty,
+              let timeline = try? await env.library.timelineForPlayback(summary.id), timeline.utteranceCount > 0
+        else { return }
+        let notes = ["The line the whole argument turns on — come back to it before the reading group."]
+        // From the second utterance: the first is the title, and a bookmark on the title of the
+        // thing you are reading tells a screenshot nothing.
+        for (n, index) in (1..<min(timeline.utteranceCount, 6)).enumerated() {
+            let position = PositionResolver.position(for: Playhead(utteranceIndex: index), in: timeline)
+            let bookmark = Bookmark(documentID: summary.id, position: position,
+                                    passageText: timeline[utterance: index].source,
+                                    userNote: n < notes.count ? notes[n] : nil,
+                                    createdAt: Date().addingTimeInterval(Double(-n) * 600))
+            try? await env.library.store.add(bookmark)
+        }
+        await env.libraryModel.notePlaying(summary.id)
     }
 
     private func openPending() {

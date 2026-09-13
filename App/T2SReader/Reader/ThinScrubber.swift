@@ -81,8 +81,8 @@ struct ThinScrubber: View {
                     let isZoomed = zoom?.index == i
                     segment(span, width: max(1, ranges[i].upperBound - ranges[i].lowerBound - leading - trailing),
                             height: isZoomed ? Self.pressedHeight : Self.restingHeight, rounded: isZoomed,
-                            showBookmarks: activeIndex == i, chapterTicks: isZoomed && isChapterScoped,
-                            fraction: fraction)
+                            showBookmarks: activeIndex == i, isCurrent: zoomedChapter == i,
+                            chapterTicks: isZoomed && isChapterScoped, fraction: fraction)
                         .opacity(opacity(of: i, pressed: pressed))
                         .offset(x: ranges[i].lowerBound + leading)
                 }
@@ -172,7 +172,8 @@ struct ThinScrubber: View {
 
     /// One chapter's bar: its ticks underneath, the played part on top, square-ended unless zoomed.
     private func segment(_ span: Range<Double>, width: CGFloat, height: CGFloat, rounded: Bool,
-                         showBookmarks: Bool, chapterTicks: Bool, fraction: Double) -> some View {
+                         showBookmarks: Bool, isCurrent: Bool, chapterTicks: Bool,
+                         fraction: Double) -> some View {
         let length = max(span.upperBound - span.lowerBound, .leastNonzeroMagnitude)
         let played = min(1, max(0, (fraction - span.lowerBound) / length))
         return ZStack(alignment: .leading) {
@@ -181,9 +182,14 @@ struct ThinScrubber: View {
             // chapter pass squeezed into a tenth of the bar is sub-point. Changing the tick *count*
             // mid-spring re-lays-out the fill under a bar that is still moving, which flickers; a
             // cross-fade of two fixed grids does not.
+            //
+            // Only the playhead's own chapter carries the second grid. It used to be drawn by every
+            // segment — the condition was on the array being non-empty, which has nothing to do
+            // with *which* bar this is — so a fourteen-chapter book built 672 tick views to show 48
+            // of them (2026-09-13).
             tickRow(bookTicks(in: span)).opacity(chapterTicks ? 0 : 1)
-            if !model.chapterTicks.isEmpty {
-                tickRow(model.chapterTicks).opacity(chapterTicks ? 1 : 0)
+            if isCurrent, !model.chapterTicks.isEmpty {
+                tickRow(TickSlice(ticks: model.chapterTicks)).opacity(chapterTicks ? 1 : 0)
             }
             /// Only the layout springs. The seek is async, so on release `fraction` falls back to the
             /// stale model value for a beat — animating the width would show the fill slide back.
@@ -206,21 +212,25 @@ struct ThinScrubber: View {
         .animation(.easeInOut(duration: 0.2), value: chapterTicks)
     }
 
-    private func tickRow(_ ticks: [Bool]) -> some View {
-        HStack(spacing: 0) {
-            ForEach(Array(ticks.enumerated()), id: \.offset) { _, ready in
-                Rectangle().fill(ready ? Tokens.ink2 : Tokens.ink3)
-            }
+    /// The frontier as two fills rather than as one view per tick: unrendered ground, with the
+    /// rendered runs drawn over it. `TickMarks` has no layout children, so a bar whose width is
+    /// springing costs one path rebuild a frame instead of a width negotiation per tick.
+    private func tickRow(_ ticks: TickSlice) -> some View {
+        ZStack {
+            Tokens.ink3
+            TickMarks(ticks: ticks.ticks, slice: ticks.slice).fill(Tokens.ink2)
         }
     }
 
-    /// The book-wide ticks overlapping this chapter; at least the one under its start.
-    private func bookTicks(in span: Range<Double>) -> [Bool] {
+    /// The book-wide ticks overlapping this chapter; at least the one under its start. A range into
+    /// the shared array rather than a copy of it: `Array(slice)` here allocated once per segment per
+    /// body, and the body runs at 10 Hz while playing.
+    private func bookTicks(in span: Range<Double>) -> TickSlice {
         let n = model.tickCount
-        guard n > 0, model.renderedTicks.count == n else { return [] }
+        guard n > 0, model.renderedTicks.count == n else { return TickSlice(ticks: [], slice: 0..<0) }
         let first = min(n - 1, max(0, Int(span.lowerBound * Double(n))))
         let last = min(n - 1, max(first, Int((span.upperBound * Double(n)).rounded(.up)) - 1))
-        return Array(model.renderedTicks[first...last])
+        return TickSlice(ticks: model.renderedTicks, slice: first..<(last + 1))
     }
 
     /// The bookmarks inside this chapter, as 0…1 along the chapter itself.
@@ -229,5 +239,35 @@ struct ThinScrubber: View {
         return bookmarkFractions
             .filter { $0 >= span.lowerBound && $0 <= span.upperBound }
             .map { min(1, max(0, ($0 - span.lowerBound) / length)) }
+    }
+}
+
+/// A window onto a shared tick array, so passing one costs nothing.
+struct TickSlice: Equatable {
+    var ticks: [Bool]
+    var slice: Range<Int>
+
+    init(ticks: [Bool], slice: Range<Int>? = nil) {
+        self.ticks = ticks
+        self.slice = slice ?? 0..<ticks.count
+    }
+}
+
+/// The rendered part of a frontier, as merged rectangles. A realistic frontier — the opening ready
+/// and a patch the reader jumped ahead to — is two or three of them rather than forty-eight views.
+private struct TickMarks: Shape {
+    var ticks: [Bool]
+    var slice: Range<Int>
+
+    func path(in rect: CGRect) -> Path {
+        let count = min(ticks.count, slice.upperBound) - max(0, slice.lowerBound)
+        guard count > 0 else { return Path() }
+        let width = rect.width / CGFloat(count)
+        var path = Path()
+        for run in ScrubberModel.runs(of: true, in: ticks, over: slice) {
+            path.addRect(CGRect(x: CGFloat(run.lowerBound) * width, y: 0,
+                                width: CGFloat(run.count) * width, height: rect.height))
+        }
+        return path
     }
 }

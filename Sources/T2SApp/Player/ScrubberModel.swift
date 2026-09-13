@@ -101,4 +101,28 @@ public struct ScrubberModel: Hashable, Sendable {
         }
         return ticks
     }
+
+    /// The frontier as contiguous runs rather than as one tick apiece, over `slice` of `ticks`
+    /// (clamped) and with indices relative to that slice's start.
+    ///
+    /// `ThinScrubber` drew the grid as an `HStack` of one `Rectangle` per tick: 48 flexible
+    /// children whose widths SwiftUI negotiated on every frame of the scope spring, while the bar
+    /// containing them was itself resizing. The picture is the same drawn as merged rectangles —
+    /// a realistic frontier is two or three of them — and a `Shape` has no layout children at all.
+    public static func runs(of value: Bool, in ticks: [Bool], over slice: Range<Int>? = nil) -> [Range<Int>] {
+        let bounds = slice ?? 0..<ticks.count
+        let lo = max(0, bounds.lowerBound)
+        let hi = min(ticks.count, bounds.upperBound)
+        guard lo < hi else { return [] }
+        var runs: [Range<Int>] = []
+        var i = lo
+        while i < hi {
+            guard ticks[i] == value else { i += 1; continue }
+            var j = i
+            while j + 1 < hi, ticks[j + 1] == value { j += 1 }
+            runs.append((i - lo)..<(j + 1 - lo))
+            i = j + 1
+        }
+        return runs
+    }
 }

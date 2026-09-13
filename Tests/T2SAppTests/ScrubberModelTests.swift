@@ -120,3 +120,47 @@ import T2SCore
         #expect(book == [true, true, true, true, false, false, false, false])
     }
 }
+
+/// The frontier drawn as runs rather than as one view per tick (2026-09-13). `ThinScrubber` used to
+/// build an `HStack` of one `Rectangle` per tick — 48 flexible children whose widths SwiftUI had to
+/// negotiate on every frame of the scope spring, while the bar they sit in was resizing. The same
+/// picture is a handful of merged rectangles, and these pin the merge.
+@Suite struct TickRunsTests {
+    @Test func adjacentTicksOfTheSameValueBecomeOneRun() {
+        let ticks = [true, true, true, false, false, true]
+        #expect(ScrubberModel.runs(of: true, in: ticks) == [0..<3, 5..<6])
+        #expect(ScrubberModel.runs(of: false, in: ticks) == [3..<5])
+    }
+
+    @Test func aUniformFrontierIsASingleRun() {
+        #expect(ScrubberModel.runs(of: true, in: Array(repeating: true, count: 48)) == [0..<48])
+        #expect(ScrubberModel.runs(of: true, in: Array(repeating: false, count: 48)).isEmpty)
+    }
+
+    @Test func runsAreClippedToTheRequestedSlice() {
+        let ticks = [true, true, false, true, true, true]
+        // The book bar draws one chapter's slice of the book-wide pass, so the runs have to be
+        // relative to that slice, not to the whole array.
+        #expect(ScrubberModel.runs(of: true, in: ticks, over: 2..<6) == [1..<4])
+        #expect(ScrubberModel.runs(of: false, in: ticks, over: 2..<6) == [0..<1])
+    }
+
+    @Test func anEmptyOrOutOfRangeSliceDrawsNothing() {
+        let ticks = [true, false, true]
+        #expect(ScrubberModel.runs(of: true, in: ticks, over: 1..<1).isEmpty)
+        #expect(ScrubberModel.runs(of: true, in: [], over: 0..<0).isEmpty)
+        #expect(ScrubberModel.runs(of: true, in: ticks, over: 0..<99) == [0..<1, 2..<3])
+    }
+
+    /// A real frontier: the opening rendered, a patch in the middle, the rest not. Four runs, not 48
+    /// rectangles.
+    @Test func aRealisticFrontierCollapsesToAHandfulOfRuns() {
+        let ticks = (0..<48).map { i -> Bool in
+            let f = (Double(i) + 0.5) / 48
+            return f < 0.132 || (f > 0.615 && f < 0.672)
+        }
+        let drawn = ScrubberModel.runs(of: true, in: ticks)
+        #expect(drawn.count == 2)
+        #expect(drawn.reduce(0) { $0 + $1.count } == ticks.filter { $0 }.count)
+    }
+}

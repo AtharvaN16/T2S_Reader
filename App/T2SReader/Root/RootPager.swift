@@ -148,7 +148,22 @@ struct RootPager: View {
         }
         .fullScreenCover(item: $readerDocument, onDismiss: refreshHome) { ReaderPage(summary: $0) }
         .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation, nowPlaying: env.nowPlaying)
-        .task { await env.libraryModel.refresh() }
+        .task {
+            await env.libraryModel.refresh()
+            #if DEBUG
+            // One route back, and only in a debug build: a script-driven simulator cannot tap a
+            // book open, and the Reader is where most of this app's look lives. `T2S_OPEN=reader`
+            // with an optional `T2S_BOOK=<title fragment>`. The dozen screenshot routes that were
+            // dropped on 2026-09-13 stay dropped — this is the one a photograph cannot do without.
+            if ProcessInfo.processInfo.environment["T2S_OPEN"] == "reader" {
+                let wanted = ProcessInfo.processInfo.environment["T2S_BOOK"]
+                readerDocument = env.libraryModel.summaries.first {
+                    guard let wanted else { return true }
+                    return $0.document.title.localizedCaseInsensitiveContains(wanted)
+                } ?? env.libraryModel.summaries.first
+            }
+            #endif
+        }
         .onChange(of: env.deviceMonitor.deviceState, initial: true) { _, state in
             updatePrepareDeviceState(state)
         }

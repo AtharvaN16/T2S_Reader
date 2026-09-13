@@ -11,7 +11,12 @@ import T2SApp
 /// labelled "Chapter" would be repeating a word at twice the size; and the glyphs are not icons
 /// standing for the idea of a book, they are miniatures of the two bars themselves, sitting
 /// directly under the bar they switch.
-struct ScopeChip: View {
+struct ScopeChip: View, Equatable {
+    /// The scope is the whole of this view's input — `onChange` captures `ReaderPreferences`, which
+    /// is a reference that outlives every redraw. Without this the chip is rebuilt ten times a
+    /// second by the playback clock ticking in the row above it, including through its own spring.
+    nonisolated static func == (a: ScopeChip, b: ScopeChip) -> Bool { a.scope == b.scope }
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var scope: ScrubberScope
     var onChange: (ScrubberScope) -> Void

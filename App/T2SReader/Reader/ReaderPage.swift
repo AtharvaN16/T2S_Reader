@@ -343,6 +343,7 @@ struct ReaderPage: View {
                 .overlay {
                     if chapterSegments.count > 1 {
                         ScopeChip(scope: scrubberScope) { env.preferences.scrubberScope = $0 }
+                            .equatable()
                     }
                 }
                 .typeRole(.meta).foregroundStyle(Tokens.ink2)

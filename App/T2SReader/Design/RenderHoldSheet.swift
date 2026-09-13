@@ -1,6 +1,7 @@
 // App/T2SReader/Design/RenderHoldSheet.swift
 import SwiftUI
 import T2SApp
+import UIKit
 
 /// The chapter queue, stopped with work still in it, said where the reader is actually looking.
 ///
@@ -58,40 +59,99 @@ struct RenderHoldHost: View {
 /// and holds it there, because "a warning that keeps breathing at full reads as something still
 /// working on it, and nothing is". This is that ending state from the start, so there is no
 /// `TimelineView` here and nothing for Reduce Motion to turn off.
-///
-/// Only a surface whose frame begins at the window's top edge can draw it — the root pager and the
-/// Reader over it. Not the book sheet: a `.sheet` starts a little way down the screen, and a copy
-/// in there would put a second rim on the sheet's own top edge, which is the thing that was just
-/// taken off it. The strip the sheet leaves uncovered is where the root's copy shows through.
-struct RenderHoldGlowHost: View {
-    @Environment(AppEnvironment.self) private var env
+struct RenderHoldGlow: View {
+    /// A shade under `WarmRamp`'s own held strength of 0.66. The owner walked this down to 0.45 and
+    /// back up a notch once it was at the top of the screen instead of round the card — the light
+    /// had further to travel and less to sit against there (2026-09-13, "slightly less intense",
+    /// then "very slightly more intense").
+    static let settled: Double = 0.55
 
-    /// Below `WarmRamp`'s own held strength of 0.66 (owner, 2026-09-13: "slightly less intense").
-    /// The warm-up's light is the app's headline event and can afford to be; this one is a notice
-    /// that will sit there until the phone cools, and has to be liveable with for that long.
-    private static let settled: Double = 0.45
+    var body: some View {
+        ZStack {
+            WarmRamp.wash(pulse: Self.settled, light: Tokens.glowHot)
+            WarmRamp.bezel(pulse: Self.settled, light: Tokens.glowHot)
+        }
+        .frame(height: WarmRamp.height)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The window the light lives in, and why it needs one.
+///
+/// A sheet is not drawn inside the view that presents it — UIKit puts the presented controller over
+/// the presenter — so an `overlay` anywhere in the pager's hierarchy is *under* the book sheet, and
+/// the sheet's own top edge cut the rim off a little way down the screen (owner, 2026-09-13: "the
+/// booksheet is covering it"). Drawing a second copy inside the sheet was the arrangement this
+/// replaces, and it cannot be the answer either: a sheet's frame starts below the window's top, so
+/// its copy lands on the sheet's edge rather than the screen's.
+///
+/// A window above `.alert` has neither problem. It is the screen's edge by construction, it clears
+/// every sheet and `fullScreenCover` without knowing they exist, and — `isUserInteractionEnabled`
+/// being false — it is invisible to touch, so nothing underneath loses a tap. It is never made key,
+/// so it never takes over the status bar's appearance from the app's own window.
+///
+/// The one window is enough for the whole app, which is why this is the only thing `renderHoldGlow`
+/// does and why only the root pager applies it. Torn down, not merely hidden, when the hold lifts:
+/// a spare `UIWindow` retained for the life of the process to show nothing is a thing that will one
+/// day be wondered about.
+@MainActor
+enum RenderHoldGlowWindow {
+    private static var window: UIWindow?
+    /// The same fade `WarmRim` uses when the warm-up's light arrives and leaves.
+    private static let fade: TimeInterval = 0.3
+
+    static func setShown(_ shown: Bool) {
+        shown ? show() : hide()
+    }
+
+    private static func show() {
+        guard window == nil else { return }
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive })
+        else { return }
+
+        let host = UIHostingController(rootView: RenderHoldGlow())
+        host.view.backgroundColor = .clear
+        let made = UIWindow(windowScene: scene)
+        made.windowLevel = .alert + 1
+        made.backgroundColor = .clear
+        made.isUserInteractionEnabled = false
+        made.rootViewController = host
+        made.alpha = 0
+        made.isHidden = false
+        window = made
+        UIView.animate(withDuration: fade) { made.alpha = 1 }
+    }
+
+    private static func hide() {
+        guard let going = window else { return }
+        window = nil
+        UIView.animate(withDuration: fade) { going.alpha = 0 } completion: { _ in
+            going.isHidden = true
+        }
+    }
+}
+
+/// Puts the light up for as long as the queue is held and the reader has not dismissed the notice.
+private struct RenderHoldGlowDriver: ViewModifier {
+    @Environment(AppEnvironment.self) private var env
+    @Environment(\.scenePhase) private var scenePhase
 
     private var isHeld: Bool {
         !env.chapterRenderer.holdNoticeDismissed && env.chapterRenderer.hold != nil
     }
 
-    var body: some View {
-        ZStack {
-            if isHeld {
-                ZStack {
-                    WarmRamp.wash(pulse: Self.settled, light: Tokens.glowHot)
-                    WarmRamp.bezel(pulse: Self.settled, light: Tokens.glowHot)
-                }
-                .frame(height: WarmRamp.height)
-                .transition(.opacity)
+    func body(content: Content) -> some View {
+        content
+            // Not while the app is away: the window belongs to a foreground scene, and one built on
+            // the way out would be a window with no scene to live in.
+            .onChange(of: isHeld && scenePhase == .active, initial: true) { _, shown in
+                RenderHoldGlowWindow.setShown(shown)
             }
-        }
-        .frame(height: WarmRamp.height)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .ignoresSafeArea(edges: .top)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-        .animation(.easeInOut(duration: 0.3), value: isHeld)
     }
 }
 
@@ -174,9 +234,9 @@ extension View {
         overlay { RenderHoldHost() }
     }
 
-    /// Draws the held-queue light at the head of the screen. Only for a surface that reaches the
-    /// window's top edge — see `RenderHoldGlowHost` for why the book sheet is not one.
+    /// Puts the held-queue light at the head of the screen, in a window of its own above every
+    /// sheet. The root pager alone applies it — see `RenderHoldGlowWindow` for why one is enough.
     func renderHoldGlow() -> some View {
-        overlay { RenderHoldGlowHost() }
+        modifier(RenderHoldGlowDriver())
     }
 }

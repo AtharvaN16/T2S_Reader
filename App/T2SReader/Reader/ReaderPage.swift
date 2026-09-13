@@ -154,10 +154,9 @@ struct ReaderPage: View {
             }
         }
         // The queue holds while a book is being read as often as while the book sheet is up, and
-        // the Reader is a `fullScreenCover` over the pager, so the pager's copy cannot reach here —
-        // neither the notice nor the light it puts at the head of the screen.
+        // the Reader is a `fullScreenCover` over the pager, so the pager's copy of the notice cannot
+        // reach here. The light needs no copy: it is in a window above every cover (`renderHoldGlow`).
         .renderHoldSheet()
-        .renderHoldGlow()
         .task(id: summary.id) { await open() }
         .task(id: env.player.current?.id) {
             // Not `player.current.map { await … }`: `Optional.map`'s transform is synchronous, and

@@ -137,8 +137,9 @@ struct RootPager: View {
         // The held-queue notice, over whichever page is up. Drawn by each layer that can be
         // frontmost — the Reader and the book sheet have their own — because it is a card in a
         // stack, not a `.sheet`, and a stack only covers what is under it. The light that goes with
-        // it is separate and belongs to the screen: this frame starts at the window's top edge, so
-        // it can draw it and the book sheet cannot.
+        // it is not in this hierarchy at all — it has a window of its own above every sheet, which
+        // is the only place a sheet cannot cut it off — so it is put up from here once, for the
+        // whole app, rather than drawn by each layer.
         .renderHoldSheet()
         .renderHoldGlow()
         .appTheme()

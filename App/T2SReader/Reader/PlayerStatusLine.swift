@@ -28,7 +28,10 @@ struct PlayerStatusLine: View {
         }
         .typeRole(.pill)                                                    // a step up from `meta`, in Medium
         .foregroundStyle(Tokens.ink)
-        .padding(.horizontal, 16)
+        // Wide shoulders (owner, 2026-09-13): a `Capsule` already spends its first ~24 pt each
+        // side on the curve, so 16 pt of padding left the words sitting in the bend rather than on
+        // the flat of the pill.
+        .padding(.horizontal, 28)
         .padding(.vertical, 9)
         // A `surface` capsule, the same fill and the same fully-rounded shape as the voice chip
         // and the tool circles a few rows below, so the line reads as one of the app's own objects

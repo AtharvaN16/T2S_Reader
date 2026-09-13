@@ -307,10 +307,8 @@ struct ReaderPage: View {
                 }
             }
             // 22 pt between the chip row and the transport (owner, 2026-09-13). The block is
-            // bottom-anchored, so the air has to be made here and paid for at the foot: most of
-            // the gap comes from pushing the scrubber group up, the rest from the six points taken
-            // off the bottom padding below, which is what actually moves the transport and the
-            // tool row down rather than merely apart.
+            // bottom-anchored, so air made here pushes the scrubber group up rather than the
+            // transport down; the foot is set by the block's own bottom padding below.
             .padding(.bottom, 22)
             ReaderControls(onSleepTimer: { showSleepTimer = true }, onSpeed: { showSpeed = true })
                 .padding(.bottom, 10)
@@ -318,7 +316,16 @@ struct ReaderPage: View {
         }
         .padding(.horizontal, Spacing.margin)
         .padding(.top, 12)
-        .padding(.bottom, 2)                                               // was `Spacing.grid`; see the gap above
+        // The whole block's foot, and so the whole assembly's position: the `ground` fade is a
+        // background on this same view, so raising the foot lifts the fade with it rather than
+        // leaving the controls to climb out of their own gradient. The state-line overlay rides up
+        // too — it hangs off the chapter picker.
+        //
+        // `2 * Spacing.grid` rather than the bare `grid` it was, and rather than the 2 pt it was
+        // cut to earlier today (owner, 2026-09-13): it is the top bar's own band padding, so the
+        // block's foot and the header's band keep one rhythm, and it stands the tool row clear of
+        // the safe area instead of on its edge.
+        .padding(.bottom, 2 * Spacing.grid)
         .overlay(alignment: .top) {
             // One slot, and the Reader's own toast has it: a bookmark saved here is answered here.
             // An app-wide message (`ToastCenter` — the voice model removed under a play) uses the

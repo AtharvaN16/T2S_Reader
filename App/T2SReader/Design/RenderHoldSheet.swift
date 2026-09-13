@@ -83,12 +83,12 @@ struct RenderHoldHost: View {
 struct RenderHoldGlowHost: View {
     @Environment(AppEnvironment.self) private var env
 
-    /// Well under `WarmRamp`'s own held strength of 0.66. The owner walked this down to 0.45, up to
-    /// 0.55 once the light moved from round the card to the top of the screen, and finally to 0.40
-    /// with it there (2026-09-13). It is a notice that sits on screen until the phone cools, so it
-    /// has to be liveable with for as long as that takes; the blue warm-up, which is over in a
-    /// minute, is the one that can afford to be bright.
-    private static let settled: Double = 0.40
+    /// Under `WarmRamp`'s own held strength of 0.66, and arrived at by looking: 0.45 round the card,
+    /// 0.55 when the light moved to the top of the screen, 0.40, and 0.50 once it was behind the
+    /// sheet rather than over it (owner, 2026-09-13). It is a notice that sits on screen until the
+    /// phone cools, so it has to be liveable with for as long as that takes; the blue warm-up, which
+    /// is over in a minute, is the one that can afford to be bright.
+    private static let settled: Double = 0.50
 
     private var isHeld: Bool {
         !env.chapterRenderer.holdNoticeDismissed && env.chapterRenderer.hold != nil

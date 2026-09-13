@@ -10,6 +10,13 @@ enum Tokens {
     // Dark's grey is lifted well clear of `ground` and `raised` (owner, 2026-09-12): a filled
     // control has to read as a fill, without an outline drawn round it to rescue it.
     static let surface = dynamic(light: 0xEEEEEC, dark: 0x2F2F2F)
+    /// `surface`'s grey for a control standing on an *inverted* card — the toast, which is `ink`
+    /// with `ground` lettering, so the page's own greys run the wrong way on it. Each mode takes
+    /// the other's family: in the dark the toast is near-white, so its buttons are a light grey
+    /// (owner, 2026-09-13: "use light gray buttons"); in the light the toast is near-black, so
+    /// they are the dark grey the page uses at night. Either way the button sits the same short
+    /// step off the card it is on, as `surface` does off `ground`.
+    static let surfaceOnInk = dynamic(light: 0x2F2F2F, dark: 0xE2E2E0)
     static let raised = dynamic(light: 0xFFFFFF, dark: 0x1A1A1A)
     static let ink = dynamic(light: 0x111111, dark: 0xF2F2F2)
     /// The Reader's text that has not been read out yet (owner, 2026-09-12): `ink`, dimmed, so the
@@ -71,6 +78,19 @@ enum Tokens {
     static let heartBottom = dynamic(light: 0xDB1729, dark: 0xE62E3E)
     static let heartShade = dynamic(light: 0x99000D, dark: 0x000000)
     static let positive = dynamic(light: 0x22A559, dark: 0x34C070)
+    /// The toast's status disc and the tick on it (owner, 2026-09-13: "black circle with white tick
+    /// on light mode and white circle with dark tick on dark mode"). The card is `ink`, so the disc
+    /// is the card's own colour carried one step further — true black on the near-black card, true
+    /// white on the near-white one — and the tick is the card's lettering. It reads as a mark
+    /// pressed into the toast rather than a grey chip laid on it, and the tick, not the disc, is
+    /// what carries the news.
+    static let discOnInk = dynamic(light: 0x000000, dark: 0xFFFFFF)
+    static let onDiscOnInk = dynamic(light: 0xFFFFFF, dark: 0x111111)
+    /// The ring round that disc (owner, 2026-09-13). A disc one step from its card is a disc you
+    /// have to look for; the line is what makes it an object. It cannot be either of the two
+    /// colours already on the card — a grey between them, a little away from the disc it edges so
+    /// it reads in both themes.
+    static let discEdgeOnInk = dynamic(light: 0x3D3D3D, dark: 0xCFCFCD)
     static let destructive = dynamic(light: 0xE5453B, dark: 0xFF5A50)
     /// The voice picker's avatar discs: pink for a female voice, blue for a male one. Categorical,
     /// not accent — they say which of two kinds a row is, never that it is selected or active.

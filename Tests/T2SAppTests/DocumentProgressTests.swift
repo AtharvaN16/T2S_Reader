@@ -63,4 +63,35 @@ import T2SStore
         s.isStale = true                                                                        // measured against chapters about to go
         #expect(DocumentProgress.fromSummary(s) == nil)
     }
+
+    func shelfSummary(elapsed: TimeInterval? = nil, total: TimeInterval = 100, finished: Bool = false,
+                      queued: Int? = nil, stale: Bool = false) -> DocumentSummary {
+        DocumentSummary(document: Document(title: "D", sourceType: .epub), chapterCount: 2, utteranceCount: 4,
+                        totalSeconds: total, renderedCount: 4, isFinished: finished, queueOrder: queued,
+                        lastPlayedAt: nil, resumeElapsedSeconds: elapsed, resumeChapterIndex: 0, isStale: stale)
+    }
+
+    @Test func shelfFractionPrefersTheTrackedProgress() {
+        let s = shelfSummary(elapsed: 10, queued: 0)
+        let tracked = DocumentProgress(elapsedSeconds: 40, totalSeconds: 100, chapterIndex: 0, chapterCount: 2, isApproximate: false)
+        #expect(DocumentProgress.shelfFraction(for: s, tracked: tracked) == 0.4)
+    }
+
+    @Test func shelfFractionFallsBackToTheRowsOwnPlayhead() {
+        // The Collection lists every document, but `LibraryModel.refresh` only tracks queued or
+        // finished rows — an un-queued book still has to be able to say where it is.
+        #expect(DocumentProgress.shelfFraction(for: shelfSummary(elapsed: 25), tracked: nil) == 0.25)
+    }
+
+    @Test func shelfFractionIsZeroWhenNothingKnowsWhereItIs() {
+        #expect(DocumentProgress.shelfFraction(for: shelfSummary(), tracked: nil) == 0)
+        #expect(DocumentProgress.shelfFraction(for: shelfSummary(elapsed: 25, stale: true), tracked: nil) == 0)
+        #expect(DocumentProgress.shelfFraction(for: shelfSummary(elapsed: 25, total: 0), tracked: nil) == 0)
+    }
+
+    @Test func shelfFractionIsWholeForAFinishedBook() {
+        // Finished rows can carry a playhead short of the end; the shelf must still read 100%.
+        #expect(DocumentProgress.shelfFraction(for: shelfSummary(elapsed: 90, finished: true), tracked: nil) == 1)
+        #expect(DocumentProgress.shelfFraction(for: shelfSummary(finished: true), tracked: nil) == 1)
+    }
 }

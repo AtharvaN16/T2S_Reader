@@ -59,7 +59,10 @@ before any reader beyond the two phones.
 `T2S_CLOUD_VOICE_KEY` in `App/Local.xcconfig` → Info.plist → Keychain, once); hosted Heart stands in
 wherever the on-device default is not open; the on-device route opens only when its warm-up finishes
 (`5b1cea9`); the player hands the book to on-device Heart at the first chapter change after it
-answers; prepare waits; the warm-up glow stays over the hosted voice (`4108cf8`); the hosted voice is
+answers; prepare waits; the warm-up glow stays over the hosted voice (`4108cf8`) — and, since
+2026-09-13, over every other voice too (`3aa4661`: the glow and the line no longer hide when audio
+starts, and the Reader draws `WarmUpLine` itself rather than leaving it behind on the pager it
+covers); the hosted voice is
 named "Heart · Cloud" (`9dc46c9`). Design: `docs/superpowers/specs/2026-09-11-cloud-first-bootstrap-design.md`;
 run: `docs/superpowers/evidence/2026-09-11-cloud-first-acceptance.log`. A fresh install on the 17 Pro
 spoke from the mirrors with nothing typed (04:00Z: 48 renders, no 429, no H12). Owed: the final

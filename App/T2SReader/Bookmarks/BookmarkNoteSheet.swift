@@ -34,8 +34,10 @@ struct BookmarkNoteSheet: View {
                 .lineLimit(focused ? 2 : 16)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text(entry.rangeText)
-                .typeRole(.mono).foregroundStyle(Tokens.ink2)
+            // The one time, in the accent, as every other surface prints a bookmark's clock
+            // (owner, 2026-09-13) — it was the span, and a span is the length of one sentence.
+            Text(entry.timeText)
+                .typeRole(.mono).foregroundStyle(Tokens.accent)
             TextEditor(text: $text)
                 .typeRole(.rowTitle)
                 .foregroundStyle(Tokens.ink)

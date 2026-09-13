@@ -344,12 +344,14 @@ struct CollectionPage: View {
     }
 }
 
-/// One grid cell: the Home row's book at the Home row's size, on its shelf slot, with the title and
-/// author under it. No progress line — the Collection is the shelf, not the Queue.
+/// One grid cell: the Home row's book at the Home row's size, on its shelf slot, with how far
+/// through it you are, then the title and author, under it.
 private struct CollectionTile: View {
     @Environment(AppEnvironment.self) private var env
     var summary: DocumentSummary
     var action: () -> Void
+
+    private var fraction: Double { shelfFraction(summary, env) }
 
     var body: some View {
         Button(action: action) {
@@ -360,6 +362,10 @@ private struct CollectionTile: View {
                 // Home, and the slot (`shelved`) keeps every title's left edge under its book's.
                 ShelfArt(summary: summary, height: BookCover.shelfHeight)
                 VStack(alignment: .leading, spacing: 3) {
+                    // Above the title, not under the author: it sits against the cover's fixed
+                    // height, so every cell in a row starts its words on one line. Under a title
+                    // that runs to two lines in one cell and one in the next, it would not.
+                    if !summary.document.isPlaceholder { ShelfProgress(fraction: fraction, size: 11) }
                     Text(summary.document.title).typeRole(.pill).foregroundStyle(Tokens.ink).lineLimit(2)
                     if let author = summary.document.displayAuthor {
                         Text(author).typeRole(.caption).foregroundStyle(Tokens.ink2).lineLimit(1)
@@ -375,21 +381,21 @@ private struct CollectionTile: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(CollectionText.accessibilityLabel(for: summary))
+        .accessibilityLabel(CollectionText.accessibilityLabel(for: summary, fraction: fraction))
         .accessibilityHint("Opens the book")
     }
 }
 
-/// One list row: a smaller book, the title in the row face with the author under it, and the Home
-/// row's `⋯` circle for the same menu the grid gives on a long press. No chapter count and no
-/// length (owner, 2026-09-12): the Collection is the shelf, and a row here now says what a tile
-/// says — what the thing is and who wrote it. Both numbers are still a tap away in Details, and
-/// the Queue is where a book's progress belongs.
+/// One list row: a smaller book, how far through it you are over the title in the row face with
+/// the author under it, and the Home row's `⋯` circle for the same menu the grid gives on a long
+/// press. No chapter count and no length (owner, 2026-09-12): those stay a tap away in Details.
 private struct CollectionRow<Items: View>: View {
     @Environment(AppEnvironment.self) private var env
     var summary: DocumentSummary
     var onOpen: () -> Void
     @ViewBuilder var menuItems: () -> Items
+
+    private var fraction: Double { shelfFraction(summary, env) }
 
     var body: some View {
         HStack(spacing: 20) {
@@ -398,6 +404,7 @@ private struct CollectionRow<Items: View>: View {
                 HStack(spacing: 20) {
                     ShelfArt(summary: summary, height: 88)                     // the text column stays put row to row
                     VStack(alignment: .leading, spacing: 4) {
+                        if !summary.document.isPlaceholder { ShelfProgress(fraction: fraction, size: 12) }
                         Text(summary.document.title).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
                         if let author = summary.document.displayAuthor {
                             Text(author).typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(1)
@@ -413,7 +420,7 @@ private struct CollectionRow<Items: View>: View {
             }
             .buttonStyle(.plain)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(CollectionText.accessibilityLabel(for: summary))
+            .accessibilityLabel(CollectionText.accessibilityLabel(for: summary, fraction: fraction))
             .accessibilityHint("Opens the book")
             Menu {
                 menuItems()
@@ -456,8 +463,9 @@ private struct ShelfArt: View {
 
 /// The words a tile and a row share.
 private enum CollectionText {
-    /// "Title, by Author, PDF" (or "link", "text"): what VoiceOver reads for a tile or a row.
-    static func accessibilityLabel(for summary: DocumentSummary) -> String {
+    /// "Title, by Author, PDF, 68 per cent through" (or "link", "text"): what VoiceOver reads for a
+    /// tile or a row. The reading is dropped for a placeholder, which is not here to be read yet.
+    static func accessibilityLabel(for summary: DocumentSummary, fraction: Double) -> String {
         var parts = [summary.document.title]
         if let author = summary.document.displayAuthor { parts.append("by \(author)") }
         switch summary.document.sourceType {
@@ -465,6 +473,42 @@ private enum CollectionText {
         case .article: parts.append(summary.document.sourceURL == nil ? "text" : "link")
         case .epub: break
         }
+        if !summary.document.isPlaceholder {
+            let percent = Int((fraction * 100).rounded())
+            parts.append(percent == 0 ? "not started" : percent == 100 ? "finished" : "\(percent) per cent through")
+        }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// The shelf's one reading of how far through a document is, for a cell's line and its VoiceOver
+/// label both.
+@MainActor private func shelfFraction(_ summary: DocumentSummary, _ env: AppEnvironment) -> Double {
+    DocumentProgress.shelfFraction(for: summary, tracked: env.libraryModel.progress(for: summary.id))
+}
+
+/// How far through the whole document, above the title in both layouts (owner, 2026-09-13): Home
+/// says what is left in the *chapter*, and until now nothing said what was left in the book. The
+/// Queue's own ring and number, so the shelf and the Queue speak one language. An untouched book
+/// keeps the line and shows an empty ring at 0% in the faint ink, so a row of cells still lands on
+/// one baseline rather than one title jumping up to fill the gap; a finished one says the word
+/// instead of the number, since "100%" is a measurement and finishing a book is an event.
+private struct ShelfProgress: View {
+    var fraction: Double
+    /// 11 in the grid's ~104 pt cell; 12 in the row, which is the Queue line's own size.
+    var size: CGFloat
+
+    var body: some View {
+        // Rounded first, then read: a book at 0.998 is finished to a reader, and rounding after the
+        // test would have it say "100%" instead.
+        let percent = Int((fraction * 100).rounded())
+        HStack(spacing: 6) {
+            CircularProgress(fraction: fraction, lineWidth: 2, size: size)
+            Text(percent >= 100 ? "Finished" : "\(percent)%")
+        }
+        .font(.custom("Inter-SemiBold", size: size, relativeTo: .footnote))
+        .foregroundStyle(fraction > 0 ? Tokens.ink2 : Tokens.ink3)
+        .padding(.bottom, 4)                                                   // air before the title, as the Queue's line keeps
+        .accessibilityHidden(true)                                             // the cell's label says it in words
     }
 }

@@ -7,9 +7,10 @@ import T2SCore
 import T2SLibrary
 
 /// Fully rounded pill (spec §2.4.3). `.accent` is the one primary action per screen; `.selected`
-/// is solid `ink` with `ground` text (chips); `.soft` and `.destructiveSoft` sit on `surface`.
+/// is solid `ink` with `ground` text (chips); `.soft` and `.destructiveSoft` sit on `surface`, and
+/// `.softOnInk` is that same soft pill for a card that is itself `ink` — the toast.
 struct Pill: View {
-    enum Style { case soft, selected, accent, destructiveSoft }
+    enum Style { case soft, selected, accent, destructiveSoft, softOnInk }
 
     var label: String
     /// A quieter second word after the label — the Play pill's "2h 28m" — in the same type, dimmed.
@@ -20,14 +21,20 @@ struct Pill: View {
     /// of a sheet (the sleep timer's Start), where a capsule the width of its two words reads as an
     /// afterthought under a full-width card. Taller too, the way a bar key is.
     var fillsWidth: Bool = false
+    /// A full-width pill at a shorter height. The bar key's 16pt of padding is right at the foot of
+    /// a sheet, where the pill is the last word on the screen; inside a toast — a message that
+    /// covers the page for four seconds — two of them at that height read as a dialog (owner,
+    /// 2026-09-13: "make the button height smaller"). Ignored unless `fillsWidth`, since a hugging
+    /// pill is already this height.
+    var compact: Bool = false
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                if let glyph { Image(systemName: glyph).font(.system(size: 13, weight: .semibold)) }
-                Text(label).typeRole(.pill)
-                if let detail { Text(detail).typeRole(.pill).foregroundStyle(foreground.opacity(0.55)) }
+                if let glyph { Image(systemName: glyph).font(.system(size: compact ? 12 : 13, weight: .semibold)) }
+                Text(label).typeRole(labelRole)
+                if let detail { Text(detail).typeRole(labelRole).foregroundStyle(foreground.opacity(0.55)) }
             }
             // A pill's label is one or two words, so it holds its own width and never breaks: at
             // the accessibility text sizes "Search" was wrapping to three lines inside its capsule.
@@ -35,8 +42,8 @@ struct Pill: View {
             // which scales down.
             .lineLimit(1)
             .fixedSize(horizontal: !fillsWidth, vertical: false)
-            .padding(.horizontal, 14)
-            .padding(.vertical, fillsWidth ? 16 : 9)
+            .padding(.horizontal, compact ? 12 : 14)
+            .padding(.vertical, fillsWidth ? (compact ? 10 : 16) : 9)
             .frame(maxWidth: fillsWidth ? .infinity : nil)
             .foregroundStyle(foreground)
             .background(background, in: Capsule())
@@ -44,12 +51,18 @@ struct Pill: View {
         .buttonStyle(.plain)
     }
 
+    /// A compact pill is half the width of a toast and its label is a phrase, not a word, so it
+    /// takes the smaller cut rather than truncating (owner, 2026-09-13).
+    private var labelRole: TypeRole { compact ? .pillSmall : .pill }
+
     private var foreground: Color {
         switch style {
         case .soft: return Tokens.ink
         case .selected: return Tokens.ground
         case .accent: return Tokens.onAccent
         case .destructiveSoft: return Tokens.destructive
+        // The card's own lettering colour: `ground` is to `ink` what `ink` is to the page.
+        case .softOnInk: return Tokens.ground
         }
     }
 
@@ -59,6 +72,7 @@ struct Pill: View {
         case .selected: return Tokens.ink
         case .accent: return Tokens.accent
         case .destructiveSoft: return Tokens.surface
+        case .softOnInk: return Tokens.surfaceOnInk
         }
     }
 }
@@ -70,13 +84,23 @@ struct CircleGlyph: View {
     /// The glyph's colour. `ink` for the ordinary marks; a Delete passes `destructive`, so the one
     /// mark on a screen that destroys something is the one mark that is red (owner, 2026-09-12).
     var tint: Color = Tokens.ink
+    /// The disc behind it. `surface` on a page; the toast passes `discOnInk`, since its card is
+    /// `ink` and the page's grey would arrive inverted on it.
+    var fill: Color = Tokens.surface
+    /// A ring round the disc. Nil on a page, where `surface` against `ground` is edge enough; the
+    /// toast draws one, its disc being a step from the card rather than a colour away from it.
+    var stroke: Color? = nil
+    var strokeWidth: CGFloat = 1.5
 
     var body: some View {
         Image(systemName: systemName)
             .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(tint)
             .frame(width: 36, height: 36)
-            .background(Tokens.surface, in: Circle())
+            .background(fill, in: Circle())
+            // `strokeBorder`, not `stroke`: the line is drawn inside the 36pt circle, so a ringed
+            // disc and a plain one are the same size in a row.
+            .overlay { if let stroke { Circle().strokeBorder(stroke, lineWidth: strokeWidth) } }
     }
 }
 
@@ -434,11 +458,13 @@ struct BookCover: View {
 
 /// The generated cover for a book with no art of its own: a cloth binding — one of the eight
 /// palette colours, dealt by the title (`CoverStyle.paletteIndex`, so the same book is always the
-/// same colour), or the PDF's light red — a hairline frame stamped a little in from the edge, the
-/// title top-left in display type with the author under it, and at the foot a short rule, or the
-/// badge ("PDF") when there is one — the way a plain hardback is lettered. The type is fixed to the
-/// book's height, not to Dynamic Type: it is lettering on an object, like a real cover. Under
-/// 64 pt there is no room for words, so the cloth carries the badge or the title's first letter.
+/// same colour), or the PDF's light red — with the title set top-left and the author held down at
+/// the foot, the way most trade paperbacks are laid out (owner, 2026-09-13, from the mockup).
+/// Nothing else: the hairline frame and the little rule at the foot that this used to carry both
+/// went, because with the author pushed to the bottom the cover already has a top and a bottom and
+/// did not need a box drawn round it to say so. The type is fixed to the book's height, not to
+/// Dynamic Type: it is lettering on an object, like a real cover. Under 64 pt there is no room for
+/// words, so the cloth carries the badge or the title's first letter.
 private struct ClothCover: View {
     var title: String
     var author: String?
@@ -447,19 +473,11 @@ private struct ClothCover: View {
     /// and `pdfInk` for a PDF.
     var cloth: Color
     var ink: Color
-    /// A word at the foot in place of the rule, and the mark under 64 pt.
+    /// A word over the author at the foot, and the mark under 64 pt.
     var badge: String? = nil
 
     var body: some View {
-        cloth
-            .overlay {
-                RoundedRectangle(cornerRadius: height * 0.012, style: .continuous)
-                    .strokeBorder(ink.opacity(0.32), lineWidth: max(0.5, height * 0.005))
-                    .padding(height * 0.05)
-            }
-            .overlay {
-                if height < 64 { compact } else { lettering }
-            }
+        cloth.overlay { if height < 64 { compact } else { lettering } }
     }
 
     private var compact: some View {
@@ -474,36 +492,35 @@ private struct ClothCover: View {
     }
 
     private var lettering: some View {
-        let titleSize = height * 0.1
-        return VStack(alignment: .leading, spacing: height * 0.035) {
+        let titleSize = height * 0.105
+        return VStack(alignment: .leading, spacing: height * 0.025) {
             Text(title)
-                .font(.custom("InterDisplay-ExtraBold", fixedSize: titleSize))
+                .font(.custom("Inter-SemiBold", fixedSize: titleSize))
                 .tracking(-0.02 * titleSize)
-                .lineLimit(4)
+                .lineLimit(3)
                 .minimumScaleFactor(0.7)
                 .foregroundStyle(ink)
-            if let author, !author.isEmpty {
-                Text(author)
-                    .font(.custom("Inter-Regular", fixedSize: height * 0.068))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
-                    .foregroundStyle(ink.opacity(0.78))
-            }
-            Spacer(minLength: 0)
+            Spacer(minLength: height * 0.05)                                   // the title reads from the top whatever its length
             if let badge {
                 Text(badge)
                     .font(.custom("Inter-Bold", fixedSize: height * 0.07))
                     .tracking(height * 0.07 * 0.1)
                     .foregroundStyle(ink.opacity(0.85))
-            } else {
-                Capsule()
-                    .fill(ink.opacity(0.6))
-                    .frame(width: height * 0.12, height: max(0.75, height * 0.008))
+            }
+            if let author, !author.isEmpty {
+                Text(author)
+                    .font(.custom("Inter-Medium", fixedSize: height * 0.072))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .foregroundStyle(ink.opacity(0.72))
             }
         }
         .multilineTextAlignment(.leading)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(height * 0.1)
+        // Clear of the hinge on the left (it creases 8% of the way across), and a little more air
+        // top and bottom than at the sides, as a printed cover has.
+        .padding(.horizontal, height * 0.075)
+        .padding(.vertical, height * 0.09)
     }
 }
 

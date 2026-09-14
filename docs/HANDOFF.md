@@ -7,6 +7,35 @@ older and dated as marked. The dated per-session entries that used to stack here
 for the lot, `git log` for the rest), and what mattered from them lives in `crashreport.md`,
 `docs/research/` and the specs._
 
+## Onboarding, first slice: the cover scene and its chatter (2026-09-14)
+
+Design: `docs/superpowers/specs/2026-09-14-onboarding-design.md` (five screens; the owner's
+decisions inline — sound on launch, no payment or auth, the sample books stay on the shelf). Built
+so far, the first scene only: `OnboardingCover` over the pager on a fresh install (`OnboardingRecord`,
+`onboarding.completed`; `T2S_OPEN=onboarding` in a debug build forces it), `CoverField` — the five
+sample books rising through a blurred field in depth parallax, no tilt, no tap — and `ClipPlayer`,
+one `AVAudioPlayer` per card whose volume follows the card's height, so the lines overlap and bleed
+(the owner: "like a chatter … brief and quickly move on, not a whole narration"). `RisingChoreography`
+in T2SApp is the one clock both run on: cards every 2.2 s, 5.6 s to cross, a voice faded out before
+the top, the hero (Alice) never faded and eased to rest top centre while the field dims. After the
+settle a placeholder Continue ends the flow the way Skip does. Screenshots on the simulator, silent.
+
+The clips are the app's own voices: `scripts/render-onboarding-clips.sh` runs `OnboardingClipProbe`
+(T2SKokoro tests, enabled only while `spikes/findings/onboarding-clips/` exists) over
+`App/Resources/Onboarding/onboarding-manifest.json`, writes WAVs there for a listen, and stages AAC
+`.m4a` plus word-timing `.json` into `App/Resources/Onboarding/` — ten clips, 1.1 MB: each book's
+short line in its voice, and Alice's longer passage in all five voices for the voice screen. The
+manifest is the one source of what is said; edit it and rerun. Mind the glob: the manifest's name
+matches `onboarding-*.json`, so never `rm` that pattern in the resources folder.
+
+**Next:** beat two (the hero's lines fading in with the word tint, the five voice pills, the default
+voice written), then the question, the three benefits, the Pro mock, the hero import into the Reader,
+Settings' "Show the welcome again", and covers of our own for the five books (they are lettered
+placeholders now). Two things learned on the way: the shared `T2S Sim` is launched every few seconds
+by whichever session is photographing, which cut the scene short — a second simulator, `T2S Onb`,
+was created for this work; and the Kokoro package tests' DerivedData was already warm, so a render
+run is about four minutes.
+
 ## The cloud route is the build's, not the reader's (2026-09-13)
 
 Settings → Cloud voices → "Bring your own key" is gone, and with it `CloudVoicesPage` and

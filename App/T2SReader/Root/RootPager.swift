@@ -53,6 +53,10 @@ struct RootPager: View {
     @State private var pendingOpen: DocumentSummary?
     @State private var readerDocument: DocumentSummary?
     @State private var chrome = Chrome()
+    /// The welcome (`OnboardingCover`), up on a fresh install until it is finished or skipped, and
+    /// again after Settings' "Show the welcome again". Held as the manifest it plays, loaded from
+    /// the bundle at launch; nil is "not shown".
+    @State private var welcome: OnboardingManifest?
 
     var body: some View {
         // The reader is for the safe-area inset: `bottomFill` has to know how far below the page
@@ -155,6 +159,14 @@ struct RootPager: View {
             ImportPage(imported: $pendingOpen, initialFiles: openedFiles ?? [])
         }
         .fullScreenCover(item: $readerDocument, onDismiss: refreshHome) { ReaderPage(summary: $0) }
+        .fullScreenCover(isPresented: Binding(get: { welcome != nil }, set: { if !$0 { welcome = nil } })) {
+            if let welcome {
+                OnboardingCover(manifest: welcome) {
+                    OnboardingRecord.markCompleted(defaults: .standard)
+                    self.welcome = nil
+                }
+            }
+        }
 
         .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation, nowPlaying: env.nowPlaying)
         .task {
@@ -165,6 +177,7 @@ struct RootPager: View {
             // sets no override, so `colorScheme` *is* the device's answer.
             if env.preferences.theme == .system { env.preferences.theme = scheme == .dark ? .dark : .light }
             await env.libraryModel.refresh()
+            presentWelcomeIfNeeded()
             #if DEBUG
             // One route back, and only in a debug build: a script-driven simulator cannot tap a
             // book open, and the Reader is where most of this app's look lives. `T2S_OPEN=reader`
@@ -300,6 +313,18 @@ struct RootPager: View {
                 break
             }
         }
+    }
+
+    /// The welcome on a fresh install, and on demand for a photograph: `T2S_OPEN=onboarding` in a
+    /// debug build presents it whatever the record says. A bundle without the manifest — a build
+    /// that dropped the resources — shows nothing rather than an empty scene.
+    private func presentWelcomeIfNeeded() {
+        var wanted = !OnboardingRecord.isCompleted(defaults: .standard)
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["T2S_OPEN"] == "onboarding" { wanted = true }
+        #endif
+        guard wanted, let manifest = try? OnboardingManifest.load(from: .main) else { return }
+        welcome = manifest
     }
 
     private func openPending() {

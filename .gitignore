@@ -61,3 +61,6 @@ App/Local.xcconfig
 # The compute-plan probe's per-run dumps (scripts/compute-plan-probe.sh); report.md is committed
 spikes/findings/compute-plan-probe/ops-*.txt
 spikes/findings/compute-plan-probe/probe.env
+
+# Onboarding clip renders (WAVs for a listen); the staged .m4a/.json live in App/Resources/Onboarding
+spikes/findings/onboarding-clips/

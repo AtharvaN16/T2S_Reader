@@ -1,0 +1,42 @@
+{
+  "hero": "alice",
+  "voices": ["af_heart", "af_bella", "af_nicole", "am_michael", "am_fenrir"],
+  "books": [
+    {
+      "id": "moby-dick",
+      "title": "Moby-Dick",
+      "author": "Herman Melville",
+      "voice": "am_michael",
+      "line": "Call me Ishmael."
+    },
+    {
+      "id": "pride-and-prejudice",
+      "title": "Pride and Prejudice",
+      "author": "Jane Austen",
+      "voice": "af_bella",
+      "line": "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife."
+    },
+    {
+      "id": "tale-of-two-cities",
+      "title": "A Tale of Two Cities",
+      "author": "Charles Dickens",
+      "voice": "am_fenrir",
+      "line": "It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness."
+    },
+    {
+      "id": "great-gatsby",
+      "title": "The Great Gatsby",
+      "author": "F. Scott Fitzgerald",
+      "voice": "af_nicole",
+      "line": "In my younger and more vulnerable years my father gave me some advice that I've been turning over in my mind ever since."
+    },
+    {
+      "id": "alice",
+      "title": "Alice's Adventures in Wonderland",
+      "author": "Lewis Carroll",
+      "voice": "af_heart",
+      "line": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do.",
+      "passage": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it, \"and what is the use of a book,\" thought Alice, \"without pictures or conversations?\""
+    }
+  ]
+}

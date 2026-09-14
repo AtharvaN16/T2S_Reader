@@ -1,0 +1,32 @@
+{
+  "book" : "moby-dick",
+  "duration" : 1.9,
+  "spoken" : "Call me Ishmael.",
+  "voice" : "am_michael",
+  "words" : [
+    {
+      "end" : 0.625,
+      "range" : [
+        0,
+        4
+      ],
+      "start" : 0.42500000000000004
+    },
+    {
+      "end" : 0.8250000000000001,
+      "range" : [
+        5,
+        7
+      ],
+      "start" : 0.675
+    },
+    {
+      "end" : 1.7000000000000002,
+      "range" : [
+        8,
+        15
+      ],
+      "start" : 0.9
+    }
+  ]
+}

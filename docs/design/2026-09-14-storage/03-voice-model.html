@@ -1,0 +1,216 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>03 · The voice model — three directions</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap">
+<link rel="stylesheet" href="style.css">
+
+<div class="wrap">
+<header><div class="col">
+  <div class="eyebrow">t2s reader · design · 2026-09-14 · 03</div>
+  <h1>The voice model</h1>
+  <p class="lede">1.18 GB — the largest object on the phone, drawn at the weight of a preference.
+     And half of it is a thing the app can rebuild for free, offered today only as part of a
+     620 MB round trip.</p>
+  <div class="nav">
+    <a href="index.html">00 · the answers</a>
+    <a href="01-prepare.html">01 · prepare on charge</a>
+    <a href="02-cap.html">02 · the cap</a>
+    <a class="here" href="03-voice-model.html">03 · voice model</a>
+    <a href="04-per-document.html">04 · per document</a>
+  </div>
+  <div class="meta"><b>620.8 MB model</b> downloaded · lives in Application Support<br>
+     <b>561.6 MB compute plans</b> built on <i>this</i> phone by Core ML at first warm-up ·
+     <code>Library/Caches/&lt;bundle&gt;/com.apple.e5rt.e5bundlecache</code><br>
+     <b>Already in the code</b> <code>KokoroPlanCache.wipe</code> — the plans can be dropped
+     on their own</div>
+</div></header>
+
+<section>
+  <div class="shead"><div class="snum">—— / WHY THE TOTAL BEATS THE DOWNLOAD</div>
+    <h2>The download is the recipe; the plans are the meal prepped for your kitchen</h2>
+    <p class="cnote">Core ML can't run the downloaded model directly. On first warm-up it compiles
+      the graph into a schedule for the exact chip in this phone — which stage runs on the Neural
+      Engine, which on the GPU, how tensors are laid out. That artefact is the compute plan. It is
+      <b>built locally, never downloaded</b>, it is <b>keyed to the install</b> (every update warms a
+      fresh generation), and on the CPU path it can be the larger half. It is also why a background
+      Prepare refuses to run until a foreground warm-up has happened: building plans is about a
+      minute of a core per stage, and iOS kills background processes for exactly that.</p></div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">A / THE HERO</div>
+    <h2>Give the biggest object on the phone the biggest card on the page</h2></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph"><div class="safe">
+      <div class="back">‹</div>
+      <div class="pt">Storage</div>
+      <div class="card hero" style="margin-top:22px">
+        <div class="row">
+          <div class="grow"><span class="rt" style="color:var(--g)">Kokoro voice</span>
+            <span class="mt">The voice that reads your books, on this device</span></div>
+          <span class="big sm" style="color:var(--g)">1.18 GB</span></div>
+        <div class="stack" style="height:9px;background:#3a3a3a">
+          <i class="voice" style="width:53%"></i><i class="plans" style="width:47%"></i></div>
+        <div class="key" style="color:#9a9a9a">
+          <span><b style="background:var(--gl)"></b>Downloaded 620.8 MB</span>
+          <span><b style="background:rgba(0,102,255,.34)"></b>Built for this iPhone 561.6 MB</span></div>
+        <div class="row"><span class="pl des">Delete</span>
+          <span class="mt" style="flex:1">620 MB to get back, over Wi-Fi</span></div>
+      </div>
+      <div class="sec tight">
+        <p class="sh">Prepare on charge</p>
+        <p class="mt">Render ahead while charging…</p></div>
+    </div></div>
+      <figcaption><div class="cname">A · HERO CARD <span class="tag alt">clearest hierarchy</span></div>
+      <p class="cnote">An <code>ink</code> card, the way the toast is — the one object on the page
+        that isn't a section. Nothing below it can be mistaken for it.</p>
+      <p class="cnote">The split bar does the explaining: <b>"Downloaded" and "Built for this
+        iPhone"</b> is the whole of "what is a compute plan" in five words, without the phrase ever
+        appearing.</p>
+      <p class="cnote">The cost of the delete rides <i>beside the button</i>, not inside a dialog
+        you only see after committing.</p>
+      <div class="cost"><b>Cost</b> low — a card and a two-segment bar. All numbers exist
+        today.<br><b>Weakness</b> still one button for two very different deletes.</div></figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">B / ITS OWN PAGE</div>
+    <h2>Storage lists it; the page explains it</h2>
+    <p class="cnote">Prominence by <i>destination</i> rather than by size. Storage stays a short
+      index of four things; the voice gets the room to say what it is, what the halves are, and what
+      happens if it goes.</p></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph"><div class="safe">
+      <div class="back">‹</div><div class="pt">Storage</div>
+      <div class="card well" style="margin-top:24px;gap:0">
+        <div class="row" style="padding:4px 0">
+          <div class="grow"><span class="rt">Voice</span><span class="mt">Kokoro · on this device</span></div>
+          <span class="mts mono">1.18 GB</span><span class="chev">›</span></div>
+        <div class="hairline" style="margin:10px 0"></div>
+        <div class="row" style="padding:4px 0">
+          <div class="grow"><span class="rt">Rendered audio</span><span class="mt">8,610 clips · 4 books</span></div>
+          <span class="mts mono">535.5 MB</span><span class="chev">›</span></div>
+        <div class="hairline" style="margin:10px 0"></div>
+        <div class="row" style="padding:4px 0">
+          <div class="grow"><span class="rt">Books</span><span class="mt">12 documents</span></div>
+          <span class="mts mono">41 MB</span><span class="chev">›</span></div>
+      </div>
+      <div class="sec tight">
+        <p class="sh">Prepare on charge</p>
+        <div class="pills"><span class="pl">1h</span><span class="pl on">3h</span>
+          <span class="pl">8h</span><span class="pl">All</span></div></div>
+    </div></div>
+      <figcaption><div class="cname">B · INDEX + PAGES <span class="tag now">most conventional</span></div>
+      <p class="cnote">This is iOS Settings' own shape, and it scales: a fourth category later costs
+        one row.</p>
+      <p class="cnote">The trade is that <b>nothing is visible without a tap</b> — the screen stops
+        being a picture of your storage and becomes a menu about it. For a screen you visit once,
+        when the phone is full, that is a real cost.</p>
+      <div class="cost"><b>Cost</b> two or three new subpages, each needing its own
+        <code>settingsSubpage()</code> chrome.<br>
+        <b>Note</b> combines well with a stacked bar at the top of the index — the picture <i>and</i>
+        the menu.</div></figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">C / TWO THINGS, TWO PRICES</div>
+    <h2>Split the halves — because one of them is nearly free to give back</h2>
+    <p class="cnote">Today a reader who needs 500 MB has exactly one option: delete the voice and
+      pay 620 MB of Wi-Fi to undo it. But 561.6 MB of what's there rebuilds itself the next time they
+      plug in, at no network cost, and <code>KokoroPlanCache.wipe</code> is already written.</p></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph"><div class="safe">
+      <div class="back">‹</div><div class="pt">Storage</div>
+      <p class="sh" style="margin-top:24px">Voice</p>
+      <div class="card" style="margin-top:12px">
+        <div class="row"><div class="grow"><span class="rt">Voice model</span>
+          <span class="mt">Deleting means a 620 MB download to get it back, and books read
+            with the system voice until then.</span></div>
+          <span class="mts mono">620.8 MB</span></div>
+        <div class="row"><span class="pl des sm">Delete</span></div>
+      </div>
+      <div class="card" style="margin-top:10px">
+        <div class="row"><div class="grow"><span class="rt">Speed-up files</span>
+          <span class="mt">Built on this iPhone so the voice starts instantly.
+            <b style="color:var(--i)">Rebuilds itself free the next time you charge</b> — the
+            first book after that takes a minute to start.</span></div>
+          <span class="mts mono">561.6 MB</span></div>
+        <div class="row"><span class="pl sm">Clear</span>
+          <span class="tagb">No download</span></div>
+      </div>
+      <p class="mt" style="margin-top:12px">1.18 GB in total.</p>
+    </div></div>
+      <figcaption><div class="cname">C · SPLIT <span class="tag rec">recommended</span></div>
+      <p class="cnote"><b>"Speed-up files"</b> rather than "compute plans": the reader never needs
+        the Core ML noun, only the consequence — faster starts, rebuilt free.</p>
+      <p class="cnote">The asymmetry is the whole point, and it is carried by the buttons:
+        <b>red Delete</b> versus <b>plain Clear</b> with a <span class="tagb">No download</span>
+        tag. One is a decision; the other is housekeeping.</p>
+      <p class="cnote">It also quietly documents the thing that has bitten this project twice — that
+        plans accumulate per install — by making them a visible, sweepable object.</p>
+      <div class="cost"><b>Cost</b> genuinely small. The wipe, the measurement and the warm-up
+        record all exist; this is a second button wired to
+        <code>KokoroPlanCache.wipe</code> plus <code>KokoroWarmUpRecord.clear</code>.<br>
+        <b>Must get right</b> clearing plans without clearing the model means the next foreground
+        warm-up rebuilds them — and a <i>background</i> Prepare must not run in between (the
+        <code>warmedInstall</code> gate already handles exactly this).</div></figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">— / THE OTHER STATES</div>
+    <h2>Whichever direction wins, four states have to survive it</h2>
+    <p class="cnote">Drawn in C's shape. The confirm follows the Book sheet's rule — the question
+      replaces the heading in place, rather than arriving as a system dialog.</p></div>
+
+  <div class="rail">
+    <figure class="unit" style="width:250px"><div class="ph" style="width:250px"><div class="safe" style="padding:18px">
+      <div class="card">
+        <div class="row"><div class="grow"><span class="rt">Voice model</span>
+          <span class="mt">Removed. Books read with the system voice.</span></div></div>
+        <div class="row"><span class="pl blue sm">↓ Download</span>
+          <span class="mt">about 620 MB</span></div></div>
+    </div></div>
+      <figcaption><div class="cname">REMOVED</div>
+      <p class="cnote">Blue, because it starts something. The size sits beside it.</p></figcaption></figure>
+
+    <figure class="unit" style="width:250px"><div class="ph" style="width:250px"><div class="safe" style="padding:18px">
+      <div class="card">
+        <div class="row"><div class="grow"><span class="rt">Voice model</span>
+          <span class="mt">Downloading… 214 MB of 620 MB</span></div></div>
+        <div class="pb ac tall"><i style="width:34%"></i></div></div>
+    </div></div>
+      <figcaption><div class="cname">INSTALLING</div>
+      <p class="cnote">No button at all — the same call the page makes today.</p></figcaption></figure>
+
+    <figure class="unit" style="width:250px"><div class="ph" style="width:250px"><div class="safe" style="padding:18px">
+      <div class="card">
+        <div class="row"><div class="grow">
+          <span class="rt" style="color:var(--de)">Delete the voice model?</span>
+          <span class="mt">Playback stops. Books read with the system voice until you download it
+            again — about 620 MB, over Wi-Fi.</span></div></div>
+        <div class="row"><span class="pl sm">Keep</span><span class="pl des sm">Delete</span></div></div>
+    </div></div>
+      <figcaption><div class="cname">ASKING</div>
+      <p class="cnote">Keep first — the safe one is the one a thumb reaches by accident. Wording
+        is today's <code>voiceModelDeleteMessage</code>, which is already good.</p></figcaption></figure>
+
+    <figure class="unit" style="width:250px"><div class="ph" style="width:250px"><div class="safe" style="padding:18px">
+      <div class="card">
+        <div class="row"><div class="grow"><span class="rt">Voice</span>
+          <span class="mt">This iPhone reads with the system voice. Nothing to store.</span></div></div></div>
+    </div></div>
+      <figcaption><div class="cname">UNSUPPORTED</div>
+      <p class="cnote">Today the whole section vanishes when
+        <code>isSupported</code> is false. A line is better than a hole — it answers "where did the
+        voice setting go".</p></figcaption></figure>
+  </div>
+</section>
+
+</div>

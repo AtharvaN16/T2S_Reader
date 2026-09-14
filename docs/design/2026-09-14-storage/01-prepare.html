@@ -1,0 +1,236 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>01 · Prepare on charge — four directions</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap">
+<link rel="stylesheet" href="style.css">
+
+<div class="wrap">
+<header><div class="col">
+  <div class="eyebrow">t2s reader · design · 2026-09-14 · 01</div>
+  <h1>Prepare on charge</h1>
+  <p class="lede">It works, it picks the continue-book then the Queue, and the hours are hours of
+     listening. None of that is on the screen. Four ways to put it there.</p>
+  <div class="nav">
+    <a href="index.html">00 · the answers</a>
+    <a class="here" href="01-prepare.html">01 · prepare on charge</a>
+    <a href="02-cap.html">02 · the cap</a>
+    <a href="03-voice-model.html">03 · voice model</a>
+    <a href="04-per-document.html">04 · per document</a>
+  </div>
+  <div class="meta"><b>The mechanism</b> BGProcessingTask, external power only, re-armed after each run<br>
+     <b>The order</b> continue-document → Queue, each from its resume position, one shared budget<br>
+     <b>The unit</b> playback seconds — "3 hours" is three hours of listening banked ahead of you</div>
+</div></header>
+
+<section>
+  <div class="shead"><div class="snum">A / THE PROMISE, NOT THE SETTING</div>
+    <h2>Lead with what you have, not with what to choose</h2>
+    <p class="cnote">The reader's question is "can I listen on the plane tomorrow", and the app
+      knows the answer: 1h 32m. So say it first, at the size of an answer, and let the target be a
+      quiet control underneath it.</p></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph"><div class="safe">
+      <div class="card">
+        <p class="mt" style="letter-spacing:.08em;font-weight:600">READY TO LISTEN OFFLINE</p>
+        <div class="hrow" style="margin-top:-4px">
+          <span class="big">1h 32m</span><span class="mt">of 3h</span></div>
+        <div class="pb tall po"><i style="width:51%"></i></div>
+        <div class="row"><span class="mt" style="flex:1">Topped up last night · 268 MB</span>
+          <span class="tagb pos">⚡ Charging</span></div>
+      </div>
+      <div class="sec tight" style="margin-top:22px">
+        <p class="sh">Keep ready</p>
+        <div class="pills">
+          <span class="pl">1 hour</span><span class="pl on">3 hours</span>
+          <span class="pl">8 hours</span><span class="pl">Everything</span></div>
+        <p class="mt">Rendered while charging, from where you left off — your current book first,
+          then your Queue. Never on battery.</p>
+      </div>
+    </div></div>
+      <figcaption><div class="cname">A · THE GAUGE <span class="tag alt">smallest change</span></div>
+      <p class="cnote">Everything already computed; only rearranged. <b>"Keep ready"</b> as the
+        heading makes the hours self-explaining — hours of <i>ready</i>. The one sentence under the
+        pills carries the three facts the screen has never said: on a charger, from your resume
+        point, current book then Queue.</p>
+      <p class="cnote"><b>"Topped up last night"</b> replaces "Last run: now ago" — and fixes the
+        <code>" ago"</code> bug by not concatenating.</p>
+      <div class="cost"><b>Cost</b> layout only. No new model state.<br>
+        <b>Weakness</b> still doesn't say which books, or what an hour costs in MB.</div></figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">B / INTENT, PRICED</div>
+    <h2>Stop selling hours; sell the trip, and show the bill</h2>
+    <p class="cnote">"3 hours" is a number you have to translate. "A commute" is one you don't —
+      and every option carries what it will actually take off the phone.</p></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph"><div class="safe">
+      <div class="sec tight" style="margin-top:0">
+        <p class="sh">Have ready when I unplug</p>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <div class="card well row" style="padding:13px 15px">
+            <div class="grow"><span class="rt">The next chapter</span>
+              <span class="mt">whatever you're in the middle of</span></div>
+            <span class="mt mono">~40 MB</span></div>
+          <div class="card well row" style="padding:13px 15px">
+            <div class="grow"><span class="rt">A commute</span><span class="mt">1 hour</span></div>
+            <span class="mt mono">~90 MB</span></div>
+          <div class="card row" style="padding:13px 15px;box-shadow:inset 0 0 0 2px var(--i)">
+            <div class="grow"><span class="rt">A day out</span><span class="mt">3 hours</span></div>
+            <span class="mts mono">~270 MB</span></div>
+          <div class="card well row" style="padding:13px 15px">
+            <div class="grow"><span class="rt">A flight</span><span class="mt">8 hours</span></div>
+            <span class="mt mono">~720 MB</span></div>
+          <div class="card well row" style="padding:13px 15px">
+            <div class="grow"><span class="rt">Everything in my Queue</span>
+              <span class="mt">4 books · 31h 12m</span></div>
+            <span class="mt mono">~2.8 GB</span></div>
+        </div>
+        <p class="mt" style="margin-top:4px">Rendered only while charging. Your current book is
+          filled first, then your Queue.</p>
+      </div>
+    </div></div>
+      <figcaption><div class="cname">B · PRICED PRESETS <span class="tag alt">most legible</span></div>
+      <p class="cnote">The one direction that <b>connects the hours to the megabytes</b> — which is
+        the missing link that made the two pill rows read as the same dial. A row, not a pill, so
+        each option can carry a second line and a price without any of them overflowing.</p>
+      <p class="cnote">"Everything" stops being an abstraction and becomes <b>4 books · 31h 12m ·
+        ~2.8 GB</b>, which is a number you can refuse.</p>
+      <div class="cost"><b>Cost</b> an estimator: audio seconds → bytes. The store already knows its
+        own bytes-per-second (<code>stats.bytes / clips</code>), so it is a division, not a model.<br>
+        <b>Watch</b> "A flight, ~720 MB" against a 2.15 GB cap needs the two screens to agree —
+        see <a href="02-cap.html">02</a>.</div></figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">C / ONE SWITCH</div>
+    <h2>Ask nothing. Let the app watch how much you listen.</h2>
+    <p class="cnote">The honest YAGNI reading: almost nobody knows whether they want 3 hours or 8,
+      and the app has better evidence than they do — it knows the listening history and the
+      cap.</p></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph"><div class="safe">
+      <div class="sec tight" style="margin-top:0">
+        <div class="row">
+          <div class="grow"><span class="sh">Prepare while charging</span>
+            <span class="mt">Render ahead overnight so listening costs no battery.</span></div>
+          <div class="tg on"></div></div>
+        <div class="card well" style="margin-top:4px">
+          <div class="row"><span class="mt" style="flex:1">Ready now</span>
+            <span class="mts mono">1h 32m · 268 MB</span></div>
+          <div class="row"><span class="mt" style="flex:1">You usually listen</span>
+            <span class="mts mono">~2h a day</span></div>
+          <div class="row"><span class="mt" style="flex:1">So we keep</span>
+            <span class="mts mono">3 hours ready</span></div>
+        </div>
+        <div class="hairline" style="margin:10px 0"></div>
+        <div class="row"><span class="rt" style="flex:1">Choose the amount myself</span>
+          <span class="chev">›</span></div>
+      </div>
+    </div></div>
+      <figcaption><div class="cname">C · AUTOMATIC <span class="tag rec">fewest decisions</span></div>
+      <p class="cnote">The toggle is the whole control. The card below is <b>read-only</b> — it
+        explains the app's reasoning rather than asking for yours, which is the only way an automatic
+        system earns trust.</p>
+      <p class="cnote">The four hours move behind "Choose the amount myself", where they stop
+        competing with the GB pills for meaning.</p>
+      <div class="cost"><b>Cost</b> a habit estimate — a rolling mean of daily playback seconds,
+        clamped to the four existing buckets. Small, but it is <b>new state and new behaviour</b>,
+        and a wrong guess is invisible until a flight.<br>
+        <b>Note</b> today there is no off switch at all; the budget cannot be set to zero. This
+        direction adds one.</div></figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">D / THE QUEUE MADE VISIBLE</div>
+    <h2>Answer "which document?" by showing the list, and draw the budget across it</h2>
+    <p class="cnote">This is the direction that matches the mechanism exactly:
+      <code>[lastPlayed] + queue</code>, each from its resume position, one budget draining in
+      order. That is a list with a line through it.</p></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph"><div class="safe">
+      <div class="sec tight" style="margin-top:0">
+        <p class="sh">Prepare on charge</p>
+        <p class="mt">While you're plugged in, we render ahead in this order — so listening later
+          costs no battery.</p>
+
+        <div class="row" style="margin-top:6px">
+          <div class="cov a"></div>
+          <div class="grow">
+            <span class="ttl">Thinking in Systems</span>
+            <span class="mt">Reading now · ready to 4h 12m</span>
+            <div class="segs"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="h"></i><i></i><i></i><i></i><i></i></div></div>
+        </div>
+        <div class="row">
+          <div class="cov b"></div>
+          <div class="grow">
+            <span class="ttl">A Case of Exploding Mangoes</span>
+            <span class="mt">Next in Queue · ready to 26m</span>
+            <div class="segs"><i class="d"></i><i class="h"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+        </div>
+
+        <div class="row" style="margin:6px 0">
+          <div style="flex:1;height:1px;background:var(--i)"></div>
+          <span class="mts" style="white-space:nowrap">3 hours ends here</span>
+          <div style="width:18px;height:1px;background:var(--i)"></div>
+        </div>
+
+        <div class="row" style="opacity:.42">
+          <div class="cov c"></div>
+          <div class="grow"><span class="ttl">The Anthropocene Reviewed</span>
+            <span class="mt">Queued · nothing ready</span>
+            <div class="segs"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+        </div>
+        <div class="row" style="opacity:.42">
+          <div class="cov d"></div>
+          <div class="grow"><span class="ttl">Piranesi</span>
+            <span class="mt">Queued · nothing ready</span>
+            <div class="segs"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+        </div>
+
+        <div class="pills" style="margin-top:14px">
+          <span class="pl">1h</span><span class="pl on">3h</span>
+          <span class="pl">8h</span><span class="pl">All</span></div>
+        <p class="mt">Moving the line down prepares more of your Queue. 268 MB used so far.</p>
+      </div>
+    </div></div>
+      <figcaption><div class="cname">D · THE LINE <span class="tag rec">recommended</span></div>
+      <p class="cnote"><b>The budget stops being abstract.</b> You can see it reach the end of your
+        current book, spill into the next, and stop — which is precisely what
+        <code>RenderPolicy</code> does, drawn.</p>
+      <p class="cnote">It also quietly answers three other complaints at once: which books, in what
+        order, and how far each got — reusing <code>ChapterBar</code>'s segments so the marks mean
+        what they mean everywhere else in the app.</p>
+      <p class="cnote">Changing the pill <b>animates the line</b> down the list. That is the one
+        moment a storage setting could be a pleasure to use.</p>
+      <div class="cost"><b>Cost</b> the biggest of the four. Needs a <i>dry-run plan</i> —
+        <code>RenderPolicy.plan</code> is pure and already returns exactly this, so it is a matter of
+        surfacing the per-document split rather than computing anything new.<br>
+        <b>Watch</b> an empty Queue and a single-chapter document both need a graceful shape.</div></figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">— / SIDE BY SIDE</div><h2>Choosing between them</h2></div>
+  <table>
+    <tr><th></th><th>A · gauge</th><th>B · priced</th><th>C · automatic</th><th>D · the line</th></tr>
+    <tr><td>Says which books</td><td>no</td><td>no</td><td>no</td><td><b>yes</b></td></tr>
+    <tr><td>Says what it costs in MB</td><td>total only</td><td><b>per option</b></td><td>total only</td><td>total only</td></tr>
+    <tr><td>Says "only on a charger"</td><td>yes</td><td>yes</td><td><b>in the switch itself</b></td><td>yes</td></tr>
+    <tr><td>Decisions asked of the reader</td><td>1</td><td>1</td><td><b>0</b></td><td>1</td></tr>
+    <tr><td>New model work</td><td>none</td><td>bytes estimator</td><td>habit estimate</td><td>dry-run plan</td></tr>
+    <tr><td>Fixes the margin overflow</td><td>wrapping</td><td><b>structurally — rows</b></td><td><b>structurally</b></td><td>wrapping</td></tr>
+  </table>
+  <p class="callout">A and D are not exclusive: <b>A's gauge card can sit above D's list</b>, which
+    is how the whole screen is assembled on <a href="04-per-document.html">page 04</a>.</p>
+</section>
+
+</div>

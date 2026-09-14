@@ -1,0 +1,227 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Storage, rethought — the four questions, answered from the code</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap">
+<link rel="stylesheet" href="style.css">
+
+<div class="wrap">
+<header><div class="col">
+  <div class="eyebrow">t2s reader · design · 2026-09-14</div>
+  <h1>Storage, rethought</h1>
+  <p class="lede">Four questions about the screen, answered from what the code actually does —
+     then directions for each, drawn at size.</p>
+  <div class="nav">
+    <a class="here" href="index.html">00 · the answers</a>
+    <a href="01-prepare.html">01 · prepare on charge</a>
+    <a href="02-cap.html">02 · the cap</a>
+    <a href="03-voice-model.html">03 · voice model</a>
+    <a href="04-per-document.html">04 · per document</a>
+  </div>
+  <div class="meta"><b>Read</b> StoragePage.swift · StorageModel.swift · PrepareRunner.swift ·
+     RenderPolicy.swift · PrepareTask.swift · KokoroPlanCache.swift · KokoroComposition.swift · BookSheet.swift<br>
+     <b>Status</b> directions only — nothing approved, nothing built</div>
+</div></header>
+
+<!-- ─────────────────────────────────────────────────────── -->
+<section>
+  <div class="shead"><div class="snum">00 / WHAT IS ACTUALLY WRONG</div>
+    <h2>The screen is four unrelated facts in one column</h2>
+    <p class="cnote">Not a hierarchy problem alone. Every section is drawn by the same
+      <code>section(title:)</code> helper with the same 40 pt gap, so a 1.18 GB download, a
+      scheduling preference, a cache ceiling and a list of books all arrive at the same weight —
+      and two rows of visually identical pills mean two completely different kinds of thing.</p></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph">
+      <div class="bar"><span>5:26</span><span>98%</span></div>
+      <div class="safe">
+        <div class="back">‹</div>
+        <div class="pt">Storage</div>
+        <div class="sec tight">
+          <p class="sh">Prepare on charge</p>
+          <p class="mt">Render ahead while charging, so listening later costs no battery.</p>
+          <div class="pills nowrap">
+            <span class="pl">1 hour</span><span class="pl on">3 hours</span>
+            <span class="pl">8 hours</span><span class="pl">Everything</span></div>
+          <p class="mt">Prepared: 1h 32m · Last run: now ago</p>
+        </div>
+        <div class="sec tight">
+          <p class="sh">Rendered audio</p>
+          <p class="mt">535.5 MB of 2.15 GB · 8,610 clips</p>
+          <div class="pills nowrap">
+            <span class="pl">536.9 MB</span><span class="pl">1.07 GB</span>
+            <span class="pl on">2.15 GB</span><span class="pl">4.29 GB</span></div>
+        </div>
+      </div>
+    </div>
+      <figcaption><div class="cname">TODAY <span class="tag no">shipping</span></div>
+      <p class="cnote">Both pill rows are wider than the 327 pt inside the margins — 360 pt and
+        375 pt — so they pin left and spill right. <code>Pill</code> sets
+        <code>.fixedSize(horizontal:)</code>, so the row has no give at all; it is structural, not a
+        tuning miss. <b>"Last run: now ago"</b> is a real bug:
+        <code>DurationFormatter.age</code> returns the bare word <code>"now"</code> under 60 s and
+        the page appends <code>" ago"</code> anyway.</p></figcaption></figure>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────── -->
+<section>
+  <div class="shead"><div class="snum">Q1 / DOES PREPARE ON CHARGE WORK?</div>
+    <h2>Yes. It picks the book you were last listening to, then your Queue — and the hours
+        are hours of <em>listening</em>, not hours of work</h2></div>
+
+  <table>
+    <tr><th>Question</th><th>What the code does</th></tr>
+    <tr><td><b>Does it run?</b></td><td>Two ways. A <code>BGProcessingTask</code>
+      (<code>com.t2s.reader.prepare</code>) with <code>requiresExternalPower = true</code>, asked for
+      15 minutes out and re-armed after every run; and a foreground pass. So: overnight, on a charger,
+      without you opening the app.</td></tr>
+    <tr><td><b>When does it refuse?</b></td><td><code>PrepareRunner.isSafe</code> —
+      it must be <b>charging</b>, <b>not thermally serious</b>, <b>not in Low Power Mode</b>, and the
+      store must not be full. Two more gates you can't see: the voice must not still be standing in on
+      the hosted mirror, and a foreground warm-up must have built this install's compute plans
+      (<code>KokoroWarmUpRecord</code>) — a background launch will not build them, so after every
+      update the first night is skipped.</td></tr>
+    <tr><td><b>Which documents?</b></td><td><code>RenderPolicy</code> tier <code>.prepare</code>:
+      <b>the continue-document first</b> (the one with the most recent <code>lastPlayedAt</code>),
+      <b>then the Queue in its own order</b>, deduped. Each book is walked <b>from its resume
+      position</b>, not from page one, and one shared budget drains across them in order.</td></tr>
+    <tr><td><b>Why hours?</b></td><td>The budget is in <b>playback seconds</b>.
+      "3 hours" means <i>three hours of listening ready ahead of where you are</i>. It is the right
+      unit for the promise; it is the wrong unit to sit directly above a row of GB pills, with no line
+      anywhere converting one to the other.</td></tr>
+  </table>
+
+  <p class="callout"><b>The design problem, then, is not the unit — it's that the screen never
+    says any of this.</b> It doesn't say what "prepared" is prepared <i>for</i>, doesn't name the
+    books, doesn't say it only runs on a charger, and doesn't say what the hours cost in megabytes.
+    → <a href="01-prepare.html">four directions</a></p>
+</section>
+
+<!-- ─────────────────────────────────────────────────────── -->
+<section>
+  <div class="shead"><div class="snum">Q2 / IS THERE A CAP ON WHAT THE APP TAKES?</div>
+    <h2>No. The cap covers rendered audio only — about a third of what the app is actually holding</h2></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph"><div class="safe">
+      <p class="sh">What the phone is holding</p>
+      <div class="stack" style="margin-top:12px">
+        <i class="voice" style="width:30%"></i><i class="plans" style="width:27%"></i>
+        <i class="audio" style="width:26%"></i><i class="books" style="width:9%"></i><i class="free"></i></div>
+      <div class="key" style="margin-top:12px">
+        <span><b style="background:var(--gl)"></b>Voice model 620.8 MB</span>
+        <span><b style="background:rgba(0,102,255,.34)"></b>Compute plans 561.6 MB</span>
+        <span><b style="background:var(--ac)"></b>Rendered audio 535.5 MB</span>
+        <span><b style="background:var(--i)"></b>Books &amp; timelines</span></div>
+      <div class="hairline" style="margin:16px 0"></div>
+      <p class="mt"><span class="mts">The 2.15 GB cap governs the orange band alone.</span>
+        Nothing caps the blue two, which are the bigger half.</p>
+    </div></div>
+      <figcaption><div class="cname">THE HONEST PICTURE</div>
+      <p class="cnote"><code>setCapacity</code> reaches one store: the LRU audio cache, default
+        2 GB (<code>AppPaths.defaultAudioCapacityBytes</code>, "roughly 140 hours of 32 kbps AAC").
+        The voice model, its compute plans, and the imported documents and timelines under
+        <code>&lt;App Support&gt;/t2s</code> are outside it entirely.</p>
+      <p class="cnote"><b>"535.5 MB of 2.15 GB" reads like an app total and isn't.</b> It is one
+        band of four.</p></figcaption></figure>
+  </div>
+
+  <p class="callout">→ <a href="02-cap.html">four directions</a>, from "make the cap mean the whole
+     app" to "drop the cap and manage against the phone's free space instead".</p>
+</section>
+
+<!-- ─────────────────────────────────────────────────────── -->
+<section>
+  <div class="shead"><div class="snum">Q3 / WHAT ARE COMPUTE PLANS?</div>
+    <h2>Core ML's compiled model, built on <em>your</em> phone at first launch — which is exactly
+        why the total beats the download</h2></div>
+
+  <table>
+    <tr><th></th><th>Voice model · 620.8 MB</th><th>Compute plans · 561.6 MB</th></tr>
+    <tr><td><b>Where from</b></td><td>Downloaded over Wi-Fi from the manifest</td>
+      <td><b>Built on the device</b> by Core ML the first time the voice warms up</td></tr>
+    <tr><td><b>Where it lives</b></td><td><code>&lt;App Support&gt;/…</code> — the installed revision</td>
+      <td><code>Library/Caches/&lt;bundle id&gt;/com.apple.e5rt.e5bundlecache</code></td></tr>
+    <tr><td><b>What it is</b></td><td>The weights and the compiled <code>.mlmodelc</code></td>
+      <td>The graph specialised for <i>this chip</i> — the scheduling Core ML would otherwise
+        redo on every load</td></tr>
+    <tr><td><b>Cost to rebuild</b></td><td>A 620 MB download, over Wi-Fi</td>
+      <td><b>No download.</b> About a minute of a core per stage, in the foreground</td></tr>
+    <tr><td><b>Why it's fragile</b></td><td>—</td>
+      <td>iOS keys plans to the <i>install</i>. Every build and every App Store update warms a fresh
+        generation and keeps the old one — the 11 Pro reached 4.36 GB across one day of builds
+        (2026-09-11) and filled. <code>KokoroPlanCache.prepare</code> now wipes stale generations at
+        launch.</td></tr>
+  </table>
+
+  <div class="rec">
+    <p><b>The thing worth noticing:</b> those two halves have wildly different delete costs, and the
+    screen offers one button for both. <code>KokoroPlanCache.wipe</code> already exists and is
+    already called at launch — so <b>"reclaim 561.6 MB, rebuilt free the next time you plug in"</b>
+    is a real offer the app can already make, and it is a far better first answer than "delete
+    everything and re-download 620 MB".</p>
+  </div>
+
+  <p class="callout">On prominence: the voice model is drawn by the same
+     <code>section(title:)</code> helper as the other three, so the single largest object on the
+     phone is a 17 pt heading like the rest. → <a href="03-voice-model.html">three directions</a></p>
+</section>
+
+<!-- ─────────────────────────────────────────────────────── -->
+<section>
+  <div class="shead"><div class="snum">Q4 / PER DOCUMENT, IN THE BOOK SHEET'S LANGUAGE</div>
+    <h2>The Book sheet already solved this, twice, this week</h2>
+    <p class="cnote">Everything Storage needs for a per-book row exists and has been argued over:</p></div>
+
+  <table>
+    <tr><th>Convention</th><th>Where</th><th>What it says</th></tr>
+    <tr><td>Grey <code>waveform</code> glyph beside the title</td><td><code>ChapterRow</code></td>
+      <td>"this is on the device" — it replaced a green "On device" tag on 2026-09-14 because the tag
+        announced a caching fact far louder than it deserved</td></tr>
+    <tr><td><code>ChapterBar</code> — one segment per chapter</td><td><code>Primitives.swift:776</code></td>
+      <td>green done · pale green partial · grey not; collapses to a plain bar when a segment would
+        fall under 2.5 pt</td></tr>
+    <tr><td>"135.3 MB occupied on device" as the <i>heading</i></td><td><code>onDeviceBox</code></td>
+      <td>the size is the title, not a number in a corner</td></tr>
+    <tr><td>Red trash in the mark column, no tick</td><td><code>ChapterRenderMarkView</code></td>
+      <td>a destructive action plainly visible rather than behind a gesture; the size and the trash
+        are the whole of "this one is here"</td></tr>
+    <tr><td>The question replaces the heading</td><td><code>boxBody(isAsking:)</code></td>
+      <td>"Delete all rendered audio?" in red where the size was; the bar's room is held so nothing
+        moves under the thumb</td></tr>
+    <tr><td>A well of <code>ground</code> cut into <code>raised</code></td><td><code>boxBody</code></td>
+      <td>18 pt padding, 12 pt radius — because a <code>.soft</code> pill <i>is</i>
+        <code>surface</code>, so a surface box swallows capsules whole</td></tr>
+  </table>
+
+  <p class="callout">Storage's per-document list currently invents its own row — hairline
+    <code>ProgressBar</code>, a bare percentage, a red "Evict" pill — and the word
+    <b>"Evict"</b> was already replaced by <b>"Delete"</b> in the Book sheet work.
+    → <a href="04-per-document.html">three directions, plus the whole screen assembled</a></p>
+</section>
+
+<!-- ─────────────────────────────────────────────────────── -->
+<section>
+  <div class="shead"><div class="snum">05 / WHERE I'D LAND</div>
+    <h2>One recommendation per question, if you want a shortcut</h2></div>
+  <div class="rec">
+    <ul>
+      <li><b>Prepare</b> → <i>D, the Queue made visible</i>. It is the only direction that answers
+        "which document" by showing you, and the budget becomes a line drawn across a list you
+        already understand.</li>
+      <li><b>Cap</b> → <i>A, one budget over the whole app</i>, with the stacked bar above it. If
+        that's too much surgery, <i>B</i> keeps today's mechanics and just stops lying about them.</li>
+      <li><b>Voice model</b> → <i>C, split the two halves</i>. It is nearly free —
+        <code>KokoroPlanCache.wipe</code> exists — and it turns the screen's scariest button into a
+        cheap one.</li>
+      <li><b>Per document</b> → <i>C, rows that open the Book sheet</i>. Storage stops duplicating an
+        interaction that already has a better home, and gets a proper "biggest first" list instead.</li>
+    </ul>
+    <p style="margin-top:12px"><b>Nothing here is built.</b> Pick per question — they compose
+    freely — and I'll write the spec from your picks.</p>
+  </div>
+</section>
+
+</div>

@@ -1,0 +1,168 @@
+/* t2s reader — Storage redesign directions, 2026-09-14.
+   Prose in the house style of docs/design/*.html; the phone stages use the app's real
+   light-mode tokens from App/T2SReader/Design/Tokens.swift so a colour here is a colour there. */
+
+:root{
+  --ground:#F8F8F7;--paper:#FFFFFF;--ink:#111111;--ink2:#6E7076;--hair:#E2E3E8;
+  --glow:#0066FF;--ready:#12A150;--warn:#C25A00;--no:#C0392B;
+  --serif:"Newsreader",Georgia,serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --app:"Inter",-apple-system,BlinkMacSystemFont,sans-serif;
+
+  /* app tokens, light */
+  --g:#F8F8F7;--su:#EEEEEC;--ra:#FFFFFF;--i:#111111;--i2:#8A8A8A;--i3:#C9C9C7;
+  --ac:#FF7A1A;--acs:rgba(255,122,26,.18);--gl:#0066FF;--gls:rgba(0,102,255,.18);
+  --po:#22A559;--de:#E5453B;--def:#F6E5E3;--tb:#DCEAFF;--tbi:#1D4ED8;
+  --keyTop:#5477FF;--keyBot:#2A1FE0;--keyInkTop:#333;--keyInkBot:#0C0C0C;
+}
+@media(prefers-color-scheme:dark){
+  :root{--ground:#0E0F12;--paper:#16171B;--ink:#ECEDF0;--ink2:#94969E;--hair:#26272D;
+        --glow:#5F84FF;--ready:#37D97C;--warn:#FFA24D;--no:#FF6B5E;}
+}
+
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--serif);font-size:17px;line-height:1.6;margin:0;padding:0 20px 120px}
+.wrap{max-width:1320px;margin:0 auto}
+.col{max-width:70ch}
+h1,h2,h3{margin:0;font-weight:400;text-wrap:balance}
+h1{font-size:clamp(34px,6vw,52px);line-height:1.04;letter-spacing:-.022em}
+h2{font-size:clamp(23px,3.2vw,31px);letter-spacing:-.012em}
+h3{font-size:19px}
+p{margin:0}ul{margin:0;padding-left:1.15em}li{margin:.22em 0}
+a{color:var(--glow)}
+code{font-family:var(--mono);font-size:.78em;background:color-mix(in srgb,var(--ink) 8%,transparent);padding:.14em .4em;border-radius:3px}
+
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2)}
+.lede{font-size:20px;color:var(--ink2);font-weight:300;line-height:1.5}
+header{padding-block:70px 0}
+header .col{display:flex;flex-direction:column;gap:18px}
+.meta{font-family:var(--mono);font-size:12px;color:var(--ink2);line-height:2;border-top:1px solid var(--hair);padding-top:15px}
+.meta b{color:var(--ink);font-weight:500}
+section{padding-block:62px 0;display:flex;flex-direction:column;gap:24px}
+.shead{display:flex;flex-direction:column;gap:11px;max-width:72ch}
+.snum{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--glow);letter-spacing:.1em}
+.rail{display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start}
+.unit{display:flex;flex-direction:column;gap:13px;margin:0;width:340px}
+.unit>figcaption{display:flex;flex-direction:column;gap:7px}
+.cname{font-family:var(--mono);font-size:11.5px;font-weight:700;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;letter-spacing:.03em}
+.tag{font-size:9.5px;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.08em;font-weight:500}
+.tag.rec{background:color-mix(in srgb,var(--ready) 18%,transparent);color:var(--ready)}
+.tag.alt{background:color-mix(in srgb,var(--glow) 16%,transparent);color:var(--glow)}
+.tag.no{background:color-mix(in srgb,var(--no) 15%,transparent);color:var(--no)}
+.tag.now{background:color-mix(in srgb,var(--ink) 10%,transparent);color:var(--ink2)}
+.tag.warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.cnote{font-size:14.5px;line-height:1.45;color:var(--ink2)}
+.cnote b{color:var(--ink);font-weight:500}
+.cost{font-family:var(--mono);font-size:11px;line-height:1.55;color:var(--ink2);border-top:1px dashed var(--hair);padding-top:7px}
+.cost b{color:var(--ink);font-weight:500}
+.callout{border-left:2px solid var(--glow);padding-left:14px;color:var(--ink2);max-width:72ch;font-size:15.5px}
+.callout.warn{border-color:var(--warn)}
+.callout.no{border-color:var(--no)}
+.callout b{color:var(--ink);font-weight:500}
+.rec{border:1px solid color-mix(in srgb,var(--ready) 45%,transparent);border-radius:11px;padding:18px 20px;background:color-mix(in srgb,var(--ready) 7%,transparent);max-width:74ch}
+table{border-collapse:collapse;font-family:var(--app);font-size:14px;width:100%;max-width:920px}
+th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--hair);vertical-align:top}
+th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);font-weight:500}
+.nav{display:flex;flex-wrap:wrap;gap:9px;font-family:var(--mono);font-size:11.5px;letter-spacing:.04em}
+.nav a{display:inline-block;padding:7px 12px;border:1px solid var(--hair);border-radius:99px;text-decoration:none;color:var(--ink2)}
+.nav a:hover{border-color:var(--glow);color:var(--glow)}
+.nav a.here{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+
+/* ── the phone: 340 px stands for 375 pt, so a 24 pt margin is ~22 px ───────────── */
+.ph{width:340px;background:var(--g);border-radius:30px;padding:0;font-family:var(--app);color:var(--i);
+    box-shadow:0 14px 40px rgba(0,0,0,.16),0 0 0 1px rgba(0,0,0,.07);overflow:hidden;position:relative}
+.ph.tall{min-height:640px}
+.ph .safe{padding:14px 22px 26px}
+.ph .bar{display:flex;justify-content:space-between;font-size:11px;font-weight:600;color:var(--i2);padding:9px 22px 0}
+.back{width:33px;height:33px;border-radius:99px;background:var(--su);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--i)}
+.pt{font-size:31px;font-weight:800;letter-spacing:-.03em;line-height:1.05;margin:14px 0 0}
+.sh{font-size:15.5px;font-weight:600;letter-spacing:-.01em;margin:0}
+.mt{font-size:12px;color:var(--i2);line-height:1.42}
+.mts{font-size:12px;color:var(--i);font-weight:600}
+.rt{font-size:15.5px;font-weight:500;letter-spacing:-.01em}
+.mono{font-variant-numeric:tabular-nums}
+.sec{margin-top:30px;display:flex;flex-direction:column;gap:13px}
+.sec.tight{gap:9px}
+
+/* pills — .fit wraps instead of overflowing, which is the bug on the live screen */
+.pills{display:flex;gap:7px;flex-wrap:wrap}
+.pl{display:inline-flex;align-items:center;gap:5px;border-radius:99px;padding:8px 13px;font-size:13px;font-weight:500;background:var(--su);color:var(--i);white-space:nowrap}
+.pl.on{background:var(--i);color:var(--g)}
+.pl.blue{background:var(--gl);color:#fff}
+.pl.des{background:var(--def);color:var(--de)}
+.pl.ghost{background:transparent;box-shadow:inset 0 0 0 1px var(--i3);color:var(--i2)}
+.pl.sm{padding:6px 10px;font-size:11.5px}
+.pl.wide{flex:1;justify-content:center;padding:11px 8px}
+
+/* the overflow demo */
+.nowrap{flex-wrap:nowrap;width:296px;overflow:visible}
+
+/* bars */
+.pb{height:3px;border-radius:2px;background:var(--i3);overflow:hidden}
+.pb i{display:block;height:100%;background:var(--i)}
+.pb.ac i{background:var(--ac)}
+.pb.po i{background:var(--po)}
+.pb.tall{height:6px;border-radius:3px}
+.segs{display:flex;gap:3px;height:6px}
+.segs i{flex:1;border-radius:2px;background:var(--i3)}
+.segs i.d{background:var(--po)}
+.segs i.h{background:rgba(34,165,89,.38)}
+.segs i.n{background:var(--ac)}
+
+/* the stacked storage bar */
+.stack{display:flex;height:11px;border-radius:99px;overflow:hidden;background:var(--i3);gap:2px}
+.stack i{display:block;height:100%}
+.stack i.voice{background:var(--gl)}
+.stack i.plans{background:rgba(0,102,255,.34)}
+.stack i.audio{background:var(--ac)}
+.stack i.books{background:var(--i)}
+.stack i.free{background:var(--i3);flex:1}
+.key{display:flex;flex-wrap:wrap;gap:10px 14px;font-size:11.5px;color:var(--i2)}
+.key span{display:inline-flex;align-items:center;gap:5px}
+.key b{width:8px;height:8px;border-radius:2px;display:inline-block}
+
+/* cards: the Book sheet's well — ground cut into raised */
+.card{background:var(--ra);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px;box-shadow:0 1px 0 rgba(0,0,0,.05)}
+.card.well{background:var(--su)}
+.card.hero{background:var(--i);color:var(--g)}
+.card.hero .mt{color:#9a9a9a}
+.card.hero .pl{background:#2F2F2F;color:var(--g)}
+.card.hero .pl.des{background:rgba(255,90,80,.16);color:#FF8F87}
+.big{font-size:27px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.big.sm{font-size:21px}
+.hrow{display:flex;align-items:baseline;gap:8px}
+.hrow .r{margin-left:auto;font-size:12.5px;color:var(--i2);font-variant-numeric:tabular-nums}
+
+/* rows */
+.row{display:flex;align-items:center;gap:11px}
+.row .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.row .ttl{font-size:15px;font-weight:500;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cov{width:34px;height:46px;border-radius:3px;flex:0 0 auto;box-shadow:1px 1px 3px rgba(0,0,0,.2)}
+.cov.a{background:linear-gradient(150deg,#2F5D50,#1C3B33)}
+.cov.b{background:linear-gradient(150deg,#7A3B2E,#4E2319)}
+.cov.c{background:linear-gradient(150deg,#3B4A7A,#232C4E)}
+.cov.d{background:linear-gradient(150deg,#8A6A2E,#54401B)}
+.trash{color:var(--de);font-size:15px;width:24px;text-align:center;flex:0 0 auto}
+.wf{color:var(--i2);font-size:13px;flex:0 0 auto}
+.chev{color:var(--i2);font-size:13px;flex:0 0 auto}
+.tagb{font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:99px;background:var(--tb);color:var(--tbi);white-space:nowrap}
+.tagb.warn{background:#FCE9D6;color:#9A4B00}
+.tagb.pos{background:#DDF3E5;color:#12703C}
+.hairline{height:1px;background:var(--i3);opacity:.6}
+
+/* toggle */
+.tg{width:44px;height:26px;border-radius:99px;background:var(--i3);position:relative;flex:0 0 auto}
+.tg.on{background:var(--po)}
+.tg::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:99px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.tg.on::after{left:21px}
+
+/* slider */
+.sl{height:26px;display:flex;align-items:center;position:relative}
+.sl .tr{height:5px;border-radius:99px;background:var(--i3);width:100%}
+.sl .fl{position:absolute;height:5px;border-radius:99px;background:var(--i)}
+.sl .kn{position:absolute;width:24px;height:24px;border-radius:99px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3),0 0 0 1px rgba(0,0,0,.05)}
+.ticks{display:flex;justify-content:space-between;font-size:10.5px;color:var(--i2);font-variant-numeric:tabular-nums}
+
+.bkey{display:block;width:100%;text-align:center;border-radius:99px;padding:14px;font-size:15px;font-weight:600;
+      background:linear-gradient(180deg,var(--keyInkTop),var(--keyInkBot));color:#F8F8F7;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+.bkey.blue{background:linear-gradient(180deg,var(--keyTop),var(--keyBot))}
+

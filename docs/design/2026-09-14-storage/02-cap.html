@@ -1,0 +1,212 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>02 · The cap — four directions</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap">
+<link rel="stylesheet" href="style.css">
+
+<div class="wrap">
+<header><div class="col">
+  <div class="eyebrow">t2s reader · design · 2026-09-14 · 02</div>
+  <h1>The cap</h1>
+  <p class="lede">There is no cap on what the app takes. There is a cap on one of the four things
+     it holds — the smallest of the two big ones — and the screen presents it as a total.</p>
+  <div class="nav">
+    <a href="index.html">00 · the answers</a>
+    <a href="01-prepare.html">01 · prepare on charge</a>
+    <a class="here" href="02-cap.html">02 · the cap</a>
+    <a href="03-voice-model.html">03 · voice model</a>
+    <a href="04-per-document.html">04 · per document</a>
+  </div>
+  <div class="meta"><b>Capped</b> the LRU audio cache, default 2 GB, evicted on write and on
+     lowering the cap<br>
+     <b>Not capped</b> the voice model · its compute plans · imported books and timelines under
+     <code>&lt;App Support&gt;/t2s</code></div>
+</div></header>
+
+<section>
+  <div class="shead"><div class="snum">A / ONE BUDGET, WHOLE APP</div>
+    <h2>Make the number the reader thinks they're setting the number they're setting</h2>
+    <p class="cnote">You pick a total. The stack above shows how it's spent. The audio cache is
+      whatever the fixed parts leave — so lowering the budget squeezes the one band that can
+      actually be squeezed, and tells you so.</p></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph"><div class="safe">
+      <div class="sec tight" style="margin-top:0">
+        <p class="sh">This app is using</p>
+        <div class="hrow"><span class="big">1.72 GB</span><span class="mt">of 3 GB allowed</span></div>
+        <div class="stack" style="margin-top:4px">
+          <i class="voice" style="width:21%"></i><i class="plans" style="width:19%"></i>
+          <i class="audio" style="width:18%"></i><i class="books" style="width:6%"></i><i class="free"></i></div>
+        <div class="key">
+          <span><b style="background:var(--gl)"></b>Voice 620.8 MB</span>
+          <span><b style="background:rgba(0,102,255,.34)"></b>Speed-up 561.6 MB</span>
+          <span><b style="background:var(--ac)"></b>Audio 535.5 MB</span>
+          <span><b style="background:var(--i)"></b>Books 41 MB</span></div>
+
+        <div style="margin-top:20px">
+          <div class="sl"><div class="tr"></div>
+            <div class="fl" style="width:47%"></div>
+            <div class="kn" style="left:calc(47% - 12px)"></div></div>
+          <div class="ticks"><span>1 GB</span><span>2 GB</span><span>4 GB</span><span>8 GB</span><span>No limit</span></div>
+        </div>
+        <p class="mt" style="margin-top:8px">Rendered audio makes room for itself under this
+          budget — oldest first. Your books and the voice are never deleted automatically.</p>
+        <div class="hairline" style="margin:14px 0"></div>
+        <div class="row"><span class="mt" style="flex:1">Free on this iPhone</span>
+          <span class="mts mono">18.4 GB</span></div>
+      </div>
+    </div></div>
+      <figcaption><div class="cname">A · WHOLE-APP BUDGET <span class="tag rec">what you expect</span></div>
+      <p class="cnote">The stack is the teaching device: <b>four bands, one of which is elastic.</b>
+        The sentence under the slider is the contract — what the budget is allowed to delete, and
+        what it will never touch.</p>
+      <p class="cnote">A slider also ends the overflow argument permanently: one control, any
+        width, any text size.</p>
+      <div class="cost"><b>Cost</b> real. <code>setCapacity</code> becomes
+        <code>total − (model + plans + library)</code>, recomputed whenever the voice model is
+        deleted or downloaded and whenever books are imported.<br>
+        <b>Edge</b> a budget below the fixed parts alone. The bar must be honest about being over,
+        and the only reclaim then is the voice model — so the over state should point at
+        <a href="03-voice-model.html">03</a>.</div></figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">B / SAME MECHANICS, HONEST LABELS</div>
+    <h2>Keep the cap exactly as it is — stop it pretending to be a total</h2>
+    <p class="cnote">Everything outside the cache becomes a visible, named, un-capped block. The
+      cap keeps its four values; it just gets a heading that says what it governs.</p></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph"><div class="safe">
+      <div class="sec tight" style="margin-top:0">
+        <p class="sh">On this device</p>
+        <div class="card well" style="gap:10px">
+          <div class="row"><span class="rt" style="flex:1">Voice</span>
+            <span class="mts mono">1.18 GB</span><span class="chev">›</span></div>
+          <div class="hairline"></div>
+          <div class="row"><span class="rt" style="flex:1">Books &amp; positions</span>
+            <span class="mts mono">41 MB</span></div>
+          <div class="hairline"></div>
+          <div class="row"><span class="rt" style="flex:1">Rendered audio</span>
+            <span class="mts mono">535.5 MB</span></div>
+        </div>
+      </div>
+      <div class="sec tight">
+        <p class="sh">Limit for rendered audio</p>
+        <p class="mt">Only this grows on its own. When it hits the limit, the audio you listened to
+          longest ago is deleted first — it can always be made again.</p>
+        <div class="pills">
+          <span class="pl">512 MB</span><span class="pl">1 GB</span>
+          <span class="pl on">2 GB</span><span class="pl">4 GB</span></div>
+        <div class="pb tall ac" style="margin-top:6px"><i style="width:25%"></i></div>
+        <p class="mt">535.5 MB of 2 GB · 8,610 clips</p>
+      </div>
+    </div></div>
+      <figcaption><div class="cname">B · HONEST LABELS <span class="tag alt">cheapest honest fix</span></div>
+      <p class="cnote">No model change whatsoever. The work is entirely in <b>what the headings
+        say</b> and in putting the three un-capped things where the reader can see they exist.</p>
+      <p class="cnote">"Limit for rendered audio" plus <b>"it can always be made again"</b> is the
+        sentence that makes an LRU cache comprehensible — and makes lowering the cap feel safe rather
+        than destructive.</p>
+      <p class="cnote">Rounded labels (512 MB / 1 GB / 2 GB / 4 GB instead of
+        536.9 MB / 1.07 GB / 2.15 GB / 4.29 GB) cut the row's width by about a fifth — those decimals
+        are <code>ByteCountFormatter</code> faithfully rendering powers of two, and they are the
+        single biggest contributor to that row overflowing.</p>
+      <div class="cost"><b>Cost</b> lowest of the four. Labels, one extra card, a rounding
+        helper.<br><b>Weakness</b> still four pills; still no single answer to "how big can this
+        app get".</div></figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">C / NO CAP — DEFEND THE PHONE INSTEAD</div>
+    <h2>The real constraint isn't 2 GB; it's the phone filling up</h2>
+    <p class="cnote">The 11 Pro has filled twice during this project. A ceiling of 2 GB is useless
+      on a phone with 40 GB free and still too much on one with 800 MB. So set the rule in terms of
+      the thing that actually hurts.</p></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph"><div class="safe">
+      <div class="sec tight" style="margin-top:0">
+        <p class="sh">Space</p>
+        <div class="card">
+          <div class="hrow"><span class="big sm">18.4 GB</span><span class="mt">free on this iPhone</span></div>
+          <div class="stack" style="height:8px"><i class="audio" style="width:8%"></i><i class="free"></i></div>
+          <p class="mt">This app is holding 1.72 GB of it.</p>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <div class="grow"><span class="sh">Always leave room</span>
+            <span class="mt">Delete old rendered audio before the phone gets tight.</span></div>
+          <div class="tg on"></div></div>
+        <div class="pills" style="margin-top:8px">
+          <span class="pl">1 GB free</span><span class="pl on">2 GB free</span>
+          <span class="pl">5 GB free</span></div>
+        <div class="hairline" style="margin:16px 0"></div>
+        <div class="row"><span class="rt" style="flex:1">Delete all rendered audio now</span>
+          <span class="mts mono" style="color:var(--de)">535.5 MB</span></div>
+      </div>
+    </div></div>
+      <figcaption><div class="cname">C · KEEP ROOM FREE <span class="tag alt">most useful rule</span></div>
+      <p class="cnote">Inverts the question. Instead of "how much may the app take", the reader
+        answers <b>"how much must stay free"</b> — which is the thing they actually care about and
+        the thing that varies between phones.</p>
+      <p class="cnote">The one-shot <b>"Delete all rendered audio now"</b> at the foot is the
+        escape hatch that no amount of policy replaces, and today's screen doesn't have one — you
+        can only evict book by book.</p>
+      <div class="cost"><b>Cost</b> moderate. A free-space watcher and an eviction pass that runs
+        against it; <code>DeviceState.storeFull</code> already exists as the signal.<br>
+        <b>Risk</b> a background eviction the reader didn't ask for can delete the audio they
+        prepared for a flight — this needs to be strictly "oldest listened", and it needs to say so.
+        Prepare and this rule can fight each other.</div></figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">D / JUST THE SLIDER</div>
+    <h2>If nothing else happens, this is the two-hour version</h2></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph"><div class="safe">
+      <div class="sec tight" style="margin-top:0">
+        <p class="sh">Rendered audio</p>
+        <div class="hrow"><span class="big sm">535.5 MB</span><span class="mt">of 2 GB · 8,610 clips</span></div>
+        <div class="pb tall ac"><i style="width:25%"></i></div>
+        <div style="margin-top:14px">
+          <div class="sl"><div class="tr"></div><div class="fl" style="width:50%"></div>
+            <div class="kn" style="left:calc(50% - 12px)"></div></div>
+          <div class="ticks"><span>512 MB</span><span>1 GB</span><span>2 GB</span><span>4 GB</span></div>
+        </div>
+        <p class="mt" style="margin-top:8px">Old audio is deleted first when the limit is reached.
+          It can always be made again.</p>
+      </div>
+    </div></div>
+      <figcaption><div class="cname">D · SLIDER ONLY <span class="tag now">minimum viable</span></div>
+      <p class="cnote">Does one thing: <b>ends the overflow structurally</b>, because a slider has
+        no intrinsic width to overflow with, at any text size.</p>
+      <p class="cnote">Keeps the same four stops, so <code>StorageModel.capacityOptions</code> is
+        untouched — the slider snaps to them.</p>
+      <div class="cost"><b>Cost</b> an afternoon.<br>
+        <b>Doesn't fix</b> the lie. "535.5 MB of 2 GB" still reads as the app's total.</div></figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">— / SIDE BY SIDE</div><h2>Choosing between them</h2></div>
+  <table>
+    <tr><th></th><th>A · whole app</th><th>B · honest labels</th><th>C · keep room free</th><th>D · slider</th></tr>
+    <tr><td>Answers "can I cap the app?"</td><td><b>yes</b></td><td>no, but says so</td><td>differently</td><td>no</td></tr>
+    <tr><td>Shows the voice model's share</td><td><b>yes, in the bar</b></td><td>yes, as a row</td><td>no</td><td>no</td></tr>
+    <tr><td>Adapts to the phone</td><td>no</td><td>no</td><td><b>yes</b></td><td>no</td></tr>
+    <tr><td>One-tap reclaim</td><td>no</td><td>no</td><td><b>yes</b></td><td>no</td></tr>
+    <tr><td>Fixes the overflow</td><td><b>yes</b></td><td>partly (shorter labels)</td><td>partly</td><td><b>yes</b></td></tr>
+    <tr><td>Effort</td><td>high</td><td><b>low</b></td><td>medium</td><td><b>lowest</b></td></tr>
+  </table>
+  <p class="callout"><b>A and C compose:</b> a whole-app budget that additionally yields when the
+    phone gets tight is the strongest version, and neither half is wasted if you start with
+    one.</p>
+</section>
+
+</div>

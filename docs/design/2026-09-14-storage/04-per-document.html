@@ -1,0 +1,321 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>04 · Per document — three directions, and the whole screen</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap">
+<link rel="stylesheet" href="style.css">
+
+<div class="wrap">
+<header><div class="col">
+  <div class="eyebrow">t2s reader · design · 2026-09-14 · 04</div>
+  <h1>Per document</h1>
+  <p class="lede">The Book sheet spent this week working out how to show what a book has on the
+     device. Storage invents its own row three sections lower and gets it wrong. Three ways to stop
+     doing that.</p>
+  <div class="nav">
+    <a href="index.html">00 · the answers</a>
+    <a href="01-prepare.html">01 · prepare on charge</a>
+    <a href="02-cap.html">02 · the cap</a>
+    <a href="03-voice-model.html">03 · voice model</a>
+    <a class="here" href="04-per-document.html">04 · per document</a>
+  </div>
+  <div class="meta"><b>Today</b> every document, library order, a hairline
+     <code>ProgressBar</code>, a bare "0%", a red "Evict" pill that overflows the margin and is
+     disabled-but-not-dimmed at zero<br>
+     <b>Available</b> <code>ChapterBar</code> · the <code>waveform</code> glyph · "135.3 MB occupied
+     on device" · the trash in the mark column · the in-place question</div>
+</div></header>
+
+<section>
+  <div class="shead"><div class="snum">—— / THE FOUR WRONG THINGS</div>
+    <h2>Before the directions, what today's row gets wrong</h2></div>
+  <table>
+    <tr><th>Today</th><th>Why it's wrong</th><th>What the Book sheet does</th></tr>
+    <tr><td>"Evict"</td><td>A word for a cache, not for a person's book</td>
+      <td><b>Delete</b> — renamed during the Book sheet work</td></tr>
+    <tr><td>"0%" and "2%"</td><td>A percentage of <i>utterances</i>, which answers no question the
+      reader has. On a storage screen the unit is megabytes.</td>
+      <td><b>"135.3 MB occupied on device"</b>, as the heading</td></tr>
+    <tr><td>A red pill on every row</td><td>Loud, repeated, and dead on most rows —
+      <code>.disabled</code> doesn't dim a <code>.plain</code> button, so a no-op looks live</td>
+      <td>A trash glyph in a fixed mark column, present only where there is something to
+        delete</td></tr>
+    <tr><td>Library order, every document</td><td>The screen exists to find what's big. It lists
+      books holding nothing, in an order unrelated to size.</td>
+      <td>—</td></tr>
+  </table>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">A / THE COLLECTION'S ROW, BY SIZE</div>
+    <h2>Books, biggest first, in the shape the app already draws books</h2></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph"><div class="safe">
+      <div class="sec tight" style="margin-top:0">
+        <div class="row"><p class="sh" style="flex:1">Books with audio</p>
+          <span class="mt">by size</span></div>
+
+        <div class="row" style="margin-top:6px">
+          <div class="cov a"></div>
+          <div class="grow">
+            <div class="row" style="gap:6px"><span class="ttl" style="flex:1">Thinking in Systems</span>
+              <span class="wf">∿</span></div>
+            <span class="mt">18 of 24 chapters</span>
+            <div class="segs"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="h"></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+          <span class="mts mono">281 MB</span>
+          <span class="trash">🗑</span></div>
+
+        <div class="row" style="margin-top:12px">
+          <div class="cov b"></div>
+          <div class="grow">
+            <div class="row" style="gap:6px"><span class="ttl" style="flex:1">A Case of Exploding…</span>
+              <span class="wf">∿</span></div>
+            <span class="mt">6 of 19 chapters</span>
+            <div class="segs"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="h"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+          <span class="mts mono">147 MB</span>
+          <span class="trash">🗑</span></div>
+
+        <div class="row" style="margin-top:12px">
+          <div class="cov c"></div>
+          <div class="grow">
+            <div class="row" style="gap:6px"><span class="ttl" style="flex:1">The Anthropocene…</span>
+              <span class="wf">∿</span></div>
+            <span class="mt">2 of 44 chapters</span>
+            <div class="segs" style="gap:2px"><i class="d"></i><i class="d"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+          <span class="mts mono">107 MB</span>
+          <span class="trash">🗑</span></div>
+
+        <div class="hairline" style="margin:16px 0"></div>
+        <p class="mt">9 other books have no audio on this device.</p>
+      </div>
+    </div></div>
+      <figcaption><div class="cname">A · SORTED ROWS <span class="tag alt">one place to sweep</span></div>
+      <p class="cnote">Straight reuse: the cover, the <code>waveform</code>, the
+        <code>ChapterBar</code> segments, the trash in its column. <b>Nothing new is invented.</b></p>
+      <p class="cnote"><b>Sorted by size, zeros collapsed to one line.</b> The screen finally
+        answers its own question — which book is holding the 535 MB.</p>
+      <p class="cnote">The trash keeps the <code>boxBody</code> in-place question: the row's title
+        becomes "Delete 281 MB of audio?" and the size becomes Keep / Delete. No dialog.</p>
+      <div class="cost"><b>Cost</b> medium. Needs <code>AudioStore.bytes(for:)</code> per document —
+        which <b>already exists</b> and is already what the Book sheet's "135.3 MB" calls.<br>
+        <b>Watch</b> the row must not repeat today's overflow: the trash is fixed-width and the title
+        must be the flexible child that truncates.</div></figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">B / THE SHEET'S BOX, REPEATED</div>
+    <h2>Each book gets the box it already has inside its own sheet</h2></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph"><div class="safe">
+      <div class="sec tight" style="margin-top:0">
+        <p class="sh">Books with audio</p>
+        <div class="card" style="margin-top:4px">
+          <div class="row"><div class="cov a"></div>
+            <div class="grow"><span class="ttl">Thinking in Systems</span>
+              <span class="mt">Donella Meadows</span></div></div>
+          <div class="hrow"><span class="big sm">281 MB</span>
+            <span class="mt">occupied on device</span></div>
+          <div class="segs"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="h"></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="row"><span class="mt" style="flex:1">18 of 24 chapters ready offline</span>
+            <span class="trash">🗑</span></div>
+        </div>
+        <div class="card" style="margin-top:10px">
+          <div class="row"><div class="cov b"></div>
+            <div class="grow"><span class="ttl">A Case of Exploding…</span>
+              <span class="mt">Mohammed Hanif</span></div></div>
+          <div class="hrow"><span class="big sm">147 MB</span>
+            <span class="mt">occupied on device</span></div>
+          <div class="segs"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="h"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="row"><span class="mt" style="flex:1">6 of 19 chapters ready offline</span>
+            <span class="trash">🗑</span></div>
+        </div>
+      </div>
+    </div></div>
+      <figcaption><div class="cname">B · THE BOX, REPEATED <span class="tag now">most literal reuse</span></div>
+      <p class="cnote">Pixel-for-pixel the <code>onDeviceBox</code> — the size as the heading, the
+        chapter bar, the trash, the in-place question. Someone who has used the Book sheet already
+        knows this screen.</p>
+      <p class="cnote">The cost is <b>vertical</b>: about 130 pt per book. With four books you are
+        scrolling before you reach anything else, and the screen loses its overview.</p>
+      <p class="cnote">Better as a <i>detail page</i> under direction B of
+        <a href="03-voice-model.html">03</a> — "Rendered audio ›" opens this list — than as a section
+        of the main screen.</p>
+      <div class="cost"><b>Cost</b> lowest of the three: <code>onDeviceBox</code> lifted into a
+        shared component and fed a document instead of the current one. That refactor is worth doing
+        regardless.</div></figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">C / DON'T DUPLICATE THE INTERACTION</div>
+    <h2>Rows that name the size and open the sheet that already deletes better</h2>
+    <p class="cnote">The Book sheet can delete a single chapter. Storage can only delete a whole
+      book. Every reader who taps Evict for the wrong reason would have been better served by the
+      sheet — so send them there.</p></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph"><div class="safe">
+      <div class="sec tight" style="margin-top:0">
+        <div class="row"><p class="sh" style="flex:1">Rendered audio</p></div>
+        <div class="hrow"><span class="big sm">535.5 MB</span>
+          <span class="mt">across 4 books</span></div>
+        <div class="stack" style="height:9px;gap:2px">
+          <i style="width:52%;background:var(--ac)"></i>
+          <i style="width:27%;background:rgba(255,122,26,.62)"></i>
+          <i style="width:20%;background:rgba(255,122,26,.34)"></i></div>
+
+        <div class="card well" style="margin-top:14px;gap:0">
+          <div class="row" style="padding:5px 0"><div class="cov a"></div>
+            <div class="grow"><span class="ttl">Thinking in Systems</span>
+              <span class="mt">18 of 24 chapters</span></div>
+            <span class="mts mono">281 MB</span><span class="chev">›</span></div>
+          <div class="hairline" style="margin:9px 0"></div>
+          <div class="row" style="padding:5px 0"><div class="cov b"></div>
+            <div class="grow"><span class="ttl">A Case of Exploding…</span>
+              <span class="mt">6 of 19 chapters</span></div>
+            <span class="mts mono">147 MB</span><span class="chev">›</span></div>
+          <div class="hairline" style="margin:9px 0"></div>
+          <div class="row" style="padding:5px 0"><div class="cov c"></div>
+            <div class="grow"><span class="ttl">The Anthropocene…</span>
+              <span class="mt">2 of 44 chapters</span></div>
+            <span class="mts mono">107 MB</span><span class="chev">›</span></div>
+        </div>
+        <p class="mt" style="margin-top:10px">Open a book to delete single chapters.</p>
+        <div class="row" style="margin-top:14px">
+          <span class="pl des">Delete all rendered audio</span></div>
+      </div>
+    </div></div>
+      <figcaption><div class="cname">C · LINKS, NOT CONTROLS <span class="tag rec">recommended</span></div>
+      <p class="cnote">The list becomes a <b>readout</b>: who is holding the space, in order, with a
+        bar that shows the shares at a glance. The only destructive control on the section is the
+        <b>one the screen is missing today</b> — sweep it all.</p>
+      <p class="cnote">Per-book and per-chapter deletion both live in the Book sheet, where the
+        chapter bar, the marks and the in-place question already are. Storage stops maintaining a
+        second, worse copy of that interaction.</p>
+      <p class="cnote">Rows are short — three books fit where B fits one and a half — so the section
+        can sit on the main screen without taking it over.</p>
+      <div class="cost"><b>Cost</b> low, and it <i>removes</i> code: <code>StorageModel.evict</code>
+        and its <code>performDestructiveChange</code> path can go, since the sheet's own delete
+        already handles the loaded-document case.<br>
+        <b>Watch</b> the tap target needs a route from Settings into a Book sheet; the Collection
+        already opens one, so the presentation exists.</div></figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">— / THE WHOLE SCREEN</div>
+    <h2>The four recommendations, assembled</h2>
+    <p class="cnote">01·D (the line) · 02·B (honest labels, with A's stack at the top) · 03·C
+      (split) · 04·C (links). Drawn end to end so the rhythm can be judged rather than
+      imagined.</p></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph tall">
+      <div class="bar"><span>5:26</span><span>98%</span></div>
+      <div class="safe">
+        <div class="back">‹</div>
+        <div class="pt">Storage</div>
+
+        <div class="card" style="margin-top:20px">
+          <div class="hrow"><span class="big sm">1.72 GB</span><span class="mt">on this iPhone</span>
+            <span class="mt r">18.4 GB free</span></div>
+          <div class="stack">
+            <i class="voice" style="width:36%"></i><i class="plans" style="width:32%"></i>
+            <i class="audio" style="width:30%"></i><i class="books" style="width:2%"></i></div>
+          <div class="key">
+            <span><b style="background:var(--gl)"></b>Voice</span>
+            <span><b style="background:rgba(0,102,255,.34)"></b>Speed-up</span>
+            <span><b style="background:var(--ac)"></b>Audio</span>
+            <span><b style="background:var(--i)"></b>Books</span></div>
+        </div>
+
+        <div class="sec tight">
+          <p class="sh">Ready to listen offline</p>
+          <div class="hrow"><span class="big sm">1h 32m</span><span class="mt">of 3h · 268 MB</span></div>
+          <p class="mt">Rendered while charging, in this order — never on battery.</p>
+          <div class="row" style="margin-top:4px">
+            <div class="cov a"></div>
+            <div class="grow"><span class="ttl">Thinking in Systems</span>
+              <span class="mt">Reading now · ready to 4h 12m</span>
+              <div class="segs"><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="h"></i><i></i><i></i><i></i><i></i></div></div></div>
+          <div class="row">
+            <div class="cov b"></div>
+            <div class="grow"><span class="ttl">A Case of Exploding…</span>
+              <span class="mt">Next in Queue · ready to 26m</span>
+              <div class="segs"><i class="d"></i><i class="h"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div>
+          <div class="row" style="margin:4px 0">
+            <div style="flex:1;height:1px;background:var(--i)"></div>
+            <span class="mts" style="white-space:nowrap">3 hours ends here</span>
+            <div style="width:16px;height:1px;background:var(--i)"></div></div>
+          <div class="row" style="opacity:.42">
+            <div class="cov c"></div>
+            <div class="grow"><span class="ttl">The Anthropocene…</span>
+              <span class="mt">Queued · nothing ready</span>
+              <div class="segs"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div>
+          <div class="pills" style="margin-top:10px">
+            <span class="pl">1h</span><span class="pl on">3h</span>
+            <span class="pl">8h</span><span class="pl">All</span></div>
+        </div>
+
+        <div class="sec tight">
+          <p class="sh">Voice</p>
+          <div class="card well" style="gap:0">
+            <div class="row" style="padding:4px 0">
+              <div class="grow"><span class="rt">Voice model</span>
+                <span class="mt">620 MB to download again</span></div>
+              <span class="mts mono">620.8 MB</span><span class="pl des sm">Delete</span></div>
+            <div class="hairline" style="margin:10px 0"></div>
+            <div class="row" style="padding:4px 0">
+              <div class="grow"><span class="rt">Speed-up files</span>
+                <span class="mt">Rebuilt free next time you charge</span></div>
+              <span class="mts mono">561.6 MB</span><span class="pl sm">Clear</span></div>
+          </div>
+        </div>
+
+        <div class="sec tight">
+          <div class="row"><p class="sh" style="flex:1">Rendered audio</p>
+            <span class="mt mono">535.5 MB of 2 GB</span></div>
+          <p class="mt">Only this grows on its own. When it reaches the limit the audio you
+            listened to longest ago goes first — it can always be made again.</p>
+          <div class="pills">
+            <span class="pl">512 MB</span><span class="pl">1 GB</span>
+            <span class="pl on">2 GB</span><span class="pl">4 GB</span></div>
+          <div class="card well" style="margin-top:8px;gap:0">
+            <div class="row" style="padding:5px 0"><div class="cov a"></div>
+              <div class="grow"><span class="ttl">Thinking in Systems</span>
+                <span class="mt">18 of 24 chapters</span></div>
+              <span class="mts mono">281 MB</span><span class="chev">›</span></div>
+            <div class="hairline" style="margin:9px 0"></div>
+            <div class="row" style="padding:5px 0"><div class="cov b"></div>
+              <div class="grow"><span class="ttl">A Case of Exploding…</span>
+                <span class="mt">6 of 19 chapters</span></div>
+              <span class="mts mono">147 MB</span><span class="chev">›</span></div>
+            <div class="hairline" style="margin:9px 0"></div>
+            <div class="row" style="padding:5px 0"><div class="cov c"></div>
+              <div class="grow"><span class="ttl">The Anthropocene…</span>
+                <span class="mt">2 of 44 chapters</span></div>
+              <span class="mts mono">107 MB</span><span class="chev">›</span></div>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <span class="pl des">Delete all rendered audio</span></div>
+        </div>
+      </div>
+    </div>
+      <figcaption><div class="cname">ASSEMBLED <span class="tag rec">01·D + 02·B + 03·C + 04·C</span></div>
+      <p class="cnote">The screen now reads as <b>one picture, then three sections in descending
+        order of what they cost you</b>: the stack answers "how big is this app", the gauge answers
+        "can I listen tomorrow", the voice answers "what is the gigabyte", the audio answers "which
+        book is holding it".</p>
+      <p class="cnote">Every pill row wraps. Every fixed-width control sits at the end of a flexible
+        row. Nothing reaches the margin.</p>
+      <p class="cnote"><b>Open question I'd want your call on:</b> this is long — roughly two and a
+        half screens. The alternative is 03·B, an index of three rows pushing to three pages, with
+        the stack at the top. Shorter, but you have to tap to learn anything.</p>
+      </figcaption></figure>
+  </div>
+</section>
+
+</div>

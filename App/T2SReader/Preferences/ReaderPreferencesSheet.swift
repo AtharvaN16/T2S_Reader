@@ -18,6 +18,8 @@ struct ReaderPreferencesSheet: View {
     /// The Reader's paper. The sheet that chooses a paper had better be drawn on one (owner,
     /// 2026-09-14) — and from Settings, where there is no Reader, this is the app's own greys.
     @Environment(\.readerPalette) private var palette
+    /// Only consulted while the app-wide switch still says `system`; see `showsDarkFaces`.
+    @Environment(\.colorScheme) private var scheme
     /// Everything that only means something while a book is open: the two sliders and the two
     /// switches. Off in Settings, which shows the theme alone.
     var showsReaderControls: Bool = true
@@ -46,6 +48,13 @@ struct ReaderPreferencesSheet: View {
                     // Under the two sliders rather than under everything (owner, 2026-09-14):
                     // type size, line height and the page's colour are the three things about how
                     // the book *looks*, and the switches below them are about what it does.
+                    //
+                    // Light and dark come first because they decide what the papers under them can
+                    // even look like (owner, 2026-09-14: "you should be able to switch between app
+                    // level light and dark, which then makes the reader theme easier to select").
+                    // A swatch shows one face now — the one you are in — so the way to see the
+                    // other eight is to stand in it.
+                    modes($preferences.theme)
                     papers($preferences.readerPaper)
                     // Two switches, both about what the Reader does rather than how it looks. Each
                     // carries a grey line saying what it governs — these are gestures and marks a
@@ -60,17 +69,7 @@ struct ReaderPreferencesSheet: View {
                                isOn: $preferences.showsBookmarkMarks)
                     }
                 } else {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Theme · applies to the whole app").typeRole(.meta).foregroundStyle(palette.ink2)
-                        HStack(spacing: Spacing.grid) {
-                            ForEach(ReaderTheme.allCases, id: \.self) { theme in
-                                Pill(label: theme.rawValue.capitalized,
-                                     style: preferences.theme == theme ? .selected : .soft) {
-                                    preferences.theme = theme
-                                }
-                            }
-                        }
-                    }
+                    modes($preferences.theme, note: "Applies to the whole app.")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -82,21 +81,71 @@ struct ReaderPreferencesSheet: View {
         .presentationCornerRadius(Spacing.sheetCorner)
     }
 
+    /// Light or dark, app-wide — the same switch that used to be called Theme, and still the thing
+    /// that governs every screen. `System` is gone with the rename (owner, 2026-09-14): a paper is
+    /// an explicit choice, and a page that changed under the reader at sunset would change which
+    /// eight swatches they were looking at with it.
+    @ViewBuilder private func modes(_ choice: Binding<ReaderTheme>, note: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Light and dark").typeRole(.meta).foregroundStyle(palette.ink2)
+            HStack(spacing: Spacing.grid) {
+                ForEach([ReaderTheme.light, .dark], id: \.self) { theme in
+                    modePill(theme.rawValue.capitalized,
+                             glyph: theme == .light ? "sun.max.fill" : "moon.fill",
+                             isOn: choice.wrappedValue == theme) {
+                        withAnimation(.snappy(duration: 0.2)) { choice.wrappedValue = theme }
+                    }
+                }
+            }
+            if let note {
+                Text(note).typeRole(.fine).foregroundStyle(palette.ink2)
+            }
+        }
+    }
+
+    /// `Pill`'s shape in the paper's own colours — the app's `Pill` is drawn in `Tokens`, and on a
+    /// sepia sheet the app's greys are a different object arriving from another room.
+    private func modePill(_ label: String, glyph: String, isOn: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: glyph).font(.system(size: 12, weight: .semibold))
+                Text(label).typeRole(.pill)
+            }
+            .lineLimit(1)
+            .foregroundStyle(isOn ? palette.page : palette.ink)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(isOn ? palette.ink : palette.surface, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+    }
+
     /// The sixteen papers, in their two families (palette:
-    /// `docs/design/2026-09-14-reader-papers-16.html`). Zen first, because a book is the ordinary
-    /// case; pop under it, under its own word, because choosing one is choosing something else.
+    /// `docs/design/2026-09-14-reader-papers-16.html`; the picker: `…-paper-picker.html`). Quiet
+    /// first, because a book is the ordinary case; loud under it, under its own word.
     ///
-    /// Each swatch is split down the diagonal — the paper's lit face and its unlit one. A paper is
-    /// a hue, and the phone still says whether it is day: showing one face would promise a page the
-    /// reader might never see.
+    /// One face per swatch — the one the app is in — and one letter in that face's ink. The split
+    /// chip that came before showed a paper, its night face, and what text looked like on both, at
+    /// 56 pt: four regions a swatch, sixteen times (owner, 2026-09-14: "how many colors are there
+    /// 4?"). The letter stays because at night it is the *only* part that differs: eight quiet
+    /// papers in the dark are eight near-blacks, and what tells Sepia from Rose is the cream
+    /// against the pink-white. The name goes to the heading, where one of them is enough.
     @ViewBuilder private func papers(_ choice: Binding<ReaderPaper>) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 20) {
             ForEach([ReaderPaper.Family.zen, .pop], id: \.self) { family in
-                VStack(alignment: .leading, spacing: 11) {
-                    Text(family == .zen ? "Paper" : "Paper · loud")
-                        .typeRole(.meta).foregroundStyle(palette.ink2)
-                    // Eight to a family: four and four at phone width, and one row of eight on
-                    // anything wider.
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(family == .zen ? "Quiet" : "Loud")
+                            .typeRole(.meta).foregroundStyle(palette.ink2)
+                        // The chosen paper names itself once, beside its own family.
+                        if choice.wrappedValue.family == family {
+                            Text("· \(choice.wrappedValue.title)")
+                                .typeRole(.meta).foregroundStyle(palette.ink)
+                                .contentTransition(.opacity)
+                        }
+                    }
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4),
                               spacing: 14) {
                         ForEach(ReaderPaper.all(family), id: \.self) { paper in
@@ -110,38 +159,36 @@ struct ReaderPreferencesSheet: View {
         }
     }
 
+    /// Which face a swatch shows: the one the app's own light/dark switch has chosen, and the
+    /// device's answer only while that switch still says `system` — which, after the 2026-09-14
+    /// migration, it no longer does for anyone.
+    private var showsDarkFaces: Bool {
+        switch env.preferences.theme {
+        case .light: return false
+        case .dark: return true
+        case .system: return scheme == .dark
+        }
+    }
+
     private func swatch(_ paper: ReaderPaper, isOn: Bool, action: @escaping () -> Void) -> some View {
         let faces = ReaderPalette.swatch(paper)
+        let page = showsDarkFaces ? faces.dark : faces.light
+        let ink = showsDarkFaces ? faces.darkInk : faces.lightInk
         return Button(action: action) {
-            VStack(spacing: 7) {
-                ZStack {
-                    faces.light
-                    // The unlit face, cut in under the diagonal.
-                    faces.dark.clipShape(SwatchHalf())
-                    // One letter, in each face's own ink, so the swatch says what *text* looks like
-                    // on this paper rather than only what the paper is.
-                    HStack(spacing: 0) {
-                        Text("A").foregroundStyle(faces.lightInk)
-                        Text("a").foregroundStyle(faces.darkInk)
-                    }
-                    .font(.custom("Inter-Bold", size: 17))
-                }
-                .frame(width: 56, height: 56)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            Text("Aa")
+                .font(.custom("Inter-Bold", size: 17))
+                .foregroundStyle(ink)
+                .frame(width: 52, height: 52)
+                .background(page, in: Circle())
+                // A hairline, or Mono's white face on a white sheet is nothing at all.
+                .overlay { Circle().strokeBorder(Tokens.edge, lineWidth: 1) }
                 .overlay {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(Tokens.edge, lineWidth: 1)
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(palette.ink, lineWidth: 2.5)
+                    Circle().strokeBorder(palette.ink, lineWidth: 2.5)
                         .padding(-4)
                         .opacity(isOn ? 1 : 0)
                 }
-                Text(paper.title).typeRole(.fine).foregroundStyle(isOn ? palette.ink : palette.ink2)
-                    .lineLimit(1).minimumScaleFactor(0.8)
-            }
-            .contentShape(Rectangle())
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(paper.title)
@@ -161,17 +208,5 @@ struct ReaderPreferencesSheet: View {
             Spacer(minLength: 12)
             Toggle("", isOn: isOn).labelsHidden()
         }
-    }
-}
-
-/// The lower-right triangle of a swatch: the paper's unlit face, cut in under the diagonal.
-private struct SwatchHalf: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.closeSubpath()
-        return path
     }
 }

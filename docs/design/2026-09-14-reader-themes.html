@@ -1,0 +1,205 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reader themes — paper, ink, and the four colours that must survive them</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap">
+<style>
+:root{--ground:#F8F8F7;--paper:#FFFFFF;--ink:#111111;--ink2:#6E7076;--hair:#E2E3E8;--glow:#0066FF;--ready:#12A150;--no:#C0392B;--warn:#B5762B;
+ --serif:"Newsreader",Georgia,serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace;--app:"Inter",-apple-system,sans-serif}
+@media(prefers-color-scheme:dark){:root{--ground:#0E0F12;--paper:#16171B;--ink:#ECEDF0;--ink2:#94969E;--hair:#26272D;--glow:#5F84FF;--ready:#37D97C;--no:#FF6B5E;--warn:#E0A64A}}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--serif);font-size:17px;line-height:1.6;margin:0;padding:0 20px 120px}
+.wrap{max-width:1340px;margin:0 auto}.col{max-width:68ch}
+h1,h2,h3{margin:0;font-weight:400;text-wrap:balance}
+h1{font-size:clamp(34px,6vw,50px);line-height:1.05;letter-spacing:-.02em}
+h2{font-size:clamp(23px,3.2vw,30px);letter-spacing:-.01em}
+h3{font-size:19px}
+p{margin:0}
+code{font-family:var(--mono);font-size:.78em;background:color-mix(in srgb,var(--ink) 8%,transparent);padding:.14em .4em;border-radius:3px}
+b{font-weight:500}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2)}
+.lede{font-size:20px;color:var(--ink2);font-weight:300;line-height:1.5}
+header{padding-block:70px 0}header .col{display:flex;flex-direction:column;gap:18px}
+.meta{font-family:var(--mono);font-size:12px;color:var(--ink2);line-height:2;border-top:1px solid var(--hair);padding-top:15px}
+.meta b{color:var(--ink);font-weight:500}
+section{padding-block:56px 0;display:flex;flex-direction:column;gap:24px}
+.shead{display:flex;flex-direction:column;gap:11px;max-width:74ch}
+.snum{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--glow);letter-spacing:.1em}
+.note{font-size:14.5px;color:var(--ink2);line-height:1.5;max-width:70ch}
+/* the picker strip */
+.strip{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
+.sw{width:76px;display:flex;flex-direction:column;gap:7px;align-items:center;font-family:var(--app);font-size:11px;color:var(--ink2)}
+.chip{width:62px;height:62px;border-radius:17px;position:relative;overflow:hidden;box-shadow:0 1px 0 rgba(0,0,0,.14) inset,0 2px 8px rgba(0,0,0,.18);display:grid;place-items:center}
+.chip span{font-family:var(--app);font-weight:700;font-size:23px;line-height:1}
+.chip.on{outline:2.5px solid var(--glow);outline-offset:3px}
+/* theme card */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:34px 26px}
+.card{display:flex;flex-direction:column;gap:11px}
+.cname{font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.04em;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.cname .hex{color:var(--ink2);font-weight:400}
+.page{border-radius:16px;padding:16px 16px 13px;font-family:var(--app);display:flex;flex-direction:column;gap:11px;box-shadow:0 8px 22px rgba(0,0,0,.3)}
+.ptitle{font-size:12.5px;font-weight:700;letter-spacing:-.01em;opacity:.9}
+.ptext{font-size:13.5px;line-height:1.62;letter-spacing:-.005em}
+.chrome{display:flex;gap:8px;align-items:center;padding-top:3px;flex-wrap:wrap}
+.key{font-size:11.5px;font-weight:600;padding:8px 13px;border-radius:99px;color:#fff;box-shadow:0 3px 9px rgba(0,0,0,.28)}
+.pill{font-size:11px;font-weight:600;padding:6px 11px;border-radius:99px}
+.dot{width:9px;height:9px;border-radius:99px}
+.bar{height:6px;border-radius:99px;flex:1;min-width:52px;position:relative;overflow:hidden}
+.bar i{position:absolute;inset:0 62% 0 0;border-radius:99px;display:block}
+.tbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11.5px}
+.tbl th{text-align:left;font-weight:500;color:var(--ink2);padding:3px 8px 3px 0;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}
+.tbl td{padding:2px 8px 2px 0;border-top:1px solid var(--hair)}
+.ok{color:var(--ready)}.mid{color:var(--warn)}.bad{color:var(--no)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:26px}
+.verdict{font-family:var(--app);font-size:12.5px;line-height:1.5;color:var(--ink2)}
+.verdict b{color:var(--ink)}
+.rule{display:flex;gap:13px;align-items:flex-start;padding:15px 17px;border:1px solid var(--hair);border-radius:13px;max-width:78ch}
+.rule .k{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--glow);white-space:nowrap;padding-top:3px}
+.rule .t{font-size:15px;line-height:1.5}
+.matrix{overflow-x:auto}
+.matrix table{border-collapse:collapse;font-family:var(--mono);font-size:11.5px;min-width:620px}
+.matrix th,.matrix td{padding:7px 11px;border-bottom:1px solid var(--hair);text-align:left;white-space:nowrap}
+.matrix th{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink2);font-weight:500}
+.matrix td.name{font-weight:700}
+.swatchcell{display:flex;align-items:center;gap:7px}
+.mini{width:15px;height:15px;border-radius:5px;flex:none}
+</style>
+<div class="wrap">
+<header><div class="col">
+<div class="eyebrow">t2s_reader · reader themes · proposal</div>
+<h1>Paper, ink, and the four colours that must survive them</h1>
+<p class="lede">A reader theme colours the page you read on. It must not colour the four things the app uses to <em>mean</em> something — progress, the key that starts something, a delete, a success — or the page stops being able to say them.</p>
+<div class="meta">
+<b>Asked for</b> 2026-09-14 — “show the theme as a swatch … we can have multiple different themes, from bright red to pastel red, blue … think of the swatch option, and edge cases (so the reader theme does not clash with any UI elements)”.<br>
+<b>Decides</b> the palette, the swatch control, what happens to <code>System</code>, and the one rule that keeps a theme from eating the app.<br>
+<b>Not built yet.</b> Nothing here is in the app: pick the papers you want and I will build exactly those.
+</div>
+</div></header>
+
+<section><div class="shead">
+<div class="snum">01</div><h2>The rule: paper is a tint, not a colour</h2>
+<p>The Reader draws four colours that carry meaning, and all four have to keep working on every page: <b style="color:#FF8C3A">accent</b> is progress and the read-along, <b style="color:#5F84FF">glow</b> is the key that starts something, <b style="color:#FF5A50">destructive</b> is a delete, <b style="color:#34C070">positive</b> is a thing that finished. A saturated page competes with all of them at once — and a red page competes with the delete <em>specifically</em>, which is the one clash that is not merely ugly.</p>
+</div>
+<div class="rule"><div class="k">RULE A</div><div class="t"><b>Light papers stay under 8% saturation, dark papers under 18%.</b> That is enough to see the hue on a whole screen of it and not enough to argue with a saturated glyph sitting on it. It is the difference between “pastel red” and “bright red”, and §3 shows what happens when you cross it.</div></div>
+<div class="rule"><div class="k">RULE B</div><div class="t"><b>Ink is the paper’s own hue, darkened — never pure black.</b> Black text on tinted paper reads as a sticker on the page; ink at the same hue reads as printing.</div></div>
+<div class="rule"><div class="k">RULE C</div><div class="t"><b>Each theme pins its own read-along tint, at least 60° of hue from its paper.</b> The read-along is an 8%-alpha wash — on paper of its own hue it simply disappears. Amber on blue paper, blue on red paper, and so on. The app already has this dial (<code>HighlightTheme</code>); the theme sets it rather than the reader.</div></div>
+<div class="rule"><div class="k">RULE D</div><div class="t"><b>The four meaning-colours are per-theme values, not constants.</b> On a wine paper the delete red is lifted until it clears the page by 3:1; on sky the key stays the same electric blue, because a saturated blue on an 6% blue tint still reads as an object. The theme owns the shift, so no screen has to know.</div></div>
+</section>
+
+<section><div class="shead">
+<div class="snum">02</div><h2>The swatch</h2>
+<p>A row of papers, each showing its own ink on itself — a letter, not an abstract square, because what you are choosing is “what does text look like on this”. Selected takes the app’s ring. Two rows, light and dark, and that is what replaces <code>System</code>: a theme is now a paper, and a paper is either lit or unlit. (See §6 for what happens to readers who are on <code>System</code> today.)</p>
+</div>
+<div class="strip" id="strip"></div>
+</section>
+
+<section><div class="shead">
+<div class="snum">03</div><h2>Bright red, pastel red</h2>
+<p>The owner asked for the range. Here it is, with the app’s own chrome laid on both.</p>
+</div>
+<div class="two" id="brightVsPastel"></div>
+<p class="note">On the bright paper the delete pill has to become white-on-red to be seen at all — at which point it is the same object as the page, and “delete” has stopped being a colour and become a shape. The read-along wash is gone. Body text at 4.9:1 is under the 7:1 a full screen of prose wants. The pastel keeps every one of them and still reads, unmistakably, as a red page.</p>
+</section>
+
+<section><div class="shead">
+<div class="snum">04</div><h2>The papers</h2>
+<p>Five lit, five unlit. Each card is the Reader as it would look: the chapter title, a sentence already read, the sentence being read now in that theme’s wash, the text ahead dimmed — then the chrome strip underneath, where the four meaning-colours sit on that paper, and the numbers.</p>
+</div>
+<div class="cards" id="cards"></div>
+</section>
+
+<section><div class="shead">
+<div class="snum">05</div><h2>The clash matrix</h2>
+<p>Every paper against every meaning-colour, as a contrast ratio. <span class="ok">3.0+</span> is the floor for a glyph or a pill, <span class="mid">under 3.0</span> needs the per-theme lift of Rule D, <span class="bad">under 2.0</span> cannot be rescued and the paper is wrong.</p>
+</div>
+<div class="matrix"><table id="matrix"></table></div>
+<p class="note"><b>The amber column is a finding, not a slip.</b> The accent orange scores 2.2–2.5 on every light paper and the green 2.7–3.0 — and that is true of the app <em>today</em>, since <b>Paper</b> is the light page it already ships. As a 6 pt bar or a dot those are marks, not text, and 2.5 is survivable; the moment a theme wants either as a <em>word</em> (“Rendering 2 of 3”, a “ready” tag) it needs Rule D. The lifts that work on every light paper: accent <code>#C85A0A</code> (4.0 on Paper, 3.6 on Sepia), positive <code>#1B8C4A</code> (4.0 / 3.7). The dark papers need no lift at all — everything is 5.4 or better.</p>
+</section>
+
+<section><div class="shead">
+<div class="snum">06</div><h2>What building it costs</h2>
+</div>
+<div class="col" style="display:flex;flex-direction:column;gap:14px">
+<p><b>Tokens.</b> <code>Tokens</code> resolves light/dark through one dynamic <code>UIColor</code>. A theme is a third axis: the same tokens, resolved from the chosen paper instead of the trait. That is one lookup table and one <code>@Environment</code> value — every screen already reads <code>Tokens.ink</code>, so no view changes.</p>
+<p><b>Scope.</b> The reader theme colours the Reader page. Whether it also colours Home, the Collection and Settings is the real question — the owner said “applies to the whole app” should go from the label, which points at the page-only answer. Page-only is also the safe one: sepia paper with the app’s own greys around it is a book in an app, where a sepia <em>app</em> is a skin.</p>
+<p><b>Migration.</b> A reader on <code>System</code> today gets <b>Paper</b> if the device is light and <b>Ink</b> if it is dark, once, at first launch after the update — then the choice is theirs and stops following the phone.</p>
+<p><b>Cost.</b> Roughly: the palette + token plumbing, the swatch control, the per-theme highlight and the Rule D lifts, plus a pass over the Reader’s own chrome (the scrubber, the warm-up glow, the raised key). Half a day, and the screenshots to prove each paper.</p>
+</div>
+</section>
+</div>
+
+<script>
+const THEMES = [
+  {name:"Paper",   dark:false, page:"#F8F8F7", ink:"#111111", ink2:"#8A8A8A", ink3:"#C9C9C7", surface:"#EEEEEC", wash:"#FF7A1A", mark:"Amber"},
+  {name:"Sepia",   dark:false, page:"#F4ECDB", ink:"#2A2118", ink2:"#8C7F6A", ink3:"#DCD0B6", surface:"#EBE0C9", wash:"#B5562B", mark:"Fall"},
+  {name:"Blush",   dark:false, page:"#FBECEA", ink:"#2E1C1A", ink2:"#937B77", ink3:"#E9D2CE", surface:"#F3DEDB", wash:"#3B82F6", mark:"Sky"},
+  {name:"Sky",     dark:false, page:"#EBF1FA", ink:"#16202C", ink2:"#78838F", ink3:"#CBD8E8", surface:"#DEE8F5", wash:"#FF7A1A", mark:"Amber"},
+  {name:"Sage",    dark:false, page:"#EDF3EB", ink:"#17241A", ink2:"#7B8A7C", ink3:"#CFDDCC", surface:"#E0EADD", wash:"#EAB308", mark:"Marker"},
+  {name:"Ink",     dark:true,  page:"#101010", ink:"#F2F2F2", ink2:"#8E8E8E", ink3:"#3A3A3A", surface:"#2F2F2F", wash:"#FF8C3A", mark:"Amber"},
+  {name:"Midnight",dark:true,  page:"#0D121B", ink:"#E7EDF7", ink2:"#8892A3", ink3:"#2A3342", surface:"#1E2733", wash:"#FF8C3A", mark:"Amber"},
+  {name:"Wine",    dark:true,  page:"#1A0F10", ink:"#F4E7E6", ink2:"#A08C8B", ink3:"#3A2526", surface:"#2C1B1C", wash:"#5B9CFF", mark:"Sky"},
+  {name:"Forest",  dark:true,  page:"#0D140F", ink:"#E5EFE6", ink2:"#869285", ink3:"#26332A", surface:"#1A241C", wash:"#FACC15", mark:"Marker"},
+  {name:"Slate",   dark:true,  page:"#12151A", ink:"#E9ECF1", ink2:"#8B919C", ink3:"#2C323A", surface:"#20252C", wash:"#FF8C3A", mark:"Amber"},
+];
+const SEM = t => t.dark
+  ? {accent:"#FF8C3A", glow:"#5F84FF", no:"#FF5A50", yes:"#34C070"}
+  : {accent:"#FF7A1A", glow:"#0066FF", no:"#E5453B", yes:"#22A559"};
+
+const hex2rgb = h => [1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const lum = h => { const c = hex2rgb(h).map(v=>{v/=255; return v<=.03928? v/12.92 : Math.pow((v+.055)/1.055,2.4)});
+  return .2126*c[0]+.7152*c[1]+.0722*c[2]; };
+const ratio = (a,b) => { const [x,y]=[lum(a),lum(b)].sort((p,q)=>q-p); return (x+.05)/(y+.05); };
+const r2 = (a,b) => ratio(a,b).toFixed(1);
+const cls = v => v>=4.5? "ok" : v>=3? "mid" : "bad";
+const mix = (h,over,a) => { const A=hex2rgb(h), B=hex2rgb(over);
+  return "#"+A.map((v,i)=>Math.round(v*a+B[i]*(1-a)).toString(16).padStart(2,"0")).join(""); };
+
+function pageMock(t, opts={}) {
+  const s = SEM(t), wash = mix(t.wash, t.page, t.dark? .17 : .11), word = mix(t.wash, t.page, t.dark? .34 : .24);
+  return `<div class="page" style="background:${t.page};color:${t.ink}">
+    <div class="ptitle">III. The Rabbi and the Diadem</div>
+    <div class="ptext">He had gone down to the shore before the others were awake.
+      <span style="background:${wash};box-shadow:0 0 0 3px ${wash}">There was a <span style="background:${word};box-shadow:0 0 0 2px ${word}">light</span> on the water that he did not trust,</span>
+      <span style="color:${mix(t.ink,t.page,t.dark?.34:.28)}">and the boats were further out than they had been the evening before, and nobody had told him why.</span></div>
+    <div class="chrome">
+      <span class="key" style="background:linear-gradient(${s.glow},${mix(s.glow,"#000",.72)})">Back to current</span>
+      <span class="pill" style="background:${t.surface};color:${s.no}">Delete</span>
+      <span class="dot" style="background:${s.yes}"></span>
+      <span class="dot" style="background:${s.accent}"></span>
+      <span class="bar" style="background:${t.ink3}"><i style="background:${t.ink}"></i></span>
+    </div>
+  </div>`;
+}
+
+function numbers(t) {
+  const s = SEM(t);
+  const rows = [["ink", t.ink],["dimmed", mix(t.ink,t.page,t.dark?.34:.28)],["accent", s.accent],["key blue", s.glow],["delete", s.no],["done", s.yes]];
+  return `<table class="tbl"><tr><th>on ${t.name.toLowerCase()}</th><th>ratio</th></tr>` +
+    rows.map(([n,c])=>{const v=ratio(c,t.page);
+      return `<tr><td><span class="swatchcell"><span class="mini" style="background:${c}"></span>${n}</span></td><td class="${cls(v)}">${v.toFixed(1)}:1</td></tr>`}).join("") +
+    `</table>`;
+}
+
+document.getElementById("strip").innerHTML = THEMES.map((t,i)=>
+  `<div class="sw"><div class="chip${i===0?" on":""}" style="background:${t.page}"><span style="color:${t.ink}">Aa</span></div>${t.name}</div>`).join("");
+
+document.getElementById("cards").innerHTML = THEMES.map(t=>
+  `<div class="card">
+     <div class="cname">${t.name} <span class="hex">${t.page} · ${t.ink} · ${t.mark}</span></div>
+     ${pageMock(t)}
+     ${numbers(t)}
+   </div>`).join("");
+
+const BRIGHT = {name:"Bright red", dark:true, page:"#D8342B", ink:"#FFFFFF", ink2:"#F6C9C5", ink3:"#B02A22", surface:"#B02A22", wash:"#FFD166", mark:"—"};
+const PASTEL = THEMES.find(t=>t.name==="Blush");
+document.getElementById("brightVsPastel").innerHTML = [BRIGHT,PASTEL].map(t=>
+  `<div class="card"><div class="cname">${t.name} <span class="hex">${t.page}</span></div>${pageMock(t)}${numbers(t)}</div>`).join("");
+
+const COLS = [["ink","ink"],["accent","accent"],["glow","key blue"],["no","delete"],["yes","done"]];
+document.getElementById("matrix").innerHTML =
+  `<tr><th>paper</th>${COLS.map(c=>`<th>${c[1]}</th>`).join("")}<th>read-along</th></tr>` +
+  THEMES.concat([BRIGHT]).map(t=>{const s=SEM(t);
+    const cell = c => {const v=ratio(c,t.page); return `<td class="${cls(v)}">${v.toFixed(1)}</td>`};
+    return `<tr><td class="name"><span class="swatchcell"><span class="mini" style="background:${t.page}"></span>${t.name}</span></td>` +
+      cell(t.ink)+cell(s.accent)+cell(s.glow)+cell(s.no)+cell(s.yes) + `<td>${t.mark}</td></tr>`}).join("");
+</script>

@@ -163,9 +163,16 @@ private struct SkipControl: View {
 
     /// How long the press has to last before the button admits what it is offering.
     private static let reveal: Double = 0.18
-    /// And how long the disc then takes to fill. `reveal + fill` is the whole hold.
-    private static let fill: Double = 0.55
+    /// And how long the disc then takes to fill. `reveal + fill` is the whole hold. 0.9 rather than
+    /// the 0.55 it was (owner, 2026-09-14): the fill is the only thing telling the reader how much
+    /// longer to hold, and at half a second it was over before it had been read.
+    private static let fill: Double = 0.9
     private static let frame: CGFloat = 52
+    /// The disc the hold draws, wider than the button it grows out of — and wider than a fingertip,
+    /// which is the point (owner, 2026-09-14: "I can't see it, my finger covers it"). It is drawn
+    /// as a background, so it overhangs the 52 pt button without moving the transport; 76 stops
+    /// exactly at the play button's frame, whose own glyph is another 14 pt inside that.
+    private static let holdFrame: CGFloat = 76
     /// How far the finger may wander and still count as a tap on release.
     private static let slop: CGFloat = 24
 
@@ -178,35 +185,41 @@ private struct SkipControl: View {
     @State private var jumps = 0
 
     var body: some View {
+        Image(systemName: isHolding ? holdGlyph : glyph)
+            .font(.system(size: isHolding ? 30 : 28, weight: .regular))
+            .contentTransition(.symbolEffect(.replace))
+            .frame(width: Self.frame, height: Self.frame)
+            .background { if isHolding { disc } }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in begin() }
+                    .onEnded { value in
+                        let wandered = max(abs(value.translation.width), abs(value.translation.height)) > Self.slop
+                        end(tapping: !wandered)
+                    }
+            )
+            .sensoryFeedback(.impact(weight: .medium), trigger: jumps)
+            .accessibilityElement()
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(label)
+            .accessibilityAction { onTap() }
+            // The gesture is a hold, which VoiceOver does not do; the jump is a named action instead.
+            .accessibilityAction(named: holdLabel) { if holds { onHold() } }
+    }
+
+    /// The disc under the glyph while the hold runs, and the fill measuring it: one grey circle
+    /// growing inside another, clipped to it, so it reads as the button filling up rather than as a
+    /// circle getting bigger. The fill is a clear step off the disc — `ink3` was a grey on a grey
+    /// and the measurement disappeared into the thing it was measuring — and neither is a colour.
+    private var disc: some View {
         ZStack {
-            // The disc and its fill are drawn only while holding, and both are clipped to the
-            // circle, so the fill reads as the button filling up rather than as a circle growing.
-            Circle().fill(Tokens.surface).opacity(isHolding ? 1 : 0)
-            // A step clear of the disc it grows inside — `ink3` was a grey on a grey and the
-            // measurement disappeared into the button it was measuring — and still no colour.
-            Circle().fill(Tokens.ink2.opacity(0.7)).scaleEffect(filled).opacity(isHolding ? 1 : 0)
-            Image(systemName: isHolding ? holdGlyph : glyph)
-                .font(.system(size: isHolding ? 22 : 28, weight: .regular))
-                .contentTransition(.symbolEffect(.replace))
+            Circle().fill(Tokens.surface)
+            Circle().fill(Tokens.ink2.opacity(0.7)).scaleEffect(filled)
         }
-        .frame(width: Self.frame, height: Self.frame)
+        .frame(width: Self.holdFrame, height: Self.holdFrame)
         .clipShape(Circle())
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in begin() }
-                .onEnded { value in
-                    let wandered = max(abs(value.translation.width), abs(value.translation.height)) > Self.slop
-                    end(tapping: !wandered)
-                }
-        )
-        .sensoryFeedback(.impact(weight: .medium), trigger: jumps)
-        .accessibilityElement()
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(label)
-        .accessibilityAction { onTap() }
-        // The gesture is a hold, which VoiceOver does not do; the jump is a named action instead.
-        .accessibilityAction(named: holdLabel) { if holds { onHold() } }
+        .transition(.opacity)
     }
 
     /// The finger has landed. `onChanged` fires on every movement, so this runs once per press —

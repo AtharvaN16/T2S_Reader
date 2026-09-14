@@ -40,25 +40,41 @@ struct ReaderPreferencesSheet: View {
                         Slider(value: $preferences.lineHeight, in: ReaderPreferences.lineHeightRange, step: 0.1)
                             .tint(Tokens.ink)
                     }
+                    // Under the two sliders rather than under everything (owner, 2026-09-14):
+                    // type size, line height and the page's colour are the three things about how
+                    // the book *looks*, and the switches below them are about what it does.
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Theme").typeRole(.meta).foregroundStyle(Tokens.ink2)
+                        HStack(spacing: Spacing.grid) {
+                            ForEach(ReaderTheme.allCases, id: \.self) { theme in
+                                Pill(label: theme.rawValue.capitalized,
+                                     style: preferences.theme == theme ? .selected : .soft) {
+                                    preferences.theme = theme
+                                }
+                            }
+                        }
+                    }
                     // Two switches, both about what the Reader does rather than how it looks. Each
                     // carries a grey line saying what it governs — these are gestures and marks a
                     // reader may never have noticed, so the row has to name them before it can
                     // sensibly ask whether to keep them.
                     VStack(alignment: .leading, spacing: 20) {
                         toggle("Hold to change chapter",
-                               detail: "Press and hold a skip button to jump a chapter.",
+                               detail: "Press and hold the skip buttons to jump chapters.",
                                isOn: $preferences.holdSkipChangesChapter)
-                        toggle("Bookmark marks on the bar",
-                               detail: "Shows where this chapter's bookmarks are while you scrub.",
+                        toggle("Bookmark positions",
+                               detail: "Shows the bookmarks' positions on the scrubber.",
                                isOn: $preferences.showsBookmarkMarks)
                     }
-                }
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Theme · applies to the whole app").typeRole(.meta).foregroundStyle(Tokens.ink2)
-                    HStack(spacing: Spacing.grid) {
-                        ForEach(ReaderTheme.allCases, id: \.self) { theme in
-                            Pill(label: theme.rawValue.capitalized, style: preferences.theme == theme ? .selected : .soft) {
-                                preferences.theme = theme
+                } else {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Theme · applies to the whole app").typeRole(.meta).foregroundStyle(Tokens.ink2)
+                        HStack(spacing: Spacing.grid) {
+                            ForEach(ReaderTheme.allCases, id: \.self) { theme in
+                                Pill(label: theme.rawValue.capitalized,
+                                     style: preferences.theme == theme ? .selected : .soft) {
+                                    preferences.theme = theme
+                                }
                             }
                         }
                     }

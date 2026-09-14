@@ -83,15 +83,6 @@ struct ChapterListView: View {
     /// already in the mode — so the space goes to the one thing picking chapters one at a time
     /// cannot do quickly.
     var headerAllAction: (() -> Void)? = nil
-    /// What stands in that slot once chapters have been ticked: "Clear", which puts them all back
-    /// down without leaving the mode. It takes the pill's place rather than sitting beside it —
-    /// "Render all" would discard the very picking it is offered next to, and three controls do not
-    /// fit in one header row at phone width.
-    var headerClearAction: (() -> Void)? = nil
-    /// The way out of render mode, as the disc the way in used to occupy. The bar at the foot reads
-    /// "Done" only while nothing is picked; once it reads "Render 3 chapters" there has to be a
-    /// door that is not the commit (owner, 2026-09-14).
-    var headerCloseAction: (() -> Void)? = nil
     var onSelect: (ChapterEntry) -> Void
     var onSelectBookmark: ((BookmarkEntry) -> Void)? = nil
     var onEvict: ((ChapterEntry) -> Void)? = nil
@@ -102,26 +93,14 @@ struct ChapterListView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 10) {
                 Text("Chapters").typeRole(heading).foregroundStyle(Tokens.ink)
-                if headerClearAction != nil || headerAllAction != nil
-                    || headerCloseAction != nil || headerAction != nil {
+                if let headerAllAction {
                     Spacer(minLength: 8)
-                }
-                if let headerClearAction {
-                    Pill(label: "Clear", style: .soft, action: headerClearAction)
-                        .accessibilityLabel("Clear selection")
-                        .accessibilityHint("Unticks every chapter")
-                } else if let headerAllAction {
                     Pill(label: "Render all", glyph: "waveform", style: .soft, action: headerAllAction)
                         .accessibilityHint("Renders every chapter this device does not already have")
-                }
-                // 36 pt disc, 24 pt column: out by six, so its centre lands on the marks
-                // below rather than nine points inboard of them.
-                if let headerCloseAction {
-                    Button(action: headerCloseAction) { CircleGlyph(systemName: "xmark") }
-                        .padding(.trailing, -(36 - ChapterRow.markColumn) / 2)
-                        .accessibilityLabel("Close render mode")
-                        .accessibilityHint("Leaves without rendering anything")
                 } else if let headerAction {
+                    Spacer(minLength: 8)
+                    // 36 pt disc, 24 pt column: out by six, so its centre lands on the marks
+                    // below rather than nine points inboard of them.
                     Button(action: headerAction) { CircleGlyph(systemName: "waveform") }
                         .padding(.trailing, -(36 - ChapterRow.markColumn) / 2)
                         .accessibilityLabel("Render chapters")

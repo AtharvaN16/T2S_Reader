@@ -109,11 +109,16 @@ struct BookSheet: View {
                         bookMenu
                     }
                     .frame(maxWidth: .infinity)
-                    if isRendering {
-                        onDeviceBox
-                    } else if let job = runningHere {
-                        renderProgress(job).id(Self.progressAnchor)
+                    // Both boxes in one slot, and neither of them cross-fades into the other as the
+                    // mode turns: see `modeSwitchIsInstant`.
+                    Group {
+                        if isRendering {
+                            onDeviceBox
+                        } else if let job = runningHere {
+                            renderProgress(job).id(Self.progressAnchor)
+                        }
                     }
+                    .modeSwitchIsInstant(isRendering)
                     ChapterListView(chapters: chapters, current: resumeIndex, heading: .groupTitle,
                                     pulsing: pulsingChapter,
                                     // Render mode is about what is on the device, so the rows are
@@ -124,15 +129,8 @@ struct BookSheet: View {
                                     // mode the trailing mark says the same thing and says it louder.
                                     onDevice: isRendering ? [] : onDeviceChapters,
                                     headerAction: isRendering ? nil : { enterRendering() },
-                                    headerAllAction: isRendering && selection.isEmpty && !renderableChapters.isEmpty
+                                    headerAllAction: isRendering && !renderableChapters.isEmpty
                                         ? { renderAll(scrollingWith: proxy) } : nil,
-                                    // The same slot, once there are ticks in the list: with chapters
-                                    // in hand the useful offer is not "take everything" — which
-                                    // would throw the picking away — but to put them back down
-                                    // (owner, 2026-09-14: "clear selection has more usecases").
-                                    headerClearAction: isRendering && !selection.isEmpty
-                                        ? { clearSelection() } : nil,
-                                    headerCloseAction: isRendering ? { endRendering() } : nil,
                                     onSelect: { chapter in
                                         if isRendering { toggle(chapter.index); return }
                                         Task {
@@ -154,6 +152,7 @@ struct BookSheet: View {
                                         }
                                     },
                                     onEvict: { chapter in evict(chapter: chapter.index) })
+                    .modeSwitchIsInstant(isRendering)
                     .padding(.horizontal, -12)                                 // the rows' fill runs into the margin, as in the Reader
                     Color.clear.frame(height: Spacing.section)
                 }
@@ -180,13 +179,21 @@ struct BookSheet: View {
                 // `⋯` (owner, 2026-09-13: "there is no way to exit the render mode"). "Done" is not
                 // an invitation to nothing; it is the answer to the question the mode is asking.
                 if isRendering {
-                    // Blue the moment there is something to render (owner, 2026-09-14). The two
-                    // states of this key are not two shades of the same act: "Done" closes a mode
-                    // and is the ink key every sheet closes with, while "Render 3 chapters" spends
-                    // the phone's battery on the next ten minutes — and blue is what this app has
-                    // always called the key that starts something.
-                    BarButton(label: doneLabel, tone: selection.isEmpty ? .ink : .blue) {
-                        endRendering(startingPicked: true, scrollingWith: proxy)
+                    // The undo of the picking over the one key, never beside it — the voice sheet's
+                    // "Also make Alloy my default voice" is the shape this app gives a second
+                    // thought about the key under it (owner, 2026-09-14). A pill up in the header
+                    // was the wrong weight and the wrong place: it looked like a second answer to
+                    // the bar's question and it took "Render all"'s seat to do it.
+                    VStack(spacing: Spacing.grid) {
+                        if !selection.isEmpty { clearRow }
+                        // Blue the moment there is something to render (owner, 2026-09-14). The two
+                        // states of this key are not two shades of the same act: "Done" closes a
+                        // mode and is the ink key every sheet closes with, while "Render 3 chapters"
+                        // spends the phone's battery on the next ten minutes — and blue is what this
+                        // app has always called the key that starts something.
+                        BarButton(label: doneLabel, tone: selection.isEmpty ? .ink : .blue) {
+                            endRendering(startingPicked: true, scrollingWith: proxy)
+                        }
                     }
                     .padding(.horizontal, Spacing.margin)
                     // Air over the key, and the list fading out under it rather than being cut off
@@ -646,9 +653,28 @@ struct BookSheet: View {
 
     /// Puts every tick back down without leaving the mode. Undoing a selection a row at a time is
     /// the one thing render mode made the reader do by hand (owner, 2026-09-14), and the further
-    /// down a long book they had got, the more taps it cost to change their mind.
+    /// down a long book they had got, the more taps it cost to change their mind. With nothing
+    /// picked the key reads "Done" again, so this is also the way out of a selection you have
+    /// changed your mind about.
     private func clearSelection() {
         withAnimation(.snappy) { selection.removeAll() }
+    }
+
+    /// That undo as a quiet line over the key, in the voice sheet's `scopeTick` form: a glyph, the
+    /// words in the pill's type, and the whole row a 44 pt target so it is never hit at the height
+    /// of its own lettering. Grey, and no capsule around it — it must not read as a second key.
+    private var clearRow: some View {
+        Button { clearSelection() } label: {
+            HStack(spacing: Spacing.grid + 2) {
+                Image(systemName: "xmark.circle.fill").font(.system(size: 15, weight: .semibold))
+                Text("Clear selection").typeRole(.pill)
+            }
+            .foregroundStyle(Tokens.ink2)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Unticks every chapter")
     }
 
     /// Leaves render mode, handing whatever was picked to the app's one queue on the way out.
@@ -765,5 +791,22 @@ struct BookSheet: View {
     private func refreshAudio() async {
         guard let timeline = try? await env.library.currentTimeline(live.id) else { return }
         audio = await BookAudioStatus.read(timeline: timeline, audioStore: env.audioStore)
+    }
+}
+
+/// Turning render mode on or off changes half a dozen things at once: a box appears over the list,
+/// every row swaps the mark at its end, the on-device glyph leaves every title, the bookmark pills
+/// go, the header's control changes. Animating all of that together is what the owner saw (2026-09-14:
+/// "the animation between render mode and normal mode is very jarring with lots of ghosting"). A
+/// cross-fade reads as one thing becoming another only when it *is* one thing; a column where every
+/// row dissolves into a different row while the whole column slides under a box that is fading in is
+/// six dissolves at once, and the eye reads the overlap as a smear rather than a change.
+///
+/// So the list and the boxes change the instant the mode does. The one thing left moving is the bar
+/// at the foot — a single object arriving from an edge, which is both the one motion the switch can
+/// afford and the one that says which way it went.
+private extension View {
+    func modeSwitchIsInstant(_ isRendering: Bool) -> some View {
+        animation(nil, value: isRendering)
     }
 }

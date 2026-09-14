@@ -24,12 +24,14 @@ struct ReaderControls: View {
             .foregroundStyle(Tokens.ink2)
             Spacer()
             HStack(spacing: 12) {
-                control(
-                    "gobackward.\(preferences.skipBackSeconds)", "Back \(preferences.skipBackSeconds) seconds",
-                    size: 28, frame: 52
-                ) {
-                    Task { await player.skip(by: -Double(preferences.skipBackSeconds)) }
-                }
+                SkipControl(
+                    glyph: "gobackward.\(preferences.skipBackSeconds)",
+                    label: "Back \(preferences.skipBackSeconds) seconds",
+                    holdGlyph: "backward.end.fill", holdLabel: "Previous chapter",
+                    holds: preferences.holdSkipChangesChapter && chapter(by: -1) != nil,
+                    onTap: { Task { await player.skip(by: -Double(preferences.skipBackSeconds)) } },
+                    onHold: { jump(by: -1) }
+                )
                 Button {
                     Task { await player.togglePlay() }
                 } label: {
@@ -47,12 +49,14 @@ struct ReaderControls: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
                 .accessibilityValue(player.isCatchingUp ? (env.isWarmingUp ? "Preparing the voice" : "Buffering") : "")
-                control(
-                    "goforward.\(preferences.skipForwardSeconds)", "Forward \(preferences.skipForwardSeconds) seconds",
-                    size: 28, frame: 52
-                ) {
-                    Task { await player.skip(by: Double(preferences.skipForwardSeconds)) }
-                }
+                SkipControl(
+                    glyph: "goforward.\(preferences.skipForwardSeconds)",
+                    label: "Forward \(preferences.skipForwardSeconds) seconds",
+                    holdGlyph: "forward.end.fill", holdLabel: "Next chapter",
+                    holds: preferences.holdSkipChangesChapter && chapter(by: 1) != nil,
+                    onTap: { Task { await player.skip(by: Double(preferences.skipForwardSeconds)) } },
+                    onHold: { jump(by: 1) }
+                )
             }
             Spacer()
             Button(action: onSpeed) {
@@ -70,6 +74,19 @@ struct ReaderControls: View {
         }
         .foregroundStyle(Tokens.ink)
         .frame(height: 72)                                                 // no side padding: ends align with the circles below
+    }
+
+    /// The chapter a hold on one of the skips would land in, or nil at that end of the book — which
+    /// is what takes the hold off the button rather than letting a reader hold a dead one.
+    private func chapter(by delta: Int) -> Int? {
+        guard let index = env.player.chapterIndex else { return nil }
+        let target = index + delta
+        return env.player.chapters.contains { $0.index == target } ? target : nil
+    }
+
+    private func jump(by delta: Int) {
+        guard let target = chapter(by: delta) else { return }
+        Task { await env.player.seek(toChapter: target) }
     }
 
     /// `size` is the glyph's point size and `frame` its square tap target.
@@ -115,5 +132,121 @@ private struct TransportGlyph: View {
     /// curve and left pulsing after playback has started.
     private var breathAnimation: Animation? {
         breathing ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : nil
+    }
+}
+
+/// One of the two skips. A tap is the skip it has always been; a hold turns the button into a
+/// chapter jump (owner, 2026-09-14) — the glyph becomes the transport's own next/previous mark and
+/// a grey disc grows from the centre out under it, so the reader can see how much longer to hold
+/// and, just as importantly, that letting go now costs them nothing.
+///
+/// The morph waits `reveal` before it starts: a tap is over in about a tenth of a second, and a
+/// button that changed shape under every ordinary press would flicker all evening. Nothing is
+/// coloured — greys and the glyph's own ink, on the owner's word — because this is a measurement of
+/// a press, not a state of the book.
+///
+/// Built on one `DragGesture(minimumDistance: 0)` rather than a `Button` with a long press beside
+/// it: those two fire together on a long press, and the reader who held for a chapter would also
+/// have skipped thirty seconds on the way out of it. Here the hold cancels the tap by definition —
+/// whichever of the two happens, the other cannot.
+private struct SkipControl: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var glyph: String
+    var label: String
+    var holdGlyph: String
+    var holdLabel: String
+    /// False at the ends of the book and when the reader has turned the gesture off in Preferences:
+    /// then this is the plain skip button it was before, tap and all.
+    var holds: Bool
+    var onTap: () -> Void
+    var onHold: () -> Void
+
+    /// How long the press has to last before the button admits what it is offering.
+    private static let reveal: Double = 0.18
+    /// And how long the disc then takes to fill. `reveal + fill` is the whole hold.
+    private static let fill: Double = 0.55
+    private static let frame: CGFloat = 52
+    /// How far the finger may wander and still count as a tap on release.
+    private static let slop: CGFloat = 24
+
+    @State private var isHolding = false
+    @State private var filled: Double = 0
+    @State private var press: Task<Void, Never>?
+    /// Set when the hold completed, so the release that follows is not also a skip.
+    @State private var jumped = false
+    /// Counts completed holds, for the one bump of haptic feedback.
+    @State private var jumps = 0
+
+    var body: some View {
+        ZStack {
+            // The disc and its fill are drawn only while holding, and both are clipped to the
+            // circle, so the fill reads as the button filling up rather than as a circle growing.
+            Circle().fill(Tokens.surface).opacity(isHolding ? 1 : 0)
+            // A step clear of the disc it grows inside — `ink3` was a grey on a grey and the
+            // measurement disappeared into the button it was measuring — and still no colour.
+            Circle().fill(Tokens.ink2.opacity(0.7)).scaleEffect(filled).opacity(isHolding ? 1 : 0)
+            Image(systemName: isHolding ? holdGlyph : glyph)
+                .font(.system(size: isHolding ? 22 : 28, weight: .regular))
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .frame(width: Self.frame, height: Self.frame)
+        .clipShape(Circle())
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in begin() }
+                .onEnded { value in
+                    let wandered = max(abs(value.translation.width), abs(value.translation.height)) > Self.slop
+                    end(tapping: !wandered)
+                }
+        )
+        .sensoryFeedback(.impact(weight: .medium), trigger: jumps)
+        .accessibilityElement()
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(label)
+        .accessibilityAction { onTap() }
+        // The gesture is a hold, which VoiceOver does not do; the jump is a named action instead.
+        .accessibilityAction(named: holdLabel) { if holds { onHold() } }
+    }
+
+    /// The finger has landed. `onChanged` fires on every movement, so this runs once per press —
+    /// and `jumped` keeps it once per press even after the hold has fired, or a finger left down
+    /// would walk the book a chapter every three quarters of a second.
+    private func begin() {
+        guard press == nil, !jumped else { return }
+        press = Task {
+            guard holds else { return }
+            try? await Task.sleep(for: .seconds(Self.reveal))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.14)) { isHolding = true }
+            withAnimation(reduceMotion ? nil : .linear(duration: Self.fill)) { filled = 1 }
+            try? await Task.sleep(for: .seconds(Self.fill))
+            guard !Task.isCancelled else { return }
+            jumped = true
+            jumps += 1
+            onHold()
+            // A beat at the full disc, so the press is seen to have been answered before the
+            // button goes back to being a skip.
+            try? await Task.sleep(for: .milliseconds(160))
+            settle()
+        }
+    }
+
+    private func end(tapping: Bool) {
+        press?.cancel()
+        press = nil
+        if !jumped, tapping { onTap() }
+        jumped = false
+        settle()
+    }
+
+    /// Back to a skip button. The fill is wound down rather than dropped so a released hold reads
+    /// as abandoned, not as something that happened.
+    private func settle() {
+        press = nil
+        withAnimation(.easeOut(duration: 0.18)) {
+            isHolding = false
+            filled = 0
+        }
     }
 }

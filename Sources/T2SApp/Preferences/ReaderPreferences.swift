@@ -78,6 +78,8 @@ public final class ReaderPreferences {
         static let highlightTheme = "reader.highlightTheme"
         static let collectionLayout = "collection.layout"
         static let scrubberScope = "reader.scrubberScope"
+        static let holdSkipChapter = "reader.holdSkipChapter"
+        static let bookmarkMarks = "reader.bookmarkMarks"
         static let skipBack = "playback.skipBack"
         static let skipForward = "playback.skipForward"
         static let rate = "playback.defaultRate"
@@ -119,6 +121,19 @@ public final class ReaderPreferences {
     /// The segmented book bar is what the app has always drawn, so it stays the default.
     public var scrubberScope: ScrubberScope {
         didSet { defaults.set(scrubberScope.rawValue, forKey: Key.scrubberScope) }
+    }
+
+    /// Whether holding a skip button turns it into a chapter jump (owner, 2026-09-14). On by
+    /// default: the gesture costs a reader who never finds it nothing, since a tap is still a tap.
+    public var holdSkipChangesChapter: Bool {
+        didSet { defaults.set(holdSkipChangesChapter, forKey: Key.holdSkipChapter) }
+    }
+
+    /// Whether the Reader's scrubber wears a mark for every bookmark. On by default — it is how the
+    /// bar has always been drawn — but a heavily marked book turns the bar into a dotted line, and
+    /// the reader who does not want that should be able to say so (owner, 2026-09-14).
+    public var showsBookmarkMarks: Bool {
+        didSet { defaults.set(showsBookmarkMarks, forKey: Key.bookmarkMarks) }
     }
 
     public var skipBackSeconds: Int {
@@ -166,6 +181,8 @@ public final class ReaderPreferences {
         highlightTheme = HighlightTheme(rawValue: defaults.string(forKey: Key.highlightTheme) ?? "") ?? .amber
         collectionLayout = CollectionLayout(rawValue: defaults.string(forKey: Key.collectionLayout) ?? "") ?? .grid
         scrubberScope = ScrubberScope(rawValue: defaults.string(forKey: Key.scrubberScope) ?? "") ?? .book
+        holdSkipChangesChapter = defaults.object(forKey: Key.holdSkipChapter) as? Bool ?? true
+        showsBookmarkMarks = defaults.object(forKey: Key.bookmarkMarks) as? Bool ?? true
         skipBackSeconds = defaults.object(forKey: Key.skipBack) as? Int ?? 15
         skipForwardSeconds = defaults.object(forKey: Key.skipForward) as? Int ?? 30
         defaultRate = defaults.object(forKey: Key.rate) as? Double ?? 1.0
@@ -182,6 +199,8 @@ public final class ReaderPreferences {
         highlightTheme = .amber
         collectionLayout = .grid
         scrubberScope = .book
+        holdSkipChangesChapter = true
+        showsBookmarkMarks = true
         skipBackSeconds = 15
         skipForwardSeconds = 30
         defaultRate = 1.0

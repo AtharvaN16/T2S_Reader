@@ -30,6 +30,8 @@ struct ReaderPage: View {
     /// `player.elapsed` when `syncOffer` last appeared, so the ten-second auto-dismiss measures
     /// listening time from there rather than from playback's own start.
     @State private var offerShownAt: TimeInterval = 0
+    /// Whether the front-matter offer has had its say. See the `.task` that sets it.
+    @State private var skipOfferExpired = false
     /// The save confirmation, and the bookmark it is about so "Add a note" knows what to open.
     /// Up for four seconds after a render is asked for, then gone. See `flashRenderNotice`.
     @State private var renderNotice = false
@@ -81,7 +83,7 @@ struct ReaderPage: View {
                     }
                     .padding(.top, 12)
                     .zIndex(1)
-                } else if let skip = skipTarget, chromeVisible {
+                } else if let skip = skipTarget, chromeVisible, !skipOfferExpired {
                     // One tap past the title page, dedication and reviews to the first numbered
                     // chapter (owner's ask, 2026-09-09). Goes with the chrome, so a tap on the text
                     // dismisses it. Blue, unlike the ink "Back to current": this one moves you on
@@ -164,6 +166,16 @@ struct ReaderPage: View {
         .onChange(of: isRenderingThisBook) { _, on in if on { flashRenderNotice() } }
         .onDisappear { renderNoticeTask?.cancel() }
         .task(id: summary.id) { await open() }
+        // Eighteen seconds is an answer (owner, 2026-09-14): a reader who has listened through the
+        // front matter that long is reading it on purpose, and a pill offering to skip what they
+        // are listening to is a button that has stopped being an offer and become furniture. It
+        // does not come back — for this opening of the book, the question has been asked.
+        .task(id: skipTarget != nil) {
+            guard skipTarget != nil, !skipOfferExpired else { return }
+            try? await Task.sleep(for: .seconds(18))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.3)) { skipOfferExpired = true }
+        }
         .task(id: env.player.current?.id) {
             // Not `player.current.map { await … }`: `Optional.map`'s transform is synchronous, and
             // a closure with `await` inside cannot satisfy that (confirmed against the compiler).
@@ -184,7 +196,7 @@ struct ReaderPage: View {
             Task { await env.player.persistRenderedChapters() }
         }
         .sheet(isPresented: $showChapters) { ChapterList() }
-        .sheet(isPresented: $showAppearance) { AppearanceSheet() }
+        .sheet(isPresented: $showAppearance) { ReaderPreferencesSheet() }
         .sheet(isPresented: $showSpeed) { SpeedPicker() }
         // A page, not a sheet, and the same one the Book sheet opens (owner, 2026-09-12).
         .fullScreenCover(isPresented: $showBookmarks) {
@@ -236,7 +248,7 @@ struct ReaderPage: View {
                 Menu {
                     Button { showChapters = true } label: { Label("Chapters", systemImage: "list.bullet") }
                     Button { showBookmarks = true } label: { Label("Bookmarks", systemImage: "bookmark.circle") }
-                    Button { showAppearance = true } label: { Label("Appearance", systemImage: "textformat.size") }
+                    Button { showAppearance = true } label: { Label("Preferences", systemImage: "slider.horizontal.3") }
                     Button { showVoiceChange = true } label: { Label("Change voice", systemImage: "person.wave.2") }
                     Button { showSleepTimer = true } label: { Label("Sleep timer", systemImage: "moon.zzz") }
                     Button { showDetails = true } label: { Label("Details", systemImage: "info.circle") }
@@ -329,7 +341,7 @@ struct ReaderPage: View {
             // inside `ThinScrubber`, which lifts the bar within the same 40 pt frame.
             VStack(spacing: 10) {
                 ThinScrubber(model: player.scrubber, segments: chapterSegments,
-                             bookmarkFractions: player.bookmarkFractions,
+                             bookmarkFractions: env.preferences.showsBookmarkMarks ? player.bookmarkFractions : [],
                              scope: scrubberScope, currentChapter: player.chapterIndex,
                              onSeek: { fraction in Task { await player.seek(fraction: fraction) } },
                              onScrub: { scrubChapter = $0 })

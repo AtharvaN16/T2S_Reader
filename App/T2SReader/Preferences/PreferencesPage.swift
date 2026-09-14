@@ -104,7 +104,7 @@ struct PreferencesPage: View {
             // The "voice model removed" toast's action, tapped from any page (`Chrome.opensStorage`).
             .navigationDestination(isPresented: Bindable(chrome).opensStorage) { StoragePage() }
         }
-        .sheet(isPresented: $showAppearance) { AppearanceSheet(showsTextControls: false) }
+        .sheet(isPresented: $showAppearance) { ReaderPreferencesSheet(showsReaderControls: false) }
         .task {
             resolvedDefaultVoiceID = await env.voiceRouting.effectiveVoiceID(VoiceOption.systemDefault.id)
             await env.storage.refresh()

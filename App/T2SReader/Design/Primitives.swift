@@ -734,3 +734,54 @@ struct PositiveCheck: View {
             .accessibilityLabel("Ready to play offline")
     }
 }
+
+/// One line that never wraps: at its own width while it fits, and cut off with the last few points
+/// fading out once it does not. A tail ellipsis would be a second mark on a line that already
+/// carries a "·" separator, and it reads as part of the name it truncates — a chapter called
+/// "The Gunners…" looks like a chapter called that. The fade says "there is more of this" without
+/// spending a character to say it.
+///
+/// The line is laid out `fixedSize`, at its natural width, and a frame no wider than that width
+/// (nor than `maxWidth`) crops it: `.frame(maxWidth:)` stretches to its maximum whenever it is
+/// offered the room — which is what put a long silence between a chapter and its progress — but it
+/// cannot stretch past a maximum that is the text's own width (owner, 2026-09-14).
+///
+/// Two widths are measured to run that: what the line wants, off a hidden copy in the background
+/// (a background never sizes its parent, and `fixedSize` ignores what it is offered, so this cannot
+/// feed back into the layout), and what it was given. The fade appears only when the second is
+/// short of the first — including when the row itself is the thing that is short, on a narrow
+/// phone or at an accessibility text size, which a fixed ceiling alone would not catch.
+struct FadingLine: View {
+    var text: String
+    /// The most this line may take before it starts fading, however much room the row has beyond it.
+    var maxWidth: CGFloat
+    /// The width the line asks for, unconstrained: 0 until the first layout has measured it.
+    @State private var natural: CGFloat = 0
+    /// The width it was actually given.
+    @State private var shown: CGFloat = 0
+
+    private var line: some View {
+        Text(text).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+    }
+
+    var body: some View {
+        line
+            .frame(maxWidth: natural > 0 ? min(natural, maxWidth) : maxWidth, alignment: .leading)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { shown = $0 }
+            .mask(veil)
+            .background(alignment: .leading) {
+                line.hidden()
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { natural = $0 }
+            }
+    }
+
+    /// Opaque over the whole line, or opaque until the last fifth of it and gone by the end. In
+    /// fractions, not points, so the fade reads the same on a narrow phone as on a wide one.
+    private var veil: some View {
+        let cut = natural - shown > 0.5
+        return LinearGradient(stops: [.init(color: .black, location: 0),
+                                      .init(color: .black, location: cut ? 0.78 : 1),
+                                      .init(color: cut ? .clear : .black, location: 1)],
+                              startPoint: .leading, endPoint: .trailing)
+    }
+}

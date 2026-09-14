@@ -58,6 +58,8 @@ struct BookSheet: View {
     @State private var stopScope = 0
     /// See `trackBatch`.
     @State private var batchSize = 0
+    /// Set by `commit` when it hands chapters to the queue, spent by the progress box's `onAppear`.
+    @State private var landingOnProgress = false
 
     enum Asking { case deleteAudio, stop }
 
@@ -115,7 +117,11 @@ struct BookSheet: View {
                         if isRendering {
                             onDeviceBox
                         } else if let job = runningHere {
-                            renderProgress(job).id(Self.progressAnchor)
+                            renderProgress(job)
+                                .id(Self.progressAnchor)
+                                // The box itself says when it is on screen, which is the only
+                                // moment a scroll to it can land. See `landOnProgressBox`.
+                                .onAppear { landOnProgressBox(proxy) }
                         }
                     }
                     .modeSwitchIsInstant(isRendering)
@@ -408,6 +414,18 @@ struct BookSheet: View {
     /// off the screen mid-decision: the reader who pressed ✕ on a batch found a bare Yes, or reached
     /// for "All 3" and pressed whatever had slid into its place. A question keeps the shape it was
     /// asked in until it is answered.
+    ///
+    /// And when there is one left *of a batch*, the question says so. That case is what the owner
+    /// met (2026-09-14: "I put 2 chapters to render, and when I stopped it stopped both renders
+    /// without the option to stop only for that chp"): the heading counts the batch — "Rendering 2
+    /// of 2" — while the answers count what is still outstanding, so a first chapter finishing
+    /// quietly turned three answers into one, and the single Yes looked like it was taking the
+    /// other chapter down with it. It was not; there was nothing else left to take. "Stop the last
+    /// chapter?" is that sentence.
+    private var stopTitle: String {
+        stopScope <= 1 && batchSize > 1 ? "Stop the last chapter?" : "Stop rendering?"
+    }
+
     @ViewBuilder private func stopControls(_ job: ChapterRenderJob) -> some View {
         let outstanding = stopScope
         Pill(label: "No", style: .soft, fillsWidth: true, compact: true) { ask(nil) }
@@ -462,7 +480,7 @@ struct BookSheet: View {
         let hold = env.chapterRenderer.hold
         let asked = asking == .stop
         boxBody(
-            title: asked ? "Stop rendering?" : progressTitle(job),
+            title: asked ? stopTitle : progressTitle(job),
             titleTint: asked ? Tokens.destructive : holdTint(hold),
             trailing: asked ? nil : "\(Int((job.fraction * 100).rounded()))%",
             isAsking: asked,
@@ -696,12 +714,14 @@ struct BookSheet: View {
     /// the scroll follows its answer, because the block does not exist until there is a job for it
     /// to describe.
     ///
-    /// Asking the queue is not enough on its own, which is why the scroll waits a beat afterwards
-    /// (owner, 2026-09-14: "press done, the sheet does not go to rendering box … sometimes it
-    /// does"). `enqueue` returning means the queue holds the job, not that this sheet has been
-    /// drawn again with the block in it — and a `scrollTo` for an anchor SwiftUI has not laid out
-    /// yet is not deferred, it is dropped. The wait is what made it a coin toss: a sheet that
-    /// already had a block on screen scrolled, and a sheet that was about to grow one did nothing.
+    /// `enqueue` returning means the queue holds the job, not that this sheet has been drawn again
+    /// with the block in it — and a `scrollTo` for an anchor SwiftUI has not laid out yet is not
+    /// deferred, it is dropped. That was the coin toss the owner saw on 2026-09-14. It was answered
+    /// first with a wait, which traded one complaint for another ("remove the delay for the render
+    /// to start… it just looks like the render restarted"): the box was already up and ticking when
+    /// the page finally moved under it. The box announces itself instead — `onAppear` is exactly
+    /// the moment it is in the tree and laid out — so the move begins on the box's first frame and
+    /// there is nothing to wait for.
     private func commit(_ picked: [Int], scrollingWith proxy: ScrollViewProxy?) {
         asking = nil
         withAnimation(.snappy) {
@@ -709,15 +729,24 @@ struct BookSheet: View {
             selection.removeAll()
         }
         guard !picked.isEmpty else { return }
+        landingOnProgress = proxy != nil
         Task {
             await env.chapterRenderer.enqueue(documentID: live.id, chapters: picked)
-            guard let proxy, runningHere != nil else { return }
-            // Two frames at 60 Hz, and the bar's own exit is under way in them, so the list has
-            // settled at its new length before the scroll starts rather than during it.
-            try? await Task.sleep(for: .milliseconds(120))
-            withAnimation(.easeOut(duration: 0.45)) {
-                proxy.scrollTo(Self.progressAnchor, anchor: .center)
-            }
+            // Nothing took the work — a deleted book, an empty pick — so nothing is coming to
+            // scroll to, and the flag must not sit armed for the next render to trip over.
+            if runningHere == nil { landingOnProgress = false }
+        }
+    }
+
+    /// The scroll that puts the reader in front of what they just started, run from the progress
+    /// box's own `onAppear`. Once per commit: the box appears again whenever a render starts from
+    /// anywhere in the app — the Reader's own button, Home's row menu — and a sheet that jumped
+    /// every time would be moving for reasons the reader is not part of.
+    private func landOnProgressBox(_ proxy: ScrollViewProxy) {
+        guard landingOnProgress else { return }
+        landingOnProgress = false
+        withAnimation(.easeOut(duration: 0.3)) {
+            proxy.scrollTo(Self.progressAnchor, anchor: .center)
         }
     }
 

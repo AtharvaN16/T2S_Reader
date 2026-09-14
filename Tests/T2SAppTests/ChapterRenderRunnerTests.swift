@@ -119,6 +119,36 @@ import T2SCore
         #expect(await engine.requests.count == 2)
     }
 
+    /// Stopping one chapter is a decision about that chapter (owner, 2026-09-14). The batch behind
+    /// it was asked for separately and carries on — so the queue drains past the hole rather than
+    /// emptying with it.
+    @Test func stoppingOneChapterLeavesTheRestOfTheQueueRunning() async throws {
+        let fixtures = try AppFixtures()
+        let id = try await fixtures.importFake()
+        let engine = FakeEngine(secondsPerCharacter: 0.01)
+        let runner = makeRunner(fixtures, engine: engine)
+
+        await engine.hold()
+        await runner.enqueue(documentID: id, chapters: [0, 1])
+        var spins = 0
+        while await engine.parkedCount < 1, spins < 10_000 { await Task.yield(); spins += 1 }
+        #expect(runner.queue.count == 2)
+        #expect(runner.queue[0].state == .running)
+
+        let running = runner.queue[0].id
+        runner.cancel(running)
+        #expect(runner.queue.count == 1)                              // the job is gone, its neighbour is not
+        await engine.release()
+        await runner.awaitDrain()
+
+        // The chapter that was not cancelled rendered right through, and the queue is not held.
+        #expect(runner.queue.count == 1)
+        #expect(runner.queue[0].chapterIndex == 1)
+        #expect(runner.queue[0].state == .ready)
+        #expect(runner.hold == nil)
+        #expect(!runner.isWorking)
+    }
+
     /// Pause is the reader's hand on the same lever heat pulls: the chapter in flight keeps what it
     /// has stored, goes back to the head of the queue, and resumes from there rather than starting
     /// the chapter again.

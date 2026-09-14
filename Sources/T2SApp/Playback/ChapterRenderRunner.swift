@@ -103,8 +103,17 @@ public final class ChapterRenderRunner {
     /// one of the three views that draw it. Cleared whenever the hold changes, so a second reason
     /// to stop is a second notice.
     public private(set) var holdNoticeDismissed = false
-    /// The last drain's tally, for the toast. Nil until one drain has finished with work in it.
+    /// The last drain's tally. Nil until one drain has finished with work in it.
     public private(set) var lastCompletion: Completion?
+    /// The chapter that most recently left the queue, ready or failed. The message a reader gets is
+    /// per chapter, not per drain (owner, 2026-09-14): a chapter becoming playable is the event —
+    /// it is the thing they can act on, and it is true the moment it happens rather than whenever
+    /// the rest of the batch catches up.
+    public private(set) var lastFinished: ChapterRenderJob?
+    /// Increases with every finish. `lastFinished` alone cannot be observed reliably — rendering the
+    /// same chapter twice in a session produces two equal values, and a view watching for a change
+    /// would see one event.
+    public private(set) var finishCount = 0
 
     /// True while anything is outstanding — held included, since a held queue is work waiting, not
     /// work finished.
@@ -490,6 +499,13 @@ public final class ChapterRenderRunner {
 
     private func setState(_ jobID: String, _ state: ChapterRenderJob.State) {
         update(jobID) { $0.state = state }
+        switch state {
+        case .ready, .failed:
+            lastFinished = queue.first { $0.id == jobID }
+            finishCount += 1
+        case .queued, .running:
+            break
+        }
     }
 
     /// Waits for the drain in flight; tests only.

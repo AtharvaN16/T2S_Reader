@@ -29,11 +29,14 @@ struct EmptyShelf: View {
     var title: String
     var line: String
 
-    /// How far below the header's row the fan starts. Home and the Collection lay the shelf out in
-    /// different containers (a `List` whose header row ends `Spacing.row` down, a `VStack` spaced
-    /// `Spacing.section`), so each subtracts what its container already adds and the fan lands on
-    /// the same line on both pages (owner, 2026-09-14: "it is higher in one, align it").
-    static let topGap: CGFloat = Spacing.section + Spacing.grid
+    /// How far below the header's row the picture starts. Home and the Collection lay the shelf
+    /// out in different containers (a `List` whose header row ends `Spacing.row` down, a `VStack`
+    /// spaced `Spacing.section`), so each subtracts what its container already adds and the
+    /// picture lands on the same line on both pages (owner, 2026-09-14: "it is higher in one,
+    /// align it"). 128, not a spacing token: it puts the picture's middle a little above the
+    /// middle of the screen on a phone (about 380 pt down on 812–874), which is where the owner
+    /// asked for it ("slightly lower, just above the center") — at 48 it sat in the top third.
+    static let topGap: CGFloat = 128
 
     var body: some View {
         VStack(spacing: 0) {

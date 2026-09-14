@@ -9,9 +9,12 @@ import T2SLibrary
 /// Fully rounded pill (spec §2.4.3). `.accent` is the one primary action per screen; `.selected`
 /// is solid `ink` with `ground` text (chips); `.soft` sits on `surface` and `.destructiveSoft` on
 /// `destructiveFill` — that same grey with the red carried into it — and `.softOnInk` is the soft
-/// pill for a card that is itself `ink`, the toast.
+/// pill for a card that is itself `ink`, the toast. `.glow` is the same pill in the app's blue
+/// (`Tokens.glow`, the raised key's colour): the empty shelf's call to action, which moved from a
+/// key under the shelf to the page's own Import pill (owner, 2026-09-14: "the import button in
+/// the top right should be the blue button, only during empty state").
 struct Pill: View {
-    enum Style { case soft, selected, accent, destructiveSoft, softOnInk }
+    enum Style { case soft, selected, accent, glow, destructiveSoft, softOnInk }
 
     var label: String
     /// A quieter second word after the label — the Play pill's "2h 28m" — in the same type, dimmed.
@@ -60,7 +63,7 @@ struct Pill: View {
         switch style {
         case .soft: return Tokens.ink
         case .selected: return Tokens.ground
-        case .accent: return Tokens.onAccent
+        case .accent, .glow: return Tokens.onAccent
         case .destructiveSoft: return Tokens.destructive
         // The card's own lettering colour: `ground` is to `ink` what `ink` is to the page.
         case .softOnInk: return Tokens.ground
@@ -72,6 +75,7 @@ struct Pill: View {
         case .soft: return Tokens.surface
         case .selected: return Tokens.ink
         case .accent: return Tokens.accent
+        case .glow: return Tokens.glow
         case .destructiveSoft: return Tokens.destructiveFill
         case .softOnInk: return Tokens.surfaceOnInk
         }

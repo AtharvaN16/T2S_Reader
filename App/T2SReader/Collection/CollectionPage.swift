@@ -97,9 +97,8 @@ struct CollectionPage: View {
                     // swapping it out a frame later is what keeps a real shelf from flashing empty.
                 } else if all.isEmpty {
                     EmptyShelf(title: "Your shelf is empty",
-                               line: "Books, PDFs, links and text you import live here.",
-                               button: "Import") { showAdd = true }
-                        .padding(.top, Spacing.grid)
+                               line: "Everything you import will appear here.")
+                        .padding(.top, EmptyShelf.topGap - Spacing.section) // the stack's own spacing is the rest
                 } else if books.isEmpty {
                     Text(emptyText).typeRole(.meta).foregroundStyle(Tokens.ink2)
                 } else if layout == .grid {
@@ -208,7 +207,10 @@ struct CollectionPage: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(layout == .grid ? "Show as list" : "Show as grid")
                 }
-                Pill(label: "Import", glyph: "plus", style: .soft) { showAdd = true }
+                // Blue while the shelf is empty: the shelf's own button is gone, so this is the
+                // one way in. Grey once anything is on it — and until the first refresh lands.
+                Pill(label: "Import", glyph: "plus",
+                     style: all.isEmpty && env.libraryModel.hasLoaded ? .glow : .soft) { showAdd = true }
                     .accessibilityLabel("Import")
             }
             .padding(.top, Spacing.titleTop + 4)

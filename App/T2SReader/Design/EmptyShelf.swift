@@ -2,8 +2,10 @@
 import SwiftUI
 
 /// The empty state Home and the Collection share (the owner's reference, 2026-09-10: Klarna's
-/// "Nothing saved" — a fan of three objects over a soft pool of colour, a headline, one line, one
-/// button). The objects are three real covers, bundled: Alex Aster's *Starside* and Kate Quinn's
+/// "Nothing saved" — a fan of three objects over a soft pool of colour, a headline, one line). The
+/// button that used to sit under the line is gone (owner, 2026-09-14, from Queue's empty pages):
+/// the page's own Import pill in the top row turns blue while the page is empty instead, so there
+/// is one way in, not two, and the shelf is only the picture and the words. The objects are three real covers, bundled: Alex Aster's *Starside* and Kate Quinn's
 /// *The Astral Library*, two of 2026's popular books, behind Madeline Miller's *Circe*. Three
 /// authors, one each — the first cut had *Circe* and *The Song of Achilles*, both Miller's, and the
 /// owner asked for neither that nor a shelf with nothing new on it (2026-09-10: "don't include 2
@@ -19,8 +21,12 @@ import SwiftUI
 struct EmptyShelf: View {
     var title: String
     var line: String
-    var button: String
-    var action: () -> Void
+
+    /// How far below the header's row the fan starts. Home and the Collection lay the shelf out in
+    /// different containers (a `List` whose header row ends `Spacing.row` down, a `VStack` spaced
+    /// `Spacing.section`), so each subtracts what its container already adds and the fan lands on
+    /// the same line on both pages (owner, 2026-09-14: "it is higher in one, align it").
+    static let topGap: CGFloat = Spacing.section + Spacing.grid
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,8 +36,6 @@ struct EmptyShelf: View {
             Text(line).typeRole(.rowTitle).foregroundStyle(Tokens.ink2)
                 .padding(.top, 8)
                 .padding(.horizontal, Spacing.grid)
-            RaisedButton(label: button, glyph: "plus", action: action)
-                .padding(.top, Spacing.row)
         }
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity)

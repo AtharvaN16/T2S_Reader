@@ -29,9 +29,8 @@ struct QueuePage: View {
                         .listRowInsets(EdgeInsets())
                 } else if rows.isEmpty {
                     EmptyShelf(title: "Nothing playing yet",
-                               line: "Import a book, PDF or article and it plays right away.",
-                               button: "Import") { showAdd = true }
-                        .padding(.top, Spacing.section)
+                               line: "Everything you're listening to will appear right here.")
+                        .padding(.top, EmptyShelf.topGap - Spacing.row)     // the header row's bottom inset is the rest
                         .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
                 } else {
                     SectionHeader(title: "Continue Listening")
@@ -64,12 +63,15 @@ struct QueuePage: View {
         readerRoute.open(doc)
     }
 
-    /// Search lives on Collection now; Home's one control is the way in.
+    /// Search lives on Collection now; Home's one control is the way in. While the page is empty
+    /// it is the blue one too — the only call to action on the page, now the shelf has no button
+    /// of its own; `hasLoaded` keeps it grey until the first refresh has actually said "empty".
     private var header: some View {
-        HStack(alignment: .top) {
+        let isEmpty = rows.isEmpty && env.libraryModel.hasLoaded
+        return HStack(alignment: .top) {
             PageTitle(text: "Home")
             Spacer(minLength: 12)
-            Pill(label: "Import", glyph: "plus", style: .soft) { showAdd = true }
+            Pill(label: "Import", glyph: "plus", style: isEmpty ? .glow : .soft) { showAdd = true }
                 .accessibilityLabel("Import")
                 .padding(.top, Spacing.titleTop + 4)
         }

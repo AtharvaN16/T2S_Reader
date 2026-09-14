@@ -12,9 +12,15 @@ import T2SApp
 /// air between them doing what the instruction line used to: nothing else is asked of you here, so
 /// there is nothing left to explain.
 struct SleepTimerSheet: View {
-    /// The Reader's paper when this sheet was opened from the Reader; the app's greys otherwise.
-    @Environment(\.readerPalette) private var palette
     @Environment(AppEnvironment.self) private var env
+    /// True when the Reader presented this, and so when it should wear the book's paper.
+    var wearsPaper = false
+
+    /// Read from the model on every pass rather than taken from the environment at presentation
+    /// (owner, 2026-09-14: "the UI sheets does not update when switching"). A sheet is its own
+    /// presentation: a value handed to it when it opened is the value it keeps, and changing the
+    /// paper or the light behind it left every sheet painted in the old one.
+    private var palette: ReaderPalette { wearsPaper ? ReaderPalette(env.preferences.readerPaper) : .app }
     @Environment(\.dismiss) private var dismiss
     @State private var selected: SleepOption = .minutes(30)
 
@@ -67,6 +73,11 @@ struct SleepTimerSheet: View {
         // `presentationBackground`, not `.background`: the content is only as wide as it needs to
         // be, so a background painted on it left the sheet's own sides unfilled (owner, 2026-09-12).
         .presentationBackground(palette.sheet)
+        // Each presentation carries the app's light/dark itself: an override set back on the pager
+        // is applied to a sheet when it opens and not again, so flipping it under an open sheet
+        // repainted the page behind and left the sheet as it was.
+        .appTheme()
+        .environment(\.readerPalette, palette)
         // A shade taller than `.medium` (owner, 2026-09-12: the grid at its new height, and air
         // between it and the key). Medium is a fixed fraction of the screen, and at that height the
         // card all but touched the key; this is the fraction the content actually asks for.

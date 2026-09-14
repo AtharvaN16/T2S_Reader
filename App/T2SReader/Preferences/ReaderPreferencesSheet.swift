@@ -17,12 +17,18 @@ struct ReaderPreferencesSheet: View {
     @Environment(AppEnvironment.self) private var env
     /// The Reader's paper. The sheet that chooses a paper had better be drawn on one (owner,
     /// 2026-09-14) — and from Settings, where there is no Reader, this is the app's own greys.
-    @Environment(\.readerPalette) private var palette
     /// Only consulted while the app-wide switch still says `system`; see `showsDarkFaces`.
     @Environment(\.colorScheme) private var scheme
     /// Everything that only means something while a book is open: the two sliders and the two
     /// switches. Off in Settings, which shows the theme alone.
     var showsReaderControls: Bool = true
+
+    /// The Reader's presentation wears the book's paper; Settings' wears the app's greys. Read from
+    /// the model here rather than handed in, so changing the paper — or the light behind it —
+    /// repaints the sheet that is doing the changing (owner, 2026-09-14).
+    private var palette: ReaderPalette {
+        showsReaderControls ? ReaderPalette(env.preferences.readerPaper) : .app
+    }
 
     var body: some View {
         @Bindable var preferences = env.preferences
@@ -77,6 +83,8 @@ struct ReaderPreferencesSheet: View {
             .padding(.bottom, Spacing.section)
         }
         .presentationBackground(palette.sheet)
+        .appTheme()                                                    // this sheet owns the switch; it had better follow it
+        .environment(\.readerPalette, palette)
         .presentationDetents([.medium, .large])
         .presentationCornerRadius(Spacing.sheetCorner)
     }
@@ -123,8 +131,8 @@ struct ReaderPreferencesSheet: View {
     }
 
     /// The sixteen papers, in their two families (palette:
-    /// `docs/design/2026-09-14-reader-papers-16.html`; the picker: `…-paper-picker.html`). Quiet
-    /// first, because a book is the ordinary case; loud under it, under its own word.
+    /// `docs/design/2026-09-14-reader-papers-16.html`; the picker: `…-paper-picker.html`). Zen
+    /// first, because a book is the ordinary case; pop under it, under its own word.
     ///
     /// One face per swatch — the one the app is in — and one letter in that face's ink. The split
     /// chip that came before showed a paper, its night face, and what text looked like on both, at
@@ -134,18 +142,40 @@ struct ReaderPreferencesSheet: View {
     /// against the pink-white. The name goes to the heading, where one of them is enough.
     @ViewBuilder private func papers(_ choice: Binding<ReaderPaper>) -> some View {
         VStack(alignment: .leading, spacing: 20) {
+            // One line for the section, the chosen paper's name, and the way back. `Paper` is the
+            // page the app has always drawn, so it says so rather than repeating its own name
+            // (owner, 2026-09-14) — and while you are anywhere else, the same slot is the door
+            // home. A reader who tried Magenta at midnight should not have to remember which of
+            // sixteen they started on.
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("Paper").typeRole(.meta).foregroundStyle(palette.ink2)
+                Text(choice.wrappedValue == .paper ? "· Default" : "· \(choice.wrappedValue.title)")
+                    .typeRole(.meta).foregroundStyle(palette.ink)
+                    .contentTransition(.opacity)
+                Spacer(minLength: 8)
+                if choice.wrappedValue != .paper {
+                    Button {
+                        withAnimation(.snappy(duration: 0.2)) { choice.wrappedValue = .paper }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "arrow.uturn.backward").font(.system(size: 11, weight: .semibold))
+                            Text("Default").typeRole(.fine)
+                        }
+                        .foregroundStyle(palette.ink2)
+                        .padding(.horizontal, 10)
+                        .frame(minHeight: 32)
+                        .background(palette.surface, in: Capsule())
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Back to the default paper")
+                    .transition(.opacity)
+                }
+            }
             ForEach([ReaderPaper.Family.zen, .pop], id: \.self) { family in
                 VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(family == .zen ? "Quiet" : "Loud")
-                            .typeRole(.meta).foregroundStyle(palette.ink2)
-                        // The chosen paper names itself once, beside its own family.
-                        if choice.wrappedValue.family == family {
-                            Text("· \(choice.wrappedValue.title)")
-                                .typeRole(.meta).foregroundStyle(palette.ink)
-                                .contentTransition(.opacity)
-                        }
-                    }
+                    Text(family == .zen ? "Zen" : "Pop")
+                        .typeRole(.fine).foregroundStyle(palette.ink2)
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4),
                               spacing: 14) {
                         ForEach(ReaderPaper.all(family), id: \.self) { paper in

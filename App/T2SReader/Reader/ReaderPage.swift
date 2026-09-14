@@ -163,6 +163,10 @@ struct ReaderPage: View {
             }
         }
         .environment(\.readerPalette, palette)
+        // The Reader is a `fullScreenCover`, which is its own presentation: the pager's copy of the
+        // app-wide light and dark cannot reach it, and an override applied when it opened is not
+        // re-applied when the reader flips the switch inside it (owner, 2026-09-14).
+        .appTheme()
         // The queue holds while a book is being read as often as while the book sheet is up, and
         // the Reader is a `fullScreenCover` over the pager, so the pager's copy cannot reach here.
         .renderHoldSheet()
@@ -202,14 +206,14 @@ struct ReaderPage: View {
         }
         // The Reader's sheets are the book's, not the app's: each takes the page's paper with it
         // (owner, 2026-09-14). A sheet does not inherit this on its own, so each is handed it.
-        .sheet(isPresented: $showChapters) { ChapterList().environment(\.readerPalette, palette) }
-        .sheet(isPresented: $showAppearance) { ReaderPreferencesSheet().environment(\.readerPalette, palette) }
-        .sheet(isPresented: $showSpeed) { SpeedPicker().environment(\.readerPalette, palette) }
+        .sheet(isPresented: $showChapters) { ChapterList() }
+        .sheet(isPresented: $showAppearance) { ReaderPreferencesSheet() }
+        .sheet(isPresented: $showSpeed) { SpeedPicker(wearsPaper: true) }
         // A page, not a sheet, and the same one the Book sheet opens (owner, 2026-09-12).
         .fullScreenCover(isPresented: $showBookmarks) {
             if let current = env.player.current { BookmarksPage(summary: current) }
         }
-        .sheet(isPresented: $showSleepTimer) { SleepTimerSheet().environment(\.readerPalette, palette) }
+        .sheet(isPresented: $showSleepTimer) { SleepTimerSheet(wearsPaper: true) }
         .sheet(isPresented: $showVoiceChange) {
             if let current = env.player.current { VoiceChangeSheet(summary: current) }
         }

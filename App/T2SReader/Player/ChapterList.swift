@@ -8,9 +8,10 @@ import T2SCore
 struct ChapterList: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
-    /// The Reader's paper, injected by the page that presented this (owner, 2026-09-14). A chapter
-    /// list opened over a sepia book belongs to that book, not to the app around it.
-    @Environment(\.readerPalette) private var palette
+    /// The Reader's paper. Read from the model on every pass, not taken from the environment at
+    /// presentation: a sheet is its own presentation and keeps whatever it was handed when it
+    /// opened (owner, 2026-09-14: "the UI sheets does not update when switching").
+    private var palette: ReaderPalette { ReaderPalette(env.preferences.readerPaper) }
     /// Which chapters the device holds in full. Read once when the sheet opens (owner, 2026-09-14:
     /// "make sure chapters that have been rendered are also visible in the chapter sheet in the
     /// reader"). It was left out on the argument that this list is about listening and has no
@@ -45,6 +46,7 @@ struct ChapterList: View {
         // gives the bounce back the moment there are rows enough to need it.
         .scrollBounceBehavior(.basedOnSize)
         .background(palette.sheet)
+        .appTheme()                                                    // the sheet carries the app's light/dark itself
         .presentationDetents([.medium, .large])
         .presentationCornerRadius(Spacing.sheetCorner)
         // The coordinator's timeline, not a fresh read of the library: this book is loaded, so the
@@ -70,7 +72,7 @@ struct ChapterList: View {
 struct ChapterListView: View {
     /// The paper, when this list is the Reader's. The Book sheet's copy is an app surface and takes
     /// the app's greys, which is what `variant` decides below — one component, two worlds.
-    @Environment(\.readerPalette) private var readerPalette
+    @Environment(AppEnvironment.self) private var env
     /// Which sheet the list is standing in. The two are deliberately one component — a chapter
     /// should read the same wherever you meet it — but they are not the same *sheet*, and the owner
     /// asked for that difference to have a name so either side can be changed on purpose rather
@@ -125,7 +127,9 @@ struct ChapterListView: View {
 
     @State private var expanded: Set<Int> = []
 
-    private var palette: ReaderPalette { variant == .reader ? readerPalette : .app }
+    private var palette: ReaderPalette {
+        variant == .reader ? ReaderPalette(env.preferences.readerPaper) : .app
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

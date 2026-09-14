@@ -4,9 +4,12 @@ import T2SApp
 /// Vertical 0.5x–4.0x speed selector. Rates past the coordinator's sustainable threshold are
 /// visibly unavailable rather than silently clamped.
 struct SpeedPicker: View {
-    /// The Reader's paper when this sheet was opened from the Reader; the app's greys otherwise.
-    @Environment(\.readerPalette) private var palette
     @Environment(AppEnvironment.self) private var env
+    /// True when the Reader presented this. See `SleepTimerSheet.palette` for why it is read here
+    /// rather than taken from the environment.
+    var wearsPaper = false
+
+    private var palette: ReaderPalette { wearsPaper ? ReaderPalette(env.preferences.readerPaper) : .app }
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -54,6 +57,8 @@ struct SpeedPicker: View {
             .padding(.horizontal, Spacing.margin)
         }
         .background(palette.sheet)
+        .appTheme()
+        .environment(\.readerPalette, palette)
         .presentationDetents([.medium, .large])
         .presentationCornerRadius(Spacing.sheetCorner)
     }

@@ -4,8 +4,8 @@ import SwiftUI
 /// The empty state Home and the Collection share (the owner's reference, 2026-09-10: Klarna's
 /// "Nothing saved" — a fan of three objects over a soft pool of colour, a headline, one line). The
 /// button that used to sit under the line is gone (owner, 2026-09-14, from Queue's empty pages):
-/// the page's own Import pill in the top row turns blue while the page is empty instead, so there
-/// is one way in, not two, and the shelf is only the picture and the words. The objects are three real covers, bundled: Alex Aster's *Starside* and Kate Quinn's
+/// the page's own Import control in the top row becomes the raised blue key while the page is
+/// empty instead, so there is one way in, not two, and the shelf is only the picture and the words. The objects are three real covers, bundled: Alex Aster's *Starside* and Kate Quinn's
 /// *The Astral Library*, two of 2026's popular books, behind Madeline Miller's *Circe*. Three
 /// authors, one each — the first cut had *Circe* and *The Song of Achilles*, both Miller's, and the
 /// owner asked for neither that nor a shelf with nothing new on it (2026-09-10: "don't include 2
@@ -17,8 +17,15 @@ import SwiftUI
 /// angles rather than three pictures laid flat (the owner, on the first cut: "use our book mockup
 /// for the covers"). They rise into place one after another when the page appears, and the one in
 /// front keeps a slow breath after. The pool under them is `glowFaint`, the same blue as the
-/// warm-up's light and the button below.
+/// warm-up's light and the raised key in the page's top row.
 struct EmptyShelf: View {
+    /// Which picture stands over the pool. The Collection keeps the fan — three covers standing at
+    /// angles, a shelf with things on it. Home has its own: the same three books small, stacked as
+    /// rows with a grey line or two beside each, the queue it will be (owner, 2026-09-14, from the
+    /// reference's Queue and Collection pages: "use different graphic for home and collection").
+    enum Graphic { case fan, rows }
+
+    var graphic: Graphic
     var title: String
     var line: String
 
@@ -30,7 +37,16 @@ struct EmptyShelf: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            CoverFan()
+            // One frame for both pictures, so the headline lands on the same line on both pages.
+            ZStack {
+                Pool()
+                switch graphic {
+                case .fan: CoverFan()
+                case .rows: RowStack()
+                }
+            }
+            .frame(height: 230)
+            .accessibilityHidden(true)
             Text(title).typeRole(.playerTitle).foregroundStyle(Tokens.ink)
                 .padding(.top, Spacing.row)
             Text(line).typeRole(.rowTitle).foregroundStyle(Tokens.ink2)
@@ -76,17 +92,6 @@ private struct CoverFan: View {
 
     var body: some View {
         ZStack {
-            // A circle of light squashed to a pool, fully faded before its own edge, so nothing
-            // about its frame shows — a hard-cut rectangle did, faintly, at the first look.
-            Circle()
-                .fill(RadialGradient(stops: [
-                    .init(color: Tokens.glowSoft, location: 0),
-                    .init(color: Tokens.glowFaint, location: 0.45),
-                    .init(color: Tokens.glowFaint.opacity(0), location: 1),
-                ], center: .center, startRadius: 0, endRadius: 170))
-                .frame(width: 340, height: 340)
-                .scaleEffect(x: 1, y: 0.68)
-                .offset(y: 12)
             ForEach(Array(Self.books.enumerated()), id: \.offset) { index, book in
                 let isHero = index == Self.hero
                 let moves = !reduceMotion
@@ -103,7 +108,6 @@ private struct CoverFan: View {
                     .animation(isHero ? .easeInOut(duration: 2.8).repeatForever(autoreverses: true) : nil, value: breathing)
             }
         }
-        .frame(height: 230)
         .onAppear { settled = true }
         .task {
             // The breath starts once the hero has landed; it is never part of the entrance.
@@ -111,6 +115,69 @@ private struct CoverFan: View {
             try? await Task.sleep(for: .seconds(1.3))
             breathing = true
         }
-        .accessibilityHidden(true)
+    }
+}
+
+/// The pool of light under either picture: a circle squashed to a pool, fully faded before its
+/// own edge, so nothing about its frame shows — a hard-cut rectangle did, faintly, at the first look.
+private struct Pool: View {
+    var body: some View {
+        Circle()
+            .fill(RadialGradient(stops: [
+                .init(color: Tokens.glowSoft, location: 0),
+                .init(color: Tokens.glowFaint, location: 0.45),
+                .init(color: Tokens.glowFaint.opacity(0), location: 1),
+            ], center: .center, startRadius: 0, endRadius: 170))
+            .frame(width: 340, height: 340)
+            .scaleEffect(x: 1, y: 0.68)
+            .offset(y: 12)
+    }
+}
+
+/// Home's picture: the same three books as small covers, one under another, each with a title line
+/// and a shorter second line in grey beside it — three rows of the queue this page will be, the
+/// way the reference draws three episodes with their artwork. The lines are `ink3`, the colour of
+/// a divider, so they read as the shape of text and not as words the reader missed. The rows
+/// slide in from the left one after another when the page appears; with Reduce Motion on they
+/// only fade in together.
+private struct RowStack: View {
+    @Environment(AppEnvironment.self) private var env
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var settled = false
+
+    private struct Row {
+        var asset: String
+        var title: String
+        /// The two grey lines' widths: a title and a shorter line under it, no two rows alike.
+        var lines: (CGFloat, CGFloat)
+        var delay: Double
+    }
+
+    private static let rows = [
+        Row(asset: "EmptyCoverCirce", title: "Circe", lines: (96, 60), delay: 0),
+        Row(asset: "EmptyCoverStarside", title: "Starside", lines: (120, 72), delay: 0.12),
+        Row(asset: "EmptyCoverAstralLibrary", title: "The Astral Library", lines: (80, 52), delay: 0.24),
+    ]
+    private static let coverHeight: CGFloat = 50
+
+    var body: some View {
+        let moves = !reduceMotion
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(Array(Self.rows.enumerated()), id: \.offset) { index, row in
+                HStack(spacing: 12) {
+                    BookCover(relativePath: nil, paths: env.paths, height: Self.coverHeight, title: row.title, asset: row.asset)
+                        .shelved
+                    VStack(alignment: .leading, spacing: 7) {
+                        Capsule().fill(Tokens.ink3).frame(width: row.lines.0, height: 8)
+                        Capsule().fill(Tokens.ink3).frame(width: row.lines.1, height: 8)
+                    }
+                }
+                .offset(x: settled || !moves ? 0 : -28)
+                .opacity(settled ? 1 : 0)
+                .animation(moves ? .spring(response: 0.6, dampingFraction: 0.8).delay(row.delay)
+                                 : .easeOut(duration: 0.35), value: settled)
+            }
+        }
+        .onAppear { settled = true }
     }
 }

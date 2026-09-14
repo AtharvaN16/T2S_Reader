@@ -96,7 +96,7 @@ struct CollectionPage: View {
                     // until it lands. Waiting here rather than showing the empty state and
                     // swapping it out a frame later is what keeps a real shelf from flashing empty.
                 } else if all.isEmpty {
-                    EmptyShelf(title: "Your shelf is empty",
+                    EmptyShelf(graphic: .fan, title: "Your shelf is empty",
                                line: "Everything you import will appear here.")
                         .padding(.top, EmptyShelf.topGap - Spacing.section) // the stack's own spacing is the rest
                 } else if books.isEmpty {
@@ -207,11 +207,17 @@ struct CollectionPage: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(layout == .grid ? "Show as list" : "Show as grid")
                 }
-                // Blue while the shelf is empty: the shelf's own button is gone, so this is the
-                // one way in. Grey once anything is on it — and until the first refresh lands.
-                Pill(label: "Import", glyph: "plus",
-                     style: all.isEmpty && env.libraryModel.hasLoaded ? .glow : .soft) { showAdd = true }
-                    .accessibilityLabel("Import")
+                // The raised blue key while the shelf is empty: the shelf's own button is gone,
+                // so this is the one way in. The grey pill once anything is on it — and until the
+                // first refresh lands.
+                Group {
+                    if all.isEmpty, env.libraryModel.hasLoaded {
+                        RaisedButton(label: "Import", glyph: "plus", tone: .blue, size: .compact) { showAdd = true }
+                    } else {
+                        Pill(label: "Import", glyph: "plus", style: .soft) { showAdd = true }
+                    }
+                }
+                .accessibilityLabel("Import")
             }
             .padding(.top, Spacing.titleTop + 4)
         }

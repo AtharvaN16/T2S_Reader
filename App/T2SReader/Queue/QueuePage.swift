@@ -28,7 +28,7 @@ struct QueuePage: View {
                     EmptyView()
                         .listRowInsets(EdgeInsets())
                 } else if rows.isEmpty {
-                    EmptyShelf(title: "Nothing playing yet",
+                    EmptyShelf(graphic: .rows, title: "Nothing playing yet",
                                line: "Everything you're listening to will appear right here.")
                         .padding(.top, EmptyShelf.topGap - Spacing.row)     // the header row's bottom inset is the rest
                         .listRowInsets(EdgeInsets(top: 0, leading: Spacing.margin, bottom: Spacing.row, trailing: Spacing.margin))
@@ -64,16 +64,23 @@ struct QueuePage: View {
     }
 
     /// Search lives on Collection now; Home's one control is the way in. While the page is empty
-    /// it is the blue one too — the only call to action on the page, now the shelf has no button
-    /// of its own; `hasLoaded` keeps it grey until the first refresh has actually said "empty".
+    /// it is the raised blue key — the only call to action on the page, now the shelf has no
+    /// button of its own (owner, 2026-09-14: "use raised blue button for import"); `hasLoaded`
+    /// keeps it the grey pill until the first refresh has actually said "empty".
     private var header: some View {
         let isEmpty = rows.isEmpty && env.libraryModel.hasLoaded
         return HStack(alignment: .top) {
             PageTitle(text: "Home")
             Spacer(minLength: 12)
-            Pill(label: "Import", glyph: "plus", style: isEmpty ? .glow : .soft) { showAdd = true }
-                .accessibilityLabel("Import")
-                .padding(.top, Spacing.titleTop + 4)
+            Group {
+                if isEmpty {
+                    RaisedButton(label: "Import", glyph: "plus", tone: .blue, size: .compact) { showAdd = true }
+                } else {
+                    Pill(label: "Import", glyph: "plus", style: .soft) { showAdd = true }
+                }
+            }
+            .accessibilityLabel("Import")
+            .padding(.top, Spacing.titleTop + 4)
         }
     }
 }

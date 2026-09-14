@@ -775,13 +775,77 @@ struct FadingLine: View {
             }
     }
 
-    /// Opaque over the whole line, or opaque until the last fifth of it and gone by the end. In
+    private var veil: some View { FadingTail.veil(cut: natural - shown > 0.5) }
+}
+
+/// The tail fade itself, shared by the one-line and the wrapped kinds so a truncated chapter and a
+/// truncated title dissolve over the same distance.
+enum FadingTail {
+    /// Opaque over the whole width, or opaque until the last fifth of it and gone by the end. In
     /// fractions, not points, so the fade reads the same on a narrow phone as on a wide one.
+    static func veil(cut: Bool) -> LinearGradient {
+        LinearGradient(stops: [.init(color: .black, location: 0),
+                               .init(color: .black, location: cut ? 0.78 : 1),
+                               .init(color: cut ? .clear : .black, location: 1)],
+                       startPoint: .leading, endPoint: .trailing)
+    }
+}
+
+/// The same idea as [FadingLine] for text that wraps: up to `lines` lines, and if the words run
+/// past that, the last line dissolves at its end instead of stopping at an ellipsis. `.lineLimit`
+/// alone cannot do it — the "…" is the only ending it knows — so the block is laid out with no
+/// limit at all and cropped to the height of exactly `lines` lines, which leaves the last visible
+/// line full rather than shortened to make room for a character.
+///
+/// Three heights are measured off hidden copies in the background, all of them at the width the
+/// block was given (a background is proposed its parent's size and never sizes the parent back):
+/// what the words want, what `lines` lines of them come to, and what one line comes to. The first
+/// two decide whether anything was cut; the third places the fade over the last line only, so the
+/// line above it keeps its final word at full strength.
+///
+/// The font, tracking and line spacing all arrive through the environment, so a caller styles this
+/// exactly as it would style a `Text`: `FadingParagraph(...).typeRole(.rowTitle)`.
+struct FadingParagraph: View {
+    var text: String
+    /// How many lines are allowed before the fade.
+    var lines: Int
+    /// The height the words want, unconstrained.
+    @State private var natural: CGFloat = 0
+    /// The height `lines` lines come to, and the height of one line.
+    @State private var allowed: CGFloat = 0
+    @State private var lineHeight: CGFloat = 0
+
+    /// `.lineLimit(nil)` is not redundant: `typeRole(.rowTitle)` puts a limit of 2 in the
+    /// environment, and a block that stops at two lines can never be found to be taller than two.
+    private func block(_ string: String) -> some View {
+        Text(string)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    var body: some View {
+        block(text)
+            .frame(height: allowed > 0 ? min(natural, allowed) : nil, alignment: .top)
+            .mask(veil)
+            .background(alignment: .topLeading) { ruler(text) { natural = $0 } }
+            // Real lines of the real font, not a number multiplied out: the gap between two lines
+            // is the environment's to set, and only a second line can report it.
+            .background(alignment: .topLeading) { ruler(String(repeating: "A\n", count: lines).dropLast()) { allowed = $0 } }
+            .background(alignment: .topLeading) { ruler("A") { lineHeight = $0 } }
+    }
+
+    private func ruler(_ string: some StringProtocol, into: @escaping (CGFloat) -> Void) -> some View {
+        block(String(string))
+            .hidden()
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { into($0) }
+    }
+
+    /// Full strength down to the last line, and the fade across that line alone.
     private var veil: some View {
-        let cut = natural - shown > 0.5
-        return LinearGradient(stops: [.init(color: .black, location: 0),
-                                      .init(color: .black, location: cut ? 0.78 : 1),
-                                      .init(color: cut ? .clear : .black, location: 1)],
-                              startPoint: .leading, endPoint: .trailing)
+        VStack(spacing: 0) {
+            Color.black.frame(maxHeight: .infinity)
+            FadingTail.veil(cut: natural - allowed > 0.5).frame(height: lineHeight)
+        }
     }
 }

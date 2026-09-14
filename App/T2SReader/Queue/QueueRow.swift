@@ -113,25 +113,23 @@ struct QueueRow: View {
                         .foregroundStyle(Tokens.ink2)
                         .padding(.bottom, 4)                                              // it labels the title under it, so it sits with it
 
-                        Text(summary.document.title)
+                        // Two lines, as `rowTitle` has always allowed — but a third one dissolves
+                        // at the end of the second rather than stopping at an ellipsis, the way the
+                        // chapter above it does (owner, 2026-09-14).
+                        FadingParagraph(text: summary.document.title, lines: 2)
                             .typeRole(.rowTitle)                                   // the Settings rows' face, by the owner's eye
                             .foregroundStyle(Tokens.ink)
                             .multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
 
                         if let excerpt = glimpse?.excerpt, !excerpt.isEmpty {
-                            Text(excerpt)
+                            FadingParagraph(text: excerpt, lines: 2)
                                 // The real face, not `.italic()`: that asks for a trait the system
                                 // fonts carry, and a `Font.custom` face without one is left upright.
                                 // And no `typeRole(.meta)` above it — see the chapter line: the role
                                 // would win and this face would never be reached (owner, 2026-09-11).
                                 .font(.custom("Inter-Italic", size: 13, relativeTo: .footnote))
-                                .lineLimit(2)
-                                .truncationMode(.tail)
                                 .foregroundStyle(Tokens.ink2)
                                 .multilineTextAlignment(.leading)
-                                .fixedSize(horizontal: false, vertical: true)      // wraps to its 2 lines instead of hugging 1
-                                .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.top, 7)                                  // its own top, so a row without one keeps the 18 below
                         }
                     }

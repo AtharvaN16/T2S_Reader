@@ -127,8 +127,11 @@ struct RootPager: View {
                 }
                 // Above the mini-player, where a message about what was just tapped belongs; the
                 // Reader draws the same toast over its own page while it is up.
+                // Clear of the mini-player, not stacked on it (owner, 2026-09-14: "animate it a bit
+                // higher"). At 8 pt the toast's card and the player's capsule read as one column of
+                // chrome; a band of page between them is what says the message is not transport.
                 ToastHost()
-                    .padding(.bottom, Spacing.grid + 96)
+                    .padding(.bottom, Spacing.grid + 152)
             }
             .animation(.snappy, value: chrome.isSubpageOpen)
         }
@@ -217,9 +220,12 @@ struct RootPager: View {
         // One message when the queue empties, not one per chapter, and from here rather than the
         // Book sheet: the queue outlives the sheet, so the reader who started it and swiped away is
         // the one who most needs telling.
-        .onChange(of: env.chapterRenderer.lastCompletion) { _, completion in
-            guard let completion else { return }
-            showRenderToast(completion)
+        // Per chapter, not per drain (owner, 2026-09-14). A chapter becoming playable is the
+        // event worth a message: it is the thing the reader can act on, and "3 chapters ready"
+        // was a summary of something that had already stopped being news twice over.
+        .onChange(of: env.chapterRenderer.finishCount) { _, _ in
+            guard let job = env.chapterRenderer.lastFinished else { return }
+            showRenderToast(job)
         }
         .onChange(of: env.preferences.defaultRate) { _, rate in
             env.player.setRate(rate)
@@ -328,22 +334,38 @@ struct RootPager: View {
         Task { await env.libraryModel.refresh() }
     }
 
-    /// The one message a drain earns, with the one thing worth doing about it: audio that is ready
-    /// is ready *to play*, so the toast offers to play it (owner, 2026-09-13). Only when everything
-    /// that finished belongs to one book — a mixed drain has no single thing a Play could mean.
-    private func showRenderToast(_ completion: ChapterRenderRunner.Completion) {
-        let ready = env.chapterRenderer.queue.filter { $0.state == .ready }
-        let ids = Set(ready.map(\.documentID))
-        let summary = ids.count == 1 ? env.libraryModel.summaries.first { $0.id == ids.first } : nil
-        // One chapter of a book plays from that chapter; anything else picks the book up where the
-        // reader left it, which is what the Play pill everywhere else in the app does.
-        let chapter = ready.count == 1 ? ready[0].chapterIndex : nil
-        let content = Self.renderToast(completion, queue: env.chapterRenderer.queue,
-                                       chapters: summary.flatMap { env.libraryModel.progress(for: $0.id)?.chapterCount } ?? 0,
-                                       canPlay: summary != nil)
-        env.toasts.show(content, action: summary.map { book in
-            { playRendered(book, chapter: chapter) }
-        })
+    /// The one message a finished chapter earns, with the one thing worth doing about it: audio
+    /// that is ready is ready *to play*, so the toast offers to play it. The cover carries the
+    /// book, which frees the line under the headline to name the chapter alone.
+    private func showRenderToast(_ job: ChapterRenderJob) {
+        guard let book = env.libraryModel.summaries.first(where: { $0.id == job.documentID }) else { return }
+        let cover = ToastContent.Cover(relativePath: book.document.coverImagePath,
+                                       title: book.document.title,
+                                       isPDF: book.document.sourceType == .pdf)
+        let chapters = env.libraryModel.progress(for: book.id)?.chapterCount ?? 0
+        // A document with one chapter is not a book with a chapter in it — an article, or a PDF the
+        // reader imported — and its one piece has no name worth printing, so the line takes the
+        // document's own title instead.
+        let hasChapters = chapters > 1
+        let name = hasChapters ? ChapterLabel.text(for: job.title, ordinal: job.chapterIndex + 1)
+                               : book.document.title
+
+        if case .failed(let message) = job.state {
+            env.toasts.show(ToastContent(title: hasChapters ? "Chapter couldn't be rendered"
+                                                            : "Couldn't be rendered",
+                                         detail: message, actionLabel: nil, cover: cover))
+            return
+        }
+        // The sentence, not the label: "Chapter 4: The Siege of Delhi has finished rendering" says
+        // both which one and what happened to it, where a bare name left the second half to the
+        // headline (owner, 2026-09-14).
+        env.toasts.show(ToastContent(title: hasChapters ? "Chapter ready to play"
+                                                        : "Document ready to play",
+                                     detail: "\(name) has finished rendering",
+                                     actionLabel: "Play", actionGlyph: "play.fill",
+                                     actionIsGlyph: true, cover: cover)) {
+            playRendered(book, chapter: hasChapters ? job.chapterIndex : nil)
+        }
     }
 
     /// Opens the book and starts it, from the chapter that was just made when there is one.
@@ -354,36 +376,6 @@ struct RootPager: View {
             if !env.player.isPlaying { await env.player.togglePlay() }
             readerDocument = summary
         }
-    }
-
-    /// What one drain of the chapter queue came to. A chapter that failed carries its own sentence
-    /// — how many sentences never became audio, or why the book could not be read — so the detail
-    /// line quotes it rather than saying "something went wrong": the reader can act on the first
-    /// and not on the second.
-    private static func renderToast(_ completion: ChapterRenderRunner.Completion,
-                                    queue: [ChapterRenderJob],
-                                    chapters: Int, canPlay: Bool) -> ToastContent {
-        let reason = queue.compactMap { job -> String? in
-            if case .failed(let message) = job.state { return message }
-            return nil
-        }.last
-        // A document with one chapter is not a book with a chapter in it — an article, or a PDF the
-        // reader imported — and calling its one piece "1 chapter" is the app describing its own
-        // data model rather than the thing on the screen.
-        let ready: String
-        if completion.ready == 1 {
-            ready = chapters == 1 ? "Document ready to play" : "Chapter ready to play"
-        } else {
-            ready = "\(completion.ready) chapters ready to play"
-        }
-        let play = canPlay ? "Play" : nil
-        guard completion.failed > 0 else {
-            return ToastContent(title: ready, actionLabel: play, actionGlyph: "play.fill")
-        }
-        let failed = completion.failed == 1 ? "1 chapter could not be rendered"
-                                            : "\(completion.failed) chapters could not be rendered"
-        if completion.ready == 0 { return ToastContent(title: failed, detail: reason, actionLabel: nil) }
-        return ToastContent(title: ready, detail: failed, actionLabel: play, actionGlyph: "play.fill")
     }
 
     /// A foreground pass is only a convenience while the app is awake and idle. The scheduler's

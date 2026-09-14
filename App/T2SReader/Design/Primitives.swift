@@ -672,15 +672,76 @@ private struct Perforation: Shape {
 /// Thin progress line under covers and chapter rows.
 struct ProgressBar: View {
     var fraction: Double
+    /// The filled part's colour. `ink` is the hairline's own — the Storage page's per-document rows
+    /// — and the render box passes `accent` while it works and `ink2` while it is stopped.
+    var tint: Color = Tokens.ink
+    /// 2 pt for a hairline under a row; the render box asks for 5, where the bar is one of three
+    /// rows rather than a detail on one.
+    var height: CGFloat = 2
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(Tokens.ink3)
-                Capsule().fill(Tokens.ink).frame(width: geo.size.width * min(1, max(0, fraction)))
+                Capsule().fill(tint).frame(width: geo.size.width * min(1, max(0, fraction)))
             }
         }
-        .frame(height: 2)
+        .frame(height: height)
+        .animation(.easeOut(duration: 0.25), value: fraction)
+    }
+}
+
+/// A book drawn as its chapters: one segment each, lit for what the device holds.
+///
+/// A plain bar cannot tell the truth here. The fill tier leaves chapters half made, and that audio
+/// takes up room without playing a chapter through — so there are three states, not two: whole,
+/// part, none. A continuous bar would have to pick one lie or the other.
+///
+/// Above ``segmentLimit`` chapters the gaps beat the bars, and it falls back to a plain one in the
+/// same slot; at one chapter a single segment *is* a plain bar, which is correct.
+struct ChapterBar: View {
+    var total: Int
+    var rendered: Set<Int>
+    var partial: Set<Int> = []
+    private static let height: CGFloat = 6
+    /// Below this a segment stops reading as a mark and starts reading as noise — so the fallback is
+    /// decided by the width a chapter actually gets, not by a chapter count guessed in advance. A
+    /// fixed limit of 30 was wrong on the first real book it met (owner, 2026-09-14: "I thought the
+    /// storage module had segments").
+    private static let thinnest: CGFloat = 2.5
+
+    var body: some View {
+        // A document with one chapter — a web article, a PDF — has nothing to divide, and a single
+        // full-width segment is a bar pretending to be a measurement (owner, 2026-09-14). The box
+        // drops the row entirely rather than drawing one.
+        if total > 1 { bar }
+    }
+
+    private var bar: some View {
+        GeometryReader { geo in
+            let gap: CGFloat = total > 24 ? 2 : 3
+            // Flexible segments, so a book sets its own segment width: `(bar − gaps) / chapters`.
+            let each = (geo.size.width - gap * CGFloat(max(total - 1, 0))) / CGFloat(max(total, 1))
+            if each < Self.thinnest {
+                ProgressBar(fraction: total > 0 ? Double(rendered.count) / Double(total) : 0,
+                            tint: Tokens.positive, height: Self.height)
+                    .frame(maxHeight: .infinity)
+            } else {
+                HStack(spacing: gap) {
+                    ForEach(0..<max(total, 1), id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 2, style: .continuous).fill(fill(index))
+                    }
+                }
+                .animation(.easeOut(duration: 0.25), value: rendered)
+            }
+        }
+        .frame(height: Self.height)
+    }
+
+    private func fill(_ index: Int) -> Color {
+        if rendered.contains(index) { return Tokens.positive }
+        if partial.contains(index) { return Tokens.positive.opacity(0.38) }
+        return Tokens.ink3
     }
 }
 

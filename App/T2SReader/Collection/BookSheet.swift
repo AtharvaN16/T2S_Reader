@@ -49,6 +49,12 @@ struct BookSheet: View {
     @State private var audio = BookAudioStatus()
     /// The `⋯`'s Delete, asked for confirmation before `AppEnvironment.deleteDocument` runs.
     @State private var confirmDelete = false
+    /// A question the box is asking of itself. Neither of these is a dialog: the box keeps its
+    /// shape and changes what it says, so the answer is given where the question was asked (owner,
+    /// 2026-09-14). An alert would cover the very thing the reader is deciding about.
+    @State private var asking: Asking?
+
+    enum Asking { case deleteAudio, stop }
 
     private static let heroHeight: CGFloat = 200
 
@@ -107,6 +113,8 @@ struct BookSheet: View {
                                     // mode the trailing mark says the same thing and says it louder.
                                     onDevice: isRendering ? [] : onDeviceChapters,
                                     headerAction: isRendering ? nil : { enterRendering() },
+                                    headerAllAction: isRendering && !renderableChapters.isEmpty
+                                        ? { renderAll() } : nil,
                                     onSelect: { chapter in
                                         if isRendering { toggle(chapter.index); return }
                                         Task {
@@ -243,87 +251,248 @@ struct BookSheet: View {
         .accessibilityLabel("More")
     }
 
-    /// What sits above the chapter list in render mode (owner, 2026-09-13): this book's own total —
-    /// not the whole cache, which Settings → Storage keeps — how many chapters that is, and the one
-    /// control that takes it all back. A box rather than the bare line it was until today, because
-    /// it is the header of the screen you have just entered and has to look like one.
+    /// The storage box: what this book has on the device. Three rows, and they are the rendering
+    /// box's three rows exactly (owner, 2026-09-14) — the size where the heading goes, the bar where
+    /// the bar goes, the count where the chapter's name goes, one control in the slot the transport
+    /// buttons use. Two different questions, one shape.
     ///
-    /// Why a held queue has stopped lived here too until 2026-09-13; it is `RenderHoldSheet` now,
-    /// app-wide and up from the foot, because at the top of this sheet nobody ever saw it.
-    private var onDeviceBox: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("On this device").typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
-                Spacer(minLength: 8)
-                Text(BookAudioStatus.sizeText(audio.bytes)).typeRole(.meta).foregroundStyle(Tokens.ink2)
-            }
-            Text(audio.countLine).typeRole(.meta).foregroundStyle(Tokens.ink2)
-            if audio.hasAudio {
-                Pill(label: "Evict all", glyph: "trash", style: .destructiveSoft, action: evictAll)
-            }
+    /// "On this device" is gone as a label: the heading is now the answer rather than the question,
+    /// and the sheet it sits in has already said which book this is.
+    /// Only when there is something to report (owner, 2026-09-14). A box headed "Zero KB" over an
+    /// empty bar, with nothing to delete, is a panel about the absence of a thing — and render mode
+    /// is where you go to make some, so the chapter list underneath is the whole answer.
+    @ViewBuilder private var onDeviceBox: some View {
+        if audio.hasAudio {
+            let asked = asking == .deleteAudio
+            boxBody(
+                title: asked ? "Delete this audio?"
+                             : "\(BookAudioStatus.sizeText(audio.bytes)) occupied on device",
+                titleTint: asked ? Tokens.destructive : Tokens.ink,
+                trailing: nil,
+                showsBar: chapters.count > 1, isAsking: asked,
+                bar: { ChapterBar(total: chapters.count, rendered: onDeviceChapters,
+                                  partial: partlyRenderedChapters) },
+                // Nothing under the bar while it asks: the question is the heading and the answer is
+                // the row, and a sentence between them is one thing too many to read before pressing
+                // something irreversible (owner, 2026-09-14).
+                detail: asked ? nil : audio.countLine,
+                controls: {
+                    if asked {
+                        yesNo(yesLabel: "Delete this book's audio") { evictAll() }
+                    } else {
+                        // The chapter row's trash exactly — same glyph, same size, same red
+                        // (owner, 2026-09-14). One mark means "take this audio away", whether it is
+                        // one chapter's or the book's, and a worded pill up here made the box's
+                        // delete look like a different act from the row's.
+                        Button { ask(.deleteAudio) } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Tokens.destructive)
+                                .frame(width: ChapterRow.markColumn)
+                                .frame(minHeight: 36)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Delete this book's audio")
+                    }
+                })
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        // `ground`, not `surface`: a `.soft` pill *is* `surface`, so a surface box swallowed the
-        // capsules whole and left Evict all as three floating red words. The sheet stands on
-        // `raised`, so this reads as a well cut into it, and the controls stand on the well.
-        .background(Tokens.ground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    /// The queue, said in the sheet you are reading rather than only in the mode you have left
-    /// (owner, 2026-09-13). Which chapter is being made, how far in, and the two controls —
-    /// Pause / Resume and Stop — that until today existed on the runner and nowhere in the app.
+    /// Both boxes, drawn once: a heading with an optional figure at the far end, a bar, and a line
+    /// with the controls at the far end. A quantity and a rate are different questions, and the
+    /// owner chose different words for them — but they swap in place on the same spot in the sheet,
+    /// so they are the same three rows or the swap reads as a replacement.
+    ///
+    /// The rhythm is deliberately uneven: the heading and its bar are one thought, so 12 between
+    /// them; the controls are a different thought, so 20 (owner, 2026-09-14: "increase the space
+    /// above the buttons row… have some spacing hierarchy").
+    private func boxBody<Bar: View, Controls: View>(
+        title: String, titleTint: Color, trailing: String?, showsBar: Bool = true,
+        isAsking: Bool = false,
+        @ViewBuilder bar: () -> Bar, detail: String?,
+        @ViewBuilder controls: () -> Controls
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(title).typeRole(.sectionHeader).foregroundStyle(titleTint).lineLimit(1)
+                    .contentTransition(.opacity)
+                Spacer(minLength: 8)
+                if let trailing {
+                    Text(trailing).typeRole(.metaStrong).foregroundStyle(Tokens.ink2).monospacedDigit()
+                        .transition(.opacity)
+                }
+            }
+            // No bar, no gap for one: a chapterless document leaves two rows, not two rows and a
+            // hole where a measurement would have been.
+            if showsBar {
+                Spacer().frame(height: 12)
+                // While it asks, the bar goes but its room stays (owner, 2026-09-14). A box that
+                // shrank to put a question and grew back to answer it would move the very buttons
+                // the thumb is travelling towards.
+                bar().opacity(isAsking ? 0 : 1)
+            }
+            Spacer().frame(height: 20)
+            // One height for the row whatever stands in it — a 36 pt disc, a bare trash, a pair of
+            // pills — so the box is the same height asking as it is telling (owner, 2026-09-14).
+            HStack(alignment: .center, spacing: 8) {
+                if let detail {
+                    Text(detail).typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(1)
+                        .contentTransition(.opacity)
+                    Spacer(minLength: 8)
+                }
+                controls()
+                    // Keyed on the question, so the controls cross-fade rather than being edited in
+                    // place — one set of words leaves as the other arrives.
+                    .id(isAsking)
+                    .transition(.opacity)
+            }
+            .frame(minHeight: 40)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        // `ground`, not `surface`: a `.soft` pill *is* `surface`, so a surface box swallowed the
+        // capsules whole. The sheet stands on `raised`, so this reads as a well cut into it.
+        .background(Tokens.ground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .animation(.snappy(duration: 0.3), value: asking)
+    }
+
+    /// The answer, where the question was asked. `No` first: the safe one should be the one a thumb
+    /// reaches by accident.
+    /// What ✕ asks. With one chapter outstanding there is only one thing it can mean, so it is the
+    /// plain yes-or-no; with a batch there are two different intentions behind the same press — drop
+    /// the chapter that is being made, or drop everything still to come — and the reader is the only
+    /// one who knows which (owner, 2026-09-14). Naming the count is the point: "All 5" is the number
+    /// that decides it.
+    @ViewBuilder private func stopControls(_ job: ChapterRenderJob) -> some View {
+        let outstanding = outstandingHere
+        Pill(label: "No", style: .soft, fillsWidth: true, compact: true) { ask(nil) }
+            .accessibilityLabel("No, keep rendering")
+        if outstanding > 1 {
+            // `cancel` drops the job, lets the utterance already in the engine finish and be stored,
+            // and the drain loop simply takes the next one.
+            Pill(label: "This one", style: .destructiveSoft, fillsWidth: true, compact: true) {
+                ask(nil); env.chapterRenderer.cancel(job.id)
+            }
+            .accessibilityLabel("Stop this chapter only")
+            Pill(label: "All \(outstanding)", style: .destructiveSoft, fillsWidth: true, compact: true) {
+                ask(nil); stopAllHere()
+            }
+            .accessibilityLabel("Stop all \(outstanding) chapters")
+        } else {
+            Pill(label: "Yes", style: .destructiveSoft, fillsWidth: true, compact: true) {
+                ask(nil); env.chapterRenderer.cancel(job.id)
+            }
+            .accessibilityLabel("Yes, stop rendering")
+        }
+    }
+
+    /// Every outstanding chapter of *this* book. Not `cancelAll()`: the queue is the whole app's, and
+    /// another book's chapters are none of this sheet's business to throw away.
+    private func stopAllHere() {
+        for job in jobs.values where job.state == .queued || job.state == .running {
+            env.chapterRenderer.cancel(job.id)
+        }
+    }
+
+    @ViewBuilder private func yesNo(yesLabel: String, yes: @escaping () -> Void) -> some View {
+        Pill(label: "No", style: .soft, fillsWidth: true, compact: true) { ask(nil) }
+            .accessibilityLabel("No, leave it")
+        Pill(label: "Yes", style: .destructiveSoft, fillsWidth: true, compact: true) { ask(nil); yes() }
+            .accessibilityLabel(yesLabel)
+    }
+
+    private func ask(_ question: Asking?) {
+        withAnimation(.snappy(duration: 0.28)) { asking = question }
+    }
+
+    /// The queue, said in the sheet you are reading rather than only in the mode you have left.
+    /// The storage box's three rows, carrying a rate instead of a quantity.
     ///
     /// This book's jobs only. The queue is the whole app's, so another book's chapter is none of
     /// this sheet's business and must not be reported here as though it were this book's.
     @ViewBuilder private func renderProgress(_ job: ChapterRenderJob) -> some View {
-        let paused = env.chapterRenderer.isPaused
-        let held = env.chapterRenderer.hold != nil
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(progressTitle(job, paused: paused, held: held))
-                        .typeRole(.sectionHeader).foregroundStyle(Tokens.ink).lineLimit(1)
-                    Text(ChapterLabel.text(for: job.title, ordinal: job.chapterIndex + 1))
-                        .typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(1)
+        let hold = env.chapterRenderer.hold
+        let asked = asking == .stop
+        boxBody(
+            title: asked ? "Stop rendering?" : progressTitle(job),
+            titleTint: asked ? Tokens.destructive : holdTint(hold),
+            trailing: asked ? nil : "\(Int((job.fraction * 100).rounded()))%",
+            isAsking: asked,
+            // Grey while it is stopped, whoever stopped it: the one difference between a queue that
+            // is working and a queue that is waiting for you.
+            bar: { ProgressBar(fraction: job.fraction,
+                               tint: hold == nil && !asked ? Tokens.accent : Tokens.ink2, height: 6) },
+            detail: asked ? nil : progressDetail(job),
+            controls: {
+                if asked {
+                    stopControls(job)
+                } else {
+                    // Glyphs, not words (owner, 2026-09-14). Resume is `play` because resuming a
+                    // queue that heat stopped is the "render anyway" the held-queue sheet offers —
+                    // one control for either reason. A full store has nothing to press through, so
+                    // it gets no Resume at all.
+                    if hold != .storeFull {
+                        Button { hold == nil ? env.chapterRenderer.pause() : env.chapterRenderer.resume() } label: {
+                            CircleGlyph(systemName: hold == nil ? "pause.fill" : "play.fill")
+                        }
+                        .accessibilityLabel(hold == nil ? "Pause rendering" : "Resume rendering")
+                    }
+                    Button { ask(.stop) } label: {
+                        CircleGlyph(systemName: "xmark", tint: Tokens.destructive)
+                    }
+                    .accessibilityLabel("Stop rendering")
                 }
-                Spacer(minLength: 8)
-                Text("\(Int((job.fraction * 100).rounded()))%")
-                    .typeRole(.metaStrong).foregroundStyle(Tokens.ink2)
-                    .monospacedDigit()
-            }
-            ProgressBar(fraction: job.fraction)
-            HStack(spacing: 8) {
-                // One key for both reasons to be stopped: the phone's and the reader's. Resuming a
-                // queue the heat stopped is the "render anyway" the held-queue sheet also offers.
-                Pill(label: held ? "Resume" : "Pause",
-                     glyph: held ? "play.fill" : "pause.fill",
-                     style: .soft) {
-                    if held { env.chapterRenderer.resume() } else { env.chapterRenderer.pause() }
-                }
-                Pill(label: "Stop", glyph: "xmark", style: .destructiveSoft) {
-                    env.chapterRenderer.cancelAll()
-                }
-            }
+            })
+    }
+
+    private func holdTint(_ hold: ChapterRenderRunner.Hold?) -> Color {
+        switch hold {
+        case .storeFull: return Tokens.destructive
+        case .hot: return Tokens.accent
+        case .byReader, .none: return Tokens.ink
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(Tokens.ground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     /// "Rendering 2 of 5", or why it has stopped. A hold the reader did not ask for names itself,
     /// since the app-wide sheet that would have said so is dismissible and may already be gone.
-    private func progressTitle(_ job: ChapterRenderJob, paused: Bool, held: Bool) -> String {
+    private func progressTitle(_ job: ChapterRenderJob) -> String {
+        switch env.chapterRenderer.hold {
+        case .byReader: return "Paused"
+        case .hot: return "Paused — phone is warm"
+        case .storeFull: return "Paused — no room"
+        case .none: break
+        }
         let outstanding = jobs.values.count { $0.state == .queued || $0.state == .running }
         let total = jobs.values.count { if case .failed = $0.state { return false } else { return true } }
         let position = max(1, total - outstanding + 1)
-        if paused { return "Paused · \(position) of \(total)" }
-        switch env.chapterRenderer.hold {
-        case .hot: return "Paused — the phone is warm"
-        case .storeFull: return "Paused — no room left"
-        case .byReader, .none: break
-        }
         return total > 1 ? "Rendering \(position) of \(total)" : "Rendering"
+    }
+
+    /// The line under the bar: the chapter being made, or — when the queue has stopped — what that
+    /// means for the work already done, which is the only question a pause actually raises.
+    private func progressDetail(_ job: ChapterRenderJob) -> String {
+        switch env.chapterRenderer.hold {
+        // A pause the reader asked for needs no sentence — the heading has already said it, and the
+        // chapter's name is the more useful thing to keep on screen (owner, 2026-09-14). The two
+        // holds nobody asked for keep theirs: those carry news.
+        case .byReader, .none: return ChapterLabel.text(for: job.title, ordinal: job.chapterIndex + 1)
+        case .hot: return "Starts again once it cools"
+        case .storeFull: return "Free space in Settings → Storage"
+        }
+    }
+
+    /// Which of this book's chapters hold some audio but not a whole chapter's worth. The fill tier
+    /// leaves these behind and they take up room without playing a chapter through, so the bar has
+    /// to say "there is something here" without claiming the chapter is ready.
+    /// How many of this book's chapters are still to come, the one being made included. Decides
+    /// whether ✕ is "stop this chapter" or simply "stop".
+    private var outstandingHere: Int {
+        jobs.values.count { $0.state == .queued || $0.state == .running }
+    }
+
+    private var partlyRenderedChapters: Set<Int> {
+        Set(audio.chapters.filter { $0.rendered > 0 && !$0.isFullyRendered }.map(\.chapterIndex))
     }
 
     /// This book's job that the queue is actually working on, or the next one waiting — nil when
@@ -375,6 +544,35 @@ struct BookSheet: View {
         }
     }
 
+    /// Every chapter the device does not already hold and the queue is not already making. The
+    /// denominator for "Render all", and the reason that control disappears once there is nothing
+    /// left for it to do.
+    private var renderableChapters: [Int] {
+        chapters.map(\.index).filter { index in
+            if audio.chapter(index)?.isFullyRendered == true { return false }
+            switch jobs[index]?.state {
+            case .queued, .running: return false
+            default: return true
+            }
+        }
+    }
+
+    /// The whole book, chapter by chapter, in one press (owner, 2026-09-14). It goes to the same
+    /// queue as a hand-picked batch and drains the same way — one at a time, pausable, and stoppable
+    /// a chapter at a time — so the only thing this saves is the picking.
+    ///
+    /// It leaves render mode on the way out, like Done: the progress box outside is where a batch
+    /// this size is actually watched, and it carries the Stop.
+    private func renderAll() {
+        let all = renderableChapters
+        withAnimation(.snappy) {
+            isRendering = false
+            selection.removeAll()
+        }
+        guard !all.isEmpty else { return }
+        Task { await env.chapterRenderer.enqueue(documentID: live.id, chapters: all) }
+    }
+
     private func enterRendering() {
         withAnimation(.snappy) { isRendering = true }
     }
@@ -387,6 +585,7 @@ struct BookSheet: View {
     /// nothing is stopped by leaving — the queue is the app's and outlives this sheet.
     private func endRendering(startingPicked: Bool = false) {
         let picked = startingPicked ? selection.sorted() : []
+        asking = nil
         withAnimation(.snappy) {
             isRendering = false
             selection.removeAll()

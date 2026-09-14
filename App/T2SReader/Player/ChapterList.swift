@@ -8,6 +8,12 @@ import T2SCore
 struct ChapterList: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
+    /// Which chapters the device holds in full. Read once when the sheet opens (owner, 2026-09-14:
+    /// "make sure chapters that have been rendered are also visible in the chapter sheet in the
+    /// reader"). It was left out on the argument that this list is about listening and has no
+    /// business saying what is cached — but the reader deciding which chapter to jump to on a train
+    /// is asking exactly that, and this is the list they are looking at when they ask it.
+    @State private var onDevice: Set<Int> = []
 
     var body: some View {
         let player = env.player
@@ -15,6 +21,7 @@ struct ChapterList: View {
         ScrollView {
             ChapterListView(chapters: player.chapters, current: current, heading: .playerTitle,
                             bookmarks: player.bookmarksByChapter,
+                            onDevice: onDevice,
                             onSelect: { chapter in
                                 Task { await player.seek(toChapter: chapter.index); dismiss() }
                             },
@@ -32,6 +39,13 @@ struct ChapterList: View {
         .background(Tokens.raised)
         .presentationDetents([.medium, .large])
         .presentationCornerRadius(Spacing.sheetCorner)
+        // The coordinator's timeline, not a fresh read of the library: this book is loaded, so the
+        // chapters on screen and the keys being checked are the same ones.
+        .task(id: env.player.current?.id) {
+            guard let timeline = env.player.coordinator.timeline else { onDevice = []; return }
+            let status = await BookAudioStatus.read(timeline: timeline, audioStore: env.audioStore)
+            onDevice = Set(status.chapters.filter(\.isFullyRendered).map(\.chapterIndex))
+        }
     }
 }
 
@@ -64,6 +78,11 @@ struct ChapterListView: View {
     /// The way into render mode, as a glyph beside the heading (owner, 2026-09-13). Only the Book
     /// sheet passes one; without it the heading is the word it has always been.
     var headerAction: (() -> Void)? = nil
+    /// The same slot once you are inside render mode: "Render all", which takes every chapter the
+    /// device does not already hold (owner, 2026-09-14). The glyph's job is done by then — you are
+    /// already in the mode — so the space goes to the one thing picking chapters one at a time
+    /// cannot do quickly.
+    var headerAllAction: (() -> Void)? = nil
     var onSelect: (ChapterEntry) -> Void
     var onSelectBookmark: ((BookmarkEntry) -> Void)? = nil
     var onEvict: ((ChapterEntry) -> Void)? = nil
@@ -74,9 +93,16 @@ struct ChapterListView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 10) {
                 Text("Chapters").typeRole(heading).foregroundStyle(Tokens.ink)
-                if let headerAction {
+                if let headerAllAction {
                     Spacer(minLength: 8)
+                    Pill(label: "Render all", glyph: "waveform", style: .soft, action: headerAllAction)
+                        .accessibilityHint("Renders every chapter this device does not already have")
+                } else if let headerAction {
+                    Spacer(minLength: 8)
+                    // 36 pt disc, 24 pt column: out by six, so its centre lands on the marks
+                    // below rather than nine points inboard of them.
                     Button(action: headerAction) { CircleGlyph(systemName: "waveform") }
+                        .padding(.trailing, -(36 - ChapterRow.markColumn) / 2)
                         .accessibilityLabel("Render chapters")
                         .accessibilityHint("Choose chapters to keep on this device")
                 }
@@ -158,6 +184,10 @@ struct BookmarkStampRow: View {
 /// The title sits a step under `rowTitle` and the time a step over `meta`, so the two read closer
 /// in size.
 struct ChapterRow: View {
+    /// The width every trailing mark is centred in, so the column reads as a column. `RadioMark`'s
+    /// own box — the heading's render glyph is pulled out by half the difference to meet it.
+    static let markColumn: CGFloat = 24
+
     var chapter: ChapterEntry
     var isCurrent: Bool
     var isHeard: Bool
@@ -178,73 +208,119 @@ struct ChapterRow: View {
     var action: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            // The row's own button stops short of the pill, so the two never share a tap.
-            Button(action: action) {
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(ChapterLabel.text(for: chapter.title, ordinal: chapter.index + 1))
+        let name = ChapterLabel.text(for: chapter.title, ordinal: chapter.index + 1)
+        let length = DurationFormatter.remaining(chapter.durationSeconds, approximate: false)
+        // The row is two lines, and everything that marks the chapter belongs to the *first* of
+        // them (owner, 2026-09-14: "the row graphic elements need to be aligned with the title not
+        // the entire row"). Centred on the row, a mark floats between the name and the length and
+        // reads as belonging to neither — the more so on a chapter whose name wraps. On the title's
+        // own line it is plainly a mark on the title, and the length sits under it with nothing in
+        // its way. Bookmarks, the listening ring, the heard-check and every render mark, alike.
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center, spacing: 10) {
+                Button(action: action) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(name)
                             .typeRole(.settingsRow).foregroundStyle(Tokens.ink).lineLimit(2)
                             .multilineTextAlignment(.leading)
-                        HStack(spacing: 5) {
-                            Text(DurationFormatter.remaining(chapter.durationSeconds, approximate: false))
-                                .typeRole(.pill).foregroundStyle(Tokens.ink2)
-                            if isOnDevice, renderMark == nil {
-                                Text("·").typeRole(.pill).foregroundStyle(Tokens.ink3)
-                                Label("On device", systemImage: "arrow.down.circle.fill")
-                                    .labelStyle(.titleAndIcon)
-                                    .font(.custom("Inter-Medium", size: 12, relativeTo: .footnote))
-                                    .foregroundStyle(Tokens.positive)
-                                    .imageScale(.small)
-                            }
+                        // "This chapter is on the device", riding with the name (owner, 2026-09-14):
+                        // a grey waveform, the app's glyph for rendered audio, where the eye already
+                        // is. It replaced a green "On device" tag, which announced a fact about
+                        // caching far louder than it deserves and put a second colour in a
+                        // one-colour list.
+                        if isOnDevice, renderMark == nil {
+                            Image(systemName: "waveform")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Tokens.ink2)
+                                .accessibilityHidden(true)          // the row's value says it in words
                         }
+                        Spacer(minLength: 12)
                     }
-                    Spacer(minLength: 12)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                // A fully rendered chapter has nothing left to render, so its row does not take a
+                // tap: the trash beside it is its one action.
+                .allowsHitTesting(renderMark?.isSelectable ?? true)
+                .accessibilityAddTraits(isCurrent ? .isSelected : [])
+                .accessibilityLabel("\(name), \(length)")
+                .accessibilityValue(renderMark?.accessibilityText
+                    ?? [isCurrent ? "\(Int((chapter.fraction * 100).rounded())) percent" : (isHeard ? "Heard" : ""),
+                        isOnDevice ? "On this device" : ""]
+                        .filter { !$0.isEmpty }.joined(separator: ", "))
+
+                if bookmarkCount > 0 {
+                    Button(action: onToggleBookmarks) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "bookmark.fill").font(.system(size: 11, weight: .semibold))
+                            Text("\(bookmarkCount)").font(.custom("Inter-Medium", size: 13, relativeTo: .footnote))
+                        }
+                        // Grey, not the dots' accent (owner, 2026-09-12): it counts bookmarks, it is
+                        // not one. Open, it takes the app's selected chip — ink under `ground`.
+                        .foregroundStyle(isShowingBookmarks ? Tokens.ground : Tokens.ink)
+                        .padding(.horizontal, 9)
+                        .frame(height: 28)                               // a target of its own, clear of the words
+                        .background(isShowingBookmarks ? Tokens.ink : Tokens.ink3, in: Capsule())
+                        .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(bookmarkCount == 1 ? "1 bookmark" : "\(bookmarkCount) bookmarks")
+                    .accessibilityHint(isShowingBookmarks ? "Hides them" : "Shows them")
+                }
+
+                // Every mark ends in the same column (owner, 2026-09-14). The ring and the
+                // heard-check are 18 pt and the selection circle 24, so they sat three points apart
+                // down a list, and the heading's 36 pt glyph nine points off all of them.
+                //
+                // The column is given to each *glyph*, not to the mark as a whole. Wrapping the
+                // whole mark in a 24 pt frame is what broke the rows on 2026-09-14: `.ready` and
+                // `.queued` carry text, and a `Text` offered 24 points wraps to a column of
+                // letters — the size vanished and the row grew a 30 pt hole between the title and
+                // its length. The marks that *are* a glyph take the frame; the marks that are a
+                // sentence end in one.
+                Group {
+                    if let renderMark {
+                    // The mark is a button of its own when it can be picked (owner, 2026-09-14: "the
+                    // touch target is weird"). It sits outside the row's button — the row's stops at
+                    // its `Spacer` — so a tap landing squarely on the circle used to do nothing at
+                    // all, and the only way to pick a chapter was to hit its name. Padded out and
+                    // back, so a 24 pt circle takes a 44 pt tap without moving anything.
+                        if renderMark.isSelectable {
+                            Button(action: action) {
+                                ChapterRenderMarkView(mark: renderMark, onEvict: onEvict)
+                                    .padding(10)
+                                    .contentShape(Rectangle())
+                                    .padding(-10)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHidden(true)                   // the row carries the state and the action
+                        } else {
+                            ChapterRenderMarkView(mark: renderMark, onEvict: onEvict)
+                        }
+                    } else if isCurrent {
+                        CircularProgress(fraction: chapter.fraction, lineWidth: 2, size: 18)
+                            .frame(width: ChapterRow.markColumn)
+                    } else if isHeard {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Tokens.positive)
+                            .frame(width: ChapterRow.markColumn)
+                            .accessibilityLabel("Heard")
+                    }
+                }
+            }
+            // The length, on its own line and clear to the margin. Still the row's tap, so the gap
+            // under the title is not a dead strip.
+            Button(action: action) {
+                HStack(spacing: 0) {
+                    Text(length).typeRole(.pill).foregroundStyle(Tokens.ink2)
+                    Spacer(minLength: 0)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            // A fully rendered chapter has nothing left to render, so its row does not take a tap:
-            // the trash beside it is its one action.
             .allowsHitTesting(renderMark?.isSelectable ?? true)
-            .accessibilityAddTraits(isCurrent ? .isSelected : [])
-            .accessibilityValue(renderMark?.accessibilityText
-                ?? [isCurrent ? "\(Int((chapter.fraction * 100).rounded())) percent" : (isHeard ? "Heard" : ""),
-                    isOnDevice ? "On this device" : ""]
-                    .filter { !$0.isEmpty }.joined(separator: ", "))
-
-            if bookmarkCount > 0 {
-                Button(action: onToggleBookmarks) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "bookmark.fill").font(.system(size: 11, weight: .semibold))
-                        Text("\(bookmarkCount)").font(.custom("Inter-Medium", size: 13, relativeTo: .footnote))
-                    }
-                    // Grey, not the dots' accent (owner, 2026-09-12): it counts bookmarks, it is
-                    // not one. Open, it takes the app's selected chip — ink under `ground`.
-                    .foregroundStyle(isShowingBookmarks ? Tokens.ground : Tokens.ink)
-                    .padding(.horizontal, 9)
-                    .frame(height: 28)                                   // a target of its own, clear of the words
-                    .background(isShowingBookmarks ? Tokens.ink : Tokens.ink3, in: Capsule())
-                    .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(bookmarkCount == 1 ? "1 bookmark" : "\(bookmarkCount) bookmarks")
-                .accessibilityHint(isShowingBookmarks ? "Hides them" : "Shows them")
-            }
-
-            if let renderMark {
-                // Render mode replaces the end of the row rather than crowding it: the ring says
-                // how far you have listened, and this says what is on the device — two different
-                // questions, and only one of them is being asked.
-                ChapterRenderMarkView(mark: renderMark, onEvict: onEvict)
-            } else if isCurrent {
-                CircularProgress(fraction: chapter.fraction, lineWidth: 2, size: 18)
-            } else if isHeard {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 18))
-                    .foregroundStyle(Tokens.positive)
-                    .accessibilityLabel("Heard")
-            }
+            .accessibilityHidden(true)                                   // the line above speaks for the row
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -319,15 +395,23 @@ struct ChapterRenderMarkView: View {
         case .running(let fraction):
             RenderWaveform(fraction: fraction)
         case .ready(let size):
-            HStack(spacing: 6) {
-                PositiveCheck()
+            // No tick (owner, 2026-09-14). The size and the trash are already the whole of "this
+            // one is here"; a green check in front of them was a third thing saying the same fact,
+            // and it pushed the pair off the column every other row's mark stands in.
+            HStack(spacing: 10) {
                 if let size { Text(size).typeRole(.meta).foregroundStyle(Tokens.ink2) }
                 Button(action: onEvict) {
                     Image(systemName: "trash")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Tokens.destructive)
-                        .frame(width: 30, height: 30)                   // a target of its own, clear of the tick
+                        // `RadioMark`'s box exactly, so the trash lands in the same column as the
+                        // rings above and below it — then padded out and back for a target twice
+                        // the glyph's size without moving anything (owner: "align the delete with
+                        // the checkmarks").
+                        .frame(width: 24, height: 24)
+                        .padding(10)
                         .contentShape(Rectangle())
+                        .padding(-10)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Remove this chapter's audio")
@@ -336,6 +420,7 @@ struct ChapterRenderMarkView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 15))
                 .foregroundStyle(Tokens.destructive)
+                .frame(width: ChapterRow.markColumn)
                 .accessibilityLabel(message)
         }
     }

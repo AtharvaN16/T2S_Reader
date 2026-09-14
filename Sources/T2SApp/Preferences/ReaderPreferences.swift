@@ -79,6 +79,7 @@ public final class ReaderPreferences {
         static let collectionLayout = "collection.layout"
         static let scrubberScope = "reader.scrubberScope"
         static let holdSkipChapter = "reader.holdSkipChapter"
+        static let paper = "reader.paper"
         static let bookmarkMarks = "reader.bookmarkMarks"
         static let skipBack = "playback.skipBack"
         static let skipForward = "playback.skipForward"
@@ -121,6 +122,14 @@ public final class ReaderPreferences {
     /// The segmented book bar is what the app has always drawn, so it stays the default.
     public var scrubberScope: ScrubberScope {
         didSet { defaults.set(scrubberScope.rawValue, forKey: Key.scrubberScope) }
+    }
+
+    /// The Reader's page (owner, 2026-09-14). Reader-only: nothing else in the app reads it, and
+    /// the app-wide `theme` still decides light from dark — including which face of this paper the
+    /// Reader shows. `paper` is the page the app has always drawn, so a reader who never opens the
+    /// picker sees no change.
+    public var readerPaper: ReaderPaper {
+        didSet { defaults.set(readerPaper.rawValue, forKey: Key.paper) }
     }
 
     /// Whether holding a skip button turns it into a chapter jump (owner, 2026-09-14). On by
@@ -181,6 +190,7 @@ public final class ReaderPreferences {
         highlightTheme = HighlightTheme(rawValue: defaults.string(forKey: Key.highlightTheme) ?? "") ?? .amber
         collectionLayout = CollectionLayout(rawValue: defaults.string(forKey: Key.collectionLayout) ?? "") ?? .grid
         scrubberScope = ScrubberScope(rawValue: defaults.string(forKey: Key.scrubberScope) ?? "") ?? .book
+        readerPaper = ReaderPaper(rawValue: defaults.string(forKey: Key.paper) ?? "") ?? .paper
         holdSkipChangesChapter = defaults.object(forKey: Key.holdSkipChapter) as? Bool ?? true
         showsBookmarkMarks = defaults.object(forKey: Key.bookmarkMarks) as? Bool ?? true
         skipBackSeconds = defaults.object(forKey: Key.skipBack) as? Int ?? 15
@@ -199,6 +209,7 @@ public final class ReaderPreferences {
         highlightTheme = .amber
         collectionLayout = .grid
         scrubberScope = .book
+        readerPaper = .paper
         holdSkipChangesChapter = true
         showsBookmarkMarks = true
         skipBackSeconds = 15

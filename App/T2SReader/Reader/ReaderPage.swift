@@ -44,17 +44,22 @@ struct ReaderPage: View {
     /// release would land rather than where playback still is (owner, 2026-09-12).
     @State private var scrubChapter: Int?
 
+    /// The page's own paper, and the only place in the app it is decided (owner, 2026-09-14). The
+    /// page reads it directly; everything under the page — the transport, the scrubber, the chip —
+    /// takes it from the environment, which is what keeps it to this screen.
+    private var palette: ReaderPalette { ReaderPalette(env.preferences.readerPaper) }
+
     var body: some View {
         let reader = env.readerModel
         ZStack {
-            Tokens.ground.ignoresSafeArea()
+            palette.page.ignoresSafeArea()
             if let text {
                 ReaderTextView(
                     text: text,
                     textScale: env.preferences.textScale,
                     lineHeight: env.preferences.lineHeight,
                     highlight: reader.activeHighlight,
-                    highlightTheme: env.preferences.highlightTheme,
+                    palette: palette,
                     isFollowing: reader.isFollowing,
                     onTap: handleTap,
                     onUserScroll: { reader.suspendFollowing() },
@@ -62,14 +67,14 @@ struct ReaderPage: View {
                 )
                 .ignoresSafeArea(edges: .bottom)
             } else if let error {
-                Text(error).typeRole(.meta).foregroundStyle(Tokens.destructive).padding(Spacing.margin)
+                Text(error).typeRole(.meta).foregroundStyle(palette.destructive).padding(Spacing.margin)
             } else if env.kokoroStatus.status.isWarming {
                 VStack(spacing: 10) {
                     WarmingDot()
                     Text("Preparing the voice…").typeRole(.meta).foregroundStyle(Tokens.glow)
                 }
             } else {
-                ProgressView().tint(Tokens.ink)
+                ProgressView().tint(palette.ink)
             }
 
             VStack(spacing: 0) {
@@ -77,8 +82,7 @@ struct ReaderPage: View {
                 // Both pills live under the header (owner, 2026-09-12): they are about where you
                 // are in the book, which belongs with the title, not down by the transport.
                 if !reader.isFollowing {
-                    RaisedButton(label: "Back to current", glyph: "text.line.first.and.arrowtriangle.forward",
-                                 tone: .blue, size: .compact) {
+                    readerKey("Back to current", glyph: "text.line.first.and.arrowtriangle.forward") {
                         reader.resumeFollowing()
                     }
                     .padding(.top, 12)
@@ -88,8 +92,8 @@ struct ReaderPage: View {
                     // chapter (owner's ask, 2026-09-09). Goes with the chrome, so a tap on the text
                     // dismisses it. Blue, unlike the ink "Back to current": this one moves you on
                     // through the book rather than back to where you were (owner, 2026-09-12).
-                    RaisedButton(label: skip.number.map { "Skip to Chapter \($0)" } ?? "Skip the front matter",
-                                 glyph: "forward.end.fill", tone: .blue, size: .compact) {
+                    readerKey(skip.number.map { "Skip to Chapter \($0)" } ?? "Skip the front matter",
+                              glyph: "forward.end.fill") {
                         Task { await env.player.seek(toChapter: skip.index) }
                     }
                     .padding(.top, 12)
@@ -158,6 +162,7 @@ struct ReaderPage: View {
                 WarmUpLine(band: geo.frame(in: .global).minY)
             }
         }
+        .environment(\.readerPalette, palette)
         // The queue holds while a book is being read as often as while the book sheet is up, and
         // the Reader is a `fullScreenCover` over the pager, so the pager's copy cannot reach here.
         .renderHoldSheet()
@@ -237,7 +242,7 @@ struct ReaderPage: View {
         ZStack {
             Text(summary.document.title)
                 .typeRole(.pill)
-                .foregroundStyle(Tokens.ink)
+                .foregroundStyle(palette.ink)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 60)                                  // clear of one circle each side
@@ -258,9 +263,9 @@ struct ReaderPage: View {
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Tokens.ink)
+                        .foregroundStyle(palette.ink)
                         .frame(width: 36, height: 36)
-                        .background(Tokens.surface, in: Circle())
+                        .background(palette.surface, in: Circle())
                 }
             }
         }
@@ -268,7 +273,7 @@ struct ReaderPage: View {
         .padding(.top, 2 * Spacing.grid)
         .padding(.bottom, 2 * Spacing.grid)                                  // a taller band, at the owner's ask
         .background(alignment: .top) {
-            Tokens.ground                                                  // plain: the glow is the rim over this, not this
+            palette.page                                                   // plain: the glow is the rim over this, not this
                 .mask(Self.groundShape(solidAtTop: true, span: 0.5))
                 .padding(.bottom, -48)                                     // hangs below the bar, over the text
                 .ignoresSafeArea(edges: .top)
@@ -364,23 +369,23 @@ struct ReaderPage: View {
                 }
                 .overlay {
                     if chapterSegments.count > 1 {
-                        ScopeChip(scope: scrubberScope) { env.preferences.scrubberScope = $0 }
+                        ScopeChip(palette: palette, scope: scrubberScope) { env.preferences.scrubberScope = $0 }
                             .equatable()
                     }
                 }
-                .typeRole(.meta).foregroundStyle(Tokens.ink2)
+                .typeRole(.meta).foregroundStyle(palette.ink2)
                 if let error = player.renderError {
-                    Text(error).typeRole(.meta).foregroundStyle(Tokens.destructive).lineLimit(2)
+                    Text(error).typeRole(.meta).foregroundStyle(palette.destructive).lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 if let offer = syncOffer, let where_ = player.describe(offer.position), let id = player.current?.id {
                     HStack(spacing: 8) {
-                        Text("Continue from \(offer.deviceName) · \(where_)").typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(1)
+                        Text("Continue from \(offer.deviceName) · \(where_)").typeRole(.meta).foregroundStyle(palette.ink2).lineLimit(1)
                         Spacer(minLength: 0)
                         Button("Jump") { Task { await player.jump(to: offer.position); await env.syncModel.dismissOffer(for: id); syncOffer = nil } }
                             .typeRole(.pill)
                         Button { Task { await env.syncModel.dismissOffer(for: id); syncOffer = nil } } label: {
-                            Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(Tokens.ink3)
+                            Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(palette.ink3)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -433,10 +438,38 @@ struct ReaderPage: View {
             .alignmentGuide(.top) { d in d[.bottom] + 10 }
         }
         .background(alignment: .bottom) {
-            Tokens.ground
+            palette.page
                 .mask(Self.groundShape(solidAtTop: false, span: 0.25))
                 .padding(.top, -64)                                        // hangs above the block, over the text
                 .ignoresSafeArea(edges: .bottom)
+        }
+    }
+
+    /// The Reader's two pills — "Back to current" and the front-matter skip.
+    ///
+    /// On a zen paper this is the app's blue key, because a tinted page can host it. On a pop paper
+    /// it is the page's own ink with the page's own colour lettering, and flat rather than raised:
+    /// a lit blue key on a cobalt page is an object hiding inside its own background, and the key
+    /// that gets you out of the front matter is the last thing that should be hard to find. It is
+    /// still the loudest object on the screen — it is simply loud in the page's own voice.
+    @ViewBuilder private func readerKey(_ label: String, glyph: String,
+                                        action: @escaping () -> Void) -> some View {
+        if palette.isPop {
+            Button(action: action) {
+                HStack(spacing: 6) {
+                    Image(systemName: glyph).font(.system(size: 13, weight: .bold))
+                    Text(label).typeRole(.pill)
+                }
+                .lineLimit(1)
+                .foregroundStyle(palette.page)
+                .padding(.horizontal, 18)
+                .frame(minHeight: 40)
+                .background(palette.ink, in: Capsule())
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        } else {
+            RaisedButton(label: label, glyph: glyph, tone: .blue, size: .compact, action: action)
         }
     }
 
@@ -610,7 +643,7 @@ struct ReaderPage: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 12, weight: .semibold))
                     }
-                    .foregroundStyle(Tokens.ink)
+                    .foregroundStyle(palette.ink)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -645,19 +678,19 @@ struct ReaderPage: View {
             Button { showVoiceChange = true } label: {
                 HStack(spacing: 8) {
                     Circle()
-                        .fill(Tokens.ink3)
+                        .fill(palette.ink3)
                         .frame(width: 20, height: 20)
                         .overlay(
                             Text(voiceName.prefix(1).uppercased())
                                 .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(Tokens.ink)
+                                .foregroundStyle(palette.ink)
                         )
                     Text(voiceName).typeRole(.pill)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .foregroundStyle(Tokens.ink)
-                .background(Tokens.surface, in: Capsule())
+                .foregroundStyle(palette.ink)
+                .background(palette.surface, in: Capsule())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Change voice")
@@ -670,9 +703,9 @@ struct ReaderPage: View {
         Button(action: action) {
             Image(systemName: glyph)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Tokens.ink)
+                .foregroundStyle(palette.ink)
                 .frame(width: 36, height: 36)
-                .background(Tokens.surface, in: Circle())
+                .background(palette.surface, in: Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)

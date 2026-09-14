@@ -16,6 +16,7 @@ import T2SApp
 /// The three dots are the ellipsis made honest: the strings no longer carry "…" as punctuation the
 /// eye does not count, they carry a wave that says work is still going on.
 struct PlayerStatusLine: View {
+    @Environment(\.readerPalette) private var palette
     var text: String
 
     var body: some View {
@@ -27,7 +28,7 @@ struct PlayerStatusLine: View {
             Text(text)
         }
         .typeRole(.pill)                                                    // a step up from `meta`, in Medium
-        .foregroundStyle(Tokens.ink)
+        .foregroundStyle(palette.ink)
         // Wide shoulders (owner, 2026-09-13): a `Capsule` already spends its first ~24 pt each
         // side on the curve, so 16 pt of padding left the words sitting in the bend rather than on
         // the flat of the pill.
@@ -41,7 +42,7 @@ struct PlayerStatusLine: View {
         // Opaque, because tinting alone did not hold: the fade only reaches ~30% by here, and a
         // translucent blue — `glowFaint`, `glowSoft`, `glow` at a third — still let the sentence
         // behind read through, which is a highlighter over words rather than a surface under them.
-        .background(Tokens.surface, in: Capsule())
+        .background(palette.surface, in: Capsule())
         // `edge` is the app's hairline for exactly this — the mini-player's capsule already wears
         // it. All but invisible in light, where the fill alone is enough to sit off the page; a
         // faint light line in dark, where there is no shadow to give the capsule an edge.

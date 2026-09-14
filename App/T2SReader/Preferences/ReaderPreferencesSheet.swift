@@ -43,17 +43,7 @@ struct ReaderPreferencesSheet: View {
                     // Under the two sliders rather than under everything (owner, 2026-09-14):
                     // type size, line height and the page's colour are the three things about how
                     // the book *looks*, and the switches below them are about what it does.
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Theme").typeRole(.meta).foregroundStyle(Tokens.ink2)
-                        HStack(spacing: Spacing.grid) {
-                            ForEach(ReaderTheme.allCases, id: \.self) { theme in
-                                Pill(label: theme.rawValue.capitalized,
-                                     style: preferences.theme == theme ? .selected : .soft) {
-                                    preferences.theme = theme
-                                }
-                            }
-                        }
-                    }
+                    papers($preferences.readerPaper)
                     // Two switches, both about what the Reader does rather than how it looks. Each
                     // carries a grey line saying what it governs — these are gestures and marks a
                     // reader may never have noticed, so the row has to name them before it can
@@ -89,6 +79,72 @@ struct ReaderPreferencesSheet: View {
         .presentationCornerRadius(Spacing.sheetCorner)
     }
 
+    /// The sixteen papers, in their two families (palette:
+    /// `docs/design/2026-09-14-reader-papers-16.html`). Zen first, because a book is the ordinary
+    /// case; pop under it, under its own word, because choosing one is choosing something else.
+    ///
+    /// Each swatch is split down the diagonal — the paper's lit face and its unlit one. A paper is
+    /// a hue, and the phone still says whether it is day: showing one face would promise a page the
+    /// reader might never see.
+    @ViewBuilder private func papers(_ choice: Binding<ReaderPaper>) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            ForEach([ReaderPaper.Family.zen, .pop], id: \.self) { family in
+                VStack(alignment: .leading, spacing: 11) {
+                    Text(family == .zen ? "Paper" : "Paper · loud")
+                        .typeRole(.meta).foregroundStyle(Tokens.ink2)
+                    // Eight to a family: four and four at phone width, and one row of eight on
+                    // anything wider.
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4),
+                              spacing: 14) {
+                        ForEach(ReaderPaper.all(family), id: \.self) { paper in
+                            swatch(paper, isOn: choice.wrappedValue == paper) {
+                                withAnimation(.snappy(duration: 0.2)) { choice.wrappedValue = paper }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func swatch(_ paper: ReaderPaper, isOn: Bool, action: @escaping () -> Void) -> some View {
+        let faces = ReaderPalette.swatch(paper)
+        return Button(action: action) {
+            VStack(spacing: 7) {
+                ZStack {
+                    faces.light
+                    // The unlit face, cut in under the diagonal.
+                    faces.dark.clipShape(SwatchHalf())
+                    // One letter, in each face's own ink, so the swatch says what *text* looks like
+                    // on this paper rather than only what the paper is.
+                    HStack(spacing: 0) {
+                        Text("A").foregroundStyle(faces.lightInk)
+                        Text("a").foregroundStyle(faces.darkInk)
+                    }
+                    .font(.custom("Inter-Bold", size: 17))
+                }
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Tokens.edge, lineWidth: 1)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(Tokens.ink, lineWidth: 2.5)
+                        .padding(-4)
+                        .opacity(isOn ? 1 : 0)
+                }
+                Text(paper.title).typeRole(.fine).foregroundStyle(isOn ? Tokens.ink : Tokens.ink2)
+                    .lineLimit(1).minimumScaleFactor(0.8)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(paper.title)
+        .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
+    }
+
     /// Settings' own row, which is a title over a grey line with the control at the far end.
     private func toggle(_ title: String, detail: String, isOn: Binding<Bool>) -> some View {
         HStack(alignment: .center, spacing: 12) {
@@ -102,5 +158,17 @@ struct ReaderPreferencesSheet: View {
             Spacer(minLength: 12)
             Toggle("", isOn: isOn).labelsHidden()
         }
+    }
+}
+
+/// The lower-right triangle of a swatch: the paper's unlit face, cut in under the diagonal.
+private struct SwatchHalf: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }

@@ -10,6 +10,7 @@ import T2SApp
 /// Skip amounts stay synchronized with the reading preferences.
 struct ReaderControls: View {
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.readerPalette) private var palette
     var onSleepTimer: () -> Void
     var onSpeed: () -> Void
 
@@ -21,7 +22,7 @@ struct ReaderControls: View {
                 env.sleepTimer.active == nil ? "moon.zzz" : "moon.zzz.fill", "Sleep timer",
                 size: 20, frame: 36, action: onSleepTimer
             )
-            .foregroundStyle(Tokens.ink2)
+            .foregroundStyle(palette.ink2)
             Spacer()
             HStack(spacing: 12) {
                 SkipControl(
@@ -64,7 +65,7 @@ struct ReaderControls: View {
                 Text(SpeedPickerModel.label(for: player.coordinator.rate))
                     .monospacedDigit()
                     .typeRole(.rowTitle)
-                    .foregroundStyle(Tokens.ink2)
+                    .foregroundStyle(palette.ink2)
                     .frame(minWidth: 36)
                     .frame(height: 44)
                     .contentShape(Rectangle())
@@ -72,7 +73,7 @@ struct ReaderControls: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Playback speed")
         }
-        .foregroundStyle(Tokens.ink)
+        .foregroundStyle(palette.ink)
         .frame(height: 72)                                                 // no side padding: ends align with the circles below
     }
 
@@ -151,6 +152,7 @@ private struct TransportGlyph: View {
 /// whichever of the two happens, the other cannot.
 private struct SkipControl: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.readerPalette) private var palette
     var glyph: String
     var label: String
     var holdGlyph: String
@@ -214,8 +216,8 @@ private struct SkipControl: View {
     /// and the measurement disappeared into the thing it was measuring — and neither is a colour.
     private var disc: some View {
         ZStack {
-            Circle().fill(Tokens.surface)
-            Circle().fill(Tokens.ink2.opacity(0.7)).scaleEffect(filled)
+            Circle().fill(palette.surface)
+            Circle().fill(palette.ink2.opacity(0.7)).scaleEffect(filled)
         }
         .frame(width: Self.holdFrame, height: Self.holdFrame)
         .clipShape(Circle())

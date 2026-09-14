@@ -23,7 +23,10 @@ struct ReaderTextView: UIViewRepresentable {
     let textScale: Double
     let lineHeight: Double
     let highlight: HighlightRange?
-    let highlightTheme: HighlightTheme
+    /// The paper this page is drawn on. It carries the ink, the dimmed ink ahead of the playhead
+    /// and the mark the reader's own selection wears — everything this view used to take from
+    /// `Tokens` (owner, 2026-09-14: the Reader's sixteen papers).
+    let palette: ReaderPalette
     let isFollowing: Bool
     let onTap: (Tap) -> Void
     let onUserScroll: () -> Void
@@ -53,11 +56,11 @@ struct ReaderTextView: UIViewRepresentable {
         view.textContainer.lineFragmentPadding = 0
         // The default before any text arrives; the typeset string then carries `ink` per run, since
         // `textColor` applies to the whole string and would flatten the byline's `ink2`.
-        view.textColor = UIColor(Tokens.ink)
+        view.textColor = UIColor(palette.ink)
         // The selection wears the colour the read-along used to paint (owner, 2026-09-12), set
         // here as well as in `setHighlightTheme` — that one only fires on a *change*, so a reader
         // who never touches the Appearance sheet would have kept the system blue.
-        view.tintColor = UIColor(Tokens.highlightWord(highlightTheme))
+        view.tintColor = UIColor(palette.mark)
         view.contentInsetAdjustmentBehavior = .never
         view.verticalScrollIndicatorInsets = UIEdgeInsets(top: Self.insets.top, left: 0, bottom: Self.insets.bottom, right: 0)
         view.delegate = context.coordinator
@@ -85,7 +88,9 @@ struct ReaderTextView: UIViewRepresentable {
         coordinator.onTap = onTap
         coordinator.onUserScroll = onUserScroll
         coordinator.onSaveSelection = onSaveSelection
-        coordinator.setHighlightTheme(highlightTheme)
+        // Before `setText`: the paper is part of the style key, so a new paper rebuilds the string
+        // in its ink rather than leaving the old one painted on the new page.
+        coordinator.setPalette(palette)
         coordinator.setText(text, scale: textScale, lineHeight: lineHeight, following: isFollowing)
         coordinator.setHighlight(highlight, following: isFollowing)
     }
@@ -104,6 +109,7 @@ struct ReaderTextView: UIViewRepresentable {
         var documentID: UUID
         var scale: Double
         var lineHeight: Double
+        var paper: ReaderPaper
     }
 
     @MainActor
@@ -118,7 +124,7 @@ struct ReaderTextView: UIViewRepresentable {
         private var styleKey: StyleKey?
         private var buildTask: Task<Void, Never>?
         private var highlight: HighlightRange?
-        private var highlightTheme: HighlightTheme = .amber
+        private var palette: ReaderPalette = .default
         private var wasFollowing = true
         private var wordRange: Range<Int>?
         /// Flattened offset of the word being spoken: everything before it has been read. Nil before
@@ -209,7 +215,7 @@ struct ReaderTextView: UIViewRepresentable {
             let range = fadeQueue.removeFirst()
             guard let traits = view?.traitCollection else { markRead(range); repaint(); return }
             fade = (range,
-                    UIColor(Tokens.inkUnread).resolvedColor(with: traits),
+                    UIColor(palette.unread).resolvedColor(with: traits),
                     storageColour(at: range.lowerBound).resolvedColor(with: traits),
                     CACurrentMediaTime())
             if fadeLink == nil {
@@ -279,7 +285,7 @@ struct ReaderTextView: UIViewRepresentable {
             guard ns.upperBound <= storage.length else { return }
             storage.enumerateAttribute(.foregroundColor, in: ns) { value, sub, _ in
                 guard let textRange = self.textRange(sub.location ..< sub.location + sub.length) else { return }
-                manager.setRenderingAttributes([.foregroundColor: (value as? UIColor) ?? UIColor(Tokens.ink)],
+                manager.setRenderingAttributes([.foregroundColor: (value as? UIColor) ?? UIColor(palette.ink)],
                                                for: textRange)
             }
         }
@@ -295,13 +301,13 @@ struct ReaderTextView: UIViewRepresentable {
             guard let content = view?.textLayoutManager?.textContentManager as? NSTextContentStorage,
                   let storage = content.textStorage, offset >= 0, offset < storage.length,
                   let colour = storage.attribute(.foregroundColor, at: offset, effectiveRange: nil) as? UIColor
-            else { return UIColor(Tokens.ink) }
+            else { return UIColor(palette.ink) }
             return colour
         }
 
         private func markUnread(_ range: Range<Int>) {
             guard let manager = view?.textLayoutManager, let range = textRange(range) else { return }
-            manager.setRenderingAttributes([.foregroundColor: UIColor(Tokens.inkUnread)], for: range)
+            manager.setRenderingAttributes([.foregroundColor: UIColor(palette.unread)], for: range)
         }
 
         /// A flattened-offset range as TextKit's own, or nil if it is empty or out of bounds.
@@ -324,13 +330,14 @@ struct ReaderTextView: UIViewRepresentable {
         /// text-size or line-height change does not yank the page back to the spoken word; the
         /// tints still track the new layout because `recomputeRanges()`/`redrawHighlight()` always run.
         func setText(_ text: ReaderText, scale: Double, lineHeight: Double, following: Bool) {
-            let key = StyleKey(documentID: text.documentID, scale: scale, lineHeight: lineHeight)
+            let key = StyleKey(documentID: text.documentID, scale: scale, lineHeight: lineHeight,
+                               paper: palette.paper)
             guard key != styleKey else { return }
             let isInitial = self.text == nil || styleKey?.documentID != key.documentID
             styleKey = key
             buildTask?.cancel()
-            let inkColor = UIColor(Tokens.ink)
-            let bylineColor = UIColor(Tokens.ink2)
+            let inkColor = UIColor(palette.ink)
+            let bylineColor = UIColor(palette.ink2)
             buildTask = Task.detached(priority: .userInitiated) { [text] in
                 guard let string = ReaderTypesetter.attributedString(
                     for: text, scale: scale, lineHeight: lineHeight, inkColor: inkColor, bylineColor: bylineColor)
@@ -376,12 +383,14 @@ struct ReaderTextView: UIViewRepresentable {
             wasFollowing = following
         }
 
-        /// The theme now colours the reader's own selection rather than a read-along tint, so it is
-        /// the text view's tint: UIKit paints the selection and its handles with it.
-        func setHighlightTheme(_ theme: HighlightTheme) {
-            guard theme != highlightTheme else { return }
-            highlightTheme = theme
-            view?.tintColor = UIColor(Tokens.highlightWord(theme))
+        /// The paper's mark colours the reader's own selection rather than a read-along tint, so it
+        /// is the text view's tint: UIKit paints the selection and its handles with it. The string
+        /// itself is restyled by `setText`, whose key carries the paper.
+        func setPalette(_ next: ReaderPalette) {
+            guard next != palette else { return }
+            palette = next
+            view?.tintColor = UIColor(next.mark)
+            view?.textColor = UIColor(next.ink)
         }
 
         private func recomputeRanges() {

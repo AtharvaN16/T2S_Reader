@@ -12,12 +12,17 @@ import T2SApp
 /// standing for the idea of a book, they are miniatures of the two bars themselves, sitting
 /// directly under the bar they switch.
 struct ScopeChip: View, Equatable {
-    /// The scope is the whole of this view's input — `onChange` captures `ReaderPreferences`, which
-    /// is a reference that outlives every redraw. Without this the chip is rebuilt ten times a
-    /// second by the playback clock ticking in the row above it, including through its own spring.
-    nonisolated static func == (a: ScopeChip, b: ScopeChip) -> Bool { a.scope == b.scope }
+    /// The scope and the paper are the whole of this view's input — `onChange` captures
+    /// `ReaderPreferences`, which is a reference that outlives every redraw. Without this the chip
+    /// is rebuilt ten times a second by the playback clock ticking in the row above it, including
+    /// through its own spring. The paper is in the comparison rather than read from the environment
+    /// so that changing it is one of the two things that *can* get through (2026-09-14).
+    nonisolated static func == (a: ScopeChip, b: ScopeChip) -> Bool {
+        a.scope == b.scope && a.palette.paper == b.palette.paper
+    }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var palette: ReaderPalette
     var scope: ScrubberScope
     var onChange: (ScrubberScope) -> Void
 
@@ -41,10 +46,10 @@ struct ScopeChip: View, Equatable {
                 // control on `ground`; `raised` is the step above it, so the thumb reads as
                 // sitting in the track in light and inset into it in dark.
                 Capsule()
-                    .fill(Tokens.surface)
+                    .fill(palette.surface)
                     .frame(width: Self.cell.width * 2 + Self.inset * 2, height: Self.cell.height + Self.inset * 2)
                 Capsule()
-                    .fill(Tokens.raised)
+                    .fill(palette.page)
                     .frame(width: Self.cell.width, height: Self.cell.height)
                     .offset(x: Self.inset + (scope == .chapter ? Self.cell.width : 0))
                 HStack(spacing: 0) {
@@ -76,7 +81,7 @@ struct ScopeChip: View, Equatable {
 
     private func cell(_ glyph: some View, lit: Bool) -> some View {
         glyph
-            .foregroundStyle(lit ? Tokens.ink : Tokens.ink2)
+            .foregroundStyle(lit ? palette.ink : palette.ink2)
             .frame(width: Self.cell.width, height: Self.cell.height)
             // Opacity and colour on a spring visibly wobble; only the capsule should feel sprung.
             .animation(.linear(duration: 0.16), value: lit)

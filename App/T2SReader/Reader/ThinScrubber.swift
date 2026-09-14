@@ -17,6 +17,7 @@ import T2SApp
 /// there is one place where a chapter's width is decided, and both the press and the scope go
 /// through it, so the two can never disagree about where a chapter starts.
 struct ThinScrubber: View {
+    @Environment(\.readerPalette) private var palette
     var model: ScrubberModel
     /// Chapter spans as fractions of the whole, in order. Fewer than two draws one bar.
     var segments: [Range<Double>] = []
@@ -224,7 +225,7 @@ struct ThinScrubber: View {
             /// Only the layout springs. The seek is async, so on release `fraction` falls back to the
             /// stale model value for a beat — animating the width would show the fill slide back.
             Rectangle()
-                .fill(Tokens.ink)
+                .fill(palette.ink)
                 .frame(width: width * played)
                 .transaction { $0.animation = nil }
         }
@@ -237,8 +238,8 @@ struct ThinScrubber: View {
     /// springing costs one path rebuild a frame instead of a width negotiation per tick.
     private func tickRow(_ ticks: TickSlice) -> some View {
         ZStack {
-            Tokens.ink3
-            TickMarks(ticks: ticks.ticks, slice: ticks.slice).fill(Tokens.ink2)
+            palette.ink3
+            TickMarks(ticks: ticks.ticks, slice: ticks.slice).fill(palette.ink2)
         }
     }
 
@@ -262,7 +263,7 @@ struct ThinScrubber: View {
         ZStack(alignment: .topLeading) {
             ForEach(Array(marks.enumerated()), id: \.offset) { _, mark in
                 Capsule()
-                    .fill(Tokens.accent)
+                    .fill(palette.accent)
                     .frame(width: CGFloat(mark.upperBound - mark.lowerBound) + Self.dotSize,
                            height: Self.dotSize)
                     .offset(x: CGFloat(mark.lowerBound) - Self.dotSize / 2,

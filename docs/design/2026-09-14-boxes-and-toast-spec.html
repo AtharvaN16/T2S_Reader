@@ -1,0 +1,387 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Storage box · Rendering box · Ready toast — the spec</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap">
+<style>
+:root{--ground:#F8F8F7;--paper:#FFFFFF;--ink:#111111;--ink2:#6E7076;--hair:#E2E3E8;--glow:#0066FF;--ready:#12A150;--warn:#C25A00;--no:#C0392B;
+ --serif:"Newsreader",Georgia,serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace;--app:"Inter",-apple-system,sans-serif;
+ --a-ground:#101010;--a-raised:#1A1A1A;--a-surface:#2F2F2F;--a-ink:#F2F2F2;--a-ink2:#8E8E8E;--a-ink3:#3A3A3A;
+ --a-accent:#FF8C3A;--a-positive:#34C070;--a-destructive:#FF5A50;
+ --card:#F2F2F2;--onCard:#101010;--pill:#E2E2E0;}
+@media(prefers-color-scheme:dark){:root{--ground:#0E0F12;--paper:#16171B;--ink:#ECEDF0;--ink2:#94969E;--hair:#26272D;--glow:#5F84FF;--ready:#37D97C;--warn:#FFA24D;--no:#FF6B5E;}}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--serif);font-size:17px;line-height:1.6;margin:0;padding:0 20px 110px}
+.wrap{max-width:1300px;margin:0 auto}.col{max-width:68ch}
+h1,h2,h3{margin:0;font-weight:400;text-wrap:balance}h1{font-size:clamp(34px,6vw,50px);line-height:1.05;letter-spacing:-.02em}
+h2{font-size:clamp(23px,3.2vw,30px);letter-spacing:-.01em}h3{font-size:18px}
+p{margin:0}ul{margin:0;padding-left:1.15em}li{margin:.2em 0}
+code{font-family:var(--mono);font-size:.78em;background:color-mix(in srgb,var(--ink) 8%,transparent);padding:.14em .4em;border-radius:3px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2)}
+.lede{font-size:20px;color:var(--ink2);font-weight:300;line-height:1.5}
+header{padding-block:70px 0}header .col{display:flex;flex-direction:column;gap:18px}
+.meta{font-family:var(--mono);font-size:12px;color:var(--ink2);line-height:2;border-top:1px solid var(--hair);padding-top:15px}
+.meta b{color:var(--ink);font-weight:500}
+section{padding-block:56px 0;display:flex;flex-direction:column;gap:22px}
+.shead{display:flex;flex-direction:column;gap:11px;max-width:70ch}
+.snum{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--glow);letter-spacing:.1em}
+.rail{display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start}
+.cnote{font-size:14.5px;line-height:1.45;color:var(--ink2)}.cnote b{color:var(--ink);font-weight:500}
+.callout{border-left:2px solid var(--glow);padding-left:14px;color:var(--ink2);max-width:70ch;font-size:15.5px}
+.callout b{color:var(--ink);font-weight:500}
+table{border-collapse:collapse;font-family:var(--app);font-size:13.5px;width:100%;max-width:880px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--hair);vertical-align:top}
+th{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);font-weight:500}
+td.k{font-family:var(--mono);font-size:11.5px;white-space:nowrap}
+/* stage */
+.stage{width:304px;background:var(--a-raised);border-radius:18px;padding:14px;font-family:var(--app);color:var(--a-ink);
+       box-shadow:0 10px 26px rgba(0,0,0,.38);display:flex;flex-direction:column;gap:11px}
+.box{background:var(--a-ground);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:0}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.1em;color:var(--a-ink2);text-transform:uppercase}
+.big{font-size:27px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.unit{font-size:13px;font-weight:600;color:var(--a-ink2);letter-spacing:0}
+.qual{font-size:13px;color:var(--a-ink2)}
+.ttl{font-size:16px;font-weight:600;letter-spacing:-.02em}
+.sz{font-size:14px;color:var(--a-ink2);font-variant-numeric:tabular-nums;font-weight:500}
+.sub{font-size:13px;color:var(--a-ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row{display:flex;align-items:center;gap:8px}
+.rowb{display:flex;align-items:baseline;gap:7px}
+.gl{width:34px;height:34px;border-radius:50%;background:var(--a-surface);color:var(--a-ink);display:flex;align-items:center;
+    justify-content:center;font-size:13px;flex:0 0 auto}
+.gl.des{color:var(--a-destructive)}
+.txtd{font-size:13px;font-weight:500;color:var(--a-destructive)}
+.bar{height:5px;border-radius:3px;background:var(--a-ink3);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:3px;background:var(--a-accent)}
+.bar.p i{background:var(--a-positive)}
+.seg{display:flex;gap:3px}
+.seg i{flex:1;height:6px;border-radius:2px;background:var(--a-ink3)}
+.seg i.done{background:var(--a-positive)}.seg i.half{background:color-mix(in srgb,var(--a-positive) 40%,var(--a-ink3))}
+.seg i.now{background:var(--a-accent)}.seg i.q{background:color-mix(in srgb,var(--a-accent) 30%,var(--a-ink3))}
+.seg i.fail{background:var(--a-destructive)}
+.sp{height:1px;background:none}
+/* spacing rulers */
+.ruler{position:relative}
+.tick{font-family:var(--mono);font-size:9px;color:var(--glow);letter-spacing:.04em}
+.specrow{display:flex;gap:9px;align-items:baseline;font-family:var(--mono);font-size:10.5px;color:var(--ink2);line-height:1.85}
+.specrow b{color:var(--ink);font-weight:700;min-width:88px;display:inline-block}
+/* toast */
+.ph{width:304px;height:300px;background:var(--a-ground);border-radius:34px;position:relative;overflow:hidden;font-family:var(--app);
+    box-shadow:0 0 0 9px #000,0 0 0 10.5px #2b2b2b,0 20px 44px rgba(0,0,0,.45);flex:0 0 auto;padding:16px 16px 0}
+.pg{opacity:.26;display:flex;flex-direction:column;gap:10px}
+.pr{display:flex;gap:10px;align-items:center}
+.cv{width:28px;height:40px;border-radius:3px;background:linear-gradient(150deg,#42548f,#2d3a63);flex:0 0 auto}
+.l1{height:8px;border-radius:3px;background:#333;width:60%}.l2{height:6px;border-radius:3px;background:#242424;width:38%;margin-top:5px}
+.dock{position:absolute;left:16px;right:16px;bottom:10px;display:flex;flex-direction:column}
+.mini{background:var(--a-raised);border:1px solid #262626;border-radius:99px;padding:8px 13px;display:flex;align-items:center;gap:9px;font-size:11.5px;color:#F2F2F2}
+.mini .sq{width:22px;height:22px;border-radius:5px;background:linear-gradient(150deg,#42548f,#2d3a63)}
+.pager{display:flex;gap:5px;justify-content:center;align-items:center;height:13px;margin-top:8px}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--a-ink3)}.dot.on{background:#F2F2F2;width:15px;border-radius:3px}
+.card{background:var(--card);color:var(--onCard);border-radius:10px;padding:20px 18px;display:flex;flex-direction:column;gap:20px}
+.crow{display:flex;align-items:center;gap:12px}
+.tcov{width:31px;height:46px;border-radius:3px;background:linear-gradient(150deg,#42548f,#2d3a63);flex:0 0 auto;
+      display:flex;align-items:center;justify-content:center;color:#dfe3f2;font-size:13px;font-weight:700}
+.tcov.pdf{background:#d9534f22;color:#b03a36;border:1px solid #b03a3655}
+.ttl2{font-size:15px;font-weight:500;letter-spacing:-.01em}
+.det{font-size:13px;color:rgba(16,16,16,.65);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl{background:var(--pill);color:var(--onCard);border-radius:99px;padding:11px 12px;font-size:13px;font-weight:500;
+    display:flex;align-items:center;justify-content:center;gap:6px;flex:1}
+.rec{border:1px solid color-mix(in srgb,var(--ready) 45%,transparent);border-radius:11px;padding:18px 20px;background:color-mix(in srgb,var(--ready) 7%,transparent);max-width:72ch}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(304px,1fr));gap:26px}
+.st{display:flex;flex-direction:column;gap:9px}
+.stname{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--ink);letter-spacing:.04em}
+.stwhy{font-size:13px;color:var(--ink2);line-height:1.42;max-width:304px}
+.flag{font-family:var(--mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:var(--no)}
+</style>
+<div class="wrap">
+<header><div class="col">
+  <div class="eyebrow">t2s reader · design · 2026-09-14</div>
+  <h1>Two boxes, one toast</h1>
+  <p class="lede">Storage takes the ledger; rendering takes the headline. Icon-only controls,
+     and the word is <em>Delete</em>.</p>
+  <div class="meta">
+    <b>Storage</b> 01 Ledger — label · hero number · segmented bar · detail + Delete<br>
+    <b>Rendering</b> 02 Headline — heading · percent · bar · chapter + ⏸ ✕<br>
+    <b>Toast</b> cover · “Chapter ready to play” · chapter name · Play</div>
+</div></header>
+
+<!-- 01 the two boxes, specced -->
+<section>
+  <div class="shead"><div class="snum">01 / THE TWO BOXES</div>
+    <h2>Why these two shapes are allowed to differ</h2>
+    <p class="cnote">Last round I argued they should match. Your split says otherwise, and it holds up:
+       <b>they are not two states of one thing, they are two different questions.</b> Storage asks
+       “how much of this book do I have?” — a quantity. Rendering asks “how far along is this?” — a rate.
+       A quantity wants a hero number and a count you can see; a rate wants a heading and a bar.</p>
+    <p class="cnote">What they <i>do</i> share, so they never look like strangers: the same 16 pt padding,
+       the same <code>ground</code> well, the same 5–6 pt bar, and the same trailing control slot.</p></div>
+
+  <div class="rail">
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="stage"><div class="box">
+        <div class="lbl">On this device</div>
+        <div style="height:10px"></div>
+        <div class="rowb"><span class="big">135.3</span><span class="unit">MB</span>
+          <span style="flex:1"></span><span class="qual">9 of 23 chapters</span></div>
+        <div style="height:14px"></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div style="height:14px"></div>
+        <div class="row"><span class="sub" style="flex:1">Ready to play offline</span>
+          <span class="txtd">Delete</span></div></div></div>
+      <div class="specrow"><b>label</b> 11 / 600 / +0.1em caps · <code>ink2</code></div>
+      <div class="specrow"><b>hero</b> 27 / 800 / −0.03em · unit 13 / 600 <code>ink2</code> on the baseline</div>
+      <div class="specrow"><b>qualifier</b> 13 / 400 <code>ink2</code>, trailing, same baseline as the hero</div>
+      <div class="specrow"><b>bar</b> 6 pt, 3 pt gaps, radius 2 · <code>positive</code> / <code>ink3</code></div>
+      <div class="specrow"><b>detail</b> 13 / 400 <code>ink2</code> · <b>Delete</b> 13 / 500 <code>destructive</code>, text only</div>
+      <div class="specrow"><b>rhythm</b> 10 · 14 · 14 — label sits close to its number, the bar stands apart</div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="stage"><div class="box">
+        <div class="row"><span class="ttl" style="flex:1">Rendering 2 of 5</span><span class="sz">61%</span></div>
+        <div style="height:12px"></div>
+        <div class="bar"><i style="width:61%"></i></div>
+        <div style="height:12px"></div>
+        <div class="row"><span class="sub" style="flex:1">Dramatis Personae</span>
+          <span class="gl">⏸</span><span class="gl des">✕</span></div></div></div>
+      <div class="specrow"><b>heading</b> 16 / 600 / −0.02em <code>ink</code> — sentence case, not caps</div>
+      <div class="specrow"><b>percent</b> 14 / 500 <code>ink2</code>, tabular, trailing · centred on the heading</div>
+      <div class="specrow"><b>bar</b> 5 pt continuous, radius 3 · <code>accent</code> / <code>ink3</code></div>
+      <div class="specrow"><b>chapter</b> 13 / 400 <code>ink2</code>, truncates at the tail</div>
+      <div class="specrow"><b>buttons</b> 34 pt discs, <code>surface</code> · pause <code>ink</code> · stop <code>destructive</code></div>
+      <div class="specrow"><b>rhythm</b> 12 · 12 — tighter than storage: three rows, all one thought</div>
+    </div>
+  </div>
+
+  <p class="callout"><b>On icon-only buttons.</b> Pause reads unambiguously as a glyph — every player in the
+     world uses it. <b>Stop does not.</b> A bare ✕ next to a pause button reads as “dismiss this box”, not
+     “throw away the queue”. Two ways out: give ✕ a confirmation (<i>Stop rendering? 3 chapters queued.</i>),
+     or keep ✕ for dismiss-like weight and let Stop live in the row's accessibility label only. <b>I would
+     confirm it</b> — it is the one control here that loses work.</p>
+</section>
+
+<!-- 02 storage edge cases -->
+<section>
+  <div class="shead"><div class="snum">02 / STORAGE — EVERY STATE</div><h2>Seven</h2></div>
+  <div class="grid">
+    <div class="st"><div class="stname">NOTHING YET</div>
+      <div class="stage"><div class="box">
+        <div class="lbl">On this device</div><div style="height:10px"></div>
+        <div class="rowb"><span class="big" style="color:var(--a-ink2)">Nothing</span>
+          <span style="flex:1"></span><span class="qual">23 chapters</span></div>
+        <div style="height:14px"></div>
+        <div class="seg"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div style="height:14px"></div>
+        <div class="row"><span class="sub" style="flex:1">Tap ⌇ to choose chapters</span></div></div></div>
+      <p class="stwhy"><b>No Delete</b> — nothing to delete. The empty bar shows the size of the job, and the
+        detail line points at the one thing to do.</p></div>
+
+    <div class="st"><div class="stname">ALL OF IT</div>
+      <div class="stage"><div class="box">
+        <div class="lbl">On this device</div><div style="height:10px"></div>
+        <div class="rowb"><span class="big">347</span><span class="unit">MB</span>
+          <span style="flex:1"></span><span class="qual">all 23 chapters</span></div>
+        <div style="height:14px"></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i></div>
+        <div style="height:14px"></div>
+        <div class="row"><span class="sub" style="flex:1">Ready to play offline</span><span class="txtd">Delete</span></div></div></div>
+      <p class="stwhy">“<b>all 23 chapters</b>”, not “23 of 23”. The only state where the reader learns the
+        book works with no signal.</p></div>
+
+    <div class="st"><div class="stname">PART-RENDERED CHAPTERS</div>
+      <div class="stage"><div class="box">
+        <div class="lbl">On this device</div><div style="height:10px"></div>
+        <div class="rowb"><span class="big">44</span><span class="unit">MB</span>
+          <span style="flex:1"></span><span class="qual">2 of 23 chapters</span></div>
+        <div style="height:14px"></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="half"></i><i class="half"></i><i class="half"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div style="height:14px"></div>
+        <div class="row"><span class="sub" style="flex:1">3 more partly rendered</span><span class="txtd">Delete</span></div></div></div>
+      <p class="stwhy"><span class="flag">forces the third segment state</span> The fill tier leaves chapters
+        half made. That audio takes up room and will not play a chapter through — a <b>dim segment</b> is
+        the only honest way to draw it.</p></div>
+
+    <div class="st"><div class="stname">A FAILURE</div>
+      <div class="stage"><div class="box">
+        <div class="lbl">On this device</div><div style="height:10px"></div>
+        <div class="rowb"><span class="big">128</span><span class="unit">MB</span>
+          <span style="flex:1"></span><span class="qual">8 of 23 chapters</span></div>
+        <div style="height:14px"></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="fail"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div style="height:14px"></div>
+        <div class="row"><span class="sub" style="flex:1;color:var(--a-destructive)">1 chapter failed</span>
+          <span class="txtd" style="color:var(--a-ink)">Try again</span></div></div></div>
+      <p class="stwhy">A red segment says <i>which</i>. The control becomes <b>Try again</b> — after a
+        failure, a retry beats a delete.</p></div>
+
+    <div class="st"><div class="stname">A LONG BOOK · 61 CHAPTERS</div>
+      <div class="stage"><div class="box">
+        <div class="lbl">On this device</div><div style="height:10px"></div>
+        <div class="rowb"><span class="big">612</span><span class="unit">MB</span>
+          <span style="flex:1"></span><span class="qual">24 of 61 chapters</span></div>
+        <div style="height:14px"></div>
+        <div class="bar p"><i style="width:39%"></i></div>
+        <div style="height:14px"></div>
+        <div class="row"><span class="sub" style="flex:1">Ready to play offline</span><span class="txtd">Delete</span></div></div></div>
+      <p class="stwhy"><span class="flag">breaks the segments</span> Above ~30 chapters the gaps beat the
+        bars. <b>Falls back to a plain bar</b> in the same slot — same layout, one view swapped.</p></div>
+
+    <div class="st"><div class="stname">A ONE-PIECE DOCUMENT</div>
+      <div class="stage"><div class="box">
+        <div class="lbl">On this device</div><div style="height:10px"></div>
+        <div class="rowb"><span class="big">18</span><span class="unit">MB</span>
+          <span style="flex:1"></span><span class="qual">whole document</span></div>
+        <div style="height:14px"></div>
+        <div class="bar p"><i style="width:100%"></i></div>
+        <div style="height:14px"></div>
+        <div class="row"><span class="sub" style="flex:1">Ready to play offline</span><span class="txtd">Delete</span></div></div></div>
+      <p class="stwhy">An article or a PDF has one chapter. “1 of 1” becomes <b>“whole document”</b> and the
+        bar goes plain — one segment <i>is</i> a bar.</p></div>
+
+    <div class="st"><div class="stname">DELETE, ASKED</div>
+      <div class="stage" style="padding:0;background:none;box-shadow:none">
+        <div class="card" style="background:var(--a-raised);color:var(--a-ink);border-radius:16px;padding:18px;gap:14px">
+          <div><div style="font-size:17px;font-weight:700;letter-spacing:-.02em">Delete this book's audio?</div>
+            <div style="font-size:13px;color:var(--a-ink2);margin-top:6px;line-height:1.45;white-space:normal">
+              Frees <b style="color:var(--a-ink)">135.3 MB</b>. The book, your place and your bookmarks all
+              stay. You can render it again any time.</div></div>
+          <div class="row" style="gap:8px"><span class="pl" style="background:var(--a-surface);color:var(--a-ink);flex:1">Keep</span>
+            <span class="pl" style="background:var(--a-destructive);color:#2a0603;flex:1">Delete audio</span></div></div></div>
+      <p class="stwhy">The bare word <b>Delete</b> is safe on the box <i>because</i> this sheet exists. It names
+        the megabytes, and it names what survives — which is the whole reason this delete is a
+        comfortable one.</p></div>
+  </div>
+</section>
+
+<!-- 03 rendering edge cases -->
+<section>
+  <div class="shead"><div class="snum">03 / RENDERING — EVERY STATE</div><h2>Six</h2></div>
+  <div class="grid">
+    <div class="st"><div class="stname">ONE CHAPTER</div>
+      <div class="stage"><div class="box">
+        <div class="row"><span class="ttl" style="flex:1">Rendering</span><span class="sz">61%</span></div>
+        <div style="height:12px"></div><div class="bar"><i style="width:61%"></i></div><div style="height:12px"></div>
+        <div class="row"><span class="sub" style="flex:1">Dramatis Personae</span><span class="gl">⏸</span><span class="gl des">✕</span></div></div></div>
+      <p class="stwhy"><b>No “1 of 1”.</b> A counter that can only read one out of one is the app counting
+        aloud for itself.</p></div>
+
+    <div class="st"><div class="stname">A BATCH</div>
+      <div class="stage"><div class="box">
+        <div class="row"><span class="ttl" style="flex:1">Rendering 2 of 5</span><span class="sz">61%</span></div>
+        <div style="height:12px"></div><div class="bar"><i style="width:61%"></i></div><div style="height:12px"></div>
+        <div class="row"><span class="sub" style="flex:1">Dramatis Personae · 12 min left</span><span class="gl">⏸</span><span class="gl des">✕</span></div></div></div>
+      <p class="stwhy">The percent is <b>this chapter's</b>; “2 of 5” carries the batch. The detail line picks
+        up the estimate, which only a batch makes worth printing.</p></div>
+
+    <div class="st"><div class="stname">YOU PAUSED IT</div>
+      <div class="stage"><div class="box">
+        <div class="row"><span class="ttl" style="flex:1">Paused</span><span class="sz">61%</span></div>
+        <div style="height:12px"></div><div class="bar"><i style="width:61%;background:var(--a-ink2)"></i></div><div style="height:12px"></div>
+        <div class="row"><span class="sub" style="flex:1">It keeps its place</span><span class="gl">▶</span><span class="gl des">✕</span></div></div></div>
+      <p class="stwhy">The bar goes <b>grey</b> — the one visual difference between working and stopped —
+        and ⏸ becomes ▶. The detail answers the only question a pause raises.</p></div>
+
+    <div class="st"><div class="stname">THE PHONE PAUSED IT</div>
+      <div class="stage"><div class="box">
+        <div class="row"><span class="ttl" style="flex:1;color:var(--a-accent)">Paused — phone is warm</span><span class="sz">61%</span></div>
+        <div style="height:12px"></div><div class="bar"><i style="width:61%;background:var(--a-ink2)"></i></div><div style="height:12px"></div>
+        <div class="row"><span class="sub" style="flex:1">Starts again once it cools</span><span class="gl">▶</span><span class="gl des">✕</span></div></div></div>
+      <p class="stwhy">Same three rows; the <b>heading carries the reason</b> and turns accent. ▶ here means
+        “render anyway”, which the model already treats as the same word.</p></div>
+
+    <div class="st"><div class="stname">NO ROOM LEFT</div>
+      <div class="stage"><div class="box">
+        <div class="row"><span class="ttl" style="flex:1;color:var(--a-destructive)">Paused — no room</span><span class="sz">61%</span></div>
+        <div style="height:12px"></div><div class="bar"><i style="width:61%;background:var(--a-ink2)"></i></div><div style="height:12px"></div>
+        <div class="row"><span class="sub" style="flex:1">Free space in Settings → Storage</span><span class="gl des">✕</span></div></div></div>
+      <p class="stwhy"><b>No ▶.</b> Nothing to press through — the constraint is real. One control, and the
+        sentence points at the way out.</p></div>
+
+    <div class="st"><div class="stname">STOP, ASKED</div>
+      <div class="stage" style="padding:0;background:none;box-shadow:none">
+        <div class="card" style="background:var(--a-raised);color:var(--a-ink);border-radius:16px;padding:18px;gap:14px">
+          <div><div style="font-size:17px;font-weight:700;letter-spacing:-.02em">Stop rendering?</div>
+            <div style="font-size:13px;color:var(--a-ink2);margin-top:6px;line-height:1.45;white-space:normal">
+              <b style="color:var(--a-ink)">3 chapters</b> are still waiting. Chapters already finished stay
+              on the device.</div></div>
+          <div class="row" style="gap:8px"><span class="pl" style="background:var(--a-surface);color:var(--a-ink);flex:1">Keep going</span>
+            <span class="pl" style="background:var(--a-destructive);color:#2a0603;flex:1">Stop</span></div></div></div>
+      <p class="stwhy"><span class="flag">the case that argues for a confirm</span> A bare ✕ beside ⏸ reads
+        as “dismiss this box”. This sheet is what makes an icon-only Stop safe — and it says the part
+        nobody would guess: <b>finished chapters are kept.</b></p></div>
+  </div>
+</section>
+
+<!-- 04 toast -->
+<section>
+  <div class="shead"><div class="snum">04 / THE READY TOAST</div>
+    <h2>Built, and drawn here at four sizes of truth</h2>
+    <p class="cnote">The bookmark card's geometry with the cover in the disc's place. Lifted 56 pt so it
+       clears the mini-player.</p></div>
+  <div class="rail">
+    <div style="display:flex;flex-direction:column;gap:11px">
+      <div class="ph"><div class="pg"><div class="pr"><div class="cv"></div><div><div class="l1"></div><div class="l2"></div></div></div></div>
+        <div class="dock"><div class="card"><div class="crow"><div class="tcov">2</div>
+            <div style="flex:1;min-width:0"><div class="ttl2">Chapter ready to play</div>
+              <div class="det">Chapter 4: The Siege of Delhi</div></div></div>
+            <div class="row"><div class="pl">▶ Play</div></div></div>
+          <div style="height:56px"></div>
+          <div class="mini"><div class="sq"></div><span style="flex:1">The Last Mughal</span><span>▶</span></div>
+          <div class="pager"><span class="dot"></span><span class="dot on"></span><span class="dot"></span></div></div></div>
+      <p class="stwhy"><b>A BOOK</b> — the cover carries the title, so the grey line is free to name the
+        chapter alone. Built and in the simulator now.</p></div>
+
+    <div style="display:flex;flex-direction:column;gap:11px">
+      <div class="ph"><div class="pg"><div class="pr"><div class="cv"></div><div><div class="l1"></div><div class="l2"></div></div></div></div>
+        <div class="dock"><div class="card"><div class="crow"><div class="tcov pdf">PDF</div>
+            <div style="flex:1;min-width:0"><div class="ttl2">Document ready to play</div>
+              <div class="det">Accessibility Master File</div></div></div>
+            <div class="row"><div class="pl">▶ Play</div></div></div>
+          <div style="height:56px"></div>
+          <div class="mini"><div class="sq"></div><span style="flex:1">Accessibility Master…</span><span>▶</span></div>
+          <div class="pager"><span class="dot"></span><span class="dot on"></span><span class="dot"></span></div></div></div>
+      <p class="stwhy"><b>A PDF OR ARTICLE</b> — no chapter worth naming, so the grey line takes the
+        document's own title and the headline says “Document”.</p></div>
+
+    <div style="display:flex;flex-direction:column;gap:11px">
+      <div class="ph"><div class="pg"><div class="pr"><div class="cv"></div><div><div class="l1"></div><div class="l2"></div></div></div></div>
+        <div class="dock"><div class="card"><div class="crow"><div class="tcov">2</div>
+            <div style="flex:1;min-width:0"><div class="ttl2">3 chapters ready to play</div>
+              <div class="det">The Last Mughal</div></div></div>
+            <div class="row"><div class="pl">▶ Play</div></div></div>
+          <div style="height:56px"></div>
+          <div class="mini"><div class="sq"></div><span style="flex:1">The Last Mughal</span><span>▶</span></div>
+          <div class="pager"><span class="dot"></span><span class="dot on"></span><span class="dot"></span></div></div></div>
+      <p class="stwhy"><b>A BATCH</b> — no single chapter to name, so the line falls back to the book.
+        Play picks the book up where you left it rather than jumping.</p></div>
+
+    <div style="display:flex;flex-direction:column;gap:11px">
+      <div class="ph"><div class="pg"><div class="pr"><div class="cv"></div><div><div class="l1"></div><div class="l2"></div></div></div></div>
+        <div class="dock"><div class="card"><div class="crow"><div class="tcov">2</div>
+            <div style="flex:1;min-width:0"><div class="ttl2">2 chapters ready to play</div>
+              <div class="det" style="color:#b03a36">1 chapter could not be rendered</div></div></div>
+            <div class="row"><div class="pl">▶ Play</div></div></div>
+          <div style="height:56px"></div>
+          <div class="mini"><div class="sq"></div><span style="flex:1">The Last Mughal</span><span>▶</span></div>
+          <div class="pager"><span class="dot"></span><span class="dot on"></span><span class="dot"></span></div></div></div>
+      <p class="stwhy"><b>PART FAILED</b> — the failure takes the grey line, because it is the thing the
+        reader can act on. If <i>everything</i> failed there is no Play and no cover: it becomes a plain
+        bar toast carrying the reason.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">05 / DECIDED HERE</div><h2>Four things this spec settles</h2></div>
+  <div class="rec">
+    <ul style="font-family:var(--app);font-size:15px;line-height:1.7">
+      <li><b>The two boxes may differ</b> — a quantity and a rate are different questions. They share
+        padding, well, bar weight and control slot, so they still read as siblings.</li>
+      <li><b>Delete is bare text, not a pill.</b> On the storage box it is one word in
+        <code>destructive</code> at the trailing edge; the confirmation sheet carries the weight.</li>
+      <li><b>Stop gets a confirmation.</b> Icon-only is fine for pause; a bare ✕ that silently throws away
+        a queue is not, and the sheet is where “finished chapters are kept” can be said.</li>
+      <li><b>The segmented bar falls back</b> above ~30 chapters and at 1, and needs a third dim state for
+        part-rendered chapters.</li>
+    </ul>
+  </div>
+</section>
+</div>

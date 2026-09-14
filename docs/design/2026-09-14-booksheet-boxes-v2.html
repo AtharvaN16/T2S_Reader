@@ -1,0 +1,341 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The two boxes — A + B, the delete question, and every state</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap">
+<style>
+:root{--ground:#F8F8F7;--paper:#FFFFFF;--ink:#111111;--ink2:#6E7076;--hair:#E2E3E8;--glow:#0066FF;--ready:#12A150;--warn:#C25A00;--no:#C0392B;
+ --serif:"Newsreader",Georgia,serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace;--app:"Inter",-apple-system,sans-serif;
+ --a-ground:#101010;--a-raised:#1A1A1A;--a-surface:#2F2F2F;--a-ink:#F2F2F2;--a-ink2:#8E8E8E;--a-ink3:#3A3A3A;
+ --a-accent:#FF8C3A;--a-positive:#34C070;--a-destructive:#FF5A50;}
+@media(prefers-color-scheme:dark){:root{--ground:#0E0F12;--paper:#16171B;--ink:#ECEDF0;--ink2:#94969E;--hair:#26272D;--glow:#5F84FF;--ready:#37D97C;--warn:#FFA24D;--no:#FF6B5E;}}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--serif);font-size:17px;line-height:1.6;margin:0;padding:0 20px 110px}
+.wrap{max-width:1280px;margin:0 auto}.col{max-width:68ch}
+h1,h2,h3{margin:0;font-weight:400;text-wrap:balance}h1{font-size:clamp(34px,6vw,50px);line-height:1.05;letter-spacing:-.02em}
+h2{font-size:clamp(23px,3.2vw,30px);letter-spacing:-.01em}h3{font-size:19px}
+p{margin:0}ul{margin:0;padding-left:1.15em}li{margin:.2em 0}
+code{font-family:var(--mono);font-size:.78em;background:color-mix(in srgb,var(--ink) 8%,transparent);padding:.14em .4em;border-radius:3px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2)}
+.lede{font-size:20px;color:var(--ink2);font-weight:300;line-height:1.5}
+header{padding-block:70px 0}header .col{display:flex;flex-direction:column;gap:18px}
+.meta{font-family:var(--mono);font-size:12px;color:var(--ink2);line-height:2;border-top:1px solid var(--hair);padding-top:15px}
+.meta b{color:var(--ink);font-weight:500}
+section{padding-block:58px 0;display:flex;flex-direction:column;gap:22px}
+.shead{display:flex;flex-direction:column;gap:11px;max-width:70ch}
+.snum{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--glow);letter-spacing:.1em}
+.rail{display:flex;flex-wrap:wrap;gap:26px;align-items:flex-start}
+.unit{display:flex;flex-direction:column;gap:11px;margin:0}
+.unit>figcaption{display:flex;flex-direction:column;gap:5px;max-width:300px}
+.cname{font-family:var(--mono);font-size:11.5px;font-weight:700;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.tag{font-size:9.5px;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.08em;font-weight:500}
+.tag.rec{background:color-mix(in srgb,var(--ready) 18%,transparent);color:var(--ready)}
+.tag.alt{background:color-mix(in srgb,var(--glow) 16%,transparent);color:var(--glow)}
+.tag.no{background:color-mix(in srgb,var(--no) 15%,transparent);color:var(--no)}
+.tag.now{background:color-mix(in srgb,var(--ink) 10%,transparent);color:var(--ink2)}
+.tag.warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.cnote{font-size:14.5px;line-height:1.45;color:var(--ink2)}.cnote b{color:var(--ink);font-weight:500}
+.callout{border-left:2px solid var(--glow);padding-left:14px;color:var(--ink2);max-width:70ch;font-size:15.5px}
+.callout.warn{border-color:var(--warn)}
+.callout b{color:var(--ink);font-weight:500}
+.rec{border:1px solid color-mix(in srgb,var(--ready) 45%,transparent);border-radius:11px;padding:18px 20px;background:color-mix(in srgb,var(--ready) 7%,transparent);max-width:72ch}
+table{border-collapse:collapse;font-family:var(--app);font-size:14px;width:100%;max-width:860px}
+th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--hair);vertical-align:top}
+th{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);font-weight:500}
+/* stage + box, true scale on a raised sheet */
+.stage{width:300px;background:var(--a-raised);border-radius:18px;padding:14px;font-family:var(--app);color:var(--a-ink);
+       box-shadow:0 12px 30px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:11px}
+.box{background:var(--a-ground);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:11px}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.09em;color:var(--a-ink2)}
+.big{font-size:26px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.qual{font-size:13px;color:var(--a-ink2)}
+.hrow{display:flex;align-items:baseline;gap:8px}
+.ttl{font-size:16px;font-weight:600;letter-spacing:-.02em}
+.sz{font-size:13px;color:var(--a-ink2);margin-left:auto;font-variant-numeric:tabular-nums}
+.sub{font-size:13px;color:var(--a-ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:99px;padding:8px 13px;font-size:12.5px;font-weight:500;background:var(--a-surface);color:var(--a-ink);white-space:nowrap}
+.pill.des{color:var(--a-destructive)}.pill.sm{padding:6px 11px;font-size:11.5px}
+.txtbtn{font-size:12.5px;font-weight:500;color:var(--a-destructive);margin-left:auto}
+.bar{height:4px;border-radius:2px;background:var(--a-ink3);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:2px;background:var(--a-accent)}
+.bar.p i{background:var(--a-positive)}
+.seg{display:flex;gap:3px}
+.seg i{flex:1;height:5px;border-radius:2px;background:var(--a-ink3)}
+.seg i.done{background:var(--a-positive)}
+.seg i.half{background:color-mix(in srgb,var(--a-positive) 42%,var(--a-ink3))}
+.seg i.now{background:var(--a-accent)}
+.seg i.fail{background:var(--a-destructive)}
+.seg.fine i{border-radius:1px}
+.wave{display:inline-flex;gap:2px;align-items:flex-end;height:15px;flex:0 0 auto}
+.wave b{width:2.5px;border-radius:1px;background:var(--a-ink3);display:block}.wave b.on{background:var(--a-accent)}
+.flag{font-family:var(--mono);font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:var(--no)}
+.flag.ok{color:var(--ready)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:24px}
+.st{display:flex;flex-direction:column;gap:9px}
+.stname{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--ink);letter-spacing:.03em}
+.stwhy{font-size:13.5px;color:var(--ink2);line-height:1.4;max-width:300px}
+</style>
+<div class="wrap">
+<header><div class="col">
+  <div class="eyebrow">t2s reader · design · 2026-09-14</div>
+  <h1>A for storage, B for rendering</h1>
+  <p class="lede">Your pick, drawn properly — plus the thing it costs, a better word than Evict,
+     and every state the pair has to survive.</p>
+  <div class="meta"><b>Chosen</b> A idle · B rendering · Evict → Delete<br>
+     <b>Open</b> how far to reconcile the two, and what the bar does at the edges</div>
+</div></header>
+
+<!-- 01 the pick -->
+<section>
+  <div class="shead"><div class="snum">01 / YOUR PICK, DRAWN</div>
+    <h2>What A + B looks like as one component</h2>
+    <p class="cnote">Both states, stacked, so the swap is visible.</p></div>
+  <div class="rail">
+    <figure class="unit"><div class="stage">
+      <div class="box">
+        <div class="lbl">ON THIS DEVICE</div>
+        <div class="hrow" style="margin-top:-4px"><span class="big">135.3 MB</span><span class="qual">9 of 23 chapters</span></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div><span class="pill des">🗑 Delete audio</span></div></div>
+      <div class="box">
+        <div class="hrow"><span class="ttl">Rendering 2 of 5</span><span class="sz">61%</span></div>
+        <div class="bar"><i style="width:61%"></i></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">Dramatis Personae</span>
+          <span class="pill sm">⏸ Pause</span><span class="pill sm des">✕ Stop</span></div></div>
+    </div>
+      <figcaption><div class="cname">A + B, LITERALLY <span class="tag now">as picked</span></div>
+      <p class="cnote">Both read well on their own. Side by side the seam shows: <b>a small-caps label
+         becomes a heading, a display number becomes a 13 pt corner number, and a 23-segment bar becomes
+         one continuous one.</b> Nothing is in the same place twice.</p>
+      <p class="cnote">In use these <b>swap in place</b> when you press Render — so the box appears to be
+         replaced rather than updated.</p></figcaption></figure>
+
+    <figure class="unit"><div class="stage">
+      <div class="box">
+        <div class="lbl">ON THIS DEVICE</div>
+        <div class="hrow" style="margin-top:-4px"><span class="big">135.3 MB</span><span class="qual">9 of 23 chapters</span></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">Ready to play offline</span>
+          <span class="pill sm des">🗑 Delete audio</span></div></div>
+      <div class="box">
+        <div class="lbl">RENDERING · 2 OF 5</div>
+        <div class="hrow" style="margin-top:-4px"><span class="big">61%</span><span class="qual">about 3 min left</span></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="now"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">Dramatis Personae</span>
+          <span class="pill sm">⏸ Pause</span><span class="pill sm des">✕ Stop</span></div></div>
+    </div>
+      <figcaption><div class="cname">A′ + B′, RECONCILED <span class="tag rec">recommended</span></div>
+      <p class="cnote">Same four rows both times — <b>label · number + qualifier · bar · detail with
+         controls</b>. Pressing Render changes the words, lights one segment amber and swaps the
+         buttons. Nothing moves.</p>
+      <p class="cnote">It keeps everything you liked in A (the small-caps label, the number at display
+         size, the segmented bar) and everything B did better than A (<b>the controls on the detail row
+         instead of hanging off the bottom-left</b>, which was the spacing complaint).</p>
+      <p class="cnote">The one genuine loss: <b>the percentage is no longer the heading</b> in the
+         rendering state — it is the big number instead, which is arguably where it belonged.</p></figcaption></figure>
+  </div>
+  <p class="callout"><b>The question under this:</b> are these one component in two states, or two
+     components? If they swap in place — and they do, on the same spot in the sheet — the eye expects the
+     second to be the first with different words. A′+B′ is that. A+B is two boxes that take turns.</p>
+</section>
+
+<!-- 02 delete -->
+<section>
+  <div class="shead"><div class="snum">02 / THE WORD, AND THE BUTTON</div>
+    <h2>“Evict” is a cache word. But “Delete” alone is a trap.</h2>
+    <p class="cnote">You are right that Evict has to go — no reader thinks of their audio as being
+       evicted. The catch: this sheet's <code>⋯</code> already has a <b>Delete</b> that removes the book
+       from the library for good. Two controls called Delete, one recoverable and one not, a few
+       millimetres apart.</p></div>
+  <table>
+    <tr><th>Wording</th><th>Reads as</th><th>Verdict</th></tr>
+    <tr><td><b>Evict all</b> <span class="tag now">today</span></td><td>Something the system does to a cache</td><td class="cnote">Out. Nobody's mental model.</td></tr>
+    <tr><td><b>Delete</b></td><td>Delete… what? The book is right there above it</td><td class="cnote">Ambiguous against the <code>⋯</code>'s Delete. The one word that must not be ambiguous.</td></tr>
+    <tr><td><b>Delete audio</b></td><td>The audio goes, the book stays</td><td class="cnote"><span class="flag ok">recommended</span> Says the noun. Pairs with the box's heading — “On this device · Delete audio”.</td></tr>
+    <tr><td><b>Delete downloads</b></td><td>Files that came from somewhere else</td><td class="cnote">Wrong: nothing was downloaded. The phone made it.</td></tr>
+    <tr><td><b>Remove audio</b></td><td>Gentler, reversible</td><td class="cnote">Honest — it <i>is</i> reversible — but the app says Delete elsewhere, and two verbs for one act is worse than one blunt one.</td></tr>
+  </table>
+  <div class="rail" style="margin-top:6px">
+    <figure class="unit"><div class="stage"><div class="box">
+      <div class="lbl">ON THIS DEVICE</div>
+      <div class="hrow" style="margin-top:-4px"><span class="big">135.3 MB</span><span class="qual">9 of 23 chapters</span></div>
+      <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div style="display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">Ready to play offline</span>
+        <span class="pill sm des">🗑 Delete audio</span></div></div></div>
+      <figcaption><div class="cname">D1 · PILL ON THE DETAIL ROW <span class="tag rec">recommended</span></div>
+      <p class="cnote">Trailing, small, and it closes the empty half that made the box look unfinished.
+         Same slot Pause/Stop use in the other state.</p></figcaption></figure>
+
+    <figure class="unit"><div class="stage"><div class="box">
+      <div style="display:flex;align-items:center"><span class="lbl" style="flex:1">ON THIS DEVICE</span>
+        <span class="txtbtn">Delete audio</span></div>
+      <div class="hrow" style="margin-top:-4px"><span class="big">135.3 MB</span><span class="qual">9 of 23 chapters</span></div>
+      <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div></div>
+      <figcaption><div class="cname">D2 · BARE TEXT, TOP RIGHT <span class="tag alt">quietest</span></div>
+      <p class="cnote">Three rows instead of four, and the destructive thing stops being a coloured
+         object in the middle of the box.</p>
+      <p class="cnote"><b>Against it:</b> the least protected corner for the most destructive control,
+         and a bare red word has no target of its own.</p></figcaption></figure>
+
+    <figure class="unit"><div class="stage"><div class="box">
+      <div class="lbl">ON THIS DEVICE</div>
+      <div class="hrow" style="margin-top:-4px"><span class="big">135.3 MB</span><span class="qual">9 of 23 chapters</span></div>
+      <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div style="display:flex;gap:7px"><span class="pill sm" style="flex:1;justify-content:center">Render the rest</span>
+        <span class="pill sm des" style="flex:1;justify-content:center">Delete audio</span></div></div></div>
+      <figcaption><div class="cname">D3 · PAIRED WITH ITS OPPOSITE <span class="tag alt">most useful</span></div>
+      <p class="cnote">Delete stops being the only thing you can do to a book that is 9/23 done.
+         <b>“Render the rest” is the action a reader actually wants there</b> — and it needs no picker.</p>
+      <p class="cnote"><b>Against it:</b> it is a new feature inside a layout fix, and two full-width keys
+         make the box the loudest thing on the sheet.</p></figcaption></figure>
+  </div>
+  <p class="callout warn"><b>Whichever wins, move the book's own Delete.</b> Right now <code>⋯</code> holds
+     Bookmarks · Delete, and the box holds Delete audio. The reversible one and the permanent one should
+     not share a screen without saying which is which — the permanent one should say
+     <b>“Delete book”</b>, not “Delete”.</p>
+</section>
+
+<!-- 03 edge cases -->
+<section>
+  <div class="shead"><div class="snum">03 / EVERY STATE</div>
+    <h2>Eleven, including the four that break the segmented bar</h2>
+    <p class="cnote">All drawn in the reconciled A′/B′ shape.</p></div>
+
+  <div class="grid">
+
+    <div class="st"><div class="stname">1 · NOTHING YET</div>
+      <div class="stage"><div class="box">
+        <div class="lbl">ON THIS DEVICE</div>
+        <div class="hrow" style="margin-top:-4px"><span class="big" style="color:var(--a-ink2)">Nothing</span><span class="qual">23 chapters</span></div>
+        <div class="seg"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">Nothing rendered yet</span></div></div></div>
+      <p class="stwhy"><b>No Delete at all</b> — there is nothing to delete, and a disabled red pill is an
+        invitation to nothing. The empty bar is the useful part: it shows the size of the job.</p></div>
+
+    <div class="st"><div class="stname">2 · ALL OF IT</div>
+      <div class="stage"><div class="box">
+        <div class="lbl">ON THIS DEVICE</div>
+        <div class="hrow" style="margin-top:-4px"><span class="big">347 MB</span><span class="qual">all 23 chapters</span></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">Ready to play offline</span>
+          <span class="pill sm des">🗑 Delete audio</span></div></div></div>
+      <p class="stwhy">“<b>all 23 chapters</b>”, not “23 of 23”. And the detail line earns its keep: this is
+        the one state where the reader learns the book works on a plane.</p></div>
+
+    <div class="st"><div class="stname">3 · ONE CHAPTER RENDERING</div>
+      <div class="stage"><div class="box">
+        <div class="lbl">RENDERING</div>
+        <div class="hrow" style="margin-top:-4px"><span class="big">61%</span><span class="qual">about 1 min left</span></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="now"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">Dramatis Personae</span>
+          <span class="pill sm">⏸ Pause</span><span class="pill sm des">✕ Stop</span></div></div></div>
+      <p class="stwhy"><b>No “1 of 1”.</b> Just “RENDERING”. A counter that can only ever read 1 of 1 is
+        the app counting out loud for its own benefit.</p></div>
+
+    <div class="st"><div class="stname">4 · FIVE QUEUED</div>
+      <div class="stage"><div class="box">
+        <div class="lbl">RENDERING · 2 OF 5</div>
+        <div class="hrow" style="margin-top:-4px"><span class="big">61%</span><span class="qual">about 12 min left</span></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="now"></i><i style="background:color-mix(in srgb,var(--a-accent) 30%,var(--a-ink3))"></i><i style="background:color-mix(in srgb,var(--a-accent) 30%,var(--a-ink3))"></i><i style="background:color-mix(in srgb,var(--a-accent) 30%,var(--a-ink3))"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">Dramatis Personae</span>
+          <span class="pill sm">⏸ Pause</span><span class="pill sm des">✕ Stop</span></div></div></div>
+      <p class="stwhy">The three <b>faint amber</b> segments are the ones still queued — so the bar shows
+        what you asked for as well as what you have. The percentage is the <i>current chapter's</i>;
+        “2 of 5” carries the batch.</p></div>
+
+    <div class="st"><div class="stname">5 · YOU PAUSED IT</div>
+      <div class="stage"><div class="box">
+        <div class="lbl">PAUSED · 2 OF 5</div>
+        <div class="hrow" style="margin-top:-4px"><span class="big" style="color:var(--a-ink2)">61%</span><span class="qual">Dramatis Personae</span></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i style="background:var(--a-ink2)"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">Paused. It keeps its place.</span>
+          <span class="pill sm">▶ Resume</span><span class="pill sm des">✕ Stop</span></div></div></div>
+      <p class="stwhy">Number and segment go <b>grey</b> — the one visual difference between stopped and
+        working. The detail line answers the only question a pause raises: <i>do I lose the 61%?</i></p></div>
+
+    <div class="st"><div class="stname">6 · THE PHONE PAUSED IT</div>
+      <div class="stage"><div class="box">
+        <div class="lbl" style="color:var(--a-accent)">PAUSED · PHONE IS WARM</div>
+        <div class="hrow" style="margin-top:-4px"><span class="big" style="color:var(--a-ink2)">61%</span><span class="qual">2 of 5</span></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i style="background:var(--a-ink2)"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">It starts again once it cools.</span>
+          <span class="pill sm">▶ Resume</span><span class="pill sm des">✕ Stop</span></div></div></div>
+      <p class="stwhy">Same shape; the <b>label carries the reason</b> and turns accent. Resume here is
+        “render anyway”, which the model already treats as the same word.</p></div>
+
+    <div class="st"><div class="stname">7 · NO ROOM LEFT</div>
+      <div class="stage"><div class="box">
+        <div class="lbl" style="color:var(--a-destructive)">PAUSED · NO ROOM</div>
+        <div class="hrow" style="margin-top:-4px"><span class="big" style="color:var(--a-ink2)">61%</span><span class="qual">2 of 5</span></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i style="background:var(--a-ink2)"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">Free space in Settings → Storage.</span>
+          <span class="pill sm des">✕ Stop</span></div></div></div>
+      <p class="stwhy"><b>No Resume.</b> There is nothing to press through — the constraint is real. The
+        one honest control is Stop, and the sentence points at the way out.</p></div>
+
+    <div class="st"><div class="stname">8 · ONE FAILED</div>
+      <div class="stage"><div class="box">
+        <div class="lbl">ON THIS DEVICE</div>
+        <div class="hrow" style="margin-top:-4px"><span class="big">128 MB</span><span class="qual">8 of 23 chapters</span></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="fail"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1;color:var(--a-destructive)">1 chapter couldn't be rendered</span>
+          <span class="pill sm">Try again</span></div></div></div>
+      <p class="stwhy">A red segment marks <i>which</i> one, and the control becomes <b>Try again</b>
+        rather than Delete — the useful thing after a failure is a retry.</p></div>
+
+    <div class="st"><div class="stname">9 · PART-RENDERED CHAPTERS</div>
+      <div class="stage"><div class="box">
+        <div class="lbl">ON THIS DEVICE</div>
+        <div class="hrow" style="margin-top:-4px"><span class="big">44 MB</span><span class="qual">2 of 23 chapters</span></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="half"></i><i class="half"></i><i class="half"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">3 chapters partly rendered</span>
+          <span class="pill sm des">🗑 Delete audio</span></div></div></div>
+      <p class="stwhy"><span class="flag">the case that breaks a plain bar</span> The fill tier leaves
+        chapters half made. A <b>dim third segment state</b> is the only way to show audio that takes up
+        room but will not play a chapter through — and it is exactly what “Partly rendered · 244 KB”
+        was failing to convey.</p></div>
+
+    <div class="st"><div class="stname">10 · A LONG BOOK (61 CHAPTERS)</div>
+      <div class="stage"><div class="box">
+        <div class="lbl">ON THIS DEVICE</div>
+        <div class="hrow" style="margin-top:-4px"><span class="big">612 MB</span><span class="qual">24 of 61 chapters</span></div>
+        <div class="bar p"><i style="width:39%"></i></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">Ready to play offline</span>
+          <span class="pill sm des">🗑 Delete audio</span></div></div></div>
+      <p class="stwhy"><span class="flag">the case that breaks the segments</span> At 61 segments the gaps
+        are wider than the bars. <b>Above ~30 chapters it falls back to a plain bar</b> in the same slot —
+        same layout, one view swapped.</p></div>
+
+    <div class="st"><div class="stname">11 · A ONE-PIECE DOCUMENT</div>
+      <div class="stage"><div class="box">
+        <div class="lbl">ON THIS DEVICE</div>
+        <div class="hrow" style="margin-top:-4px"><span class="big">18 MB</span><span class="qual">whole document</span></div>
+        <div class="seg"><i class="done"></i></div>
+        <div style="display:flex;align-items:center;gap:8px"><span class="sub" style="flex:1">Ready to play offline</span>
+          <span class="pill sm des">🗑 Delete audio</span></div></div></div>
+      <p class="stwhy"><span class="flag">the case that makes segments silly</span> An article or a PDF
+        has one chapter. “1 of 1 chapters” becomes <b>“whole document”</b>, and the single segment reads as
+        a plain bar, which is correct — it <i>is</i> one.</p></div>
+
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">04 / WHAT THE EDGES DECIDED</div><h2>Three rules the states forced</h2></div>
+  <div class="rec">
+    <ul style="font-family:var(--app);font-size:15px;line-height:1.7">
+      <li><b>The segmented bar needs three states, not two.</b> Done, part-done, none — because the fill
+        tier leaves chapters half made and that audio takes up room. A plain bar cannot say this at all,
+        which is why “Partly rendered” exists as a phrase today.</li>
+      <li><b>It falls back to a plain bar above ~30 chapters</b>, and reads as one at 1. Same slot, same
+        row, one view swapped.</li>
+      <li><b>The control changes with the state</b>, and sometimes there is none: nothing rendered → no
+        button; failed → Try again; no room → Stop only. A box whose bottom row is always
+        “Delete audio” would be lying in three of the eleven states.</li>
+    </ul>
+    <p style="font-family:var(--app);font-size:15px;margin-top:12px"><b>My recommendation:</b>
+      A′ + B′ reconciled, wording <b>“Delete audio”</b>, control placement <b>D1</b>, and the book's own
+      Delete renamed <b>“Delete book”</b> in the <code>⋯</code>.</p>
+  </div>
+</section>
+</div>

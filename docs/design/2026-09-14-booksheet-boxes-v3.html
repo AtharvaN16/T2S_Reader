@@ -1,0 +1,343 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The two boxes — fourteen designs</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap">
+<style>
+:root{--ground:#F8F8F7;--paper:#FFFFFF;--ink:#111111;--ink2:#6E7076;--hair:#E2E3E8;--glow:#0066FF;--ready:#12A150;--no:#C0392B;
+ --serif:"Newsreader",Georgia,serif;--mono:"JetBrains Mono",ui-monospace,Menlo,monospace;--app:"Inter",-apple-system,sans-serif;
+ --a-ground:#101010;--a-raised:#1A1A1A;--a-surface:#2F2F2F;--a-ink:#F2F2F2;--a-ink2:#8E8E8E;--a-ink3:#3A3A3A;
+ --a-accent:#FF8C3A;--a-positive:#34C070;--a-destructive:#FF5A50;}
+@media(prefers-color-scheme:dark){:root{--ground:#0E0F12;--paper:#16171B;--ink:#ECEDF0;--ink2:#94969E;--hair:#26272D;--glow:#5F84FF;--ready:#37D97C;--no:#FF6B5E;}}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--serif);font-size:17px;line-height:1.6;margin:0;padding:0 20px 110px}
+.wrap{max-width:1320px;margin:0 auto}.col{max-width:68ch}
+h1,h2{margin:0;font-weight:400;text-wrap:balance}h1{font-size:clamp(34px,6vw,50px);line-height:1.05;letter-spacing:-.02em}
+h2{font-size:clamp(23px,3.2vw,30px);letter-spacing:-.01em}
+p{margin:0}
+code{font-family:var(--mono);font-size:.78em;background:color-mix(in srgb,var(--ink) 8%,transparent);padding:.14em .4em;border-radius:3px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2)}
+.lede{font-size:20px;color:var(--ink2);font-weight:300;line-height:1.5}
+header{padding-block:70px 0}header .col{display:flex;flex-direction:column;gap:18px}
+.meta{font-family:var(--mono);font-size:12px;color:var(--ink2);line-height:2;border-top:1px solid var(--hair);padding-top:15px}
+.meta b{color:var(--ink);font-weight:500}
+section{padding-block:52px 0;display:flex;flex-direction:column;gap:22px}
+.shead{display:flex;flex-direction:column;gap:11px;max-width:70ch}
+.snum{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--glow);letter-spacing:.1em}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(304px,1fr));gap:30px 26px}
+.opt{display:flex;flex-direction:column;gap:10px}
+.oname{font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.03em;display:flex;gap:7px;align-items:baseline;flex-wrap:wrap}
+.onum{color:var(--glow)}
+.tag{font-size:9.5px;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.08em;font-weight:500}
+.tag.rec{background:color-mix(in srgb,var(--ready) 18%,transparent);color:var(--ready)}
+.tag.now{background:color-mix(in srgb,var(--ink) 10%,transparent);color:var(--ink2)}
+.owhy{font-size:13.5px;color:var(--ink2);line-height:1.45;max-width:304px}.owhy b{color:var(--ink);font-weight:500}
+/* stage */
+.stage{width:304px;background:var(--a-raised);border-radius:18px;padding:13px;font-family:var(--app);color:var(--a-ink);
+       box-shadow:0 10px 26px rgba(0,0,0,.38);display:flex;flex-direction:column;gap:10px}
+.box{background:var(--a-ground);border-radius:12px;padding:13px;display:flex;flex-direction:column;gap:10px}
+.lbl{font-size:10.5px;font-weight:600;letter-spacing:.1em;color:var(--a-ink2)}
+.big{font-size:25px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.big.sm{font-size:20px}
+.qual{font-size:12.5px;color:var(--a-ink2)}
+.ttl{font-size:15.5px;font-weight:600;letter-spacing:-.02em}
+.sz{font-size:12.5px;color:var(--a-ink2);margin-left:auto;font-variant-numeric:tabular-nums}
+.sub{font-size:12.5px;color:var(--a-ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row{display:flex;align-items:center;gap:8px}
+.rowb{display:flex;align-items:baseline;gap:8px}
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:99px;padding:7px 12px;font-size:12px;font-weight:500;background:var(--a-surface);color:var(--a-ink);white-space:nowrap}
+.pill.des{color:var(--a-destructive)}.pill.xs{padding:5px 10px;font-size:11px}
+.pill.gl{width:32px;height:32px;padding:0;justify-content:center;border-radius:50%}
+.txt{font-size:12px;font-weight:500;color:var(--a-destructive)}
+.bar{height:4px;border-radius:2px;background:var(--a-ink3);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:2px;background:var(--a-accent)}
+.bar.p i{background:var(--a-positive)}
+.bar.t{height:2px}.bar.f{height:8px;border-radius:4px}.bar.f i{border-radius:4px}
+.seg{display:flex;gap:3px}
+.seg i{flex:1;height:5px;border-radius:2px;background:var(--a-ink3)}
+.seg i.done{background:var(--a-positive)}.seg i.now{background:var(--a-accent)}
+.seg.tall i{height:20px;border-radius:3px}
+.ring{width:52px;height:52px;border-radius:50%;flex:0 0 auto;position:relative;
+      background:conic-gradient(var(--a-positive) 0 39%,var(--a-ink3) 39% 100%)}
+.ring:after{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--a-ground)}
+.ring.a{background:conic-gradient(var(--a-accent) 0 61%,var(--a-ink3) 61% 100%)}
+.ringtxt{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;z-index:2}
+.chips{display:flex;flex-wrap:wrap;gap:3px}
+.chips i{width:13px;height:13px;border-radius:3px;background:var(--a-ink3)}
+.chips i.done{background:var(--a-positive)}.chips i.now{background:var(--a-accent)}
+.wv{display:flex;gap:2px;align-items:center;height:22px}
+.wv b{flex:1;border-radius:1px;background:var(--a-ink3);display:block}
+.wv b.done{background:var(--a-positive)}.wv b.now{background:var(--a-accent)}
+.flush{margin:-13px -13px 0;border-radius:12px 12px 0 0;overflow:hidden}
+.hair{height:1px;background:#242424;margin:1px 0}
+.vline{width:1px;align-self:stretch;background:#242424}
+.crow{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:11px;background:var(--a-surface)}
+.rec{border:1px solid color-mix(in srgb,var(--ready) 45%,transparent);border-radius:11px;padding:18px 20px;background:color-mix(in srgb,var(--ready) 7%,transparent);max-width:72ch}
+.axis{font-family:var(--app);font-size:14.5px;color:var(--ink2);max-width:70ch;line-height:1.55}
+.axis b{color:var(--ink);font-weight:600}
+</style>
+<div class="wrap">
+<header><div class="col">
+  <div class="eyebrow">t2s reader · design · 2026-09-14</div>
+  <h1>Fourteen boxes</h1>
+  <p class="lede">Each is a different idea about what the box is <em>for</em> — not a variation on one.
+     Both states drawn: idle above, rendering below. Edge cases deliberately ignored until one wins.</p>
+  <div class="meta"><b>Constant</b> the same book throughout — 135.3 MB · 9 of 23 chapters ·
+     rendering chapter 2 of 5 at 61 %</div>
+</div></header>
+
+<section>
+  <div class="shead"><div class="snum">00 / THE AXES</div><h2>What actually varies</h2></div>
+  <p class="axis">Four decisions make all fourteen: <b>what the hero is</b> (megabytes, a fraction, a count,
+    or nothing) · <b>what shape progress takes</b> (segments, a bar, a ring, chips, a waveform, none) ·
+    <b>where the controls sit</b> (a row of their own, trailing the detail, in the header, or hidden) ·
+    and <b>whether it is a box at all</b>.</p>
+</section>
+
+<section>
+  <div class="snum" style="padding-top:6px">01–14 / THE DESIGNS</div>
+  <div class="grid">
+
+  <!-- 1 -->
+  <div class="opt">
+    <div class="stage">
+      <div class="box"><div class="lbl">ON THIS DEVICE</div>
+        <div class="rowb" style="margin-top:-3px"><span class="big">135.3 MB</span><span class="qual">9 of 23 chapters</span></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="row"><span class="sub" style="flex:1">Ready to play offline</span><span class="pill xs des">Delete audio</span></div></div>
+      <div class="box"><div class="lbl">RENDERING · 2 OF 5</div>
+        <div class="rowb" style="margin-top:-3px"><span class="big">61%</span><span class="qual">Dramatis Personae</span></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="now"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="row"><span class="sub" style="flex:1">about 12 min left</span><span class="pill xs">Pause</span><span class="pill xs des">Stop</span></div></div>
+    </div>
+    <div class="oname"><span class="onum">01</span> LEDGER <span class="tag rec">A′+B′ from last round</span></div>
+    <p class="owhy">Label, hero number, segmented bar, detail + controls. <b>The size is the biggest thing</b>,
+       which is what a reader opens this to learn.</p></div>
+
+  <!-- 2 -->
+  <div class="opt">
+    <div class="stage">
+      <div class="box"><div class="rowb"><span class="ttl">On this device</span><span class="sz">135.3 MB</span></div>
+        <div class="bar p"><i style="width:39%"></i></div>
+        <div class="row"><span class="sub" style="flex:1">9 of 23 chapters</span><span class="pill xs des">Delete audio</span></div></div>
+      <div class="box"><div class="rowb"><span class="ttl">Rendering 2 of 5</span><span class="sz">61%</span></div>
+        <div class="bar"><i style="width:61%"></i></div>
+        <div class="row"><span class="sub" style="flex:1">Dramatis Personae</span><span class="pill xs">Pause</span><span class="pill xs des">Stop</span></div></div>
+    </div>
+    <div class="oname"><span class="onum">02</span> HEADLINE <span class="tag now">B from last round</span></div>
+    <p class="owhy">Sentence-case heading, number in the corner, one plain bar. <b>The quietest of the
+       fourteen</b> — it reads as a caption, not a panel.</p></div>
+
+  <!-- 3 -->
+  <div class="opt">
+    <div class="stage">
+      <div class="box" style="flex-direction:row;align-items:center;gap:14px">
+        <div class="ring"><div class="ringtxt">39%</div></div>
+        <div style="flex:1;min-width:0"><div class="ttl" style="font-size:14px">135.3 MB</div>
+          <div class="sub" style="margin-top:3px">9 of 23 chapters</div>
+          <div style="margin-top:8px"><span class="pill xs des">Delete audio</span></div></div></div>
+      <div class="box" style="flex-direction:row;align-items:center;gap:14px">
+        <div class="ring a"><div class="ringtxt">61%</div></div>
+        <div style="flex:1;min-width:0"><div class="ttl" style="font-size:14px">Rendering 2 of 5</div>
+          <div class="sub" style="margin-top:3px">Dramatis Personae</div>
+          <div class="row" style="margin-top:8px"><span class="pill xs">Pause</span><span class="pill xs des">Stop</span></div></div></div>
+    </div>
+    <div class="oname"><span class="onum">03</span> RING</div>
+    <p class="owhy">The proportion becomes an object on the left. <b>Compact and immediately legible</b> —
+       though it repeats the listening rings in the list below.</p></div>
+
+  <!-- 4 -->
+  <div class="opt">
+    <div class="stage" style="gap:16px">
+      <div style="display:flex;flex-direction:column;gap:8px;padding:2px">
+        <div class="row"><span class="ttl" style="font-size:14px;flex:1">135.3 MB on this device</span><span class="txt">Delete</span></div>
+        <div class="bar p t"><i style="width:39%"></i></div>
+        <div class="sub">9 of 23 chapters</div></div>
+      <div class="hair"></div>
+      <div style="display:flex;flex-direction:column;gap:8px;padding:2px">
+        <div class="row"><span class="ttl" style="font-size:14px;flex:1">Rendering 2 of 5 · 61%</span>
+          <span class="txt" style="color:var(--a-ink)">Pause</span><span class="txt">Stop</span></div>
+        <div class="bar t"><i style="width:61%"></i></div>
+        <div class="sub">Dramatis Personae</div></div>
+    </div>
+    <div class="oname"><span class="onum">04</span> BARE — NO BOX</div>
+    <p class="owhy">No container at all: a line, a hairline, a caption, hanging directly on the sheet.
+       <b>Nothing to make look right</b>, and the sheet keeps one background instead of three.</p></div>
+
+  <!-- 5 -->
+  <div class="opt">
+    <div class="stage">
+      <div class="box" style="padding:0;overflow:hidden">
+        <div style="position:relative;padding:14px 13px;background:linear-gradient(to right,color-mix(in srgb,var(--a-positive) 22%,var(--a-ground)) 39%,var(--a-ground) 39%)">
+          <div class="row"><span class="ttl" style="font-size:14px;flex:1">135.3 MB</span><span class="sub">9 / 23</span></div>
+          <div class="row" style="margin-top:9px"><span class="sub" style="flex:1">On this device</span><span class="pill xs des">Delete audio</span></div></div></div>
+      <div class="box" style="padding:0;overflow:hidden">
+        <div style="position:relative;padding:14px 13px;background:linear-gradient(to right,color-mix(in srgb,var(--a-accent) 24%,var(--a-ground)) 61%,var(--a-ground) 61%)">
+          <div class="row"><span class="ttl" style="font-size:14px;flex:1">Rendering 2 of 5</span><span class="sub">61%</span></div>
+          <div class="row" style="margin-top:9px"><span class="sub" style="flex:1">Dramatis Personae</span><span class="pill xs">Pause</span><span class="pill xs des">Stop</span></div></div></div>
+    </div>
+    <div class="oname"><span class="onum">05</span> THE BOX IS THE BAR</div>
+    <p class="owhy">The whole card fills instead of carrying a bar. <b>No separate progress element at
+       all</b> — the panel itself is the measure.</p></div>
+
+  <!-- 6 -->
+  <div class="opt">
+    <div class="stage">
+      <div class="box"><div class="row" style="align-items:stretch;gap:13px">
+        <div style="flex:1"><div class="big sm">135.3<span style="font-size:12px;font-weight:500"> MB</span></div><div class="lbl" style="margin-top:5px">ON DEVICE</div></div>
+        <div class="vline"></div>
+        <div style="flex:1"><div class="big sm">9<span style="font-size:12px;font-weight:500">/23</span></div><div class="lbl" style="margin-top:5px">CHAPTERS</div></div></div>
+        <div class="row"><span class="sub" style="flex:1"></span><span class="pill xs des">Delete audio</span></div></div>
+      <div class="box"><div class="row" style="align-items:stretch;gap:13px">
+        <div style="flex:1"><div class="big sm" style="color:var(--a-accent)">61<span style="font-size:12px;font-weight:500">%</span></div><div class="lbl" style="margin-top:5px">THIS CHAPTER</div></div>
+        <div class="vline"></div>
+        <div style="flex:1"><div class="big sm">2<span style="font-size:12px;font-weight:500">/5</span></div><div class="lbl" style="margin-top:5px">RENDERING</div></div></div>
+        <div class="row"><span class="sub" style="flex:1">Dramatis Personae</span><span class="pill xs">Pause</span><span class="pill xs des">Stop</span></div></div>
+    </div>
+    <div class="oname"><span class="onum">06</span> STAT PAIR</div>
+    <p class="owhy">Two figures, a rule between them, labels beneath. <b>Reads as a dashboard</b> — good if
+       the numbers matter more than the proportion.</p></div>
+
+  <!-- 7 -->
+  <div class="opt">
+    <div class="stage">
+      <div class="box"><div class="row"><span class="lbl" style="flex:1">ON THIS DEVICE</span><span class="txt">Delete audio</span></div>
+        <div class="chips"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="sub">135.3 MB · 9 of 23 chapters</div></div>
+      <div class="box"><div class="row"><span class="lbl" style="flex:1">RENDERING · 2 OF 5</span>
+          <span class="txt" style="color:var(--a-ink)">Pause</span><span class="txt">Stop</span></div>
+        <div class="chips"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="now"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="sub">Dramatis Personae · 61%</div></div>
+    </div>
+    <div class="oname"><span class="onum">07</span> CHIP GRID</div>
+    <p class="owhy">A square per chapter, wrapping. <b>You can count them</b> — and it scales to a long book
+       by growing taller rather than finer.</p></div>
+
+  <!-- 8 -->
+  <div class="opt">
+    <div class="stage">
+      <div class="box" style="padding:0">
+        <div class="bar p flush" style="height:4px;border-radius:12px 12px 0 0"><i style="width:39%;border-radius:0"></i></div>
+        <div style="padding:13px;display:flex;flex-direction:column;gap:9px">
+          <div class="rowb"><span class="ttl">On this device</span><span class="sz">135.3 MB</span></div>
+          <div class="row"><span class="sub" style="flex:1">9 of 23 chapters</span><span class="pill xs des">Delete audio</span></div></div></div>
+      <div class="box" style="padding:0">
+        <div class="bar flush" style="height:4px;border-radius:12px 12px 0 0"><i style="width:61%;border-radius:0"></i></div>
+        <div style="padding:13px;display:flex;flex-direction:column;gap:9px">
+          <div class="rowb"><span class="ttl">Rendering 2 of 5</span><span class="sz">61%</span></div>
+          <div class="row"><span class="sub" style="flex:1">Dramatis Personae</span><span class="pill xs">Pause</span><span class="pill xs des">Stop</span></div></div></div>
+    </div>
+    <div class="oname"><span class="onum">08</span> PROGRESS ON THE LIP</div>
+    <p class="owhy">The bar is flush to the card's top edge, like a download tile. <b>The progress belongs to
+       the panel</b> rather than sitting inside it as one more row.</p></div>
+
+  <!-- 9 -->
+  <div class="opt">
+    <div class="stage">
+      <div class="box"><div class="wv"><b class="done" style="height:9px"></b><b class="done" style="height:17px"></b><b class="done" style="height:12px"></b><b class="done" style="height:21px"></b><b class="done" style="height:14px"></b><b class="done" style="height:19px"></b><b class="done" style="height:10px"></b><b class="done" style="height:16px"></b><b class="done" style="height:22px"></b><b style="height:12px"></b><b style="height:18px"></b><b style="height:9px"></b><b style="height:15px"></b><b style="height:20px"></b><b style="height:11px"></b><b style="height:17px"></b><b style="height:13px"></b><b style="height:21px"></b><b style="height:10px"></b><b style="height:16px"></b><b style="height:19px"></b><b style="height:12px"></b><b style="height:14px"></b></div>
+        <div class="row"><div style="flex:1"><div class="ttl" style="font-size:14px">135.3 MB</div><div class="sub" style="margin-top:2px">9 of 23 chapters</div></div><span class="pill xs des">Delete audio</span></div></div>
+      <div class="box"><div class="wv"><b class="done" style="height:9px"></b><b class="done" style="height:17px"></b><b class="done" style="height:12px"></b><b class="done" style="height:21px"></b><b class="done" style="height:14px"></b><b class="done" style="height:19px"></b><b class="done" style="height:10px"></b><b class="done" style="height:16px"></b><b class="done" style="height:22px"></b><b class="now" style="height:12px"></b><b style="height:18px"></b><b style="height:9px"></b><b style="height:15px"></b><b style="height:20px"></b><b style="height:11px"></b><b style="height:17px"></b><b style="height:13px"></b><b style="height:21px"></b><b style="height:10px"></b><b style="height:16px"></b><b style="height:19px"></b><b style="height:12px"></b><b style="height:14px"></b></div>
+        <div class="row"><div style="flex:1"><div class="ttl" style="font-size:14px">Rendering 2 of 5</div><div class="sub" style="margin-top:2px">Dramatis Personae · 61%</div></div><span class="pill xs">Pause</span><span class="pill xs des">Stop</span></div></div>
+    </div>
+    <div class="oname"><span class="onum">09</span> WAVEFORM</div>
+    <p class="owhy">One stave per chapter, at varied heights — the app's own glyph for rendered audio,
+       grown to full size. <b>Says “audio” before it says anything else.</b></p></div>
+
+  <!-- 10 -->
+  <div class="opt">
+    <div class="stage">
+      <div style="display:flex;flex-direction:column;gap:9px;padding:2px">
+        <div class="row"><span style="font-size:19px;font-weight:800;letter-spacing:-.02em;flex:1">Chapters</span>
+          <span class="sub">9 of 23 on device</span>
+          <span class="pill gl">⌄</span></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+      <div style="display:flex;flex-direction:column;gap:9px;padding:2px">
+        <div class="row"><span style="font-size:19px;font-weight:800;letter-spacing:-.02em;flex:1">Chapters</span>
+          <span class="sub" style="color:var(--a-accent)">Rendering 61%</span>
+          <span class="pill gl">⌄</span></div>
+        <div class="seg"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="now"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+    </div>
+    <div class="oname"><span class="onum">10</span> FOLDED INTO THE HEADING</div>
+    <p class="owhy">No box: the “Chapters” heading grows a status and a bar, with the controls behind the
+       chevron. <b>Zero added height</b>, and the bar sits directly over the list it describes.</p></div>
+
+  <!-- 11 -->
+  <div class="opt">
+    <div class="stage">
+      <div class="crow"><div style="flex:1"><div class="ttl" style="font-size:14px">On this device</div>
+          <div class="sub" style="margin-top:2px">135.3 MB · 9 of 23</div></div>
+        <div class="bar p" style="width:52px"><i style="width:39%"></i></div>
+        <span class="pill gl des" style="width:28px;height:28px;font-size:12px">🗑</span></div>
+      <div class="crow"><div style="flex:1"><div class="ttl" style="font-size:14px">Rendering 2 of 5</div>
+          <div class="sub" style="margin-top:2px">Dramatis Personae · 61%</div></div>
+        <span class="pill gl" style="width:28px;height:28px;font-size:12px">⏸</span>
+        <span class="pill gl des" style="width:28px;height:28px;font-size:12px">✕</span></div>
+    </div>
+    <div class="oname"><span class="onum">11</span> SHAPED LIKE A ROW</div>
+    <p class="owhy">Built as a chapter row — same fill, same height, same rhythm. <b>Belongs to the list</b>
+       rather than sitting above it as a different kind of object.</p></div>
+
+  <!-- 12 -->
+  <div class="opt">
+    <div class="stage">
+      <div class="box"><div class="lbl">ON THIS DEVICE</div>
+        <div class="seg tall"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="row"><span class="sub" style="flex:1">135.3 MB · 9 of 23 chapters</span><span class="txt">Delete</span></div></div>
+      <div class="box"><div class="lbl">RENDERING · 2 OF 5</div>
+        <div class="seg tall"><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="done"></i><i class="now"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="row"><span class="sub" style="flex:1">Dramatis Personae · 61%</span>
+          <span class="txt" style="color:var(--a-ink)">Pause</span><span class="txt">Stop</span></div></div>
+    </div>
+    <div class="oname"><span class="onum">12</span> TALL SEGMENTS</div>
+    <p class="owhy">The same segmented idea at 20 pt instead of 5. <b>The chapters become the graphic</b> —
+       the box's whole middle is the book, drawn.</p></div>
+
+  <!-- 13 -->
+  <div class="opt">
+    <div class="stage">
+      <div class="box"><div class="rowb"><span class="ttl">On this device</span><span class="sz">135.3 MB</span></div>
+        <div><div class="bar p" style="margin-bottom:4px"><i style="width:39%"></i></div>
+          <div class="bar t" style="background:var(--a-ink3)"><i style="width:22%;background:var(--a-ink2)"></i></div></div>
+        <div class="row"><span class="sub" style="flex:1">9 of 23 rendered · 5 heard</span><span class="pill xs des">Delete audio</span></div></div>
+      <div class="box"><div class="rowb"><span class="ttl">Rendering 2 of 5</span><span class="sz">61%</span></div>
+        <div><div class="bar" style="margin-bottom:4px"><i style="width:61%"></i></div>
+          <div class="bar t" style="background:var(--a-ink3)"><i style="width:22%;background:var(--a-ink2)"></i></div></div>
+        <div class="row"><span class="sub" style="flex:1">Dramatis Personae</span><span class="pill xs">Pause</span><span class="pill xs des">Stop</span></div></div>
+    </div>
+    <div class="oname"><span class="onum">13</span> TWO BARS — MADE vs HEARD</div>
+    <p class="owhy">A second hairline under the first for how far you have listened. <b>The only design here
+       that relates the two facts</b> — how much is made, how much you have used.</p></div>
+
+  <!-- 14 -->
+  <div class="opt">
+    <div class="stage">
+      <div class="box"><div class="row">
+        <div style="flex:1"><div class="big sm">9<span style="font-size:13px;font-weight:500;color:var(--a-ink2)"> of 23 chapters</span></div>
+          <div class="sub" style="margin-top:5px">135.3 MB on this device</div></div>
+        <span class="pill xs des">Delete audio</span></div></div>
+      <div class="box"><div class="row">
+        <div style="flex:1"><div class="big sm" style="color:var(--a-accent)">61<span style="font-size:13px;font-weight:500;color:var(--a-ink2)">% · chapter 2 of 5</span></div>
+          <div class="sub" style="margin-top:5px">Dramatis Personae</div></div>
+        <span class="pill xs">Pause</span><span class="pill xs des">Stop</span></div></div>
+    </div>
+    <div class="oname"><span class="onum">14</span> NO BAR AT ALL</div>
+    <p class="owhy">Words and one figure. <b>The shortest box possible</b> — and honest that a count out of
+       23 is already a proportion without drawing one.</p></div>
+
+  </div>
+</section>
+
+<section>
+  <div class="shead"><div class="snum">15 / IF YOU WANT A STEER</div><h2>Three worth trying on the phone</h2></div>
+  <div class="rec">
+    <ul style="font-family:var(--app);font-size:15px;line-height:1.7">
+      <li><b>01 Ledger</b> — the safe one. Hero number, segments, controls trailing the detail.</li>
+      <li><b>10 Folded into the heading</b> — the interesting one. Costs no height at all, puts the bar
+        directly over the list it measures, and removes a box from a sheet that already has a lot going
+        on. Worth seeing before dismissing.</li>
+      <li><b>08 Progress on the lip</b> — the tidy one. Everything that is not the bar stays plain text,
+        and the panel reads as a download tile, which is what it is.</li>
+    </ul>
+  </div>
+</section>
+</div>

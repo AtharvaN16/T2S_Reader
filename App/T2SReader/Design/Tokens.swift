@@ -92,6 +92,15 @@ enum Tokens {
     /// it reads in both themes.
     static let discEdgeOnInk = dynamic(light: 0x3D3D3D, dark: 0xCFCFCD)
     static let destructive = dynamic(light: 0xE5453B, dark: 0xFF5A50)
+    /// The fill under a destructive pill — the "Yes" of a confirmation, Storage's "Evict". It was
+    /// `surface`, which made it the same grey slab as the "No" beside it with a fainter word on it
+    /// (owner, 2026-09-14: "the yes button seems to not have enough contrast, we can make the
+    /// button fill more darker"). This is `surface` with the red carried into it: in the dark it is
+    /// also a real step darker, which is where the lettering wins its contrast back — light red on
+    /// mid-grey is the weakest pairing the app had. In the light it holds `surface`'s brightness
+    /// almost exactly and takes the cast alone: red words on paper need the ground *light*, so
+    /// darkening there would spend the very contrast this is buying.
+    static let destructiveFill = dynamic(light: 0xF6E5E3, dark: 0x3A2120)
     /// The voice picker's avatar discs: pink for a female voice, blue for a male one. Categorical,
     /// not accent — they say which of two kinds a row is, never that it is selected or active.
     static let voiceFemale = dynamic(light: 0xE8558A, dark: 0xF06E9E)

@@ -7,8 +7,9 @@ import T2SCore
 import T2SLibrary
 
 /// Fully rounded pill (spec §2.4.3). `.accent` is the one primary action per screen; `.selected`
-/// is solid `ink` with `ground` text (chips); `.soft` and `.destructiveSoft` sit on `surface`, and
-/// `.softOnInk` is that same soft pill for a card that is itself `ink` — the toast.
+/// is solid `ink` with `ground` text (chips); `.soft` sits on `surface` and `.destructiveSoft` on
+/// `destructiveFill` — that same grey with the red carried into it — and `.softOnInk` is the soft
+/// pill for a card that is itself `ink`, the toast.
 struct Pill: View {
     enum Style { case soft, selected, accent, destructiveSoft, softOnInk }
 
@@ -71,7 +72,7 @@ struct Pill: View {
         case .soft: return Tokens.surface
         case .selected: return Tokens.ink
         case .accent: return Tokens.accent
-        case .destructiveSoft: return Tokens.surface
+        case .destructiveSoft: return Tokens.destructiveFill
         case .softOnInk: return Tokens.surfaceOnInk
         }
     }

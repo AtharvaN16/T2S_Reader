@@ -53,6 +53,9 @@ struct BookSheet: View {
     /// shape and changes what it says, so the answer is given where the question was asked (owner,
     /// 2026-09-14). An alert would cover the very thing the reader is deciding about.
     @State private var asking: Asking?
+    /// How many of this book's chapters were outstanding when ✕ was pressed — the question's own
+    /// scope, held still while it is on screen. See `stopControls`.
+    @State private var stopScope = 0
     /// See `trackBatch`.
     @State private var batchSize = 0
 
@@ -121,8 +124,15 @@ struct BookSheet: View {
                                     // mode the trailing mark says the same thing and says it louder.
                                     onDevice: isRendering ? [] : onDeviceChapters,
                                     headerAction: isRendering ? nil : { enterRendering() },
-                                    headerAllAction: isRendering && !renderableChapters.isEmpty
+                                    headerAllAction: isRendering && selection.isEmpty && !renderableChapters.isEmpty
                                         ? { renderAll(scrollingWith: proxy) } : nil,
+                                    // The same slot, once there are ticks in the list: with chapters
+                                    // in hand the useful offer is not "take everything" — which
+                                    // would throw the picking away — but to put them back down
+                                    // (owner, 2026-09-14: "clear selection has more usecases").
+                                    headerClearAction: isRendering && !selection.isEmpty
+                                        ? { clearSelection() } : nil,
+                                    headerCloseAction: isRendering ? { endRendering() } : nil,
                                     onSelect: { chapter in
                                         if isRendering { toggle(chapter.index); return }
                                         Task {
@@ -170,7 +180,14 @@ struct BookSheet: View {
                 // `⋯` (owner, 2026-09-13: "there is no way to exit the render mode"). "Done" is not
                 // an invitation to nothing; it is the answer to the question the mode is asking.
                 if isRendering {
-                    BarButton(label: doneLabel) { endRendering(startingPicked: true, scrollingWith: proxy) }
+                    // Blue the moment there is something to render (owner, 2026-09-14). The two
+                    // states of this key are not two shades of the same act: "Done" closes a mode
+                    // and is the ink key every sheet closes with, while "Render 3 chapters" spends
+                    // the phone's battery on the next ten minutes — and blue is what this app has
+                    // always called the key that starts something.
+                    BarButton(label: doneLabel, tone: selection.isEmpty ? .ink : .blue) {
+                        endRendering(startingPicked: true, scrollingWith: proxy)
+                    }
                     .padding(.horizontal, Spacing.margin)
                     // Air over the key, and the list fading out under it rather than being cut off
                     // at a straight grey line (owner, 2026-09-13). `BottomFade` is the same ramp
@@ -274,7 +291,11 @@ struct BookSheet: View {
         if audio.hasAudio {
             let asked = asking == .deleteAudio
             boxBody(
-                title: asked ? "Delete this audio?"
+                // "All", and "rendered audio" as Settings → Storage names it (owner, 2026-09-14):
+                // this box's trash takes the whole book, and every row under it has a trash of its
+                // own that takes one chapter. "Delete this audio?" did not say which of the two had
+                // been pressed.
+                title: asked ? "Delete all rendered audio?"
                              : "\(BookAudioStatus.sizeText(audio.bytes)) occupied on device",
                 titleTint: asked ? Tokens.destructive : Tokens.ink,
                 trailing: nil,
@@ -373,8 +394,15 @@ struct BookSheet: View {
     /// the chapter that is being made, or drop everything still to come — and the reader is the only
     /// one who knows which (owner, 2026-09-14). Naming the count is the point: "All 5" is the number
     /// that decides it.
+    ///
+    /// The count is `stopScope` — what was outstanding when ✕ was pressed — and not the live one
+    /// (owner, 2026-09-14: "sometimes I get option to just end 1 chp and sometimes I get option to
+    /// end all"). A chapter finishing is a frequent event and it was taking two of the three answers
+    /// off the screen mid-decision: the reader who pressed ✕ on a batch found a bare Yes, or reached
+    /// for "All 3" and pressed whatever had slid into its place. A question keeps the shape it was
+    /// asked in until it is answered.
     @ViewBuilder private func stopControls(_ job: ChapterRenderJob) -> some View {
-        let outstanding = outstandingHere
+        let outstanding = stopScope
         Pill(label: "No", style: .soft, fillsWidth: true, compact: true) { ask(nil) }
             .accessibilityLabel("No, keep rendering")
         if outstanding > 1 {
@@ -399,7 +427,7 @@ struct BookSheet: View {
     /// Every outstanding chapter of *this* book. Not `cancelAll()`: the queue is the whole app's, and
     /// another book's chapters are none of this sheet's business to throw away.
     private func stopAllHere() {
-        for job in jobs.values where job.state == .queued || job.state == .running {
+        for job in jobsHere where job.state == .queued || job.state == .running {
             env.chapterRenderer.cancel(job.id)
         }
     }
@@ -412,6 +440,9 @@ struct BookSheet: View {
     }
 
     private func ask(_ question: Asking?) {
+        // The scope is read once, as the question is put. A queue that finishes a chapter while the
+        // reader is deciding must not rewrite the answers under their thumb.
+        if question == .stop { stopScope = outstandingHere }
         withAnimation(.snappy(duration: 0.28)) { asking = question }
     }
 
@@ -506,12 +537,15 @@ struct BookSheet: View {
     /// smaller lie than counting the session, and it corrects itself with the next batch.
     private func trackBatch(from old: Int, to new: Int) {
         if new == 0 { batchSize = 0 } else if old == 0 { batchSize = new } else { batchSize = max(batchSize, new) }
+        // The queue emptying takes the box with it, and a question goes with the box it was asked
+        // in — otherwise the next batch opens mid-sentence, already asking whether to stop.
+        if new == 0, asking == .stop { asking = nil }
     }
 
     /// How many of this book's chapters are still to come, the one being made included. Decides
     /// whether ✕ is "stop this chapter" or simply "stop".
     private var outstandingHere: Int {
-        jobs.values.count { $0.state == .queued || $0.state == .running }
+        jobsHere.count { $0.state == .queued || $0.state == .running }
     }
 
     private var partlyRenderedChapters: Set<Int> {
@@ -520,9 +554,16 @@ struct BookSheet: View {
 
     /// This book's job that the queue is actually working on, or the next one waiting — nil when
     /// this book has nothing outstanding, which is what takes the block off the screen.
+    ///
+    /// `jobsHere`, not `jobs.values`: a dictionary has no order, and the difference showed the
+    /// moment the queue stopped (owner, 2026-09-14: "when I press pause the entire line and the
+    /// subtext reanimate"). Pause sends the running chapter back to `.queued` where it stands, so
+    /// the box goes looking for the first waiting job — and out of a dictionary that is any of
+    /// them. The heading stayed "Paused" while the name under it and the percentage beside it
+    /// jumped to a chapter that had not been started. In the queue's own order the head of the
+    /// queue is the chapter that was running, which is the one the box was already describing.
     private var runningHere: ChapterRenderJob? {
-        let mine = jobs.values
-        return mine.first { $0.state == .running } ?? mine.first { $0.state == .queued }
+        jobsHere.first { $0.state == .running } ?? jobsHere.first { $0.state == .queued }
     }
 
     /// Which chapters the device holds in full, for the row tag.
@@ -537,11 +578,20 @@ struct BookSheet: View {
         selection.isEmpty ? "Done" : "Render \(selection.count) \(selection.count == 1 ? "chapter" : "chapters")"
     }
 
-    /// This book's jobs, by chapter. The queue is the whole app's, so another book's chapters are
-    /// in it too and are none of this sheet's business.
+    /// This book's jobs, in the order they were asked for. The queue is the whole app's, so another
+    /// book's chapters are in it too and are none of this sheet's business.
+    ///
+    /// The order is not decoration: it is what "the chapter being made" means. The queue drains
+    /// from its head, so the first of these that is running — or, while it is held, the first still
+    /// waiting — is the one the progress box speaks for.
+    private var jobsHere: [ChapterRenderJob] {
+        env.chapterRenderer.queue.filter { $0.documentID == live.id }
+    }
+
+    /// The same jobs by chapter, for the row that has to ask "what is happening to me".
     private var jobs: [Int: ChapterRenderJob] {
         var out: [Int: ChapterRenderJob] = [:]
-        for job in env.chapterRenderer.queue where job.documentID == live.id { out[job.chapterIndex] = job }
+        for job in jobsHere { out[job.chapterIndex] = job }
         return out
     }
 
@@ -594,6 +644,13 @@ struct BookSheet: View {
         withAnimation(.snappy) { isRendering = true }
     }
 
+    /// Puts every tick back down without leaving the mode. Undoing a selection a row at a time is
+    /// the one thing render mode made the reader do by hand (owner, 2026-09-14), and the further
+    /// down a long book they had got, the more taps it cost to change their mind.
+    private func clearSelection() {
+        withAnimation(.snappy) { selection.removeAll() }
+    }
+
     /// Leaves render mode, handing whatever was picked to the app's one queue on the way out.
     ///
     /// The two are one action because they are one intention: you came in here to choose chapters,
@@ -612,6 +669,13 @@ struct BookSheet: View {
     /// happened — the progress block was up the page, out of sight. The queue is asked first and
     /// the scroll follows its answer, because the block does not exist until there is a job for it
     /// to describe.
+    ///
+    /// Asking the queue is not enough on its own, which is why the scroll waits a beat afterwards
+    /// (owner, 2026-09-14: "press done, the sheet does not go to rendering box … sometimes it
+    /// does"). `enqueue` returning means the queue holds the job, not that this sheet has been
+    /// drawn again with the block in it — and a `scrollTo` for an anchor SwiftUI has not laid out
+    /// yet is not deferred, it is dropped. The wait is what made it a coin toss: a sheet that
+    /// already had a block on screen scrolled, and a sheet that was about to grow one did nothing.
     private func commit(_ picked: [Int], scrollingWith proxy: ScrollViewProxy?) {
         asking = nil
         withAnimation(.snappy) {
@@ -621,7 +685,10 @@ struct BookSheet: View {
         guard !picked.isEmpty else { return }
         Task {
             await env.chapterRenderer.enqueue(documentID: live.id, chapters: picked)
-            guard let proxy else { return }
+            guard let proxy, runningHere != nil else { return }
+            // Two frames at 60 Hz, and the bar's own exit is under way in them, so the list has
+            // settled at its new length before the scroll starts rather than during it.
+            try? await Task.sleep(for: .milliseconds(120))
             withAnimation(.easeOut(duration: 0.45)) {
                 proxy.scrollTo(Self.progressAnchor, anchor: .center)
             }

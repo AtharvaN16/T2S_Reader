@@ -149,6 +149,40 @@ import T2SCore
         #expect(!runner.isWorking)
     }
 
+    /// A paused batch keeps its order, and the chapter that was running is still the first of it.
+    ///
+    /// The book sheet's progress box names "the chapter being made" as the first job of this book
+    /// that is running, or — once a hold has sent it back to `.queued` — the first still waiting.
+    /// That only tells the truth if the queue holds its order across a pause, which is what this
+    /// pins: the paused chapter must not end up behind a chapter that has never been started
+    /// (owner, 2026-09-14: "when I press pause the entire line and the subtext reanimate").
+    @Test func aPausedBatchKeepsItsOrderWithTheStoppedChapterFirst() async throws {
+        let fixtures = try AppFixtures()
+        let id = try await fixtures.importFake()
+        let engine = FakeEngine(secondsPerCharacter: 0.01)
+        let runner = makeRunner(fixtures, engine: engine)
+
+        await engine.hold()
+        await runner.enqueue(documentID: id, chapters: [0, 1])
+        var spins = 0
+        while await engine.parkedCount < 1, spins < 10_000 { await Task.yield(); spins += 1 }
+        #expect(runner.queue.map(\.state) == [.running, .queued])
+
+        runner.pause()
+        await runner.awaitSchedulerCancel()
+        await engine.release()
+        await runner.awaitDrain()
+
+        #expect(runner.hold == .byReader)
+        #expect(runner.queue.map(\.chapterIndex) == [0, 1])
+        #expect(runner.queue.map(\.state) == [.queued, .queued])
+        // What the box reads: the chapter it was describing a moment ago, with the sentences it
+        // had already stored — not chapter 1 at zero.
+        let shown = try #require(runner.queue.first { $0.state == .queued })
+        #expect(shown.chapterIndex == 0)
+        #expect(shown.rendered == 1)
+    }
+
     /// Pause is the reader's hand on the same lever heat pulls: the chapter in flight keeps what it
     /// has stored, goes back to the head of the queue, and resumes from there rather than starting
     /// the chapter again.

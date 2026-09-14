@@ -8,6 +8,9 @@ import T2SCore
 struct ChapterList: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
+    /// The Reader's paper, injected by the page that presented this (owner, 2026-09-14). A chapter
+    /// list opened over a sepia book belongs to that book, not to the app around it.
+    @Environment(\.readerPalette) private var palette
     /// Which chapters the device holds in full. Read once when the sheet opens (owner, 2026-09-14:
     /// "make sure chapters that have been rendered are also visible in the chapter sheet in the
     /// reader"). It was left out on the argument that this list is about listening and has no
@@ -41,7 +44,7 @@ struct ChapterList: View {
         // thumb (owner, 2026-09-14: "a lot of play … no bound vertical movement"). `basedOnSize`
         // gives the bounce back the moment there are rows enough to need it.
         .scrollBounceBehavior(.basedOnSize)
-        .background(Tokens.raised)
+        .background(palette.sheet)
         .presentationDetents([.medium, .large])
         .presentationCornerRadius(Spacing.sheetCorner)
         // The coordinator's timeline, not a fresh read of the library: this book is loaded, so the
@@ -65,6 +68,9 @@ struct ChapterList: View {
 /// 2026-09-11 spec §7, whose worry was the row losing its single tap target: the pill is its own
 /// button beside the row's, so the words and the space after them still jump to the chapter.
 struct ChapterListView: View {
+    /// The paper, when this list is the Reader's. The Book sheet's copy is an app surface and takes
+    /// the app's greys, which is what `variant` decides below — one component, two worlds.
+    @Environment(\.readerPalette) private var readerPalette
     /// Which sheet the list is standing in. The two are deliberately one component — a chapter
     /// should read the same wherever you meet it — but they are not the same *sheet*, and the owner
     /// asked for that difference to have a name so either side can be changed on purpose rather
@@ -119,10 +125,12 @@ struct ChapterListView: View {
 
     @State private var expanded: Set<Int> = []
 
+    private var palette: ReaderPalette { variant == .reader ? readerPalette : .app }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 10) {
-                Text("Chapters").typeRole(variant.heading).foregroundStyle(Tokens.ink)
+                Text("Chapters").typeRole(variant.heading).foregroundStyle(palette.ink)
                 if let headerAllAction {
                     Spacer(minLength: 8)
                     Pill(label: "Render all", glyph: "waveform", style: .soft, action: headerAllAction)
@@ -147,7 +155,7 @@ struct ChapterListView: View {
                 // belonging to the chapter above them rather than floating under it (owner,
                 // 2026-09-12).
                 VStack(alignment: .leading, spacing: 6) {
-                    ChapterRow(chapter: chapter, isCurrent: isCurrent,
+                    ChapterRow(palette: palette, chapter: chapter, isCurrent: isCurrent,
                                isHeard: current.map { chapter.index < $0 } ?? false,
                                bookmarkCount: stamps.count, isShowingBookmarks: isOpen,
                                renderMark: renderMarks[chapter.index],
@@ -160,16 +168,16 @@ struct ChapterListView: View {
                                onEvict: { onEvict?(chapter) }) { onSelect(chapter) }
                     if isOpen {
                         ForEach(stamps) { stamp in
-                            BookmarkStampRow(entry: stamp) { onSelectBookmark?(stamp) }
+                            BookmarkStampRow(palette: palette, entry: stamp) { onSelectBookmark?(stamp) }
                         }
                     }
                 }
                 .padding(.bottom, isOpen ? 6 : 0)                       // the last bookmark keeps off the fill's edge
-                .background(isCurrent || isOpen ? Tokens.surface : Tokens.surface.opacity(0),
+                .background(isCurrent || isOpen ? palette.surface : palette.surface.opacity(0),
                             in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Tokens.accent.opacity(chapter.index == pulsing ? 0.3 : 0))
+                        .fill(palette.accent.opacity(chapter.index == pulsing ? 0.3 : 0))
                 )
                 // An open chapter's fill runs edge to edge; without air around it, two opened next
                 // to each other read as one frame rather than two (owner, 2026-09-12).
@@ -189,20 +197,21 @@ struct ChapterListView: View {
 /// and the time it says it at, out at the end (owner, 2026-09-12). Its own row to tap — deeper than
 /// the chapter row above it, since a list of them is tapped at speed.
 struct BookmarkStampRow: View {
+    var palette: ReaderPalette = .app
     var entry: BookmarkEntry
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(alignment: .center, spacing: 10) {
-                Circle().fill(Tokens.accent).frame(width: 7, height: 7)
-                Text(entry.lead).typeRole(.meta).foregroundStyle(Tokens.ink).lineLimit(1)
+                Circle().fill(palette.accent).frame(width: 7, height: 7)
+                Text(entry.lead).typeRole(.meta).foregroundStyle(palette.ink).lineLimit(1)
                 Spacer(minLength: 8)
                 // Inter, not the `.mono` role the stamp wore when the time led the row: out at the
                 // end it is read, not scanned down a column (owner, 2026-09-12).
                 Text(entry.timeText)
                     .font(.custom("Inter-Medium", size: 13, relativeTo: .footnote))
-                    .foregroundStyle(Tokens.ink2)
+                    .foregroundStyle(palette.ink2)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 13)
@@ -220,6 +229,8 @@ struct BookmarkStampRow: View {
 /// The title sits a step under `rowTitle` and the time a step over `meta`, so the two read closer
 /// in size.
 struct ChapterRow: View {
+    /// The page this row is drawn on — the Reader's paper, or the app's greys in the Book sheet.
+    var palette: ReaderPalette = .app
     /// The width every trailing mark is centred in, so the column reads as a column. `RadioMark`'s
     /// own box — the heading's render glyph is pulled out by half the difference to meet it.
     static let markColumn: CGFloat = 24
@@ -257,7 +268,7 @@ struct ChapterRow: View {
                 Button(action: action) {
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Text(name)
-                            .typeRole(.settingsRow).foregroundStyle(Tokens.ink).lineLimit(2)
+                            .typeRole(.settingsRow).foregroundStyle(palette.ink).lineLimit(2)
                             .multilineTextAlignment(.leading)
                         // "This chapter is on the device", riding with the name (owner, 2026-09-14):
                         // a grey waveform, the app's glyph for rendered audio, where the eye already
@@ -267,7 +278,7 @@ struct ChapterRow: View {
                         if isOnDevice, renderMark == nil {
                             Image(systemName: "waveform")
                                 .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(Tokens.ink2)
+                                .foregroundStyle(palette.ink2)
                                 .accessibilityHidden(true)          // the row's value says it in words
                         }
                         Spacer(minLength: 12)
@@ -293,10 +304,10 @@ struct ChapterRow: View {
                         }
                         // Grey, not the dots' accent (owner, 2026-09-12): it counts bookmarks, it is
                         // not one. Open, it takes the app's selected chip — ink under `ground`.
-                        .foregroundStyle(isShowingBookmarks ? Tokens.ground : Tokens.ink)
+                        .foregroundStyle(isShowingBookmarks ? palette.page : palette.ink)
                         .padding(.horizontal, 9)
                         .frame(height: 28)                               // a target of its own, clear of the words
-                        .background(isShowingBookmarks ? Tokens.ink : Tokens.ink3, in: Capsule())
+                        .background(isShowingBookmarks ? palette.ink : palette.ink3, in: Capsule())
                         .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -334,12 +345,12 @@ struct ChapterRow: View {
                             ChapterRenderMarkView(mark: renderMark, onEvict: onEvict)
                         }
                     } else if isCurrent {
-                        CircularProgress(fraction: chapter.fraction, lineWidth: 2, size: 18)
+                        CircularProgress(fraction: chapter.fraction, lineWidth: 2, size: 18, tint: palette.accent)
                             .frame(width: ChapterRow.markColumn)
                     } else if isHeard {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 18))
-                            .foregroundStyle(Tokens.positive)
+                            .foregroundStyle(palette.positive)
                             .frame(width: ChapterRow.markColumn)
                             .accessibilityLabel("Heard")
                     }
@@ -349,7 +360,7 @@ struct ChapterRow: View {
             // under the title is not a dead strip.
             Button(action: action) {
                 HStack(spacing: 0) {
-                    Text(length).typeRole(.pill).foregroundStyle(Tokens.ink2)
+                    Text(length).typeRole(.pill).foregroundStyle(palette.ink2)
                     Spacer(minLength: 0)
                 }
                 .contentShape(Rectangle())

@@ -4,6 +4,8 @@ import T2SApp
 /// Vertical 0.5x–4.0x speed selector. Rates past the coordinator's sustainable threshold are
 /// visibly unavailable rather than silently clamped.
 struct SpeedPicker: View {
+    /// The Reader's paper when this sheet was opened from the Reader; the app's greys otherwise.
+    @Environment(\.readerPalette) private var palette
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
 
@@ -16,7 +18,7 @@ struct SpeedPicker: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Speed")
                     .typeRole(.sectionHeader)
-                    .foregroundStyle(Tokens.ink)
+                    .foregroundStyle(palette.ink)
                     .padding(.top, Spacing.section)
                     .padding(.bottom, 20)
                 ForEach(model.rows) { row in
@@ -28,12 +30,12 @@ struct SpeedPicker: View {
                         HStack {
                             Text(row.label)
                                 .typeRole(.rowTitle)
-                                .foregroundStyle(row.isAvailable ? Tokens.ink : Tokens.ink3)
+                                .foregroundStyle(row.isAvailable ? palette.ink : palette.ink3)
                             Spacer()
                             if row.isCurrent {
                                 Image(systemName: "checkmark")
                                     .font(.system(size: 15, weight: .semibold))
-                                    .foregroundStyle(Tokens.ink)
+                                    .foregroundStyle(palette.ink)
                             }
                         }
                         .frame(height: 44)
@@ -45,13 +47,13 @@ struct SpeedPicker: View {
                 if let footnote = model.footnote {
                     Text(footnote)
                         .typeRole(.meta)
-                        .foregroundStyle(Tokens.ink2)
+                        .foregroundStyle(palette.ink2)
                         .padding(.top, 16)
                 }
             }
             .padding(.horizontal, Spacing.margin)
         }
-        .background(Tokens.raised)
+        .background(palette.sheet)
         .presentationDetents([.medium, .large])
         .presentationCornerRadius(Spacing.sheetCorner)
     }

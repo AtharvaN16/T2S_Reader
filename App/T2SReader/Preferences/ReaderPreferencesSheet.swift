@@ -15,6 +15,9 @@ import T2SApp
 /// fixed tint, on its stored value or the `.amber` default.
 struct ReaderPreferencesSheet: View {
     @Environment(AppEnvironment.self) private var env
+    /// The Reader's paper. The sheet that chooses a paper had better be drawn on one (owner,
+    /// 2026-09-14) — and from Settings, where there is no Reader, this is the app's own greys.
+    @Environment(\.readerPalette) private var palette
     /// Everything that only means something while a book is open: the two sliders and the two
     /// switches. Off in Settings, which shows the theme alone.
     var showsReaderControls: Bool = true
@@ -27,18 +30,18 @@ struct ReaderPreferencesSheet: View {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 Text(showsReaderControls ? "Preferences" : "Appearance")
                     .typeRole(.sectionHeader)
-                    .foregroundStyle(Tokens.ink)
+                    .foregroundStyle(palette.ink)
                     .padding(.top, Spacing.section)
                 if showsReaderControls {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Text size").typeRole(.meta).foregroundStyle(Tokens.ink2)
+                        Text("Text size").typeRole(.meta).foregroundStyle(palette.ink2)
                         Slider(value: $preferences.textScale, in: ReaderPreferences.textScaleRange, step: 0.1)
-                            .tint(Tokens.ink)
+                            .tint(palette.ink)
                     }
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Line height").typeRole(.meta).foregroundStyle(Tokens.ink2)
+                        Text("Line height").typeRole(.meta).foregroundStyle(palette.ink2)
                         Slider(value: $preferences.lineHeight, in: ReaderPreferences.lineHeightRange, step: 0.1)
-                            .tint(Tokens.ink)
+                            .tint(palette.ink)
                     }
                     // Under the two sliders rather than under everything (owner, 2026-09-14):
                     // type size, line height and the page's colour are the three things about how
@@ -58,7 +61,7 @@ struct ReaderPreferencesSheet: View {
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Theme · applies to the whole app").typeRole(.meta).foregroundStyle(Tokens.ink2)
+                        Text("Theme · applies to the whole app").typeRole(.meta).foregroundStyle(palette.ink2)
                         HStack(spacing: Spacing.grid) {
                             ForEach(ReaderTheme.allCases, id: \.self) { theme in
                                 Pill(label: theme.rawValue.capitalized,
@@ -74,7 +77,7 @@ struct ReaderPreferencesSheet: View {
             .padding(.horizontal, Spacing.margin)
             .padding(.bottom, Spacing.section)
         }
-        .presentationBackground(Tokens.raised)
+        .presentationBackground(palette.sheet)
         .presentationDetents([.medium, .large])
         .presentationCornerRadius(Spacing.sheetCorner)
     }
@@ -91,7 +94,7 @@ struct ReaderPreferencesSheet: View {
             ForEach([ReaderPaper.Family.zen, .pop], id: \.self) { family in
                 VStack(alignment: .leading, spacing: 11) {
                     Text(family == .zen ? "Paper" : "Paper · loud")
-                        .typeRole(.meta).foregroundStyle(Tokens.ink2)
+                        .typeRole(.meta).foregroundStyle(palette.ink2)
                     // Eight to a family: four and four at phone width, and one row of eight on
                     // anything wider.
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4),
@@ -131,11 +134,11 @@ struct ReaderPreferencesSheet: View {
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Tokens.ink, lineWidth: 2.5)
+                        .strokeBorder(palette.ink, lineWidth: 2.5)
                         .padding(-4)
                         .opacity(isOn ? 1 : 0)
                 }
-                Text(paper.title).typeRole(.fine).foregroundStyle(isOn ? Tokens.ink : Tokens.ink2)
+                Text(paper.title).typeRole(.fine).foregroundStyle(isOn ? palette.ink : palette.ink2)
                     .lineLimit(1).minimumScaleFactor(0.8)
             }
             .contentShape(Rectangle())
@@ -149,9 +152,9 @@ struct ReaderPreferencesSheet: View {
     private func toggle(_ title: String, detail: String, isOn: Binding<Bool>) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(title).typeRole(.settingsRow).foregroundStyle(Tokens.ink)
+                Text(title).typeRole(.settingsRow).foregroundStyle(palette.ink)
                     .multilineTextAlignment(.leading)
-                Text(detail).typeRole(.meta).foregroundStyle(Tokens.ink2)
+                Text(detail).typeRole(.meta).foregroundStyle(palette.ink2)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }

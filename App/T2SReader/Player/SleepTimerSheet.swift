@@ -12,6 +12,8 @@ import T2SApp
 /// air between them doing what the instruction line used to: nothing else is asked of you here, so
 /// there is nothing left to explain.
 struct SleepTimerSheet: View {
+    /// The Reader's paper when this sheet was opened from the Reader; the app's greys otherwise.
+    @Environment(\.readerPalette) private var palette
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
     @State private var selected: SleepOption = .minutes(30)
@@ -30,14 +32,14 @@ struct SleepTimerSheet: View {
                     VStack(spacing: 10) {
                         Image(systemName: "moon.zzz.fill")
                             .font(.system(size: 32, weight: .semibold))
-                            .foregroundStyle(Tokens.ink3)
-                        Text("Sleep timer").typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
+                            .foregroundStyle(palette.ink3)
+                        Text("Sleep timer").typeRole(.sectionHeader).foregroundStyle(palette.ink)
                     }
                     .padding(.top, Spacing.margin)
                     .padding(.bottom, Spacing.row)
 
                     if let caption {
-                        Text(caption).typeRole(.playerTitle).foregroundStyle(Tokens.ink)
+                        Text(caption).typeRole(.playerTitle).foregroundStyle(palette.ink)
                     } else {
                         OptionGrid(options: SleepOption.all, selected: $selected)
                     }
@@ -64,7 +66,7 @@ struct SleepTimerSheet: View {
         .padding(.bottom, Spacing.margin)
         // `presentationBackground`, not `.background`: the content is only as wide as it needs to
         // be, so a background painted on it left the sheet's own sides unfilled (owner, 2026-09-12).
-        .presentationBackground(Tokens.raised)
+        .presentationBackground(palette.sheet)
         // A shade taller than `.medium` (owner, 2026-09-12: the grid at its new height, and air
         // between it and the key). Medium is a fixed fraction of the screen, and at that height the
         // card all but touched the key; this is the fraction the content actually asks for.
@@ -76,6 +78,7 @@ struct SleepTimerSheet: View {
 /// The options as one card: three tiles to a row, the chosen one an ink slab — the `.selected`
 /// chip's fill, squared off to a tile.
 private struct OptionGrid: View {
+    @Environment(\.readerPalette) private var palette
     var options: [SleepOption]
     @Binding var selected: SleepOption
 
@@ -87,12 +90,13 @@ private struct OptionGrid: View {
             }
         }
         .padding(Spacing.grid * 2)
-        .background(Tokens.surface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
     }
 }
 
 /// One tile: the number over its unit — "30" over "min", "End" over "of chapter".
 private struct OptionTile: View {
+    @Environment(\.readerPalette) private var palette
     var option: SleepOption
     var isSelected: Bool
     var action: () -> Void
@@ -102,14 +106,14 @@ private struct OptionTile: View {
             VStack(spacing: 1) {
                 Text(option.tileValue).typeRole(.playerTitle)
                 Text(option.tileUnit).typeRole(.meta)
-                    .foregroundStyle(isSelected ? Tokens.ground.opacity(0.7) : Tokens.ink2)
+                    .foregroundStyle(isSelected ? palette.page.opacity(0.7) : palette.ink2)
             }
             .lineLimit(1)
             .minimumScaleFactor(0.5)
-            .foregroundStyle(isSelected ? Tokens.ground : Tokens.ink)
+            .foregroundStyle(isSelected ? palette.page : palette.ink)
             .frame(maxWidth: .infinity)
             .frame(height: 84)
-            .background(isSelected ? Tokens.ink : .clear, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(isSelected ? palette.ink : .clear, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
         .buttonStyle(.plain)

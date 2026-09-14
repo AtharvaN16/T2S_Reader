@@ -24,6 +24,10 @@ struct ReaderPalette: Equatable {
     var paper: ReaderPaper
     /// The page itself.
     var page: Color
+    /// What a sheet over the page stands on. A paper's sheets are the paper — the chapter list and
+    /// the timer belong to the book being read, not to the app around it (owner, 2026-09-14) — and
+    /// the app's own `raised` everywhere else.
+    var sheet: Color
     /// Body text: the sentences already spoken.
     var ink: Color
     /// Secondary lettering — the clocks, the chapter name, a label.
@@ -41,6 +45,8 @@ struct ReaderPalette: Equatable {
     var accent: Color
     /// A delete, where the Reader draws one.
     var destructive: Color
+    /// A chapter already heard, a thing that finished.
+    var positive: Color
     /// True when the chrome must come from the paper rather than from `Tokens`.
     var isPop: Bool
 
@@ -55,6 +61,7 @@ struct ReaderPalette: Equatable {
                          dark: Self.mix(face.darkInk, face.darkPage, t))
         }
         page = Self.dynamic(light: face.lightPage, dark: face.darkPage)
+        sheet = Self.dynamic(light: face.lightPage, dark: face.darkPage)
         ink = Self.dynamic(light: face.lightInk, dark: face.darkInk)
         ink2 = mixed(0.52)
         ink3 = mixed(0.16)
@@ -69,6 +76,7 @@ struct ReaderPalette: Equatable {
             mark = mixed(0.26)
             accent = mixed(0.70)
             destructive = Self.dynamic(light: face.lightInk, dark: face.darkInk)
+            positive = mixed(0.70)
         } else {
             // Rule C: the read-along is an 8%-alpha wash, so on paper of its own hue it simply is
             // not there. Each zen paper pins a highlight at least 60° of hue away from itself.
@@ -76,8 +84,24 @@ struct ReaderPalette: Equatable {
             mark = Tokens.highlightWord(Self.highlight[paper] ?? .amber)
             accent = Tokens.accent
             destructive = Tokens.destructive
+            positive = Tokens.positive
         }
     }
+
+    /// The app's own greys, worn as a palette. This is what every shared view gets when it is not
+    /// standing in the Reader — the Book sheet's copy of the chapter list, the sleep timer opened
+    /// from Home — so a paper cannot leak out of the one screen that chose it.
+    static let app: ReaderPalette = {
+        var p = ReaderPalette(.paper)
+        p.page = Tokens.ground
+        p.sheet = Tokens.raised
+        p.ink = Tokens.ink
+        p.ink2 = Tokens.ink2
+        p.ink3 = Tokens.ink3
+        p.surface = Tokens.surface
+        p.unread = Tokens.inkUnread
+        return p
+    }()
 
     /// The read-along hue each zen paper pins. Not the reader's choice any more — the picker for it
     /// went on 2026-09-12, and a paper knows better than a menu which tint will show on it.
@@ -139,7 +163,9 @@ struct ReaderPalette: Equatable {
 }
 
 private struct ReaderPaletteKey: EnvironmentKey {
-    static let defaultValue = ReaderPalette.default
+    /// The app's greys, not Paper: outside the Reader nothing has chosen a paper, and the shared
+    /// views must look exactly as they always have.
+    static let defaultValue = ReaderPalette.app
 }
 
 extension EnvironmentValues {

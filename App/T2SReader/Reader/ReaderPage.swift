@@ -200,14 +200,16 @@ struct ReaderPage: View {
         .onDisappear {
             Task { await env.player.persistRenderedChapters() }
         }
-        .sheet(isPresented: $showChapters) { ChapterList() }
-        .sheet(isPresented: $showAppearance) { ReaderPreferencesSheet() }
-        .sheet(isPresented: $showSpeed) { SpeedPicker() }
+        // The Reader's sheets are the book's, not the app's: each takes the page's paper with it
+        // (owner, 2026-09-14). A sheet does not inherit this on its own, so each is handed it.
+        .sheet(isPresented: $showChapters) { ChapterList().environment(\.readerPalette, palette) }
+        .sheet(isPresented: $showAppearance) { ReaderPreferencesSheet().environment(\.readerPalette, palette) }
+        .sheet(isPresented: $showSpeed) { SpeedPicker().environment(\.readerPalette, palette) }
         // A page, not a sheet, and the same one the Book sheet opens (owner, 2026-09-12).
         .fullScreenCover(isPresented: $showBookmarks) {
             if let current = env.player.current { BookmarksPage(summary: current) }
         }
-        .sheet(isPresented: $showSleepTimer) { SleepTimerSheet() }
+        .sheet(isPresented: $showSleepTimer) { SleepTimerSheet().environment(\.readerPalette, palette) }
         .sheet(isPresented: $showVoiceChange) {
             if let current = env.player.current { VoiceChangeSheet(summary: current) }
         }

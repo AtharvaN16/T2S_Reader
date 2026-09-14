@@ -125,7 +125,7 @@ struct BookSheet: View {
                         }
                     }
                     .modeSwitchIsInstant(isRendering)
-                    ChapterListView(chapters: chapters, current: resumeIndex, heading: .groupTitle,
+                    ChapterListView(chapters: chapters, current: resumeIndex, variant: .book,
                                     pulsing: pulsingChapter,
                                     // Render mode is about what is on the device, so the rows are
                                     // about that alone: the bookmark pills stand down until it ends.

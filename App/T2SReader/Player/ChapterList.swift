@@ -19,7 +19,7 @@ struct ChapterList: View {
         let player = env.player
         let current = player.chapterIndex
         ScrollView {
-            ChapterListView(chapters: player.chapters, current: current, heading: .playerTitle,
+            ChapterListView(chapters: player.chapters, current: current, variant: .reader,
                             bookmarks: player.bookmarksByChapter,
                             onDevice: onDevice,
                             onSelect: { chapter in
@@ -36,6 +36,11 @@ struct ChapterList: View {
             .padding(.bottom, Spacing.section)
             .padding(.horizontal, Spacing.margin - 12)                     // the fill's own 12 pt makes up the margin
         }
+        // A short book has fewer rows than the detent is tall, and a scroll view with nothing to
+        // scroll was still taking the drag and rubber-banding the whole list under the reader's
+        // thumb (owner, 2026-09-14: "a lot of play … no bound vertical movement"). `basedOnSize`
+        // gives the bounce back the moment there are rows enough to need it.
+        .scrollBounceBehavior(.basedOnSize)
         .background(Tokens.raised)
         .presentationDetents([.medium, .large])
         .presentationCornerRadius(Spacing.sheetCorner)
@@ -50,19 +55,44 @@ struct ChapterList: View {
 }
 
 /// The "Chapters" heading and its rows, the same list in the Reader's sheet and the Book sheet
-/// (owner's ask, 2026-09-09: one component). `heading` is the sheet's title role or a page's
-/// section header; the rows' fill runs 12 pt past the text on each side, so a caller sets its
-/// horizontal padding 12 pt short of the margin. `current` wears the ring, the chapters before it
-/// the check.
+/// (owner's ask, 2026-09-09: one component). Which of the two it is standing in is `variant`, and
+/// that is what sets the heading's type; the rows' fill runs 12 pt past the text on each side, so a
+/// caller sets its horizontal padding 12 pt short of the margin. `current` wears the ring, the
+/// chapters before it the check.
 ///
 /// A chapter that holds bookmarks carries its own count pill, and tapping that opens just this
 /// chapter's bookmarks under it (owner, 2026-09-12). That reverses the one header button of the
 /// 2026-09-11 spec §7, whose worry was the row losing its single tap target: the pill is its own
 /// button beside the row's, so the words and the space after them still jump to the chapter.
 struct ChapterListView: View {
+    /// Which sheet the list is standing in. The two are deliberately one component — a chapter
+    /// should read the same wherever you meet it — but they are not the same *sheet*, and the owner
+    /// asked for that difference to have a name so either side can be changed on purpose rather
+    /// than by guessing which caller a tweak would reach (2026-09-14: "make reader's chp sheet a
+    /// variant of the main sheet, so we can make targeted changes").
+    ///
+    /// Everything a surface decides for itself belongs here. Today that is the heading's type; what
+    /// a caller *passes* — the render marks, the bookmarks, the way into render mode — stays a
+    /// parameter, because those are about the book in hand, not about which sheet is open.
+    enum Variant {
+        /// The Book sheet: the chapter list as a section of the book's own page, and the one place
+        /// render mode turns it into a selection list.
+        case book
+        /// The Reader's chapter sheet, at a detent over the text you are listening to. Its own
+        /// title is the sheet's, so the heading is a page title rather than a section header.
+        case reader
+
+        var heading: TypeRole {
+            switch self {
+            case .book: return .groupTitle
+            case .reader: return .playerTitle
+            }
+        }
+    }
+
     var chapters: [ChapterEntry]
     var current: Int?
-    var heading: TypeRole
+    var variant: Variant = .book
     /// The row to flash once, drawing the eye to where a scroll just landed (the book sheet's
     /// open, owner 2026-09-11) — nil the rest of the time.
     var pulsing: Int? = nil
@@ -92,7 +122,7 @@ struct ChapterListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 10) {
-                Text("Chapters").typeRole(heading).foregroundStyle(Tokens.ink)
+                Text("Chapters").typeRole(variant.heading).foregroundStyle(Tokens.ink)
                 if let headerAllAction {
                     Spacer(minLength: 8)
                     Pill(label: "Render all", glyph: "waveform", style: .soft, action: headerAllAction)
@@ -146,6 +176,12 @@ struct ChapterListView: View {
                 .padding(.vertical, isOpen ? Spacing.grid : 0)
             }
         }
+        // The column takes the width it is offered and no more. Without this it measures itself
+        // against its widest row, and one chapter title too long to break — book sections are full
+        // of them — made the whole list wider than the sheet, which a vertical `ScrollView` answers
+        // by letting the reader pan it sideways (owner, 2026-09-14: "it moves left and right").
+        // Clamped, the title truncates inside its row, where the row already expects it to.
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

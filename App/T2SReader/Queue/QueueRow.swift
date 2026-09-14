@@ -22,6 +22,12 @@ struct QueueRow: View {
     @State private var isStarting = false
     /// The resume chapter's text and progress, loaded off the body so the list never decodes a chapter.
     @State private var glimpse: RowGlimpse?
+    /// A chapter of this book has just finished. See `flashComplete`.
+    @State private var justFinished = false
+    @State private var completeTask: Task<Void, Never>?
+    /// The toast's own four seconds: the row and the message are one announcement, so they go
+    /// together rather than one outstaying the other.
+    private static let completeSeconds: TimeInterval = 4
 
     /// The widest the chapter's name is allowed to run before it fades out (owner, 2026-09-14).
     /// A ceiling, not a demand: it is the one flexible thing on its line, so on a narrow phone — or
@@ -79,10 +85,36 @@ struct QueueRow: View {
                         // every word under it read low, the 15pt dot lowest of all since its box is
                         // the tallest. Baselines are what the eye actually reads a line off.
                         HStack(alignment: .firstTextBaseline, spacing: 5) {
-                            if let chapterText {
+                            // A render of this book takes the line while it runs (owner,
+                            // 2026-09-14). Starting one from this row's `⋯` used to show nothing at
+                            // all — the queue is app-wide and its only face was inside the Book
+                            // sheet — so the one row that sent the work is the one row that should
+                            // say it is happening. The chapter and the listening ring come back the
+                            // moment the queue is done with this book.
+                            if lineState == .complete {
+                                // Green, and for exactly as long as the toast that says the same
+                                // thing (owner, 2026-09-14). The row and the message arrive
+                                // together and leave together, and what the row goes back to is
+                                // where the reader actually is in the book.
+                                Text("Render complete")
+                                    .foregroundStyle(Tokens.positive)
+                                    .transition(.blurReplace)
+                            } else if let job = renderJob {
+                                // Two words and a number, and nothing else (owner, 2026-09-14): the
+                                // dot divides a chapter from its progress, and the ring draws a
+                                // proportion the percentage has already given. Neither has anything
+                                // to divide or add here.
+                                // `accent`, not `glow`: the Book sheet's render bar is the accent
+                                // already, and one activity wearing two colours in two places is
+                                // two activities as far as the eye is concerned (owner, 2026-09-14).
+                                ShimmerText(text: "Rendering \(Int((job.fraction * 100).rounded()))%",
+                                            tint: Tokens.accent)
+                                    .transition(.blurReplace)
+                            } else if let chapterText {
                                 FadingLine(text: chapterText, maxWidth: Self.chapterWidth)
+                                    .transition(.blurReplace)
                             }
-                            if let fraction {
+                            if lineState == .normal, let fraction {
                                 if chapterText != nil {
                                     // A size up from the text it divides, or it reads as punctuation inside one fact.
                                     Text("·")
@@ -100,9 +132,18 @@ struct QueueRow: View {
                                         .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1.8 }
                                     Text("\(Int((fraction * 100).rounded()))%")
                                 }
+                                .transition(.blurReplace)
                             }
-                            if summary.isFullyRendered { PositiveCheck() }
+                            if lineState == .normal, summary.isFullyRendered {
+                                PositiveCheck().transition(.blurReplace)
+                            }
                         }
+                        // The line is one fact replacing another, so it dissolves rather than
+                        // being edited in place — and the row's width settles with it (owner,
+                        // 2026-09-14). Here, wrapping the `HStack`'s geometry as well as its
+                        // contents, because the two lines are different widths and the reflow is
+                        // half of what makes the swap read as smooth.
+                        .animation(.snappy(duration: 0.32), value: lineState)
                         // No `typeRole(.meta)` here: it sets the font through the environment, and
                         // an override applied after it sits *further* from the Text, so the role
                         // wins and the override is dropped in silence. That is why this line and
@@ -176,6 +217,14 @@ struct QueueRow: View {
         .sheet(isPresented: $showSleepTimer) { SleepTimerSheet() }
         .sheet(isPresented: $showVoiceChange) { VoiceChangeSheet(summary: summary) }
         .task(id: glimpseKey) { glimpse = await env.libraryModel.glimpse(for: summary) }
+        // The queue publishes each chapter as it leaves, ready or failed. A failure has its own
+        // toast and nothing to celebrate on the row, so only `.ready` lights this.
+        .onChange(of: env.chapterRenderer.finishCount) { _, _ in
+            guard let job = env.chapterRenderer.lastFinished,
+                  job.documentID == summary.id, job.state == .ready else { return }
+            flashComplete()
+        }
+        .onDisappear { completeTask?.cancel() }
     }
 
     @ViewBuilder private var contextItems: some View {
@@ -191,6 +240,35 @@ struct QueueRow: View {
         Button {
             Task { await env.chapterRenderer.enqueueResumeChapter(of: summary.id) }
         } label: { Label(hasChapters ? "Render chapter" : "Render whole document", systemImage: "waveform") }
+    }
+
+    /// What the row's first line is saying. Three states rather than a pair of booleans, so the one
+    /// animation below has one value to watch and the three cannot contradict each other.
+    private enum LineState: Equatable { case normal, rendering, complete }
+
+    private var lineState: LineState {
+        if justFinished { return .complete }
+        return renderJob != nil ? .rendering : .normal
+    }
+
+    /// A chapter of *this* book has just become playable. Held for as long as the toast that says so
+    /// — they are one announcement in two places — and then the line goes back to the book. In a
+    /// batch, "back" is the next chapter's blue, which is the truth: one is done and another is on.
+    private func flashComplete() {
+        completeTask?.cancel()
+        justFinished = true
+        completeTask = Task {
+            try? await Task.sleep(for: .seconds(Self.completeSeconds))
+            guard !Task.isCancelled else { return }
+            justFinished = false
+        }
+    }
+
+    /// This book's outstanding render, if the app's one queue has one. The chapter being made wins
+    /// over one still waiting: it is the one with a number worth showing.
+    private var renderJob: ChapterRenderJob? {
+        let mine = env.chapterRenderer.queue.filter { $0.documentID == summary.id }
+        return mine.first { $0.state == .running } ?? mine.first { $0.state == .queued }
     }
 
     /// What the book calls the section being listened to — "Introduction", "Chapter 7" — never a

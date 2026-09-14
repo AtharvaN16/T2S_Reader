@@ -691,6 +691,75 @@ struct ProgressBar: View {
     }
 }
 
+/// Words with a light travelling across them, left to right, over and over — the app's way of
+/// saying "this is going on right now" in a place too small for a bar (owner, 2026-09-14, with a
+/// reference).
+///
+/// Driven from the wall clock through a `TimelineView`, not from a `repeatForever` animation. The
+/// row this sits in is rebuilt on every tick of the queue's progress, and `LoadingDots` documents
+/// what that does to a repeating animation: it is restarted on each redraw and never gets
+/// anywhere. A phase read from the date cannot be interrupted by a redraw, because the redraw is
+/// where it is read.
+///
+/// Reduce Motion gets the words at full strength and no sweep: the sentence is the information, and
+/// the light is only the fact that it is still happening — which the percentage climbing already
+/// says.
+struct ShimmerText: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var text: String
+    var tint: Color
+
+    /// One pass, in seconds. Slow enough to read as a sweep rather than a flicker.
+    private static let period: Double = 1.9
+    /// How wide the lit band is, as a share of the words.
+    private static let band: CGFloat = 0.42
+    /// What the words sit at between passes. 0.45 read as grey text with a blue light crossing it
+    /// rather than blue text being lit (owner, 2026-09-14): the resting state is the colour, and the
+    /// sweep is only its crest.
+    private static let resting: Double = 0.72
+    /// The crest, lifted towards white rather than simply being the tint at full — at 0.72 resting
+    /// there is not enough room left above it for a sweep to read as one.
+    private static let crest: Double = 0.4
+
+    var body: some View {
+        if reduceMotion {
+            Text(text).foregroundStyle(tint)
+        } else {
+            TimelineView(.animation) { context in
+                let t = context.date.timeIntervalSinceReferenceDate
+                    .truncatingRemainder(dividingBy: Self.period) / Self.period
+                Text(text)
+                    .foregroundStyle(tint.opacity(Self.resting))
+                    // The digits roll rather than being swapped out, so the number reads as a
+                    // thing that is moving — which is what it is (owner, 2026-09-14).
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.3), value: text)
+                    .overlay { sweep(at: t) }
+            }
+            .accessibilityLabel(text)
+        }
+    }
+
+    private func sweep(at t: Double) -> some View {
+        GeometryReader { geo in
+            let width = max(geo.size.width, 1)
+            let band = width * Self.band
+            LinearGradient(stops: [
+                .init(color: tint.opacity(0), location: 0),
+                .init(color: tint.mix(with: .white, by: Self.crest), location: 0.5),
+                .init(color: tint.opacity(0), location: 1),
+            ], startPoint: .leading, endPoint: .trailing)
+            .frame(width: band)
+            // Starts fully off the leading edge and finishes fully off the trailing one, so the
+            // light enters and leaves rather than appearing and vanishing inside the words.
+            .offset(x: -band + (width + band) * t)
+        }
+        // The glyphs, not the box: the light belongs to the letters.
+        .mask(Text(text))
+        .allowsHitTesting(false)
+    }
+}
+
 /// A book drawn as its chapters: one segment each, lit for what the device holds.
 ///
 /// A plain bar cannot tell the truth here. The fill tier leaves chapters half made, and that audio
@@ -750,13 +819,16 @@ struct CircularProgress: View {
     var fraction: Double
     var lineWidth: CGFloat = 3
     var size: CGFloat = 48
+    /// The arc's colour. `accent` is listening progress, which is what this ring nearly always
+    /// shows; Home's row lends it to a render in `glow` while one is running.
+    var tint: Color = Tokens.accent
 
     var body: some View {
         ZStack {
             Circle().stroke(Tokens.ink3, lineWidth: lineWidth)
             Circle()
                 .trim(from: 0, to: min(1, max(0, fraction)))
-                .stroke(Tokens.accent, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
         }
         .frame(width: size, height: size)

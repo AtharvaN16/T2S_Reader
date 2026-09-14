@@ -53,10 +53,14 @@ struct BookSheet: View {
     /// shape and changes what it says, so the answer is given where the question was asked (owner,
     /// 2026-09-14). An alert would cover the very thing the reader is deciding about.
     @State private var asking: Asking?
+    /// See `trackBatch`.
+    @State private var batchSize = 0
 
     enum Asking { case deleteAudio, stop }
 
     private static let heroHeight: CGFloat = 200
+    /// What `commit` scrolls to once the queue has taken the work.
+    private static let progressAnchor = "render-progress"
 
     private var live: DocumentSummary { env.libraryModel.summaries.first { $0.id == summary.id } ?? summary }
     private var isCurrent: Bool { env.player.current?.id == live.id }
@@ -102,7 +106,11 @@ struct BookSheet: View {
                         bookMenu
                     }
                     .frame(maxWidth: .infinity)
-                    if isRendering { onDeviceBox } else if let job = runningHere { renderProgress(job) }
+                    if isRendering {
+                        onDeviceBox
+                    } else if let job = runningHere {
+                        renderProgress(job).id(Self.progressAnchor)
+                    }
                     ChapterListView(chapters: chapters, current: resumeIndex, heading: .groupTitle,
                                     pulsing: pulsingChapter,
                                     // Render mode is about what is on the device, so the rows are
@@ -114,7 +122,7 @@ struct BookSheet: View {
                                     onDevice: isRendering ? [] : onDeviceChapters,
                                     headerAction: isRendering ? nil : { enterRendering() },
                                     headerAllAction: isRendering && !renderableChapters.isEmpty
-                                        ? { renderAll() } : nil,
+                                        ? { renderAll(scrollingWith: proxy) } : nil,
                                     onSelect: { chapter in
                                         if isRendering { toggle(chapter.index); return }
                                         Task {
@@ -152,6 +160,7 @@ struct BookSheet: View {
             .onChange(of: env.chapterRenderer.queue.map(\.state)) { _, _ in
                 Task { await refreshAudio() }
             }
+            .onChange(of: outstandingHere, initial: true) { old, new in trackBatch(from: old, to: new) }
             .safeAreaInset(edge: .bottom) {
                 // The bar is up for as long as render mode is, and it is the way out of it: with
                 // nothing picked it reads "Done". It used to appear only once something was picked
@@ -161,7 +170,7 @@ struct BookSheet: View {
                 // `⋯` (owner, 2026-09-13: "there is no way to exit the render mode"). "Done" is not
                 // an invitation to nothing; it is the answer to the question the mode is asking.
                 if isRendering {
-                    BarButton(label: doneLabel) { endRendering(startingPicked: true) }
+                    BarButton(label: doneLabel) { endRendering(startingPicked: true, scrollingWith: proxy) }
                     .padding(.horizontal, Spacing.margin)
                     // Air over the key, and the list fading out under it rather than being cut off
                     // at a straight grey line (owner, 2026-09-13). `BottomFade` is the same ramp
@@ -463,9 +472,12 @@ struct BookSheet: View {
         case .storeFull: return "Paused — no room"
         case .none: break
         }
-        let outstanding = jobs.values.count { $0.state == .queued || $0.state == .running }
-        let total = jobs.values.count { if case .failed = $0.state { return false } else { return true } }
-        let position = max(1, total - outstanding + 1)
+        // Against the batch, not against everything this book has ever been asked for (owner,
+        // 2026-09-14: "why does it say rendering 6 of 6 … when I do a single render"). The runner
+        // keeps finished jobs in the queue so a row can keep reporting what became of it, so
+        // counting them made a fifth single chapter read as the sixth of six.
+        let total = max(batchSize, outstandingHere)
+        let position = max(1, total - outstandingHere + 1)
         return total > 1 ? "Rendering \(position) of \(total)" : "Rendering"
     }
 
@@ -485,6 +497,17 @@ struct BookSheet: View {
     /// Which of this book's chapters hold some audio but not a whole chapter's worth. The fill tier
     /// leaves these behind and they take up room without playing a chapter through, so the bar has
     /// to say "there is something here" without claiming the chapter is ready.
+    /// How many chapters the batch on screen began with — the denominator of "2 of 5", and nothing
+    /// to do with what this book was asked for earlier in the session. Set when work appears out of
+    /// nothing, grown if more is added while it runs, and forgotten when the queue empties.
+    ///
+    /// Opening the sheet onto a batch already in flight is the one case it cannot be sure of: it
+    /// starts from what is left, so the counter reads "1 of 3" rather than "3 of 5". That is a
+    /// smaller lie than counting the session, and it corrects itself with the next batch.
+    private func trackBatch(from old: Int, to new: Int) {
+        if new == 0 { batchSize = 0 } else if old == 0 { batchSize = new } else { batchSize = max(batchSize, new) }
+    }
+
     /// How many of this book's chapters are still to come, the one being made included. Decides
     /// whether ✕ is "stop this chapter" or simply "stop".
     private var outstandingHere: Int {
@@ -563,14 +586,8 @@ struct BookSheet: View {
     ///
     /// It leaves render mode on the way out, like Done: the progress box outside is where a batch
     /// this size is actually watched, and it carries the Stop.
-    private func renderAll() {
-        let all = renderableChapters
-        withAnimation(.snappy) {
-            isRendering = false
-            selection.removeAll()
-        }
-        guard !all.isEmpty else { return }
-        Task { await env.chapterRenderer.enqueue(documentID: live.id, chapters: all) }
+    private func renderAll(scrollingWith proxy: ScrollViewProxy) {
+        commit(renderableChapters, scrollingWith: proxy)
     }
 
     private func enterRendering() {
@@ -583,15 +600,32 @@ struct BookSheet: View {
     /// and the moment you have chosen them there is nothing else to do in the mode. The rows read
     /// their state back off the queue from here on, the progress block outside takes over, and
     /// nothing is stopped by leaving — the queue is the app's and outlives this sheet.
-    private func endRendering(startingPicked: Bool = false) {
-        let picked = startingPicked ? selection.sorted() : []
+    private func endRendering(startingPicked: Bool = false, scrollingWith proxy: ScrollViewProxy? = nil) {
+        commit(startingPicked ? selection.sorted() : [], scrollingWith: proxy)
+    }
+
+    /// Leaves render mode, hands what was picked to the app's one queue, and puts the reader in
+    /// front of the thing they just started.
+    ///
+    /// That last part is the whole point (owner, 2026-09-14). Done used to drop you back on the
+    /// chapter list wherever you happened to be scrolled, which looks exactly like nothing having
+    /// happened — the progress block was up the page, out of sight. The queue is asked first and
+    /// the scroll follows its answer, because the block does not exist until there is a job for it
+    /// to describe.
+    private func commit(_ picked: [Int], scrollingWith proxy: ScrollViewProxy?) {
         asking = nil
         withAnimation(.snappy) {
             isRendering = false
             selection.removeAll()
         }
         guard !picked.isEmpty else { return }
-        Task { await env.chapterRenderer.enqueue(documentID: live.id, chapters: picked) }
+        Task {
+            await env.chapterRenderer.enqueue(documentID: live.id, chapters: picked)
+            guard let proxy else { return }
+            withAnimation(.easeOut(duration: 0.45)) {
+                proxy.scrollTo(Self.progressAnchor, anchor: .center)
+            }
+        }
     }
 
     private func evict(chapter: Int) {

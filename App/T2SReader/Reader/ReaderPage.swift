@@ -31,6 +31,9 @@ struct ReaderPage: View {
     /// listening time from there rather than from playback's own start.
     @State private var offerShownAt: TimeInterval = 0
     /// The save confirmation, and the bookmark it is about so "Add a note" knows what to open.
+    /// Up for four seconds after a render is asked for, then gone. See `flashRenderNotice`.
+    @State private var renderNotice = false
+    @State private var renderNoticeTask: Task<Void, Never>?
     @State private var toast: ToastContent?
     @State private var toastBookmark: Bookmark?
     @State private var noteTarget: BookmarkEntry?
@@ -156,6 +159,10 @@ struct ReaderPage: View {
         // The queue holds while a book is being read as often as while the book sheet is up, and
         // the Reader is a `fullScreenCover` over the pager, so the pager's copy cannot reach here.
         .renderHoldSheet()
+        // The press, answered. False → true is the moment this book joined the queue, which is the
+        // moment "Render this chapter" was pressed — from here, or from anywhere else.
+        .onChange(of: isRenderingThisBook) { _, on in if on { flashRenderNotice() } }
+        .onDisappear { renderNoticeTask?.cancel() }
         .task(id: summary.id) { await open() }
         .task(id: env.player.current?.id) {
             // Not `player.current.map { await … }`: `Optional.map`'s transform is synchronous, and
@@ -532,11 +539,40 @@ struct ReaderPage: View {
     }
 
     /// What the state line says, or nil when the engine has nothing to report. Warming wins: it is
-    /// the one the reader is waiting on before any sound at all.
+    /// the one the reader is waiting on before any sound at all. Catching up comes next, since that
+    /// one is holding up the words on this very page.
+    ///
+    /// A render is last and is not a wait at all — the reader asked for a chapter and went back to
+    /// reading, and this is the app saying it did not forget (owner, 2026-09-14). "Render this
+    /// chapter" from the Reader's `⋯` had been the app's most silent action: the queue is app-wide
+    /// and its only face was inside the Book sheet, so the press produced nothing on screen.
     private var statusText: String? {
         if env.isWarmingUp { return "Preparing The Voice" }
         if env.player.isCatchingUp { return "Catching Up" }
+        if renderNotice { return "Rendering" }
         return nil
+    }
+
+    /// The render notice is a flash, not a state (owner, 2026-09-14). It answers one question —
+    /// "did that press do anything?" — and a chip that sat there for the twenty minutes a batch
+    /// takes would be answering it long after it had been asked, over the words the reader went
+    /// back to. The Book sheet is where a render is watched; this is only the receipt.
+    private func flashRenderNotice() {
+        renderNoticeTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.25)) { renderNotice = true }
+        renderNoticeTask = Task {
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: 0.25)) { renderNotice = false }
+        }
+    }
+
+    /// Whether the app's one queue has outstanding work for the book on this page. Another book's
+    /// chapter is not this page's news.
+    private var isRenderingThisBook: Bool {
+        env.chapterRenderer.queue.contains {
+            $0.documentID == summary.id && ($0.state == .running || $0.state == .queued)
+        }
     }
 
     /// "Chapter title ▾" on the left opens the chapter list (after the reference the owner sent,

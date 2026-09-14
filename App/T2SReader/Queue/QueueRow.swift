@@ -23,6 +23,13 @@ struct QueueRow: View {
     /// The resume chapter's text and progress, loaded off the body so the list never decodes a chapter.
     @State private var glimpse: RowGlimpse?
 
+    /// The widest the chapter's name is allowed to run before it fades out (owner, 2026-09-14).
+    /// A ceiling, not a demand: it is the one flexible thing on its line, so on a narrow phone — or
+    /// beside a long "· ◔ 100% ✓" — it simply takes what is left and fades sooner. 140 leaves the
+    /// ring and its number sitting right after the name on a 393pt phone's 221pt text column,
+    /// instead of a title long enough to reach the far edge carrying them there with it.
+    private static let chapterWidth: CGFloat = 140
+
     private var progress: DocumentProgress? { env.libraryModel.progress(for: summary.id) }
     /// Whether there's a saved position to pick back up — "Continue" over "Play" once there is.
     private var hasProgress: Bool { summary.document.resumePosition != nil }
@@ -63,13 +70,17 @@ struct QueueRow: View {
                 Button(action: onOpenBook) {
                     VStack(alignment: .leading, spacing: 0) {
                         // "Chapter 7 · ◔ 41%  ✓": the chapter, how far through it, and ready-offline.
-                        HStack(alignment: .top, spacing: 6) {
+                        // One fact on one line, so it is spaced and aligned as one: no `maxWidth:
+                        // .infinity` under the chapter pushing the rest out to the row's far edge
+                        // (owner, 2026-09-14 — "there should not be so much space between the
+                        // chapter, the dot and the percentage"), and the baseline, not the top, to
+                        // line up on. Top-aligning had hung a 12pt ring from the same y as the
+                        // text's line box, which starts above the letters: the ring read high and
+                        // every word under it read low, the 15pt dot lowest of all since its box is
+                        // the tallest. Baselines are what the eye actually reads a line off.
+                        HStack(alignment: .firstTextBaseline, spacing: 5) {
                             if let chapterText {
-                                Text(chapterText)
-                                    .lineLimit(2)
-                                    .truncationMode(.tail)
-                                    .fixedSize(horizontal: false, vertical: true)   // wraps to 2 lines instead of hugging 1, as the excerpt below does
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                FadingLine(text: chapterText, maxWidth: Self.chapterWidth)
                             }
                             if let fraction {
                                 if chapterText != nil {
@@ -78,8 +89,17 @@ struct QueueRow: View {
                                         .font(.custom("Inter-SemiBold", size: 15, relativeTo: .footnote))
                                         .accessibilityHidden(true)
                                 }
-                                CircularProgress(fraction: fraction, lineWidth: 2, size: 12)
-                                Text("\(Int((fraction * 100).rounded()))%")
+                                // The ring and its number are one reading, so they sit closer to
+                                // each other than either sits to the dot.
+                                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                                    CircularProgress(fraction: fraction, lineWidth: 2, size: 12)
+                                        // A shape has no baseline of its own, so it would hang by
+                                        // its bottom edge. This drops it 1.8 below the line instead,
+                                        // which centres the ring on the digits' cap height — the
+                                        // optical middle of "41%", not the middle of its line box.
+                                        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1.8 }
+                                    Text("\(Int((fraction * 100).rounded()))%")
+                                }
                             }
                             if summary.isFullyRendered { PositiveCheck() }
                         }
@@ -93,25 +113,23 @@ struct QueueRow: View {
                         .foregroundStyle(Tokens.ink2)
                         .padding(.bottom, 4)                                              // it labels the title under it, so it sits with it
 
-                        Text(summary.document.title)
+                        // Two lines, as `rowTitle` has always allowed — but a third one dissolves
+                        // at the end of the second rather than stopping at an ellipsis, the way the
+                        // chapter above it does (owner, 2026-09-14).
+                        FadingParagraph(text: summary.document.title, lines: 2)
                             .typeRole(.rowTitle)                                   // the Settings rows' face, by the owner's eye
                             .foregroundStyle(Tokens.ink)
                             .multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
 
                         if let excerpt = glimpse?.excerpt, !excerpt.isEmpty {
-                            Text(excerpt)
+                            FadingParagraph(text: excerpt, lines: 2)
                                 // The real face, not `.italic()`: that asks for a trait the system
                                 // fonts carry, and a `Font.custom` face without one is left upright.
                                 // And no `typeRole(.meta)` above it — see the chapter line: the role
                                 // would win and this face would never be reached (owner, 2026-09-11).
                                 .font(.custom("Inter-Italic", size: 13, relativeTo: .footnote))
-                                .lineLimit(2)
-                                .truncationMode(.tail)
                                 .foregroundStyle(Tokens.ink2)
                                 .multilineTextAlignment(.leading)
-                                .fixedSize(horizontal: false, vertical: true)      // wraps to its 2 lines instead of hugging 1
-                                .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.top, 7)                                  // its own top, so a row without one keeps the 18 below
                         }
                     }

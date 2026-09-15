@@ -57,16 +57,23 @@ struct ReadAlongPassage: View {
         return timings?.wordIndex(at: time)
     }
 
+    /// The Reader's own body type (the owner, 2026-09-15: "use the font we use in the regular
+    /// reader"): `Inter-Regular` at `ReaderTypesetter.bodySize`, so a change there carries here.
+    /// The gap between rows is the Reader's 1.5 line-height multiple less the font's own height —
+    /// `FlowLayout` spaces rows in points where the Reader sets a multiple.
+    static var bodyFont: Font { .custom("Inter-Regular", size: ReaderTypesetter.bodySize) }
+    static var lineGap: CGFloat { ReaderTypesetter.bodySize * (1.5 - 1.22) }
+
     var body: some View {
         let tokens = tokens
         let current = current
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
-                FlowLayout(spacing: 7, lineSpacing: 4) {
+                FlowLayout(spacing: 6, lineSpacing: Self.lineGap) {
                     ForEach(tokens) { token in
                         let isSpoken = current.map { token.id < $0 } ?? false
                         Text(token.text)
-                            .font(.custom("Inter-Bold", size: 22))
+                            .font(Self.bodyFont)
                             .foregroundStyle(isSpoken ? Tokens.ink : Tokens.inkUnread)
                             .animation(.easeOut(duration: 0.25), value: isSpoken)
                             .id(token.id)
@@ -87,37 +94,62 @@ struct ReadAlongPassage: View {
 }
 
 /// Words laid left to right and wrapped, each on its own baseline row — a paragraph out of views,
-/// so one word can wear a highlight. Rows are as tall as their tallest word.
+/// so one word can be lit on its own. Rows are as tall as their tallest word, and each row is
+/// centred in the width (the owner, 2026-09-15: "the text and the boxes are in the center"), which
+/// a plain `Text` would do with `.multilineTextAlignment(.center)` but a layout has to do itself:
+/// rows are gathered first, then placed, since a row's inset is only known once it is full.
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
     var lineSpacing: CGFloat = 8
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? .infinity
-        return place(in: width, subviews: subviews, apply: false, origin: .zero)
+        let rows = rows(in: width, subviews: subviews)
+        let height = rows.reduce(0) { $0 + $1.height } + CGFloat(max(rows.count - 1, 0)) * lineSpacing
+        let widest = rows.map(\.width).max() ?? 0
+        return CGSize(width: width.isFinite ? width : widest, height: height)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        _ = place(in: bounds.width, subviews: subviews, apply: true, origin: bounds.origin)
+        var y = bounds.minY
+        for row in rows(in: bounds.width, subviews: subviews) {
+            var x = bounds.minX + (bounds.width - row.width) / 2
+            for index in row.indices {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                subviews[index].place(at: CGPoint(x: x, y: y + (row.height - size.height) / 2),
+                                      proposal: .unspecified)
+                x += size.width + spacing
+            }
+            y += row.height + lineSpacing
+        }
     }
 
-    @discardableResult
-    private func place(in width: CGFloat, subviews: Subviews, apply: Bool, origin: CGPoint) -> CGSize {
-        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, widest: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > 0, x + size.width > width {
-                x = 0
-                y += rowHeight + lineSpacing
-                rowHeight = 0
+    private struct Row {
+        var indices: [Int] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    /// The words gathered into rows, each row's width being its words and the gaps between them.
+    private func rows(in width: CGFloat, subviews: Subviews) -> [Row] {
+        var rows: [Row] = []
+        var row = Row()
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            let next = row.indices.isEmpty ? size.width : row.width + spacing + size.width
+            if !row.indices.isEmpty, next > width {
+                rows.append(row)
+                row = Row()
+                row.indices = [index]
+                row.width = size.width
+                row.height = size.height
+            } else {
+                row.indices.append(index)
+                row.width = next
+                row.height = max(row.height, size.height)
             }
-            if apply {
-                subview.place(at: CGPoint(x: origin.x + x, y: origin.y + y), proposal: .unspecified)
-            }
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-            widest = max(widest, x - spacing)
         }
-        return CGSize(width: width.isFinite ? width : widest, height: y + rowHeight)
+        if !row.indices.isEmpty { rows.append(row) }
+        return rows
     }
 }

@@ -96,6 +96,23 @@ reaches upward from behind the button and, drawn after the voice row in the `ZSt
 translucent bleed across the bottom of whichever container was there — fixed by drawing the row
 after the button+fade, so its solid colour paints back over the ramp.
 
+**The owner's seventh round (2026-09-15):** beat two is a full page of text now. The hero's passage
+in the manifest runs 246 words — the opening of Alice through the rabbit-hole, public domain — and
+renders to 75–111 s per voice (the bundle is 3.6 MB of clips). It is set in the Reader's own body
+type, `Inter-Regular` at `ReaderTypesetter.bodySize`, referenced rather than copied so a change
+there carries here, with the Reader's 1.5 line-height as a point gap; `FlowLayout` centres each row
+(the owner: "the text and the boxes are in the center"). The page runs the whole height as its own
+layer *under* `CoverField`, with `readingTopFade` — solid ground to 0.29 of the height, the heading
+standing on it, then the fade curve — between them, so the text dissolves under the book and the
+header; `BottomFade` behind Continue is 200 pt rather than 72, reaching past the voice row.
+
+Two layout traps, both worth knowing: the heading was in the chrome stack, whose geometry is only
+what is left under the Skip row, so it sat a tenth of the height below the fade's ground it was
+supposed to stand on — it lives on the fade's own full-screen layer now. And `readingBody` was a
+`GeometryReader` competing with a `Spacer` for height in the chrome stack; the moment its content
+stopped being full-height it lost that contest and collapsed the voice row and the key to the top
+of the screen. It is a full-screen sibling layer now, like the text and the fade.
+
 **Owed from the owner's notes:** the chatter lines need not be openings — iconic lines from anywhere
 in each book; a research pass, then a full re-render of the clips.
 

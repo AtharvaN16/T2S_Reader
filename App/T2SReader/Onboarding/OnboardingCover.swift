@@ -77,8 +77,28 @@ struct OnboardingCover: View {
                 // The default ground throughout (the owner, 2026-09-15: "don't change backgrounds
                 // for voice, keep the default bg") — an earlier cut washed it a hue per voice.
                 Tokens.ground.ignoresSafeArea()
+                // Beat two's page of text runs the whole height, under the book and the chrome —
+                // the book is drawn over it, and `readingTopFade` between the two is what lets
+                // the text dissolve beneath the book and the heading rather than collide with them.
+                if phase == .reading {
+                    ReadAlongPassage(timings: passageTimings(selectedVoice),
+                                     fallback: heroBook?.passage ?? heroBook?.line ?? "",
+                                     time: solo.currentTime,
+                                     isFinished: hasHeard && !solo.isPlaying)
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+                    readingTopFade
+                }
                 CoverField(books: manifest.books, hero: manifest.hero, schedule: schedule, elapsed: elapsed, lift: lift)
                     .ignoresSafeArea()
+                // A layer of its own rather than a case in the chrome stack below: as a stack
+                // child it had to win its height from the `Spacer` above it, and once its own
+                // content stopped being full-height it lost, collapsing the voice row and the key
+                // to the top of the screen.
+                if phase == .reading {
+                    readingBody
+                        .transition(.opacity)
+                }
                 VStack(spacing: 0) {
                     HStack {
                         Spacer()
@@ -95,8 +115,7 @@ struct OnboardingCover: View {
                             .padding(.bottom, Spacing.section + Spacing.row)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     case .reading:
-                        readingBody
-                            .transition(.opacity)
+                        EmptyView()   // its own layer above, not a case in this stack
                     }
                 }
                 .animation(.snappy, value: phase)
@@ -124,45 +143,62 @@ struct OnboardingCover: View {
         .onDisappear { chatter.stop(); solo.stop() }
     }
 
-    /// The heading right under the book, the lines filling the rest, the voice carousel floating
-    /// over their lower reach, and Continue at the foot behind the app's own bottom fade — the
-    /// only fade in the scene (the owner, 2026-09-15: "the only fade is the bottom fade of the
-    /// button, so the voice boxes are over the text"; "Choose your default voice stays on top
-    /// below the book").
-    private var readingBody: some View {
+    /// Ground behind the book and the heading, over the page of text and under the book itself,
+    /// so the text dissolves beneath them instead of running into them (the owner, 2026-09-15:
+    /// "there should be a top fade for the book and header"). Solid as far as the lifted book's
+    /// foot, then the app's own fade curve — `BottomFade.stops` read upward — across the heading.
+    private var readingTopFade: some View {
         GeometryReader { geo in
-            ZStack(alignment: .bottom) {
-                VStack(spacing: Spacing.grid) {
-                    // The lifted hero's foot is about 0.27 of the height down; the heading and
-                    // the lines start just under it.
-                    Spacer().frame(height: geo.size.height * 0.20)
-                    Text("Choose your default voice")
-                        .typeRole(.sectionHeader)
-                        .foregroundStyle(Tokens.ink)
-                    ReadAlongPassage(timings: passageTimings(selectedVoice),
-                                     fallback: heroBook?.passage ?? heroBook?.line ?? "",
-                                     time: solo.currentTime,
-                                     isFinished: hasHeard && !solo.isPlaying)
-                        .frame(maxHeight: .infinity)
-                }
-
-                VStack(spacing: 0) {
-                    RaisedButton(label: "Continue", tone: .blue, size: .bar) { finish(setDefault: true) }
-                        .padding(.horizontal, Spacing.margin)
-                        .padding(.bottom, Spacing.grid)
-                }
-                .background { BottomFade(color: Tokens.ground) }
-
-                // Floats over the text's lower reach — and over the fade's own upward ramp, last
-                // in the stack so its colour paints solid through it rather than being bled into
-                // by the gradient behind the button.
-                VoiceCarousel(voices: manifest.voices, selected: $selectedVoice,
-                              isFinished: hasHeard && !solo.isPlaying) { play(selectedVoice) }
-                    .padding(.bottom, Spacing.section + Spacing.row + Spacing.grid)
+            VStack(spacing: 0) {
+                Tokens.ground
+                    .frame(height: geo.size.height * 0.29)
+                // The heading rides on the last of the solid ground rather than in the chrome
+                // below, so it always has the fade's own ground behind it: its own layer's
+                // geometry is the screen's, where the chrome's is only what is left under the
+                // Skip row, and the two drifted apart by a tenth of the height.
+                Text("Choose your default voice")
+                    .typeRole(.sectionHeader)
+                    .foregroundStyle(Tokens.ink)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, Spacing.grid)
+                    .background(Tokens.ground)
+                LinearGradient(stops: BottomFade.stops(color: Tokens.ground), startPoint: .bottom, endPoint: .top)
+                    .frame(height: 110)
+                Spacer(minLength: 0)
             }
         }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .transition(.opacity)
+    }
+
+    /// Beat two's foot over the page of text: the voice carousel floating over the text's lower
+    /// reach, and Continue under it behind a tall bottom fade (the owner, 2026-09-15: "the bottom
+    /// fade should be taller"), which is what carries the text out of sight behind both. The
+    /// heading is not here but on `readingTopFade`, where the ground behind it is.
+    private var readingBody: some View {
+        ZStack(alignment: .bottom) {
+            VStack(spacing: 0) {
+                RaisedButton(label: "Continue", tone: .blue, size: .bar) { finish(setDefault: true) }
+                    .padding(.horizontal, Spacing.margin)
+                    .padding(.bottom, Spacing.grid)
+            }
+            .background { BottomFade(fade: Self.bottomFade, color: Tokens.ground) }
+
+            // Floats over the text's lower reach — and over the fade's own upward ramp, last
+            // in the stack so its colour paints solid through it rather than being bled into
+            // by the gradient behind the button.
+            VoiceCarousel(voices: manifest.voices, selected: $selectedVoice,
+                          isFinished: hasHeard && !solo.isPlaying) { play(selectedVoice) }
+                .padding(.bottom, Spacing.section + Spacing.row + Spacing.grid)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .onChange(of: selectedVoice) { _, voice in play(voice) }
     }
+
+    /// Taller than a bar's usual 72: the page of text runs the whole height now, so the ramp has
+    /// to reach past the voice row as well as the key.
+    static let bottomFade: CGFloat = 200
 
     private func startReading() {
         liftedAt = Date()

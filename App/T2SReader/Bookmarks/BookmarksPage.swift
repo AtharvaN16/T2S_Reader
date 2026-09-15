@@ -29,11 +29,22 @@ struct BookmarksPage: View {
     @State private var opened: BookmarkEntry?
     /// Whether the order menu is down.
     @State private var picking = false
+    /// The list turned into a selection list, mirroring the Book sheet's render-selection flow.
+    @State private var isSelecting = false
+    @State private var selection: Set<BookmarkEntry.ID> = []
+    @State private var confirmingBulkDelete = false
 
     /// The air between two bookmarks. Generous on the owner's word (2026-09-12): a bookmark is up
     /// to four lines of the book plus a note plus two buttons, and at 18 two of them ran together
     /// into one block of text with a rule somewhere in the middle of it.
     private static let rowGap: CGFloat = 30
+    /// How far the top `EdgeFade` runs, and — paired with it — the first row's own gap under the
+    /// header: the two have to agree, or the fade either cuts short of `EdgeFade`'s own default
+    /// (owner, 2026-09-14: "the fade is abrupt") or reaches past the gap into the first row's words.
+    /// Longer still on the owner's second word the same day ("increase space below the header so
+    /// the fade is longer and more gradual") — the header's own ground runs further down the page
+    /// before it starts thinning, so the ramp has more room to be gentle in.
+    private static let topFadeHeight: CGFloat = 40
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -78,6 +89,40 @@ struct BookmarksPage: View {
             BookmarkNoteSheet(summary: summary, entry: entry,
                               onSaved: { Task { await model?.load(summary) } })
         }
+        .safeAreaInset(edge: .bottom) {
+            // The Book sheet's render-mode bar (owner, 2026-09-14: "we can use the pattern we used
+            // in voice sheet and render mode") — no header pill, no header close mark; the key
+            // itself is the only door out. One line over it throughout, not only once something is
+            // picked (owner, 2026-09-14: "keep select all option above the done button, which
+            // changes to clear selection"): "Select all" with nothing ticked, "Clear selection"
+            // once something is.
+            if isSelecting, let model {
+                VStack(spacing: Spacing.grid) {
+                    selectAllRow(model)
+                    BarButton(label: selection.isEmpty ? "Done" : "Delete (\(selection.count))",
+                              tone: selection.isEmpty ? .ink : .destructive) {
+                        if selection.isEmpty { exitSelecting() } else { confirmingBulkDelete = true }
+                    }
+                }
+                .padding(.horizontal, Spacing.margin)
+                .padding(.top, Spacing.grid * 2)
+                .padding(.bottom, Spacing.grid)
+                .background { BottomFade(color: Tokens.ground) }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .confirmationDialog(selection.count == 1 ? "Delete this bookmark?" : "Delete \(selection.count) bookmarks?",
+                             isPresented: $confirmingBulkDelete, titleVisibility: .visible) {
+            Button(selection.count == 1 ? "Delete bookmark" : "Delete \(selection.count) bookmarks", role: .destructive) {
+                Task {
+                    await model?.delete(selection)
+                    exitSelecting()
+                }
+            }
+            Button("Keep", role: .cancel) {}
+        } message: {
+            Text("This cannot be undone.")
+        }
         .task {
             let model = self.model ?? BookmarkListModel(library: env.library, player: env.player)
             self.model = model
@@ -88,9 +133,11 @@ struct BookmarksPage: View {
     /// How far under the back row the title sits, in place of the `Spacing.titleTop` a root page
     /// uses: that gap assumes nothing above the title, and stacked under a back row it put
     /// "Bookmarks" a row and a half down an otherwise empty screen (owner, 2026-09-12: "bookmarks
-    /// title and page start is too low"). This lands the word at about the height every root page's
-    /// title sits at, with the back mark above it rather than the air.
-    private static let titleGap: CGFloat = 12
+    /// title and page start is too low"). Slightly more than that first landing (owner, 2026-09-14:
+    /// "move bookmark header slightly lower") now that the row above carries the filter and select
+    /// marks as well as the back one — a title sitting right under a row of glyphs read as crowding
+    /// them rather than sitting under its own back mark.
+    private static let titleGap: CGFloat = 18
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -99,16 +146,27 @@ struct BookmarksPage: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Back")
                 Spacer()
-            }
-            HStack(alignment: .top) {
-                PageTitle(text: "Bookmarks", topPadding: Self.titleGap)
-                Spacer(minLength: 12)
-                // Beside the title rather than on its baseline: a circle has no baseline of its
-                // own, so `.firstTextBaseline` hung it off the bottom of the row.
-                if let model, !model.entries.isEmpty {
-                    filterButton(model).padding(.top, Self.titleGap + 4)
+                // On the back row, not beside the title (owner, 2026-09-14: "move the filter and
+                // check buttons to align with the back button") — three marks in one row read as
+                // the page's controls, and the title's own row is free to hold only the word.
+                //
+                // Nothing here at all once selecting (owner, 2026-09-14: "we don't need select all
+                // and deselect to be there") — the render-mode header carries no clear/close mark
+                // either; the bar at the foot is the whole of that mode's controls.
+                if let model, !model.entries.isEmpty, !isSelecting {
+                    HStack(spacing: 8) {
+                        Button { enterSelecting() } label: { CircleGlyph(systemName: "checkmark.circle") }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Select bookmarks")
+                        filterButton(model)
+                    }
                 }
             }
+            // A step under `.pageTitle` (owner, 2026-09-14): the word now sits under a row that
+            // carries three marks instead of one, and at full size it crowded them from below as
+            // well as beside. Still `.playerTitle` — a step over a row's own `.rowTitle` — so it
+            // reads as the page, not one more row in the list under it.
+            PageTitle(text: "Bookmarks", topPadding: Self.titleGap, role: .playerTitle)
         }
         .padding(.horizontal, Spacing.margin)
         .padding(.top, Spacing.grid + 4)
@@ -171,11 +229,21 @@ struct BookmarksPage: View {
                                 onOpen: { opened = entry },
                                 onJump: { jump(to: entry) },
                                 onEditNote: { editing = entry },
-                                onDelete: { Task { await model.delete(entry) } })
+                                onDelete: { Task { await model.delete(entry) } },
+                                isSelecting: isSelecting,
+                                isSelected: selection.contains(entry.id),
+                                onToggleSelect: { toggleSelection(entry) })
+                        // Always the page's own margin, in or out of select mode (owner, 2026-09-14:
+                        // "the margin is not right for the rows when selected, they don't follow
+                        // page margin") — borrowing width from it to hold the check even width made
+                        // the rows narrower than the header above them. The check instead comes out
+                        // of the text's own room while selecting, same as the first cut.
                         .padding(.horizontal, Spacing.margin)
                         // `rowGap` is the air *between* two bookmarks; the first one has the title
-                        // above it instead, and owes it nothing like as much.
-                        .padding(.top, position == 0 ? Spacing.grid + 4 : Self.rowGap)
+                        // above it instead, and owes it nothing like as much — but at least
+                        // `Self.topFadeHeight`, so the fade below has clear ground to run over
+                        // rather than biting into the first row's own words at rest.
+                        .padding(.top, position == 0 ? Self.topFadeHeight : Self.rowGap)
                         .padding(.bottom, Self.rowGap)
                 }
                 Color.clear.frame(height: Spacing.section)
@@ -184,8 +252,11 @@ struct BookmarksPage: View {
         .scrollIndicators(.hidden)
         .animation(.snappy, value: model.entries.map(\.id))
         // Both ends soft (owner, 2026-09-12: "use bottom and top fade"): a row leaves the page
-        // under the title and under the foot rather than being cut off at either.
-        .overlay { EdgeFade(edge: .top, height: 20) }
+        // under the title and under the foot rather than being cut off at either. The top one was
+        // shorter than `EdgeFade`'s own default and shorter than the gap it had to run over, so a
+        // row scrolling under the header met the last few points of it as a cut rather than a fade
+        // (owner, 2026-09-14: "make the fade gradual, currently there is an abrupt fade").
+        .overlay { EdgeFade(edge: .top, height: Self.topFadeHeight) }
         .overlay { EdgeFade(edge: .bottom, height: 44) }
     }
 
@@ -195,6 +266,69 @@ struct BookmarksPage: View {
             await model.jump(to: entry, in: summary)
             dismiss()
             onJumped()
+        }
+    }
+
+    private func enterSelecting() {
+        withAnimation(.snappy) { isSelecting = true }
+    }
+
+    private func exitSelecting() {
+        withAnimation(.snappy) { isSelecting = false; selection.removeAll() }
+    }
+
+    private func selectAll(_ model: BookmarkListModel) {
+        withAnimation(.snappy) { selection = Set(model.entries.map(\.id)) }
+    }
+
+    /// Puts every tick back down without leaving the mode — `BookSheet.clearSelection()`'s own
+    /// reason applies here too: undoing a selection a row at a time is the one thing this mode
+    /// makes the reader do by hand otherwise.
+    private func clearSelection() {
+        withAnimation(.snappy) { selection.removeAll() }
+    }
+
+    /// One line over the key throughout select mode, not only once something is picked
+    /// (`BookSheet.clearRow`'s shape, its job doubled): a glyph, the words in the pill's type, no
+    /// capsule — it must not read as a second key. "Select all" with nothing ticked, since a mode
+    /// with nothing picked has nothing to clear; "Clear selection" from the first tick on.
+    ///
+    /// Both labels are always laid out, stacked, and only ever faded — the same fix as the row's
+    /// own check (`BookmarkRow`), for the same reason. A `Text`/`Image` whose *content* changes
+    /// under `withAnimation` tries to morph the old glyphs into the new ones, and "Select all" →
+    /// "Clear selection" is also a width change fighting that morph at the same time, which is
+    /// what read as ghosting (owner, 2026-09-14: "please use a better animation"). Two fixed views
+    /// crossfading past each other has neither problem: nothing's content ever changes, so there
+    /// is nothing to morph, and the `ZStack` is already the wider label's width before either tap.
+    private func selectAllRow(_ model: BookmarkListModel) -> some View {
+        let isEmpty = selection.isEmpty
+        return Button { isEmpty ? selectAll(model) : clearSelection() } label: {
+            ZStack {
+                selectAllLabel("checkmark.circle", "Select all").opacity(isEmpty ? 1 : 0)
+                selectAllLabel("xmark.circle.fill", "Clear selection").opacity(isEmpty ? 0 : 1)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+            // Both labels sit in the tree at all times now, opacity or not — VoiceOver does not
+            // care which one is invisible, so left alone it would read both on every visit.
+            .accessibilityHidden(true)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isEmpty ? "Select all" : "Clear selection")
+        .accessibilityHint(isEmpty ? "Selects every bookmark" : "Unticks every bookmark")
+    }
+
+    private func selectAllLabel(_ glyph: String, _ text: String) -> some View {
+        HStack(spacing: Spacing.grid + 2) {
+            Image(systemName: glyph).font(.system(size: 15, weight: .semibold))
+            Text(text).typeRole(.pill)
+        }
+        .foregroundStyle(Tokens.ink2)
+    }
+
+    private func toggleSelection(_ entry: BookmarkEntry) {
+        withAnimation(.snappy) {
+            if selection.contains(entry.id) { selection.remove(entry.id) } else { selection.insert(entry.id) }
         }
     }
 }

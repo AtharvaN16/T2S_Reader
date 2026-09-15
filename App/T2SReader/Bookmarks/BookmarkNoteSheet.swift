@@ -23,8 +23,14 @@ struct BookmarkNoteSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(entry.hasNote ? "Edit note" : "Add a note")
-                .typeRole(.playerTitle).foregroundStyle(Tokens.ink)
+            HStack(alignment: .top) {
+                Text(entry.hasNote ? "Edit note" : "Add a note")
+                    .typeRole(.playerTitle).foregroundStyle(Tokens.ink)
+                Spacer(minLength: 12)
+                Button { dismiss() } label: { CircleGlyph(systemName: "xmark") }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Close")
+            }
             // The whole passage, so it is plain what is being annotated; once the field has focus
             // it folds to two lines and gives the keyboard the screen (owner, 2026-09-12). A plain
             // `Text` rather than a scroller: it takes only the height it needs, where a `ScrollView`

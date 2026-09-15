@@ -124,12 +124,17 @@ struct PageTitle<Menu: View>: View {
     /// needs, or the title lands a whole row and a half down the screen (owner, 2026-09-12:
     /// "bookmarks title and page start is too low").
     var topPadding: CGFloat = Spacing.titleTop
+    /// `.pageTitle` on a root page. A page that shares its title's row with more than one trailing
+    /// mark — the bookmarks page's select and order glyphs — passes a smaller role, or the word
+    /// crowds the marks beside it (owner, 2026-09-14: "not enough space for it with the buttons on
+    /// the right"). Still well clear of a row's own title, so it reads as the page, not a row.
+    var role: TypeRole = .pageTitle
     @ViewBuilder var menu: () -> Menu
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(text).typeRole(.pageTitle).foregroundStyle(Tokens.ink)
+                Text(text).typeRole(role).foregroundStyle(Tokens.ink)
                 menu()
             }
             if let subtitle {
@@ -142,8 +147,8 @@ struct PageTitle<Menu: View>: View {
 }
 
 extension PageTitle where Menu == EmptyView {
-    init(text: String, subtitle: String? = nil, topPadding: CGFloat = Spacing.titleTop) {
-        self.init(text: text, subtitle: subtitle, topPadding: topPadding, menu: { EmptyView() })
+    init(text: String, subtitle: String? = nil, topPadding: CGFloat = Spacing.titleTop, role: TypeRole = .pageTitle) {
+        self.init(text: text, subtitle: subtitle, topPadding: topPadding, role: role, menu: { EmptyView() })
     }
 }
 

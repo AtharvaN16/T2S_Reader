@@ -8,13 +8,15 @@ import SwiftUI
 /// one in the face's own hue. A press sinks it: the light goes out of it, the shadow tightens,
 /// it scales down a little.
 ///
-/// Two tones. `.blue` is the reference's own (`Tokens.keyTop` → `keyBottom`): the empty shelf's
+/// Three tones. `.blue` is the reference's own (`Tokens.keyTop` → `keyBottom`): the empty shelf's
 /// one "do this first", and the Reader's skip pill. `.ink` is the app's black button raised
 /// (owner, 2026-09-10: "replace the black buttons with skeuomorphic versions") — the bar at the
 /// foot of an Import step, the Voice page's confirm, the Reader's "Back to current" pill, which
 /// stays ink so the one key that moves you on reads first. In the dark ink is graphite, not white:
-/// `Tokens.keyInkTop`. Three sizes: `.bar` fills its width at 56 pt (what `BarButton` is),
-/// `.key` hugs its label at 56, `.compact` hugs it at 40 for a pill in the Reader.
+/// `Tokens.keyInkTop`. `.destructive` is the heart's red, raised, for a bar whose act is a delete
+/// rather than a confirm (the bookmarks page's multi-select). Three sizes: `.bar` fills its width
+/// at 56 pt (what `BarButton` is), `.key` hugs its label at 56, `.compact` hugs it at 40 for a
+/// pill in the Reader.
 ///
 /// There was a third, `.quiet`, for the second key in a pair: a flat `surface` slab, so two keys
 /// in one bar would not compete for the same press. It is gone with the only bar that carried two
@@ -27,7 +29,7 @@ import SwiftUI
 /// there was nothing to act on — a raised key that cannot be pressed would be a lie; `busyLabel`
 /// puts a spinner in front of the words while the model works and disables it the same way.
 struct RaisedButton: View {
-    enum Tone { case blue, ink }
+    enum Tone { case blue, ink, destructive }
     enum Size { case bar, key, compact }
 
     var label: String
@@ -68,6 +70,9 @@ struct RaisedButton: View {
         switch tone {
         case .blue: return RaisedFace(top: Tokens.keyTop, bottom: Tokens.keyBottom, halo: Tokens.glow, rim: Tokens.gloss.opacity(0.75), text: Tokens.onAccent)
         case .ink: return RaisedFace(top: Tokens.keyInkTop, bottom: Tokens.keyInkBottom, halo: Tokens.shade, rim: Tokens.keyInkRim, text: Tokens.onKeyInk)
+        // The heart's own red (`Tokens.heartTop` → `heartBottom`, `heartShade`'s shadow): the app's
+        // one other top-lit object in this hue, reused rather than a third red invented for it.
+        case .destructive: return RaisedFace(top: Tokens.heartTop, bottom: Tokens.heartBottom, halo: Tokens.heartShade, rim: Tokens.gloss.opacity(0.75), text: Tokens.onAccent)
         }
     }
 }

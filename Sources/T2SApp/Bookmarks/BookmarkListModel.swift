@@ -113,6 +113,20 @@ public final class BookmarkListModel {
         }
     }
 
+    /// Every bookmark in `ids`, in one pass — the bookmarks page's multi-select delete. One
+    /// `refreshBookmarks()` at the end rather than the single-entry `delete`'s one per row.
+    public func delete(_ ids: Set<BookmarkEntry.ID>) async {
+        for id in ids {
+            do {
+                try await library.store.deleteBookmark(id: id)
+            } catch {
+                self.error = "\(error)"
+            }
+        }
+        entries.removeAll { ids.contains($0.id) }
+        await player.refreshBookmarks()
+    }
+
     /// Loads the document when it is not the current one, seeks to the bookmark, and plays.
     public func jump(to entry: BookmarkEntry, in summary: DocumentSummary) async {
         if player.current?.id != summary.id { await player.load(summary, play: false) }

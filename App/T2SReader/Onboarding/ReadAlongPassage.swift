@@ -2,11 +2,17 @@
 import SwiftUI
 import T2SApp
 
-/// The hero's lines under the settled cover, read along: a faded, oversized cut of the Reader's
-/// page (the owner, 2026-09-14: "our faded chapter reader interface for Alice moving, thick and
-/// bigger font than what we use"). Words already spoken are ink, the word being spoken sits on
-/// `accentSoft` as it does in the Reader, and the rest wait in `ink2`. The block scrolls itself so
-/// the spoken word stays in the middle — the Reader's own following — and nothing else scrolls it.
+/// The hero's lines under the settled cover, read along: a bigger cut of the Reader's own text
+/// (the owner, 2026-09-14: "our faded chapter reader interface for Alice moving, thick and bigger
+/// font than what we use"). The Reader's read-along is a boundary, not a tint (`ReaderTextView`):
+/// everything up to the word being spoken is `ink`, everything after it `inkUnread` — no
+/// highlighter box on the current word, which the owner pointed out on 2026-09-15 ("we don't use
+/// highlighter effect in our reader mode"). This mirrors that exactly, at word granularity. The
+/// block scrolls itself so the spoken word stays in the middle — the Reader's own following — and
+/// nothing else scrolls it; the top and bottom edges use the app's own bottom-fade curve
+/// (`BottomFade.stops`), not a hand-rolled mask, and only over a few points so the text stays
+/// mostly visible (the owner, 2026-09-15: "this fade is too aggressive, I can only see a small
+/// part of text").
 ///
 /// Built from the clip's timing file: each word's range in the spoken text, with the punctuation
 /// and space that follow it attached, so the line reads as prose and not as a list of words.
@@ -46,41 +52,40 @@ struct ReadAlongPassage: View {
         return timings?.wordIndex(at: time)
     }
 
+    /// How far the fade at each edge reaches — short, so the box reads as text with a soft edge
+    /// rather than a window onto a small sliver of it.
+    static let edgeFade: CGFloat = 20
+
     var body: some View {
         let tokens = tokens
         let current = current
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
-                FlowLayout(spacing: 7, lineSpacing: 2) {
+                FlowLayout(spacing: 7, lineSpacing: 4) {
                     ForEach(tokens) { token in
-                        let isCurrent = token.id == current
                         let isSpoken = current.map { token.id < $0 } ?? false
                         Text(token.text)
                             .font(.custom("Inter-Bold", size: 22))
-                            .foregroundStyle(isCurrent || isSpoken ? Tokens.ink : Tokens.ink2)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 2)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .fill(isCurrent ? Tokens.accentSoft : .clear)
-                            )
-                            .padding(.horizontal, -4)
+                            .foregroundStyle(isSpoken ? Tokens.ink : Tokens.inkUnread)
+                            .animation(.easeOut(duration: 0.25), value: isSpoken)
                             .id(token.id)
                     }
                 }
                 .padding(.horizontal, Spacing.margin)
-                .padding(.vertical, 60)
+                .padding(.vertical, Self.edgeFade + 8)
             }
             .scrollDisabled(true)
             .scrollIndicators(.hidden)
-            .mask(
-                LinearGradient(stops: [
-                    .init(color: .clear, location: 0),
-                    .init(color: .black, location: 0.18),
-                    .init(color: .black, location: 0.82),
-                    .init(color: .clear, location: 1),
-                ], startPoint: .top, endPoint: .bottom)
-            )
+            .overlay(alignment: .top) {
+                LinearGradient(stops: BottomFade.stops(color: Tokens.ground), startPoint: .bottom, endPoint: .top)
+                    .frame(height: Self.edgeFade)
+                    .allowsHitTesting(false)
+            }
+            .overlay(alignment: .bottom) {
+                LinearGradient(stops: BottomFade.stops(color: Tokens.ground), startPoint: .top, endPoint: .bottom)
+                    .frame(height: Self.edgeFade)
+                    .allowsHitTesting(false)
+            }
             .onChange(of: current) { _, index in
                 guard let index else { return }
                 withAnimation(.smooth(duration: 0.5)) { proxy.scrollTo(index, anchor: .center) }

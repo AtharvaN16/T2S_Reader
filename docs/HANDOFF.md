@@ -69,8 +69,20 @@ leads the voice row instead); the near third of the field is sharp and the far e
 of blur; the arrow and "Hear the first lines" are gone, the blue Play key stands alone; beat two is
 Inter Bold 22 with tight leading, a "Choose your default voice" heading, one big voice pill at a
 time with the next peeking in at 55 %, a replay glyph inside the pill once the passage has been
-heard (a tap replays), the ground washed a hue per voice (`tint(for:)` in `OnboardingCover`), and a
-blue raised Continue that takes the pill on screen as the default.
+heard (a tap replays), the ground washed a hue per voice, and a blue raised Continue that takes the
+pill on screen as the default.
+
+**The owner's fifth round (2026-09-15, from the phone again):** the per-voice ground tint is gone —
+back to the plain `Tokens.ground` throughout, on the owner's word ("don't change backgrounds for
+voice"). `ReadAlongPassage` no longer wears the Reader's read-along the way the fourth round guessed
+it: `ReaderTextView`'s own doc comment says the read-along is *a boundary, not a tint* — spoken text
+is `ink`, everything after `inkUnread`, no highlighter box — so the `accentSoft` background on the
+current word is gone and the two colours match the Reader's exactly. The interior mask that hid the
+top and bottom 18% of the block is gone too (owner: "I can only see a small part of text"); a much
+shorter fade at each edge, built from `BottomFade.stops` — the same curve the app's own bottom bars
+fade against — replaces it, and the passage's frame is taller besides. The arrow's replacement, the
+pointing gone quietly the round before, is not missed. Continue now sits at the true foot of the
+screen behind a trailing `Spacer` in `readingBody`'s `VStack`, the way a `BarButton` always has.
 
 **Owed from the owner's notes:** the chatter lines need not be openings — iconic lines from anywhere
 in each book; a research pass, then a full re-render of the clips.

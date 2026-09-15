@@ -2,71 +2,71 @@
   "book" : "the-adventures-of-sherlock-holmes",
   "duration" : 3.525,
   "spoken" : "To Sherlock Holmes she is always the woman.",
-  "voice" : "bm_george",
+  "voice" : "bm_lewis",
   "words" : [
     {
-      "end" : 0.4,
+      "end" : 0.525,
       "range" : [
         0,
         2
       ],
-      "start" : 0.30000000000000004
+      "start" : 0.42500000000000004
     },
     {
-      "end" : 0.9,
+      "end" : 1.0250000000000001,
       "range" : [
         3,
         11
       ],
-      "start" : 0.47500000000000003
+      "start" : 0.625
     },
     {
-      "end" : 1.625,
+      "end" : 1.7000000000000002,
       "range" : [
         12,
         18
       ],
-      "start" : 0.9500000000000001
+      "start" : 1.1
     },
     {
-      "end" : 1.85,
+      "end" : 1.925,
       "range" : [
         19,
         22
       ],
-      "start" : 1.75
+      "start" : 1.8250000000000002
     },
     {
-      "end" : 2,
+      "end" : 2.0500000000000003,
       "range" : [
         23,
         25
       ],
-      "start" : 1.9000000000000001
+      "start" : 1.9500000000000002
     },
     {
-      "end" : 2.45,
+      "end" : 2.475,
       "range" : [
         26,
         32
       ],
-      "start" : 2.075
+      "start" : 2.1
     },
     {
-      "end" : 2.575,
+      "end" : 2.6,
       "range" : [
         33,
         36
       ],
-      "start" : 2.5
+      "start" : 2.5250000000000004
     },
     {
-      "end" : 3.325,
+      "end" : 3.25,
       "range" : [
         37,
         42
       ],
-      "start" : 2.6500000000000004
+      "start" : 2.6750000000000003
     }
   ]
 }

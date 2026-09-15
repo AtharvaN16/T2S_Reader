@@ -16,6 +16,9 @@ struct ReadAlongPassage: View {
     var fallback: String
     /// The clip's position, once a frame.
     var time: TimeInterval
+    /// True once the passage has been heard through: every word stays ink rather than falling
+    /// back to waiting when the player's clock resets.
+    var isFinished: Bool = false
 
     private struct Token: Identifiable {
         var id: Int
@@ -37,19 +40,23 @@ struct ReadAlongPassage: View {
         }
     }
 
-    private var current: Int? { timings?.wordIndex(at: time) }
+    /// The word being spoken; past the end, one beyond the last, so every word reads as spoken.
+    private var current: Int? {
+        if isFinished { return timings?.words.count }
+        return timings?.wordIndex(at: time)
+    }
 
     var body: some View {
         let tokens = tokens
         let current = current
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
-                FlowLayout(spacing: 8, lineSpacing: 10) {
+                FlowLayout(spacing: 7, lineSpacing: 2) {
                     ForEach(tokens) { token in
                         let isCurrent = token.id == current
                         let isSpoken = current.map { token.id < $0 } ?? false
                         Text(token.text)
-                            .font(.custom("Inter-Bold", size: 26))
+                            .font(.custom("Inter-Bold", size: 22))
                             .foregroundStyle(isCurrent || isSpoken ? Tokens.ink : Tokens.ink2)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 2)

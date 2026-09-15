@@ -28,7 +28,7 @@
       "id": "pride-and-prejudice",
       "title": "Pride and Prejudice",
       "author": "Jane Austen",
-      "voice": "af_bella",
+      "voice": "af_alloy",
       "line": "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.",
       "coverID": 15223895
     },
@@ -36,7 +36,7 @@
       "id": "a-tale-of-two-cities",
       "title": "A Tale of Two Cities",
       "author": "Charles Dickens",
-      "voice": "am_fenrir",
+      "voice": "am_echo",
       "line": "It was the best of times, it was the worst of times.",
       "coverID": 12503144
     },
@@ -44,7 +44,7 @@
       "id": "the-great-gatsby",
       "title": "The Great Gatsby",
       "author": "F. Scott Fitzgerald",
-      "voice": "af_nicole",
+      "voice": "af_aoede",
       "line": "In my younger and more vulnerable years my father gave me some advice that I've been turning over in my mind ever since.",
       "coverID": 13853193
     },
@@ -60,7 +60,7 @@
       "id": "jane-eyre",
       "title": "Jane Eyre",
       "author": "Charlotte Brontë",
-      "voice": "af_sarah",
+      "voice": "bf_lily",
       "line": "There was no possibility of taking a walk that day.",
       "coverID": 14083354
     },
@@ -68,7 +68,7 @@
       "id": "the-adventures-of-sherlock-holmes",
       "title": "The Adventures of Sherlock Holmes",
       "author": "Arthur Conan Doyle",
-      "voice": "bm_george",
+      "voice": "bm_lewis",
       "line": "To Sherlock Holmes she is always the woman.",
       "coverID": 14622714
     },

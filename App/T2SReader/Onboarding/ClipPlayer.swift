@@ -64,12 +64,15 @@ final class ClipPlayer {
 final class SoloClipPlayer: NSObject, AVAudioPlayerDelegate {
     private var player: AVAudioPlayer?
     private(set) var isPlaying = false
+    /// True from the first `play()` on, so "heard through" is `hasPlayed && !isPlaying`.
+    private(set) var hasPlayed = false
 
     /// The clip's position, for a tint that follows the voice.
     var currentTime: TimeInterval { player?.currentTime ?? 0 }
 
     func play(_ url: URL?) {
         stop()
+        hasPlayed = true
         guard let url, let player = try? AVAudioPlayer(contentsOf: url) else { return }
         player.delegate = self
         player.volume = ClipPlayer.isSilent ? 0 : 1

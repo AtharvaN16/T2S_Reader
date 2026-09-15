@@ -1,104 +1,104 @@
 {
   "book" : "a-tale-of-two-cities",
-  "duration" : 3.325,
+  "duration" : 3.825,
   "spoken" : "It was the best of times, it was the worst of times.",
-  "voice" : "am_fenrir",
+  "voice" : "am_echo",
   "words" : [
     {
-      "end" : 0.35000000000000003,
+      "end" : 0.375,
       "range" : [
         0,
         2
       ],
-      "start" : 0.25
+      "start" : 0.275
     },
     {
-      "end" : 0.5,
+      "end" : 0.55,
       "range" : [
         3,
         6
       ],
-      "start" : 0.375
+      "start" : 0.4
     },
     {
-      "end" : 0.5750000000000001,
+      "end" : 0.675,
       "range" : [
         7,
         10
       ],
-      "start" : 0.525
+      "start" : 0.6000000000000001
     },
     {
-      "end" : 0.8500000000000001,
+      "end" : 0.9750000000000001,
       "range" : [
         11,
         15
       ],
-      "start" : 0.625
+      "start" : 0.75
     },
     {
-      "end" : 0.9500000000000001,
+      "end" : 1.1,
       "range" : [
         16,
         18
       ],
-      "start" : 0.875
+      "start" : 1
     },
     {
-      "end" : 1.5,
+      "end" : 1.725,
       "range" : [
         19,
         24
       ],
-      "start" : 1
+      "start" : 1.175
     },
     {
-      "end" : 1.6500000000000001,
+      "end" : 1.9000000000000001,
       "range" : [
         26,
         28
       ],
-      "start" : 1.6
+      "start" : 1.8250000000000002
     },
     {
-      "end" : 1.8250000000000002,
+      "end" : 2.075,
       "range" : [
         29,
         32
       ],
-      "start" : 1.675
+      "start" : 1.925
     },
     {
-      "end" : 1.925,
+      "end" : 2.2,
       "range" : [
         33,
         36
       ],
-      "start" : 1.85
+      "start" : 2.125
     },
     {
-      "end" : 2.225,
+      "end" : 2.575,
       "range" : [
         37,
         42
       ],
-      "start" : 1.975
+      "start" : 2.275
     },
     {
-      "end" : 2.3000000000000003,
+      "end" : 2.7,
       "range" : [
         43,
         45
       ],
-      "start" : 2.25
+      "start" : 2.6
     },
     {
-      "end" : 3.125,
+      "end" : 3.625,
       "range" : [
         46,
         51
       ],
-      "start" : 2.35
+      "start" : 2.7750000000000004
     }
   ]
 }

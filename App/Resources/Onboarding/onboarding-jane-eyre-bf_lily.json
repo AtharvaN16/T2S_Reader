@@ -1,88 +1,88 @@
 {
   "book" : "jane-eyre",
-  "duration" : 3.85,
+  "duration" : 3.725,
   "spoken" : "There was no possibility of taking a walk that day.",
-  "voice" : "af_sarah",
+  "voice" : "bf_lily",
   "words" : [
     {
-      "end" : 0.6000000000000001,
+      "end" : 0.4,
       "range" : [
         0,
         5
       ],
-      "start" : 0.5
+      "start" : 0.30000000000000004
     },
     {
-      "end" : 0.75,
+      "end" : 0.55,
       "range" : [
         6,
         9
       ],
-      "start" : 0.625
+      "start" : 0.42500000000000004
     },
     {
-      "end" : 0.9750000000000001,
+      "end" : 0.8250000000000001,
       "range" : [
         10,
         12
       ],
-      "start" : 0.8
+      "start" : 0.625
     },
     {
-      "end" : 1.85,
+      "end" : 1.675,
       "range" : [
         13,
         24
       ],
-      "start" : 1.0250000000000001
+      "start" : 0.9
     },
     {
-      "end" : 1.975,
+      "end" : 1.8,
       "range" : [
         25,
         27
       ],
-      "start" : 1.925
+      "start" : 1.725
     },
     {
-      "end" : 2.3000000000000003,
+      "end" : 2.2,
       "range" : [
         28,
         34
       ],
-      "start" : 2.025
+      "start" : 1.85
     },
     {
-      "end" : 2.35,
+      "end" : 2.3000000000000003,
       "range" : [
         35,
         36
       ],
-      "start" : 2.325
+      "start" : 2.25
     },
     {
-      "end" : 2.625,
+      "end" : 2.6500000000000004,
       "range" : [
         37,
         41
       ],
-      "start" : 2.4000000000000004
+      "start" : 2.375
     },
     {
-      "end" : 2.825,
+      "end" : 2.85,
       "range" : [
         42,
         46
       ],
-      "start" : 2.6750000000000003
+      "start" : 2.7
     },
     {
-      "end" : 3.625,
+      "end" : 3.5,
       "range" : [
         47,
         50
       ],
-      "start" : 2.875
+      "start" : 2.9000000000000004
     }
   ]
 }

@@ -62,9 +62,10 @@ struct CoverField: View {
         /// within seconds and left clumps and gaps (the owner, 2026-09-14: "the spacing is random").
         var speed: CGFloat { 16 + CGFloat(depth) * 12 }
         /// Strictly by depth, and gentle: the furthest cover is soft, not a smear — you can still
-        /// make it out (the owner, 2026-09-14: "the most furthest cover should also not be super
-        /// blurred … reduce the blur intensity across the board").
-        var blur: CGFloat { 6 * CGFloat(pow(1 - depth, 1.1)) }
+        /// make it out — and anything in the near third is sharp (the owner, 2026-09-14: "the most
+        /// furthest cover should also not be super blurred … reduce the blur intensity across the
+        /// board"; 2026-09-15: "the least blurred book is still very blurred").
+        var blur: CGFloat { depth >= 0.66 ? 0 : 3.5 * CGFloat(1 - depth / 0.66) }
         var opacity: Double { 0.5 + depth * 0.5 }
 
         /// The columns the covers take in turn along the loop, as fractions of the width from the

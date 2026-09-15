@@ -63,6 +63,15 @@ again"); Continue writes the choice to `defaultVoiceID` by the picker's own id f
 voice, Skip leaves it. `T2S_ONBOARDING=reading` in a debug build lands on beat two at once, for a
 photograph. Settings → About → "Show the welcome again" replays the whole thing.
 
+**The owner's fourth round (2026-09-15, from the phone):** the opener speaks in Michael, Alloy, Echo,
+Aoede, Emma, Lily and Lewis (seven of the nine the owner named; Heart and Puck are unused — Heart
+leads the voice row instead); the near third of the field is sharp and the far end is at most 3.5 pt
+of blur; the arrow and "Hear the first lines" are gone, the blue Play key stands alone; beat two is
+Inter Bold 22 with tight leading, a "Choose your default voice" heading, one big voice pill at a
+time with the next peeking in at 55 %, a replay glyph inside the pill once the passage has been
+heard (a tap replays), the ground washed a hue per voice (`tint(for:)` in `OnboardingCover`), and a
+blue raised Continue that takes the pill on screen as the default.
+
 **Owed from the owner's notes:** the chatter lines need not be openings — iconic lines from anywhere
 in each book; a research pass, then a full re-render of the clips.
 

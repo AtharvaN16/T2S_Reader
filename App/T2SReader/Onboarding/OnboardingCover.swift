@@ -8,12 +8,13 @@ import T2SApp
 ///
 /// 1. One field of covers drifting in depth while a few opening lines chatter past, each heard
 ///    whole and the next fading into its tail (`ChatterSchedule`), and the hero settling out of
-///    the crowd, silent. Then an arrow to the book and the blue Play key — the ATC reference's
-///    "listen to this replay": the reader chooses the clean listen.
+///    the crowd, silent. Then the blue Play key alone under it — the ATC reference's "listen to
+///    this replay": the reader chooses the clean listen.
 /// 2. On Play the hero lifts and its lines are read under it, oversized and faded with the
-///    spoken word tinted (`ReadAlongPassage`), over a carousel of voices (`VoiceCarousel`):
-///    choosing one plays the passage again in that voice, and Continue makes it the app's
-///    default voice.
+///    spoken word tinted (`ReadAlongPassage`), under "Choose your default voice" and over one big
+///    voice pill at a time (`VoiceCarousel`): swiping to another plays the passage again in that
+///    voice and washes the ground a colour of its own, and the blue Continue makes the pill on
+///    screen the app's default voice.
 ///
 /// The scene runs on the wall clock from the moment it appears: the field draws from it and the
 /// chatter takes its gains from it, once a frame. It follows the app's theme — covers on the
@@ -23,6 +24,7 @@ struct OnboardingCover: View {
     var onFinish: () -> Void
 
     @Environment(AppEnvironment.self) private var env
+    @Environment(\.colorScheme) private var scheme
 
     private enum Phase { case scene, ready, reading }
 
@@ -32,6 +34,7 @@ struct OnboardingCover: View {
     @State private var phase: Phase = .scene
     @State private var liftedAt: Date?
     @State private var selectedVoice: String
+    @State private var hasHeard = false
     @State private var timings: [String: OnboardingClipTimings] = [:]
 
     private let schedule: ChatterSchedule
@@ -65,6 +68,18 @@ struct OnboardingCover: View {
         return loaded
     }
 
+    /// Each voice washes the ground its own way: a soft hue spaced around the wheel by its place
+    /// in the row, faint on light and deep on dark (the owner, 2026-09-15: "as voice changes also
+    /// change the color of the bg").
+    private func tint(for voice: String) -> Color {
+        let index = manifest.voices.firstIndex(of: voice) ?? 0
+        let count = max(manifest.voices.count, 1)
+        let hue = (Double(index) / Double(count) + 0.08).truncatingRemainder(dividingBy: 1)
+        return scheme == .dark
+            ? Color(hue: hue, saturation: 0.35, brightness: 0.24)
+            : Color(hue: hue, saturation: 0.14, brightness: 0.99)
+    }
+
     var body: some View {
         TimelineView(.animation) { context in
             let elapsed = startedAt.map { context.date.timeIntervalSince($0) } ?? 0
@@ -72,6 +87,11 @@ struct OnboardingCover: View {
             let lift = liftedAt.map { smooth(context.date.timeIntervalSince($0) / 0.7) } ?? 0
             ZStack {
                 Tokens.ground.ignoresSafeArea()
+                tint(for: selectedVoice)
+                    .ignoresSafeArea()
+                    .opacity(phase == .reading ? 1 : 0)
+                    .animation(.smooth(duration: 0.7), value: selectedVoice)
+                    .animation(.smooth(duration: 0.7), value: phase)
                 CoverField(books: manifest.books, hero: manifest.hero, schedule: schedule, elapsed: elapsed, lift: lift)
                     .ignoresSafeArea()
                 VStack(spacing: 0) {
@@ -86,10 +106,11 @@ struct OnboardingCover: View {
                     case .scene:
                         EmptyView()
                     case .ready:
-                        readyFoot
+                        RaisedButton(label: "Play", glyph: "play.fill", tone: .blue, size: .key) { startReading() }
+                            .padding(.bottom, Spacing.section + Spacing.row)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                     case .reading:
-                        readingBody(in: context.date)
+                        readingBody
                             .transition(.opacity)
                     }
                 }
@@ -100,6 +121,7 @@ struct OnboardingCover: View {
                 guard startedAt != nil else { return }
                 chatter.update(gains: schedule.gains(at: elapsed))
                 if settled, phase == .scene { phase = .ready }
+                if phase == .reading, hasHeard == false, solo.hasPlayed, !solo.isPlaying { hasHeard = true }
             }
         }
         .onAppear {
@@ -117,34 +139,24 @@ struct OnboardingCover: View {
         .onDisappear { chatter.stop(); solo.stop() }
     }
 
-    /// The arrow to the book, a line, and the blue Play key.
-    private var readyFoot: some View {
-        VStack(spacing: Spacing.grid) {
-            PointingArrow()
-            Text("Hear the first lines")
-                .typeRole(.rowTitle)
-                .foregroundStyle(Tokens.ink2)
-                .padding(.bottom, Spacing.grid)
-            RaisedButton(label: "Play", glyph: "play.fill", tone: .blue, size: .key) { startReading() }
-        }
-        .padding(.horizontal, Spacing.margin)
-        .padding(.bottom, Spacing.section)
-    }
-
-    /// The lines under the lifted hero, the voice row, and Continue.
-    @ViewBuilder
-    private func readingBody(in now: Date) -> some View {
+    /// The lines under the lifted hero, the heading, the voice pill, and Continue.
+    private var readingBody: some View {
         GeometryReader { geo in
             VStack(spacing: Spacing.row) {
                 // The lifted hero's foot is about 0.27 of the height down; the lines start just
                 // under it and the mask eases them in.
-                Spacer().frame(height: geo.size.height * 0.25)
+                Spacer().frame(height: geo.size.height * 0.22)
                 ReadAlongPassage(timings: passageTimings(selectedVoice),
                                  fallback: heroBook?.passage ?? heroBook?.line ?? "",
-                                 time: solo.currentTime)
-                    .frame(height: geo.size.height * 0.36)
-                VoiceCarousel(voices: manifest.voices, selected: $selectedVoice) { play(selectedVoice) }
-                BarButton(label: "Continue") { finish(setDefault: true) }
+                                 time: solo.currentTime,
+                                 isFinished: hasHeard && !solo.isPlaying)
+                    .frame(height: geo.size.height * 0.30)
+                Text("Choose your default voice")
+                    .typeRole(.sectionHeader)
+                    .foregroundStyle(Tokens.ink)
+                VoiceCarousel(voices: manifest.voices, selected: $selectedVoice,
+                              isFinished: hasHeard && !solo.isPlaying) { play(selectedVoice) }
+                RaisedButton(label: "Continue", tone: .blue, size: .bar) { finish(setDefault: true) }
                     .padding(.horizontal, Spacing.margin)
                     .padding(.bottom, Spacing.grid)
             }
@@ -159,6 +171,7 @@ struct OnboardingCover: View {
     }
 
     private func play(_ voice: String) {
+        hasHeard = false
         solo.play(passageClip(voice))
     }
 

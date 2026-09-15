@@ -18,6 +18,14 @@ public enum PrepareSkipReason: Hashable, Sendable {
     case alreadyRunning
     /// The hosted voice stands in for the default; a charger must not render through the mirrors.
     case waitingForVoice
+    /// The reader turned Prepare off on its own page.
+    case disabled
+    /// "Overnight", and it is not. iOS grants background time when it likes, so the window is
+    /// enforced here, at the start of the pass, rather than promised to the scheduler.
+    case outsideWindow
+    /// "Only what I pick", and nothing is picked. Not a failure — the reader has said what they
+    /// want and it is nothing, which the page shows them plainly.
+    case nothingPicked
 }
 
 public enum PrepareStopReason: Hashable, Sendable {
@@ -69,6 +77,11 @@ public final class PrepareRunner {
     /// True while the app's default voice resolves to the hosted stand-in (cloud-first bootstrap
     /// spec): a run then does nothing rather than render a library through the mirrors on a charger.
     public var isStandingIn: @Sendable () async -> Bool = { false }
+    /// Settings → Prepare on charge. Nil is the pre-page behaviour — every document in the Queue,
+    /// against the stored budget — which is what the policy tests and the prime path still want.
+    public var settings: PrepareSettings?
+    /// The clock the overnight window is judged against. A seam for the tests; the app never sets it.
+    public var now: @Sendable () -> Date = { Date() }
     /// How long a chapter's rendered metadata may sit unwritten while the pass stays in that chapter.
     /// Rendered audio is already on disk under its key; a lost write self-heals on the next load
     /// (`PlaybackCoordinator.reconcileWithStore`), so this bounds a crash's loss, not correctness.
@@ -104,18 +117,56 @@ public final class PrepareRunner {
     }
 
     /// Looks up the persisted continuation document and Queue before executing a normal app or
-    /// background invocation. The explicit overload below keeps the policy testable.
+    /// background invocation, and asks Settings → Prepare on charge what to make of them. The
+    /// explicit overload below keeps the policy testable.
     public func run(reason: PrepareRunReason, device: DeviceState) async -> PrepareRunResult {
+        guard settings?.isEnabled != false else {
+            return finish(PrepareRunResult(reason: reason, stopReason: .skipped(.disabled)))
+        }
+        guard settings?.window.allows(now()) != false else {
+            return finish(PrepareRunResult(reason: reason, stopReason: .skipped(.outsideWindow)))
+        }
+
         let summaries = (try? await store.summaries()) ?? []
         let lastPlayed = summaries.max { ($0.lastPlayedAt ?? .distantPast) < ($1.lastPlayedAt ?? .distantPast) }?.id
         let queue = (try? await store.queue())?.map(\.id) ?? []
-        return await run(reason: reason, lastPlayed: lastPlayed, queue: queue, device: device)
+
+        guard let settings else {
+            return await run(reason: reason, lastPlayed: lastPlayed, queue: queue, scope: .budget, device: device)
+        }
+        // A pick for a book that has since been deleted would keep the page showing a row with no
+        // book behind it, so the library's own list is the last word on which picks survive.
+        settings.prunePicks(keeping: Set(summaries.map(\.id)))
+
+        switch settings.mode {
+        case .keepUp:
+            // Every document the reader has actually started, not only the Queue: "the chapter
+            // you're in, in every book" is the promise the page makes, and a book being read
+            // outside the Queue is still a book being read. Most recent first, behind the
+            // continuation document and the Queue, which keep their priority.
+            let started = summaries
+                .filter { $0.lastPlayedAt != nil }
+                .sorted { ($0.lastPlayedAt ?? .distantPast) > ($1.lastPlayedAt ?? .distantPast) }
+                .map(\.id)
+            return await run(reason: reason, lastPlayed: lastPlayed, queue: queue + started,
+                             scope: .currentChapters, device: device)
+        case .picked:
+            let picks = settings.picks
+            guard !picks.isEmpty else {
+                return finish(PrepareRunResult(reason: reason, stopReason: .skipped(.nothingPicked)))
+            }
+            // Only the picked documents are loaded — every other book in the library is a timeline
+            // read for nothing, and this runs on a charger at night behind a background budget.
+            let order = ([lastPlayed].compactMap { $0 } + queue + Array(picks.keys)).filter { picks[$0] != nil }
+            return await run(reason: reason, lastPlayed: nil, queue: order,
+                             scope: .picked(picks), device: device)
+        }
     }
 
     /// Testable policy execution: continuation document first, then Queue, using one playback
     /// budget. The budget is reread at every run so a changed preference needs no relaunch.
     public func run(lastPlayed: UUID?, queue: [UUID], device: DeviceState) async -> PrepareRunResult {
-        await run(reason: .foreground, lastPlayed: lastPlayed, queue: queue, device: device)
+        await run(reason: .foreground, lastPlayed: lastPlayed, queue: queue, scope: .budget, device: device)
     }
 
     public func cancel() {
@@ -191,7 +242,8 @@ public final class PrepareRunner {
         return await prime(last)
     }
 
-    private func run(reason: PrepareRunReason, lastPlayed: UUID?, queue: [UUID], device: DeviceState) async -> PrepareRunResult {
+    private func run(reason: PrepareRunReason, lastPlayed: UUID?, queue: [UUID],
+                     scope: PrepareScope, device: DeviceState) async -> PrepareRunResult {
         guard !isRunning else {
             return finish(PrepareRunResult(reason: reason, stopReason: .skipped(.alreadyRunning)))
         }
@@ -210,14 +262,25 @@ public final class PrepareRunner {
             return finish(PrepareRunResult(reason: reason, stopReason: .completed))
         }
 
+        // A picked chapter that is already on the device is dropped from the pick here rather than
+        // left to accumulate: the page's list is "still to do", so a reader who picked ten chapters
+        // in March does not still read "10 chapters" in June with all ten long since rendered.
+        if case .picked = scope { clearFinishedPicks(in: documents) }
+
         var input = PolicyInput(documents: Dictionary(uniqueKeysWithValues: documents.map { ($0.id, $0.snapshot) }),
                                 lastPlayed: lastPlayed, queue: queue, device: device)
         input.prepareBudgetSeconds = budget()
+        input.prepareScope = scope
         let jobs = RenderPolicy.plan(input).filter { $0.tier == .prepare }
 
-        var unlimited = input
-        unlimited.prepareBudgetSeconds = .greatestFiniteMagnitude
-        let isBudgetLimited = Set(RenderPolicy.plan(unlimited).filter { $0.tier == .prepare }) != Set(jobs)
+        // Only a budget can exhaust: the other scopes name exactly what they want, so a pass that
+        // rendered everything it planned is complete rather than cut short.
+        var isBudgetLimited = false
+        if case .budget = scope {
+            var unlimited = input
+            unlimited.prepareBudgetSeconds = .greatestFiniteMagnitude
+            isBudgetLimited = Set(RenderPolicy.plan(unlimited).filter { $0.tier == .prepare }) != Set(jobs)
+        }
 
         var result = PrepareRunResult(reason: reason, stopReason: jobs.isEmpty ? .completed : .completed)
         for group in groupedByDocument(jobs) {
@@ -373,6 +436,31 @@ public final class PrepareRunner {
         await flush()
         currentScheduler = nil
         return outcome
+    }
+
+    /// Drops a pick whose chapter has nothing left to render, so the Prepare page's list is always
+    /// what is still to do rather than a record of everything ever asked for.
+    ///
+    /// It reads the same `rendered` flags the policy plans against — reconciled against the store
+    /// by ``loadDocuments(lastPlayed:queue:allowingReDerivation:)``, not taken from the timeline's
+    /// references — so a chapter the cache has quietly evicted counts as unrendered and stays
+    /// picked, which is exactly what a reader who asked for it offline would want.
+    private func clearFinishedPicks(in documents: [PreparedDocument]) {
+        guard let settings else { return }
+        for document in documents {
+            for chapter in settings.chapters(for: document.id) {
+                let range = document.snapshot.chapterRange(chapter)
+                // An empty range is a chapter that has gone, or one that never had utterances:
+                // either way there is nothing to make, so the pick has no work left in it.
+                guard !range.isEmpty else {
+                    settings.clearPick(document: document.id, chapter: chapter)
+                    continue
+                }
+                if document.snapshot.rendered[range].allSatisfy({ $0 }) {
+                    settings.clearPick(document: document.id, chapter: chapter)
+                }
+            }
+        }
     }
 
     private func budget() -> TimeInterval {

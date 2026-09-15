@@ -30,18 +30,23 @@ final class KokoroModelStore {
     private(set) var measurement = Measurement()
     /// True while a delete is running, so the pills cannot be tapped twice.
     private(set) var isDeleting = false
+    /// The same for the plans-only sweep, which is a directory walk rather than an instant.
+    private(set) var isClearingPlans = false
 
     private let measure: @MainActor () -> Measurement
     private let performDelete: @MainActor () async -> Void
+    private let performClearPlans: @MainActor () async -> Void
     private let performDownload: @MainActor () -> Void
 
     init(isSupported: Bool,
          measure: @escaping @MainActor () -> Measurement,
          delete: @escaping @MainActor () async -> Void,
+         clearPlans: @escaping @MainActor () async -> Void = {},
          download: @escaping @MainActor () -> Void) {
         self.isSupported = isSupported
         self.measure = measure
         self.performDelete = delete
+        self.performClearPlans = clearPlans
         self.performDownload = download
     }
 
@@ -64,6 +69,22 @@ final class KokoroModelStore {
         await performDelete()
         refresh()
         isDeleting = false
+    }
+
+    /// Gives back the compute plans and keeps the model (owner, 2026-09-14). They are the larger
+    /// half on the CPU path and they cost *nothing over the network* to get back — Core ML builds
+    /// them on this device — so a reader who needs half a gigabyte should be offered this long
+    /// before they are offered a delete that costs a 620 MB download to undo.
+    ///
+    /// What it costs instead is the next warm-up: a minute of a core per stage, in the foreground.
+    /// The install's warm-up record goes with the plans, so a *background* Prepare pass waits for
+    /// that warm-up rather than trying to build them where iOS would kill it for the attempt.
+    func clearPlans() async {
+        guard isSupported, !isClearingPlans, !isDeleting else { return }
+        isClearingPlans = true
+        await performClearPlans()
+        refresh()
+        isClearingPlans = false
     }
 
     /// Downloads the model now and lets launches download it again.

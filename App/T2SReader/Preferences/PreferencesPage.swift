@@ -77,6 +77,14 @@ struct PreferencesPage: View {
                                 )
                             )
                         }
+                        // Its own row rather than a section of Storage (owner, 2026-09-14): making
+                        // audio ahead and capping how much room it may take are two questions, and
+                        // sharing a screen taught each other's numbers to be misread.
+                        NavigationLink {
+                            PreparePage()
+                        } label: {
+                            row("Prepare on charge", subtitle: prepareSubtitle)
+                        }
                     }
                     section("iCloud sync") {
                         row("Sync positions and bookmarks", subtitle: env.syncModel.unavailableReason ?? env.syncModel.statusText) {
@@ -112,11 +120,25 @@ struct PreferencesPage: View {
         .task { await env.syncModel.refreshAvailability() }
     }
 
+    /// What Prepare is set to, in the fewest words that are still true: off, or the mode and — when
+    /// it is not the default — the window it keeps to.
+    private var prepareSubtitle: String {
+        let settings = env.prepareSettings
+        guard settings.isEnabled else { return "Off" }
+        let what = settings.mode == .keepUp ? "Keeping up with your reading" : picksSubtitle
+        return settings.window == .overnight ? "\(what) · overnight" : what
+    }
+
+    private var picksSubtitle: String {
+        let count = env.prepareSettings.pickedChapterCount
+        guard count > 0 else { return "Nothing picked" }
+        return "\(count) \(count == 1 ? "chapter" : "chapters") picked"
+    }
+
     /// The row names the voice model only where there is one to name: the everyday build has no
     /// model, and a row offering to manage what does not exist is worse than a shorter row.
     private var storageRowTitle: String {
-        env.kokoroModel.isSupported ? "Voice model, rendered audio and prepare on charge"
-                                    : "Rendered audio and prepare on charge"
+        env.kokoroModel.isSupported ? "Voice model and rendered audio" : "Rendered audio"
     }
 
     /// The default voice: the radio moves, "Make default" applies.

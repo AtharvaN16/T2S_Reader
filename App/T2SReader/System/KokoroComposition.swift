@@ -531,6 +531,19 @@ struct KokoroComposition {
                 log.notice("Kokoro model deleted by the reader: \(freed, privacy: .public) MB freed (\(modelBytes / 1_048_576, privacy: .public) MB model, \(planBytes / 1_048_576, privacy: .public) MB plans)")
                 KokoroCoreMLEngine.timing("kokoro model deleted by the reader: \(freed) MB freed")
             },
+            clearPlans: {
+                // The model stays, so the route stays open and the engine keeps the stages it has
+                // already loaded: the cost of this lands on the *next* cold load, which is the
+                // whole point of offering it as the cheap half of "reclaim some room".
+                let planBytes = planCacheDirectory.map { KokoroPlanCache.wipe($0) } ?? 0
+                // The cache's recorded identity is left alone — it is still this install's, and
+                // what the next warm-up builds belongs under it. Only the *warmed* record goes,
+                // which is what keeps a background pass from meeting an unbuilt cache.
+                KokoroWarmUpRecord.clear(defaults: .standard)
+                status.clearWarmedInstall()
+                log.notice("Kokoro compute plans cleared by the reader: \(planBytes / 1_048_576, privacy: .public) MB freed")
+                KokoroCoreMLEngine.timing("kokoro compute plans cleared by the reader: \(planBytes / 1_048_576) MB freed")
+            },
             download: {
                 KokoroModelRemovalRecord.allow(defaults: .standard)
                 // A second tap while the first download runs would start a second installer over

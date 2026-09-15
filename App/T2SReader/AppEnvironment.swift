@@ -39,6 +39,10 @@ final class AppEnvironment {
     /// on this device rather than guessing (spec §6).
     let voiceRouting: any VoiceRouteResolving
     let storage: StorageModel
+    /// Settings → Prepare on charge: what gets made ahead, and when (owner, 2026-09-14). Its own
+    /// model rather than a field on `ReaderPreferences`, because the Prepare page is the only
+    /// thing that reads it and the runner is the only thing that acts on it.
+    let prepareSettings: PrepareSettings
     let prepareRunner: PrepareRunner
     /// The reader-initiated "render this chapter" queue, one for the whole app (chapter-rendering
     /// design). It sits beside Prepare rather than inside it — and beside the player rather than on
@@ -96,9 +100,14 @@ final class AppEnvironment {
         kokoroStatus = kokoro.status
         kokoroModel = kokoro.modelStore
         voiceRouting = kokoro.voiceRouting
-        storage = StorageModel(library: library, audioStore: audioStore, player: player, libraryModel: libraryModel)
+        storage = StorageModel(library: library, paths: paths, audioStore: audioStore, player: player,
+                               libraryModel: libraryModel)
+        prepareSettings = PrepareSettings()
         prepareRunner = PrepareRunner(library: library, store: store, audioStore: audioStore,
                                       engine: engine, arbiter: renderArbiter, budget: cpuBudget)
+        // The runner asks the page what to make of the library; with no settings it would fall back
+        // to the budget it used before the page existed, which is no longer anything the app sets.
+        prepareRunner.settings = prepareSettings
         // The same arbiter Prepare and the player share: "one render at a time" and "playback wins"
         // are its lease, not three subsystems agreeing to take turns.
         chapterRenderer = ChapterRenderRunner(library: library, store: store, audioStore: audioStore,

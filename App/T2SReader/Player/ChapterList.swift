@@ -121,6 +121,10 @@ struct ChapterListView: View {
     /// already in the mode — so the space goes to the one thing picking chapters one at a time
     /// cannot do quickly.
     var headerAllAction: (() -> Void)? = nil
+    /// What that slot says. "Render all" in the Book sheet, where pressing it spends the next ten
+    /// minutes of battery; "Pick all" on the Prepare page's sheet, where it only marks chapters for
+    /// a charger to make later. Same control, two different promises.
+    var headerAllLabel: String = "Render all"
     var onSelect: (ChapterEntry) -> Void
     var onSelectBookmark: ((BookmarkEntry) -> Void)? = nil
     var onEvict: ((ChapterEntry) -> Void)? = nil
@@ -137,8 +141,8 @@ struct ChapterListView: View {
                 Text("Chapters").typeRole(variant.heading).foregroundStyle(palette.ink)
                 if let headerAllAction {
                     Spacer(minLength: 8)
-                    Pill(label: "Render all", glyph: "waveform", style: .soft, action: headerAllAction)
-                        .accessibilityHint("Renders every chapter this device does not already have")
+                    Pill(label: headerAllLabel, glyph: "waveform", style: .soft, action: headerAllAction)
+                        .accessibilityHint("Takes every chapter this device does not already have")
                 } else if let headerAction {
                     Spacer(minLength: 8)
                     // 36 pt disc, 24 pt column: out by six, so its centre lands on the marks

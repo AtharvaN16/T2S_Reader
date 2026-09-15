@@ -72,6 +72,17 @@ public struct RenderSnapshot: Hashable, Sendable {
         chapterStarts.first { $0 > i } ?? seconds.count
     }
 
+    /// The utterances of chapter `index`, by its own bounds rather than by an index inside it: an
+    /// empty chapter shares its start with the next one, so deriving the chapter back from a start
+    /// would answer with its neighbour. Out of range, and for an empty chapter, this is empty.
+    public func chapterRange(_ index: Int) -> Range<Int> {
+        guard chapterStarts.indices.contains(index) else { return 0..<0 }
+        let start = chapterStarts[index]
+        let next = index + 1
+        let end = next < chapterStarts.count ? chapterStarts[next] : seconds.count
+        return start < end ? start..<end : 0..<0
+    }
+
     /// The first utterance of the chapter holding `i`: the last start at or before it, or 0 for an
     /// `i` before every start. A document with one chapter (`chapterStarts == [0]`) always answers
     /// 0, so a chapter-scoped render collapses to the whole document exactly when there is only one.
@@ -105,6 +116,20 @@ public struct DeviceState: Hashable, Sendable {
     public static let unplugged = DeviceState(charging: false, thermalSerious: false, lowPowerMode: false, storeFull: false)
 }
 
+/// What tier 3 renders once the device is on a charger (owner, 2026-09-14). The budget was the
+/// only answer until the Prepare page replaced hours with books; it stays because it is still the
+/// right shape for "as much as fits" and because the policy tests are written against it.
+public enum PrepareScope: Hashable, Sendable {
+    /// Spec §3.4.1 as it was: one budget in playback seconds, drained across the documents in order.
+    case budget
+    /// "Keep up with my reading": the chapter the reader is in, in each document given, and nothing
+    /// past it. The same bound tier 4 uses for one document, applied to all of them.
+    case currentChapters
+    /// "Only what I pick": the chapters named, per document. A document with one chapter has only
+    /// index 0, so picking the whole of a PDF and picking its first chapter are the same request.
+    case picked([UUID: Set<Int>])
+}
+
 public struct PolicyInput: Sendable {
     public var documents: [UUID: RenderSnapshot]
     public var playing: PlayingState?
@@ -118,8 +143,11 @@ public struct PolicyInput: Sendable {
     /// Play-ahead window at 1x (spec §3.4); multiplied by the rate.
     public var windowSeconds: TimeInterval = 60
     public var primeSeconds: TimeInterval = 30
-    /// Spec §3.4.1 default: 3 hours of listening ready.
+    /// Spec §3.4.1 default: 3 hours of listening ready. Read only under ``PrepareScope/budget``.
     public var prepareBudgetSeconds: TimeInterval = 3 * 3600
+    /// What tier 3 renders. `.budget` keeps the old behaviour, which is what every caller that has
+    /// not been taught about the Prepare page still gets.
+    public var prepareScope: PrepareScope = .budget
     /// The foreground fill's bound, in audio seconds at 1x from the playhead: the rest of the
     /// playing document's chapter, clamped to this range (Plan 18). Nil — the default, and every
     /// state but frontmost-and-listening — renders only the window.
@@ -160,6 +188,16 @@ public enum RenderPolicy {
             return used
         }
 
+        /// One chapter of `doc`, bounded by its own length — tier 4's move, which tier 3 now makes
+        /// for many documents rather than for one. Taking the bounds as a range rather than as an
+        /// index keeps an *empty* chapter honest: its start equals its neighbour's, so a helper
+        /// that re-derived the chapter from an index would render the chapter after it instead.
+        func walkRange(_ doc: RenderSnapshot, _ start: Int, _ end: Int, tier: RenderTier) {
+            let lower = max(0, start), upper = min(end, doc.seconds.count)
+            guard lower < upper else { return }
+            walk(doc, from: lower, budget: doc.seconds[lower..<upper].reduce(0, +), tier: tier)
+        }
+
         // Tier 1: play-ahead, window in playback-seconds at the current rate.
         if let p = input.playing, let doc = input.documents[p.documentID] {
             walk(doc, from: p.playhead.utteranceIndex, budget: input.windowSeconds * p.rate, tier: .playAhead)
@@ -183,14 +221,37 @@ public enum RenderPolicy {
             let toChapterEnd = start < end ? doc.seconds[start..<end].reduce(0, +) : 0
             walk(doc, from: start, budget: min(max(toChapterEnd, fill.lowerBound), fill.upperBound), tier: .chapterAhead)
         }
-        // Tier 3: prepare while charging — continue-document first, then queue order, one shared budget.
+        // Tier 3: prepare while charging — continue-document first, then queue order. What it takes
+        // from each is the scope's business; the order is always the caller's.
         if d.charging && !d.thermalSerious && !d.lowPowerMode && !d.storeFull {
             var order: [UUID] = []
             for id in [input.lastPlayed].compactMap({ $0 }) + input.queue where !order.contains(id) { order.append(id) }
-            var remaining = input.prepareBudgetSeconds
-            for id in order {
-                guard remaining > 0, let doc = input.documents[id] else { continue }
-                remaining -= walk(doc, from: doc.resumeIndex, budget: remaining, tier: .prepare)
+            switch input.prepareScope {
+            case .budget:
+                var remaining = input.prepareBudgetSeconds
+                for id in order {
+                    guard remaining > 0, let doc = input.documents[id] else { continue }
+                    remaining -= walk(doc, from: doc.resumeIndex, budget: remaining, tier: .prepare)
+                }
+            case .currentChapters:
+                for id in order {
+                    guard let doc = input.documents[id] else { continue }
+                    // From where the reader left off to the end of that chapter — *not* from the
+                    // chapter's start. The promise is "you can keep listening offline", and the
+                    // utterances behind the playhead are ones they have already heard: rendering
+                    // them again is battery spent on audio nobody is going to play.
+                    walkRange(doc, doc.resumeIndex, doc.chapterEnd(containing: doc.resumeIndex), tier: .prepare)
+                }
+            case .picked(let picks):
+                for id in order {
+                    guard let doc = input.documents[id], let chapters = picks[id] else { continue }
+                    // Sorted, so a pass renders a book front to back rather than in set order —
+                    // which is arbitrary, and would leave a reader's chapter 9 made before their 3.
+                    for chapter in chapters.sorted() {
+                        let range = doc.chapterRange(chapter)
+                        walkRange(doc, range.lowerBound, range.upperBound, tier: .prepare)
+                    }
+                }
             }
         }
         // Tier 4: manual renders, any power state, unless the store is full — the chapter holding

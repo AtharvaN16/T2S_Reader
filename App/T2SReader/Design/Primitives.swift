@@ -696,6 +696,129 @@ struct ProgressBar: View {
     }
 }
 
+/// A row of chips that breaks onto a second line instead of running off the page.
+///
+/// `Pill` sets `.fixedSize(horizontal:)` on purpose — a pill's label is one or two words and must
+/// never wrap inside its capsule — which leaves an `HStack` of them with no give at all: offered
+/// less width than they want, they simply overflow, and in a leading-aligned column they overflow
+/// to the right, straight past the margin. That is what Settings → Storage's two chip rows did on
+/// an iPhone 11 Pro (owner, 2026-09-14: "it is not following margin"). The fix has to be the
+/// *row*, not the chip: the chips keep their widths and the line gives way instead.
+struct FlowRow: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.replacingUnspecifiedDimensions().width
+        let rows = lines(subviews: subviews, width: width)
+        let height = rows.reduce(0) { $0 + $1.height } + lineSpacing * CGFloat(max(rows.count - 1, 0))
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for line in lines(subviews: subviews, width: bounds.width) {
+            var x = bounds.minX
+            for index in line.indices {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                // Centred in the line, so chips of unequal height sit on one axis rather than on
+                // their tops — which is what a row of them looks like when one wraps to two words.
+                subviews[index].place(at: CGPoint(x: x, y: y + (line.height - size.height) / 2),
+                                      proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += line.height + lineSpacing
+        }
+    }
+
+    private struct Line {
+        var indices: [Int] = []
+        var height: CGFloat = 0
+    }
+
+    /// A chip wider than the whole line still gets a line of its own rather than an infinite loop:
+    /// the break is only taken when the line already holds something.
+    private func lines(subviews: Subviews, width: CGFloat) -> [Line] {
+        var out: [Line] = []
+        var current = Line()
+        var x: CGFloat = 0
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            if !current.indices.isEmpty, x + size.width > width {
+                out.append(current)
+                current = Line()
+                x = 0
+            }
+            current.indices.append(index)
+            current.height = max(current.height, size.height)
+            x += size.width + spacing
+        }
+        if !current.indices.isEmpty { out.append(current) }
+        return out
+    }
+}
+
+/// Settings → Storage's one picture: the app's footprint cut into the things that make it up, in
+/// iOS's own shape (owner, 2026-09-14, with Settings → iPhone Storage as the reference). Short
+/// bars, a hair of air between them, a rounded rectangle rather than a capsule — so it reads as a
+/// measurement of one quantity rather than as four progress bars in a row.
+///
+/// It is a *picture*, not a budget. Nothing on this screen caps the whole app, and drawing the
+/// bands against a ceiling would say otherwise; they are drawn against their own total, with the
+/// only limit on the page — the audio cache's — living under its own heading further down.
+struct StorageBar: View {
+    struct Band: Identifiable {
+        var label: String
+        var bytes: Int
+        var color: Color
+        var id: String { label }
+    }
+
+    var bands: [Band]
+    var height: CGFloat = 11
+
+    private var total: Int { max(1, bands.reduce(0) { $0 + $1.bytes }) }
+    /// Bands worth drawing. A band of a few kilobytes against a gigabyte is a sliver too thin to
+    /// see and too thin to round, and it drags a legend entry along behind it.
+    private var drawn: [Band] { bands.filter { Double($0.bytes) / Double(total) >= 0.005 } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            GeometryReader { geo in
+                let gap: CGFloat = 2
+                let free = geo.size.width - gap * CGFloat(max(drawn.count - 1, 0))
+                HStack(spacing: gap) {
+                    ForEach(drawn) { band in
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(band.color)
+                            .frame(width: free * CGFloat(Double(band.bytes) / Double(total)))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(height: height)
+            .accessibilityHidden(true)                                  // the legend below says it in words
+            // Two columns rather than a wrapping row: four labels of unequal width left a ragged
+            // second line with one entry adrift on it.
+            LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading),
+                                GridItem(.flexible(), alignment: .leading)],
+                      alignment: .leading, spacing: 8) {
+                ForEach(drawn) { band in
+                    HStack(spacing: 6) {
+                        RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .fill(band.color)
+                            .frame(width: 8, height: 8)
+                        Text(band.label).typeRole(.meta).foregroundStyle(Tokens.ink2).lineLimit(1)
+                        Text(ByteCountFormatter.string(fromByteCount: Int64(band.bytes), countStyle: .file))
+                            .typeRole(.meta).foregroundStyle(Tokens.ink).monospacedDigit().lineLimit(1)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+        }
+    }
+}
+
 /// Words with a light travelling across them, left to right, over and over — the app's way of
 /// saying "this is going on right now" in a place too small for a bar (owner, 2026-09-14, with a
 /// reference).

@@ -192,4 +192,78 @@ import Testing
         #expect(RenderTier.allCases == RenderTier.allCases.sorted())
         #expect(RenderTier.allCases == [.playAhead, .prime, .chapterAhead, .prepare, .manual])
     }
+
+    // MARK: Prepare's scopes (owner, 2026-09-14) — the page stopped asking for hours
+
+    private var charging: DeviceState {
+        DeviceState(charging: true, thermalSerious: false, lowPowerMode: false, storeFull: false)
+    }
+
+    private func prepared(_ scope: PrepareScope, lastPlayed: UUID? = nil, queue: [UUID] = [],
+                          docs: [RenderSnapshot]) -> [RenderJob] {
+        var i = input(lastPlayed: lastPlayed, queue: queue, device: charging, docs: docs)
+        i.prepareScope = scope
+        return RenderPolicy.plan(i).filter { $0.tier == .prepare }
+    }
+
+    /// "Keep up with my reading": the chapter the reader is in, and not one utterance past it —
+    /// which is what makes the page able to promise books rather than a number of hours.
+    @Test func currentChaptersTakesTheResumeChapterAndStopsThere() {
+        let jobs = prepared(.currentChapters, lastPlayed: a,
+                            docs: [snap(a, resume: 45, chapterStarts: [0, 40, 80])])
+        #expect(indices(jobs, a, .prepare) == Array(45..<80))
+    }
+
+    /// Every document given, in the caller's order: the continuation document first, then the rest.
+    /// The old budget stopped after 300 s; this one does not, because it was never asked for hours.
+    @Test func currentChaptersReachesEveryDocument() {
+        let jobs = prepared(.currentChapters, lastPlayed: a, queue: [b],
+                            docs: [snap(a, resume: 0, chapterStarts: [0, 10]),
+                                   snap(b, resume: 95, chapterStarts: [0, 90])])
+        #expect(indices(jobs, a, .prepare) == Array(0..<10))
+        #expect(indices(jobs, b, .prepare) == Array(95..<100))
+        #expect(jobs.first?.documentID == a)
+    }
+
+    /// "Only what I pick": exactly those chapters, front to back whatever order the set is in, and
+    /// nothing at all for a document with no pick.
+    @Test func pickedTakesOnlyTheChaptersNamed() {
+        let jobs = prepared(.picked([a: [2, 0]]), queue: [a, b],
+                            docs: [snap(a, chapterStarts: [0, 25, 50, 75]), snap(b)])
+        #expect(indices(jobs, a, .prepare) == Array(0..<25) + Array(50..<75))
+        #expect(indices(jobs, b, .prepare).isEmpty)
+    }
+
+    /// A pick for a chapter that no longer exists — the book was re-derived shorter — is ignored
+    /// rather than reaching past the end of the document.
+    @Test func pickedIgnoresAChapterThatIsGone() {
+        let jobs = prepared(.picked([a: [0, 9]]), queue: [a], docs: [snap(a, chapterStarts: [0, 50])])
+        #expect(indices(jobs, a, .prepare) == Array(0..<50))
+    }
+
+    /// An *empty* chapter shares its start with the next one. Picking it must render nothing, not
+    /// the chapter after it — which is the whole reason the bound is a range rather than an index.
+    @Test func pickingAnEmptyChapterRendersNothing() {
+        let jobs = prepared(.picked([a: [1]]), queue: [a], docs: [snap(a, chapterStarts: [0, 50, 50])])
+        #expect(indices(jobs, a, .prepare).isEmpty)
+        #expect(RenderPolicy.plan({
+            var i = input(queue: [a], device: charging, docs: [snap(a, chapterStarts: [0, 50, 50])])
+            i.prepareScope = .picked([a: [2]])
+            return i
+        }()).filter { $0.tier == .prepare }.map(\.utteranceIndex) == Array(50..<100))
+    }
+
+    /// Every scope still answers to the charger: unplugged, tier 3 plans nothing at all.
+    @Test func noScopeRendersOffTheCharger() {
+        var i = input(lastPlayed: a, docs: [snap(a, chapterStarts: [0, 40])])
+        i.prepareScope = .currentChapters
+        #expect(RenderPolicy.plan(i).filter { $0.tier == .prepare }.isEmpty)
+    }
+
+    /// A chapter already on the device costs the pass nothing: the walk only emits what is missing.
+    @Test func pickedSkipsWhatIsAlreadyRendered() {
+        let jobs = prepared(.picked([a: [0]]), queue: [a],
+                            docs: [snap(a, rendered: Set(0..<20), chapterStarts: [0, 25])])
+        #expect(indices(jobs, a, .prepare) == Array(20..<25))
+    }
 }

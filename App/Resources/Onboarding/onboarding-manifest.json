@@ -1,42 +1,157 @@
 {
-  "hero": "alice",
-  "voices": ["af_heart", "af_bella", "af_nicole", "am_michael", "am_fenrir"],
+  "hero": "alices-adventures-in-wonderland",
+  "voices": [
+    "af_heart",
+    "af_bella",
+    "af_nicole",
+    "am_michael",
+    "am_fenrir"
+  ],
   "books": [
+    {
+      "id": "alices-adventures-in-wonderland",
+      "title": "Alice's Adventures in Wonderland",
+      "author": "Lewis Carroll",
+      "standardEbooks": "lewis-carroll/alices-adventures-in-wonderland",
+      "passage": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it, \"and what is the use of a book,\" thought Alice, \"without pictures or conversations?\"",
+      "coverID": 13772446
+    },
     {
       "id": "moby-dick",
       "title": "Moby-Dick",
       "author": "Herman Melville",
       "voice": "am_michael",
-      "line": "Call me Ishmael."
+      "line": "Call me Ishmael.",
+      "coverID": 14702332
     },
     {
       "id": "pride-and-prejudice",
       "title": "Pride and Prejudice",
       "author": "Jane Austen",
       "voice": "af_bella",
-      "line": "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife."
+      "line": "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.",
+      "coverID": 15223895
     },
     {
-      "id": "tale-of-two-cities",
+      "id": "a-tale-of-two-cities",
       "title": "A Tale of Two Cities",
       "author": "Charles Dickens",
       "voice": "am_fenrir",
-      "line": "It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness."
+      "line": "It was the best of times, it was the worst of times.",
+      "coverID": 12503144
     },
     {
-      "id": "great-gatsby",
+      "id": "the-great-gatsby",
       "title": "The Great Gatsby",
       "author": "F. Scott Fitzgerald",
       "voice": "af_nicole",
-      "line": "In my younger and more vulnerable years my father gave me some advice that I've been turning over in my mind ever since."
+      "line": "In my younger and more vulnerable years my father gave me some advice that I've been turning over in my mind ever since.",
+      "coverID": 13853193
     },
     {
-      "id": "alice",
-      "title": "Alice's Adventures in Wonderland",
-      "author": "Lewis Carroll",
-      "voice": "af_heart",
-      "line": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do.",
-      "passage": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it, \"and what is the use of a book,\" thought Alice, \"without pictures or conversations?\""
+      "id": "anna-karenina",
+      "title": "Anna Karenina",
+      "author": "Leo Tolstoy",
+      "voice": "bf_emma",
+      "line": "All happy families are alike; each unhappy family is unhappy in its own way.",
+      "coverID": 14843312
+    },
+    {
+      "id": "jane-eyre",
+      "title": "Jane Eyre",
+      "author": "Charlotte Brontë",
+      "voice": "af_sarah",
+      "line": "There was no possibility of taking a walk that day.",
+      "coverID": 14083354
+    },
+    {
+      "id": "the-adventures-of-sherlock-holmes",
+      "title": "The Adventures of Sherlock Holmes",
+      "author": "Arthur Conan Doyle",
+      "voice": "bm_george",
+      "line": "To Sherlock Holmes she is always the woman.",
+      "coverID": 14622714
+    },
+    {
+      "id": "circe",
+      "title": "Circe",
+      "author": "Madeline Miller"
+    },
+    {
+      "id": "project-hail-mary",
+      "title": "Project Hail Mary",
+      "author": "Andy Weir"
+    },
+    {
+      "id": "the-midnight-library",
+      "title": "The Midnight Library",
+      "author": "Matt Haig"
+    },
+    {
+      "id": "where-the-crawdads-sing",
+      "title": "Where the Crawdads Sing",
+      "author": "Delia Owens"
+    },
+    {
+      "id": "tomorrow-and-tomorrow-and-tomorrow",
+      "title": "Tomorrow, and Tomorrow, and Tomorrow",
+      "author": "Gabrielle Zevin"
+    },
+    {
+      "id": "fourth-wing",
+      "title": "Fourth Wing",
+      "author": "Rebecca Yarros"
+    },
+    {
+      "id": "the-seven-husbands-of-evelyn-hugo",
+      "title": "The Seven Husbands of Evelyn Hugo",
+      "author": "Taylor Jenkins Reid"
+    },
+    {
+      "id": "lessons-in-chemistry",
+      "title": "Lessons in Chemistry",
+      "author": "Bonnie Garmus"
+    },
+    {
+      "id": "educated",
+      "title": "Educated",
+      "author": "Tara Westover"
+    },
+    {
+      "id": "dune",
+      "title": "Dune",
+      "author": "Frank Herbert"
+    },
+    {
+      "id": "the-hunger-games",
+      "title": "The Hunger Games",
+      "author": "Suzanne Collins"
+    },
+    {
+      "id": "normal-people",
+      "title": "Normal People",
+      "author": "Sally Rooney"
+    },
+    {
+      "id": "the-silent-patient",
+      "title": "The Silent Patient",
+      "author": "Alex Michaelides"
+    },
+    {
+      "id": "klara-and-the-sun",
+      "title": "Klara and the Sun",
+      "author": "Kazuo Ishiguro"
+    },
+    {
+      "id": "demon-copperhead",
+      "title": "Demon Copperhead",
+      "author": "Barbara Kingsolver"
+    },
+    {
+      "id": "the-alchemist",
+      "title": "The Alchemist",
+      "author": "Paulo Coelho",
+      "coverID": 11556102
     }
   ]
 }

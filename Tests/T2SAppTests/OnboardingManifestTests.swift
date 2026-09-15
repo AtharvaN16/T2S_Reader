@@ -8,43 +8,61 @@ import Testing
       "hero": "alice",
       "voices": ["af_heart", "af_bella"],
       "books": [
-        {"id": "alice", "title": "Alice", "author": "Lewis Carroll", "voice": "af_heart", "line": "Alice was beginning to get very tired."},
-        {"id": "moby-dick", "title": "Moby-Dick", "author": "Herman Melville", "voice": "am_michael", "line": "Call me Ishmael."}
+        {"id": "alice", "title": "Alice", "author": "Lewis Carroll", "standardEbooks": "lewis-carroll/alice", "passage": "Alice was beginning to get very tired."},
+        {"id": "moby-dick", "title": "Moby-Dick", "author": "Herman Melville", "voice": "am_michael", "line": "Call me Ishmael."},
+        {"id": "dracula", "title": "Dracula", "author": "Bram Stoker"},
+        {"id": "jane-eyre", "title": "Jane Eyre", "author": "Charlotte Brontë", "voice": "af_sarah", "line": "There was no possibility of taking a walk that day."}
       ]
     }
     """
 
-    @Test func decodesTheBundledShape() throws {
-        let manifest = try JSONDecoder().decode(OnboardingManifest.self, from: Data(Self.json.utf8))
-        #expect(manifest.hero == "alice")
-        #expect(manifest.voices == ["af_heart", "af_bella"])
-        #expect(manifest.books.map(\.id) == ["alice", "moby-dick"])
-        #expect(manifest.heroBook?.author == "Lewis Carroll")
+    func manifest() throws -> OnboardingManifest {
+        try JSONDecoder().decode(OnboardingManifest.self, from: Data(Self.json.utf8))
     }
 
-    /// The hero settles at the end, so it rises last whatever the manifest's order.
+    @Test func decodesTheBundledShape() throws {
+        let manifest = try manifest()
+        #expect(manifest.hero == "alice")
+        #expect(manifest.voices == ["af_heart", "af_bella"])
+        #expect(manifest.books.map(\.id) == ["alice", "moby-dick", "dracula", "jane-eyre"])
+        #expect(manifest.heroBook?.author == "Lewis Carroll")
+        #expect(manifest.heroBook?.standardEbooks == "lewis-carroll/alice")
+    }
+
+    /// A book with a line and a voice speaks; one with neither only floats; the hero never speaks
+    /// on the way up even if it had a line.
+    @Test func onlyBooksWithALineAndAVoiceAreVoiced() throws {
+        let manifest = try manifest()
+        #expect(manifest.voiced.map(\.id) == ["moby-dick", "jane-eyre"])
+        var withTalkingHero = manifest
+        withTalkingHero.books[0].voice = "af_heart"
+        withTalkingHero.books[0].line = "Alice."
+        #expect(withTalkingHero.voiced.map(\.id) == ["moby-dick", "jane-eyre"])
+    }
+
+    /// The voiced books rise in order and the hero last, whatever the manifest's order.
     @Test func theHeroRisesLast() throws {
-        let manifest = try JSONDecoder().decode(OnboardingManifest.self, from: Data(Self.json.utf8))
-        #expect(manifest.risingOrder.map(\.id) == ["moby-dick", "alice"])
+        #expect(try manifest().risingOrder.map(\.id) == ["moby-dick", "jane-eyre", "alice"])
+    }
+
+    /// The crowd is everything that is not rising, so a cover never floats past itself.
+    @Test func theCrowdIsTheRest() throws {
+        #expect(try manifest().crowd.map(\.id) == ["dracula"])
     }
 
     @Test func aMissingHeroStillRisesTheOthers() {
         let manifest = OnboardingManifest(hero: "nowhere", voices: [], books: [
-            .init(id: "a", title: "A", author: "", voice: "af_heart", line: ""),
+            .init(id: "a", title: "A", author: "", voice: "af_heart", line: "A."),
         ])
         #expect(manifest.heroBook == nil)
         #expect(manifest.risingOrder.map(\.id) == ["a"])
+        #expect(manifest.crowd.isEmpty)
     }
 
-    @Test func clipNamesMatchTheRenderScript() {
+    @Test func fileNamesMatchTheScripts() {
         #expect(OnboardingManifest.clipName(book: "alice", voice: "af_bella") == "onboarding-alice-af_bella")
         #expect(OnboardingManifest.passageClipName(book: "alice", voice: "af_bella") == "onboarding-alice-passage-af_bella")
-    }
-
-    /// Only the hero carries a passage; the others decode without one.
-    @Test func thePassageIsOptional() throws {
-        let manifest = try JSONDecoder().decode(OnboardingManifest.self, from: Data(Self.json.utf8))
-        #expect(manifest.books.allSatisfy { $0.passage == nil })
+        #expect(OnboardingManifest.Book(id: "moby-dick", title: "", author: "").coverName == "onboarding-cover-moby-dick.jpg")
     }
 
     @Test func timingsFindTheWordBeingSpoken() throws {

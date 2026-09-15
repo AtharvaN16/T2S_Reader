@@ -49,9 +49,10 @@ import T2SCore
             var id: String
             var title: String
             var author: String
-            var voice: String
-            /// The short line that rises with the card.
-            var line: String
+            /// The voice its line rises in; nil for a book that only floats.
+            var voice: String?
+            /// The short line that rises with the card; nil for a book that only floats.
+            var line: String?
             /// The hero's longer passage for the voice screen, rendered in every voice.
             var passage: String?
         }
@@ -87,10 +88,12 @@ import T2SCore
 
         // Each book's line in its own voice — what rises with the cards — then the hero's passage
         // in every voice the row offers, under its own name, for the voice screen.
-        var jobs: [(book: Manifest.Book, voice: String, text: String, name: String)] = manifest.books.map {
-            ($0, $0.voice, $0.line, "onboarding-\($0.id)-\($0.voice)")
+        var jobs: [(book: Manifest.Book, voice: String, text: String, name: String)] = []
+        for book in manifest.books where book.id != hero.id {
+            guard let voice = book.voice, let line = book.line else { continue }
+            jobs.append((book, voice, line, "onboarding-\(book.id)-\(voice)"))
         }
-        let passage = hero.passage ?? hero.line
+        let passage = try #require(hero.passage ?? hero.line, "the hero needs a passage or a line")
         for voice in manifest.voices { jobs.append((hero, voice, passage, "onboarding-\(hero.id)-passage-\(voice)")) }
 
         let engine = KokoroCoreMLEngine(resources: try await KokoroTestSupport.compiledCoreMLResources(), options: .default)

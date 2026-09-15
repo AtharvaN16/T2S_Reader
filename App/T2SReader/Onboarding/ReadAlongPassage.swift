@@ -14,6 +14,11 @@ import T2SApp
 /// mostly visible (the owner, 2026-09-15: "this fade is too aggressive, I can only see a small
 /// part of text").
 ///
+/// No fade of its own (the owner, 2026-09-15: "the only fade is the bottom fade of the button, so
+/// the voice boxes are over the text, so make the text more visible") — the voice carousel floats
+/// over its lower reach as opaque, coloured containers, so the text needs no edge of its own to
+/// hide under; the one fade left in the scene is `BottomFade` behind the Continue key.
+///
 /// Built from the clip's timing file: each word's range in the spoken text, with the punctuation
 /// and space that follow it attached, so the line reads as prose and not as a list of words.
 struct ReadAlongPassage: View {
@@ -52,10 +57,6 @@ struct ReadAlongPassage: View {
         return timings?.wordIndex(at: time)
     }
 
-    /// How far the fade at each edge reaches — short, so the box reads as text with a soft edge
-    /// rather than a window onto a small sliver of it.
-    static let edgeFade: CGFloat = 20
-
     var body: some View {
         let tokens = tokens
         let current = current
@@ -72,20 +73,10 @@ struct ReadAlongPassage: View {
                     }
                 }
                 .padding(.horizontal, Spacing.margin)
-                .padding(.vertical, Self.edgeFade + 8)
+                .padding(.vertical, Spacing.grid)
             }
             .scrollDisabled(true)
             .scrollIndicators(.hidden)
-            .overlay(alignment: .top) {
-                LinearGradient(stops: BottomFade.stops(color: Tokens.ground), startPoint: .bottom, endPoint: .top)
-                    .frame(height: Self.edgeFade)
-                    .allowsHitTesting(false)
-            }
-            .overlay(alignment: .bottom) {
-                LinearGradient(stops: BottomFade.stops(color: Tokens.ground), startPoint: .top, endPoint: .bottom)
-                    .frame(height: Self.edgeFade)
-                    .allowsHitTesting(false)
-            }
             .onChange(of: current) { _, index in
                 guard let index else { return }
                 withAnimation(.smooth(duration: 0.5)) { proxy.scrollTo(index, anchor: .center) }

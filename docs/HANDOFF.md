@@ -84,6 +84,18 @@ fade against — replaces it, and the passage's frame is taller besides. The arr
 pointing gone quietly the round before, is not missed. Continue now sits at the true foot of the
 screen behind a trailing `Spacer` in `readingBody`'s `VStack`, the way a `BarButton` always has.
 
+**The owner's sixth round (2026-09-15):** the voice picker is rounded-rectangle containers now, each
+its own colour (`VoiceCarousel.colour(for:in:)`, hue-cycled the same way the removed page tint was,
+so it scales with the voice row), not black-and-white pills; "Choose your default voice" moved to
+just under the book, above the text, rather than between the text and the row; the row floats as an
+overlay over the lower reach of the text instead of sitting in the flow under it, so the containers'
+own colour — not a fade — is what sets them off the page; and the passage's own edge fades are gone,
+the one fade left in the scene is `BottomFade` behind Continue (the owner: "the only fade is the
+bottom fade of the button … make the text more visible"). One trap on the way: `BottomFade`'s ramp
+reaches upward from behind the button and, drawn after the voice row in the `ZStack`, painted a
+translucent bleed across the bottom of whichever container was there — fixed by drawing the row
+after the button+fade, so its solid colour paints back over the ramp.
+
 **Owed from the owner's notes:** the chatter lines need not be openings — iconic lines from anywhere
 in each book; a research pass, then a full re-render of the clips.
 

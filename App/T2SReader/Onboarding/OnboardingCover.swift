@@ -10,11 +10,12 @@ import T2SApp
 ///    whole and the next fading into its tail (`ChatterSchedule`), and the hero settling out of
 ///    the crowd, silent. Then the blue Play key alone under it — the ATC reference's "listen to
 ///    this replay": the reader chooses the clean listen.
-/// 2. On Play the hero lifts and its lines are read under it, bigger and boundary-lit the way the
-///    Reader's own page is (`ReadAlongPassage`), under "Choose your default voice" and over one
-///    big voice pill at a time (`VoiceCarousel`): swiping to another plays the passage again in
-///    that voice, and the blue Continue at the foot makes the pill on screen the app's default
-///    voice.
+/// 2. On Play the hero lifts; "Choose your default voice" sits just under it, and its lines fill
+///    the rest of the space beneath, bigger and boundary-lit the way the Reader's own page is
+///    (`ReadAlongPassage`). One big coloured container at a time (`VoiceCarousel`) floats over
+///    the lower reach of the text — the containers' own colours are what set them off the page,
+///    not a fade; the only fade in the scene is behind the blue Continue key at the foot, which
+///    makes the container on screen the app's default voice.
 ///
 /// The scene runs on the wall clock from the moment it appears: the field draws from it and the
 /// chatter takes its gains from it, once a frame. It follows the app's theme — covers on the
@@ -123,29 +124,41 @@ struct OnboardingCover: View {
         .onDisappear { chatter.stop(); solo.stop() }
     }
 
-    /// The lines under the lifted hero, the heading, the voice pill, and Continue — pinned to the
-    /// foot of the screen by the trailing `Spacer` (the owner, 2026-09-15: "move the blue button
-    /// to the bottom of the screen"), the way a `BarButton` sits at the foot of any other page.
+    /// The heading right under the book, the lines filling the rest, the voice carousel floating
+    /// over their lower reach, and Continue at the foot behind the app's own bottom fade — the
+    /// only fade in the scene (the owner, 2026-09-15: "the only fade is the bottom fade of the
+    /// button, so the voice boxes are over the text"; "Choose your default voice stays on top
+    /// below the book").
     private var readingBody: some View {
         GeometryReader { geo in
-            VStack(spacing: Spacing.row) {
-                // The lifted hero's foot is about 0.27 of the height down; the lines start just
-                // under it.
-                Spacer().frame(height: geo.size.height * 0.20)
-                ReadAlongPassage(timings: passageTimings(selectedVoice),
-                                 fallback: heroBook?.passage ?? heroBook?.line ?? "",
-                                 time: solo.currentTime,
-                                 isFinished: hasHeard && !solo.isPlaying)
-                    .frame(height: geo.size.height * 0.34)
-                Text("Choose your default voice")
-                    .typeRole(.sectionHeader)
-                    .foregroundStyle(Tokens.ink)
+            ZStack(alignment: .bottom) {
+                VStack(spacing: Spacing.grid) {
+                    // The lifted hero's foot is about 0.27 of the height down; the heading and
+                    // the lines start just under it.
+                    Spacer().frame(height: geo.size.height * 0.20)
+                    Text("Choose your default voice")
+                        .typeRole(.sectionHeader)
+                        .foregroundStyle(Tokens.ink)
+                    ReadAlongPassage(timings: passageTimings(selectedVoice),
+                                     fallback: heroBook?.passage ?? heroBook?.line ?? "",
+                                     time: solo.currentTime,
+                                     isFinished: hasHeard && !solo.isPlaying)
+                        .frame(maxHeight: .infinity)
+                }
+
+                VStack(spacing: 0) {
+                    RaisedButton(label: "Continue", tone: .blue, size: .bar) { finish(setDefault: true) }
+                        .padding(.horizontal, Spacing.margin)
+                        .padding(.bottom, Spacing.grid)
+                }
+                .background { BottomFade(color: Tokens.ground) }
+
+                // Floats over the text's lower reach — and over the fade's own upward ramp, last
+                // in the stack so its colour paints solid through it rather than being bled into
+                // by the gradient behind the button.
                 VoiceCarousel(voices: manifest.voices, selected: $selectedVoice,
                               isFinished: hasHeard && !solo.isPlaying) { play(selectedVoice) }
-                Spacer(minLength: Spacing.row)
-                RaisedButton(label: "Continue", tone: .blue, size: .bar) { finish(setDefault: true) }
-                    .padding(.horizontal, Spacing.margin)
-                    .padding(.bottom, Spacing.grid)
+                    .padding(.bottom, Spacing.section + Spacing.row + Spacing.grid)
             }
         }
         .onChange(of: selectedVoice) { _, voice in play(voice) }

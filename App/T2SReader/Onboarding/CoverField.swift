@@ -35,7 +35,7 @@ struct CoverField: View {
     /// Where the hero rests, as a fraction of the height above the centre.
     static let heroRest: CGFloat = -0.16
     /// How long the hero takes to reach its rest, and the field to dim, from `settleStart`.
-    static let settleDuration: TimeInterval = 1.4
+    static let settleDuration: TimeInterval = 1.8
 
     /// One floating cover: where it is in depth and across the screen, how fast it drifts, and
     /// whether it is one of the sharp few. All derived from the index, once.
@@ -46,10 +46,10 @@ struct CoverField: View {
         var lean: Double
         var isSharp: Bool
 
-        var height: CGFloat { 84 + CGFloat(depth) * 176 }
+        var height: CGFloat { 76 + CGFloat(depth) * 150 }
         var speed: CGFloat { 9 + CGFloat(depth) * 38 }          // points per second, upward
         var blur: CGFloat { isSharp ? 0 : 15 * CGFloat(pow(1 - depth, 1.3)) }
-        var opacity: Double { 0.45 + depth * 0.55 }
+        var opacity: Double { 0.4 + depth * 0.6 }
 
         /// A small hash of the index, four ways, so the field is the same every launch. A book
         /// that speaks is kept to the near half of the depth.
@@ -69,6 +69,7 @@ struct CoverField: View {
 
     private struct Placed {
         var book: OnboardingManifest.Book
+        var index: Int
         var placement: Placement
         var isHero: Bool
     }
@@ -92,6 +93,7 @@ struct CoverField: View {
         books.enumerated()
             .map { index, book in
                 Placed(book: book,
+                       index: index,
                        placement: Placement(index: index, near: book.isVoiced || book.id == hero),
                        isHero: book.id == hero)
             }
@@ -109,29 +111,53 @@ struct CoverField: View {
     /// A cover's drift position at `time`: `phase` of the way up its loop at the start, upward
     /// at its speed, wrapping to below the screen past the top.
     private func driftY(_ placement: Placement, at time: TimeInterval, in size: CGSize) -> CGFloat {
-        let loop = size.height + placement.height * 1.6
+        let loop = Self.loop(placement, in: size)
         let travelled = reduceMotion ? 0 : placement.speed * time
         let along = (placement.phase * loop + travelled).truncatingRemainder(dividingBy: loop)
         return loop / 2 - along
     }
 
+    /// A cover's loop is well over two screens tall, so at any moment under half the field is on
+    /// screen and the rest is white space (the owner, 2026-09-14: "too crowded, not enough white
+    /// space"; Queue shows about a dozen at once).
+    private static func loop(_ placement: Placement, in size: CGSize) -> CGFloat {
+        size.height * 2.3 + placement.height * 1.6
+    }
+
+    /// The hero's own placing: near, centred, upright, and timed so that as the settle begins it
+    /// is just below the bottom edge — it rises into its rest from below rather than sliding in
+    /// from wherever the drift had it (the owner, 2026-09-14: "Alice should not come from the
+    /// side"). Before that it drifts like any other cover.
+    private func heroPlacement(index: Int, in size: CGSize) -> Placement {
+        var p = Placement(index: index, near: true)
+        p.depth = 0.95
+        p.x = 0
+        p.lean = 0
+        p.isSharp = false
+        let loop = Self.loop(p, in: size)
+        let alongAtSettle = loop / 2 - size.height * 0.55 - p.height / 2   // fully below the bottom edge
+        let phase = (alongAtSettle - p.speed * scene.settleStart) / loop
+        p.phase = phase - floor(phase)
+        return p
+    }
+
     @ViewBuilder
     private func card(_ item: Placed, in size: CGSize) -> some View {
-        let p = item.placement
         if item.isHero {
-            // In the drift until the settle begins, then eased from where it was to its rest.
+            // In the drift until the settle begins — timed to be just below the screen then — and
+            // eased up the centre to its rest, growing on the way.
+            let p = heroPlacement(index: item.index, in: size)
             let s = settle
-            let frozen = driftY(p, at: min(elapsed, scene.settleStart), in: size)
-            let y = frozen + (size.height * Self.heroRest - frozen) * s
-            let x = size.width * p.x * (1 - s)
+            let below = driftY(p, at: min(elapsed, scene.settleStart), in: size)
+            let y = below + (size.height * Self.heroRest - below) * s
             let height = p.height + (Self.heroHeight - p.height) * s
             BookCover(relativePath: nil, paths: env.paths, height: height,
                       title: item.book.title, author: item.book.author, asset: item.book.coverName)
-                .rotationEffect(.degrees(p.lean * (1 - s)))
                 .blur(radius: p.blur * (1 - s))
-                .offset(x: x, y: y)
+                .offset(y: reduceMotion ? size.height * Self.heroRest : y)
                 .opacity(reduceMotion ? s : p.opacity + (1 - p.opacity) * s)
         } else {
+            let p = item.placement
             BookCover(relativePath: nil, paths: env.paths, height: p.height,
                       title: item.book.title, author: item.book.author, asset: item.book.coverName)
                 .rotationEffect(.degrees(p.lean))

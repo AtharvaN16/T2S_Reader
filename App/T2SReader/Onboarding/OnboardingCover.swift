@@ -3,9 +3,9 @@ import SwiftUI
 import T2SApp
 
 /// The welcome, presented over the pager on a fresh install (design:
-/// `docs/superpowers/specs/2026-09-14-onboarding-design.md`). This is the first scene — the crowd
-/// of covers, the voiced few rising through it with their lines chattering, and the hero settling
-/// silent — with Skip from the first frame. The settled hero waits for Play, the ATC reference's
+/// `docs/superpowers/specs/2026-09-14-onboarding-design.md`). This is the first scene — one field
+/// of covers drifting in depth, a few opening lines chattering past on their own clock, and the
+/// hero settling out of the crowd, silent — with Skip from the first frame. The settled hero waits for Play, the ATC reference's
 /// "listen to this replay": the reader chooses the clean listen. For now Play speaks the hero's
 /// passage in the default voice and is followed by Continue; the voice row, the question, the
 /// benefits and the Pro mock follow in later slices.
@@ -21,15 +21,14 @@ struct OnboardingCover: View {
     @State private var solo = SoloClipPlayer()
     @State private var startedAt: Date?
     @State private var heroPlayed = false
+    /// The books that speak, then the hero: the chatter's order, and the choreography's count.
     private let rising: [OnboardingManifest.Book]
-    private let crowd: [OnboardingManifest.Book]
     private let scene: RisingChoreography
 
     init(manifest: OnboardingManifest, onFinish: @escaping () -> Void) {
         self.manifest = manifest
         self.onFinish = onFinish
         rising = manifest.risingOrder
-        crowd = manifest.crowd
         _chatter = State(initialValue: ClipPlayer(urls: rising.map { book in
             guard let voice = book.voice else { return nil }
             return Bundle.main.url(forResource: OnboardingManifest.clipName(book: book.id, voice: voice), withExtension: "m4a")
@@ -49,7 +48,7 @@ struct OnboardingCover: View {
             let settled = elapsed >= scene.total
             ZStack {
                 Tokens.ground.ignoresSafeArea()
-                CoverField(rising: rising, crowd: crowd, scene: scene, elapsed: elapsed)
+                CoverField(books: manifest.books, hero: manifest.hero, scene: scene, elapsed: elapsed)
                     .ignoresSafeArea()
                 VStack {
                     HStack {

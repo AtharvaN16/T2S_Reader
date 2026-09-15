@@ -10,30 +10,36 @@ import T2SApp
 ///
 /// One field, no lanes (the owner, 2026-09-14: "there are no separate planes … the covers are
 /// just for show, the audio need not align perfectly"). Every cover has its own distance, which
-/// sets its size, its speed, its blur and its dimness together; they are scattered across the
+/// sets its size, its speed, its blur and its dimness together, and they are scattered across the
 /// whole width with the edges cutting some off, so the field reads as wider than the phone. The
 /// books that speak sit nearer than the rest, so they are large and clear while their lines are
 /// up, but they drift where they drift. The placing is seeded from each cover's index, so the
 /// field is the same every launch.
 ///
-/// The hero is one cover in the field until `RisingChoreography.settleStart`; then it leaves its
-/// drift for the rest top centre, sharpening and growing to `heroHeight` on the way, while the
-/// rest of the field dims out — the ATC app's red card left alone on the ground.
+/// The hero is one cover in the field until `ChatterSchedule.settleStart`; then it leaves its
+/// drift for the rest top centre at the size it had, and only once there grows to `heroHeight`
+/// while the rest of the field dims out — the ATC app's red card left alone on the ground. When
+/// the lines are read (`lift`) it moves up and shrinks to make room for them.
 ///
 /// With Reduce Motion nothing travels: the field stands still and dim, and the hero fades in at
 /// its rest.
 struct CoverField: View {
     var books: [OnboardingManifest.Book]
     var hero: String
-    var scene: RisingChoreography
+    var schedule: ChatterSchedule
     var elapsed: TimeInterval
+    /// 0 with the hero at its rest, 1 with it lifted and small above the lines being read.
+    var lift: Double = 0
 
     @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     static let heroHeight: CGFloat = 280
-    /// Where the hero rests, as a fraction of the height above the centre.
+    static let liftedHeight: CGFloat = 150
+    /// Where the hero rests, as a fraction of the height above the centre; and where it goes when
+    /// lifted for the lines.
     static let heroRest: CGFloat = -0.16
+    static let heroLifted: CGFloat = -0.31
     /// The settle is two beats (the owner, 2026-09-14: "settle into position, and then expand in
     /// size, while the background fades, not jump to position"): from `settleStart` the hero
     /// leaves the drift for its rest at the size it had, over `arriveDuration`; then, from
@@ -43,8 +49,8 @@ struct CoverField: View {
     static let growDelay: TimeInterval = 1.1
     static let growDuration: TimeInterval = 1.4
 
-    /// One floating cover: where it is in depth and across the screen, how fast it drifts, and
-    /// whether it is one of the sharp few. All derived from the index, once.
+    /// One floating cover: where it is in depth and across the screen, and how fast it drifts.
+    /// All derived from the index, once.
     struct Placement {
         var depth: Double      // 0 far … 1 near
         var x: CGFloat         // fraction of the width from the centre; beyond ±0.5 is off the edge
@@ -55,10 +61,11 @@ struct CoverField: View {
         /// Points per second, upward. A narrow spread: a wide one pulled neighbours together
         /// within seconds and left clumps and gaps (the owner, 2026-09-14: "the spacing is random").
         var speed: CGFloat { 16 + CGFloat(depth) * 12 }
-        /// Strictly by depth (the owner, 2026-09-14: "the further back a book is, the smaller it
-        /// should be and more blur"); no sharp exceptions.
-        var blur: CGFloat { 16 * CGFloat(pow(1 - depth, 1.25)) }
-        var opacity: Double { 0.4 + depth * 0.6 }
+        /// Strictly by depth, and gentle: the furthest cover is soft, not a smear — you can still
+        /// make it out (the owner, 2026-09-14: "the most furthest cover should also not be super
+        /// blurred … reduce the blur intensity across the board").
+        var blur: CGFloat { 6 * CGFloat(pow(1 - depth, 1.1)) }
+        var opacity: Double { 0.5 + depth * 0.5 }
 
         /// The columns the covers take in turn along the loop, as fractions of the width from the
         /// centre: each is on the other side from the one before, and a column repeats only every
@@ -134,18 +141,18 @@ struct CoverField: View {
 
     /// 0 before the hero begins to settle, 1 once it is at rest.
     private var arrive: Double {
-        smooth((elapsed - scene.settleStart) / Self.arriveDuration)
+        smooth((elapsed - schedule.settleStart) / Self.arriveDuration)
     }
 
     /// 0 until the hero has all but arrived, 1 once it is full size and the crowd is gone.
     private var grow: Double {
-        smooth((elapsed - scene.settleStart - Self.growDelay) / Self.growDuration)
+        smooth((elapsed - schedule.settleStart - Self.growDelay) / Self.growDuration)
     }
 
     /// A cover's drift position at `time`: `phase` of the way up its loop at the start, upward
     /// at its speed, wrapping to below the screen past the top.
     private func driftY(_ placement: Placement, at time: TimeInterval, in size: CGSize) -> CGFloat {
-        let loop = Self.loop(placement, in: size)
+        let loop = Self.loop(in: size)
         let travelled = reduceMotion ? 0 : placement.speed * time
         let along = (placement.phase * loop + travelled).truncatingRemainder(dividingBy: loop)
         return loop / 2 - along
@@ -155,7 +162,7 @@ struct CoverField: View {
     /// half the field is on screen with white space between (the owner, 2026-09-14: "too crowded,
     /// not enough white space"; Queue shows about a dozen at once), and a slot along it is the
     /// same distance for a small cover as for a large one.
-    private static func loop(_ placement: Placement, in size: CGSize) -> CGFloat {
+    private static func loop(in size: CGSize) -> CGFloat {
         size.height * 2.3 + 240
     }
 
@@ -169,9 +176,9 @@ struct CoverField: View {
         p.depth = 0.95
         p.x = 0
         p.lean = 0
-        let loop = Self.loop(p, in: size)
+        let loop = Self.loop(in: size)
         let alongAtSettle = loop / 2 - size.height * 0.22   // a fifth of the way down from the centre
-        let phase = (alongAtSettle - p.speed * scene.settleStart) / loop
+        let phase = (alongAtSettle - p.speed * schedule.settleStart) / loop
         p.phase = phase - floor(phase)
         return p
     }
@@ -180,17 +187,19 @@ struct CoverField: View {
     private func card(_ item: Placed, in size: CGSize) -> some View {
         if item.isHero {
             // In the drift until the settle begins — timed to be in the lower half of the screen
-            // then — and eased up the centre to its rest, growing on the way.
+            // then — eased up the centre to its rest, grown once there, and lifted for the lines.
             let p = heroPlacement(index: item.index, in: size)
             let a = arrive
             let g = grow
-            let drifting = driftY(p, at: min(elapsed, scene.settleStart), in: size)
-            let y = drifting + (size.height * Self.heroRest - drifting) * a
-            let height = p.height + (Self.heroHeight - p.height) * g
+            let drifting = driftY(p, at: min(elapsed, schedule.settleStart), in: size)
+            let rest = size.height * (Self.heroRest + (Self.heroLifted - Self.heroRest) * lift)
+            let y = drifting + (rest - drifting) * a
+            let full = Self.heroHeight + (Self.liftedHeight - Self.heroHeight) * lift
+            let height = p.height + (full - p.height) * g
             BookCover(relativePath: nil, paths: env.paths, height: height,
                       title: item.book.title, author: item.book.author, asset: item.book.coverName)
                 .blur(radius: p.blur * (1 - a))
-                .offset(y: reduceMotion ? size.height * Self.heroRest : y)
+                .offset(y: reduceMotion ? rest : y)
                 .opacity(reduceMotion ? a : p.opacity + (1 - p.opacity) * a)
         } else {
             let p = item.placement

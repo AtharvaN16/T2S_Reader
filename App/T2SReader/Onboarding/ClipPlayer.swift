@@ -18,6 +18,10 @@ import Observation
 final class ClipPlayer {
     private let players: [AVAudioPlayer?]
     private var started: Set<Int> = []
+    /// Each clip's length in play order, for the schedule; a stand-in for a missing one, so a
+    /// silent slot still takes its turn.
+    let durations: [TimeInterval]
+    static let fallbackDuration: TimeInterval = 4
 
     static let isSilent = ProcessInfo.processInfo.environment["T2S_SILENT"].map { $0 != "0" && !$0.isEmpty } ?? false
 
@@ -27,6 +31,7 @@ final class ClipPlayer {
             player.prepareToPlay()
             return player
         }
+        durations = players.map { $0?.duration ?? Self.fallbackDuration }
     }
 
     /// Once a frame: a card with a gain starts its voice if it has not, every voice takes its

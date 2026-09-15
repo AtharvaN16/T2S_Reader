@@ -51,12 +51,25 @@ raised; `docs/licenses.md` records it, and the CC0 Standard Ebooks set is in git
 Alice cover (a Rackham-illustrated edition) carries a small publisher mark; swap the `coverID` if a
 cleaner English edition turns up.
 
-**Next:** beat two (the hero's lines fading in with the word tint, the five voice pills, the default
-voice written; Play currently speaks the passage in Heart and turns into Continue), then the question,
-the three benefits, the Pro mock, the hero import into the Reader, and Settings' "Show the welcome
-again". Two things learned on the way: the shared `T2S Sim` is launched every few seconds by whichever
-session is photographing, which cut the scene short — a second simulator, `T2S Onb`, was created for
-this work; and the Kokoro package tests' DerivedData was already warm, so a render run is about four
+**Beat two landed the same night (the owner's third round):** blur is gentler across the board (the
+furthest cover is soft, not a smear); the chatter is `ChatterSchedule` now — each line plays whole
+and the next fades into its last 1.2 s, so the scene is about 35 s to the settle rather than 18;
+after the settle a bobbing hand-drawn arrow points at the book over "Hear the first lines" and the
+blue raised Play key; Play lifts the hero and reads Alice's passage under it in `ReadAlongPassage`
+(Inter Bold 26, spoken words ink, the word being spoken on `accentSoft`, the rest `ink2`, the block
+following the word — a `FlowLayout` of word views under a `ScrollViewReader`), over `VoiceCarousel`
+(five pills, swipe-snapped or tapped, each choice replays the passage in that voice, plus "Play
+again"); Continue writes the choice to `defaultVoiceID` by the picker's own id for that on-device
+voice, Skip leaves it. `T2S_ONBOARDING=reading` in a debug build lands on beat two at once, for a
+photograph. Settings → About → "Show the welcome again" replays the whole thing.
+
+**Owed from the owner's notes:** the chatter lines need not be openings — iconic lines from anywhere
+in each book; a research pass, then a full re-render of the clips.
+
+**Next:** the question, the three benefits, the Pro mock, and the hero import into the Reader. Two
+things learned on the way: the shared `T2S Sim` is launched every few seconds by whichever session
+is photographing, which cut the scene short — a second simulator, `T2S Onb`, was created for this
+work; and the Kokoro package tests' DerivedData was already warm, so a render run is about four
 minutes.
 
 ## The cloud route is the build's, not the reader's (2026-09-13)

@@ -16,7 +16,7 @@ resolved tags in `Packages/T2SReadium/.build/checkouts` and `Packages/T2SKokoro/
 | Readability.js | 0.6.0 | Apache-2.0 | `App/Resources/Readability/LICENSE` |
 | MLXUtilsLibrary | 0.0.6 + our patch | Apache-2.0 | `Packages/MLXUtilsLibrary/LICENSE` |
 | KokoroPipeline | `mattmireles/kokoro-coreml` @ `66d8cf5108cce0991b8868b01b4d8a8b2e98881d` | Apache-2.0 | `Packages/KokoroPipeline/LICENSE` |
-| Standard Ebooks covers (24 JPEGs, `App/Resources/Onboarding/onboarding-cover-*.jpg`) | fetched 2026-09-14 by `scripts/fetch-onboarding-covers.sh` | public domain (US) artwork; Standard Ebooks' own typography and layout released CC0 1.0 | https://standardebooks.org/about — "The text and cover art in our ebooks are already believed to be in the U.S. public domain, and Standard Ebooks dedicates its own work to the public domain, thus releasing the entirety of each ebook file into the public domain." (read 2026-09-14) |
+| Onboarding book covers (24 JPEGs, `App/Resources/Onboarding/onboarding-cover-*.jpg`) | fetched 2026-09-14 by `scripts/fetch-onboarding-covers.sh` from Open Library (`covers.openlibrary.org`); the manifest pins the edition of each classic by `coverID` | **publishers' cover art, not licensed** — used as the empty shelf's three covers are (`Assets.xcassets/EmptyCovers`), by the owner's decision of 2026-09-14 after the rights point was raised; the Standard Ebooks (CC0) set that preceded it is in git at `a5e09af` if it is ever needed back | https://openlibrary.org/dev/docs/api/covers |
 
 ## Swift Package Manager
 

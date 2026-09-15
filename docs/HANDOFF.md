@@ -39,6 +39,18 @@ added: an entry with a Standard Ebooks path, and optionally a voice and a line; 
 Photographs in both themes on the private simulator — note the app pins its theme from the device on
 first launch, so a light photograph needs a fresh install with the simulator already light.
 
+**Later the same night, from the owner's looks at the simulator:** no lane — every cover, voiced or
+not, drifts in one seeded field and only the hero leaves it; covers take even slots along one shared
+loop with a coprime stride and a narrow speed spread, so the field stays spaced (random placing had
+clumped); blur and size are strictly by depth, no sharp far cover; the hero drifts up the middle with
+the crowd, settles into its rest at its drifting size, *then* grows while the crowd fades (two beats);
+and the covers are 24 popular books' published covers from Open Library (`scripts/fetch-onboarding-covers.sh`
+searches by title and author, the classics pinned to a chosen edition by `coverID`; candidates were
+reviewed as contact sheets). The owner decided on publishers' covers after the rights point was
+raised; `docs/licenses.md` records it, and the CC0 Standard Ebooks set is in git at `a5e09af`. The
+Alice cover (a Rackham-illustrated edition) carries a small publisher mark; swap the `coverID` if a
+cleaner English edition turns up.
+
 **Next:** beat two (the hero's lines fading in with the word tint, the five voice pills, the default
 voice written; Play currently speaks the passage in Heart and turns into Continue), then the question,
 the three benefits, the Pro mock, the hero import into the Reader, and Settings' "Show the welcome

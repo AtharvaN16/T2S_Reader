@@ -11,10 +11,10 @@ import T2SApp
 /// One field, no lanes (the owner, 2026-09-14: "there are no separate planes … the covers are
 /// just for show, the audio need not align perfectly"). Every cover has its own distance, which
 /// sets its size, its speed, its blur and its dimness together; they are scattered across the
-/// whole width with the edges cutting some off, so the field reads as wider than the phone; a few
-/// small ones are sharp, as a camera would have it. The books that speak sit nearer than the
-/// rest, so they are large and clear while their lines are up, but they drift where they drift.
-/// The placing is seeded from each cover's index, so the field is the same every launch.
+/// whole width with the edges cutting some off, so the field reads as wider than the phone. The
+/// books that speak sit nearer than the rest, so they are large and clear while their lines are
+/// up, but they drift where they drift. The placing is seeded from each cover's index, so the
+/// field is the same every launch.
 ///
 /// The hero is one cover in the field until `RisingChoreography.settleStart`; then it leaves its
 /// drift for the rest top centre, sharpening and growing to `heroHeight` on the way, while the
@@ -34,8 +34,14 @@ struct CoverField: View {
     static let heroHeight: CGFloat = 280
     /// Where the hero rests, as a fraction of the height above the centre.
     static let heroRest: CGFloat = -0.16
-    /// How long the hero takes to reach its rest, and the field to dim, from `settleStart`.
-    static let settleDuration: TimeInterval = 1.8
+    /// The settle is two beats (the owner, 2026-09-14: "settle into position, and then expand in
+    /// size, while the background fades, not jump to position"): from `settleStart` the hero
+    /// leaves the drift for its rest at the size it had, over `arriveDuration`; then, from
+    /// `growDelay` after the start, it grows to `heroHeight` over `growDuration` while the crowd
+    /// fades on the same clock.
+    static let arriveDuration: TimeInterval = 1.3
+    static let growDelay: TimeInterval = 1.1
+    static let growDuration: TimeInterval = 1.4
 
     /// One floating cover: where it is in depth and across the screen, how fast it drifts, and
     /// whether it is one of the sharp few. All derived from the index, once.
@@ -44,13 +50,14 @@ struct CoverField: View {
         var x: CGFloat         // fraction of the width from the centre; beyond ±0.5 is off the edge
         var phase: CGFloat     // fraction of the loop it starts at
         var lean: Double
-        var isSharp: Bool
 
         var height: CGFloat { 76 + CGFloat(depth) * 150 }
         /// Points per second, upward. A narrow spread: a wide one pulled neighbours together
         /// within seconds and left clumps and gaps (the owner, 2026-09-14: "the spacing is random").
         var speed: CGFloat { 16 + CGFloat(depth) * 12 }
-        var blur: CGFloat { isSharp ? 0 : 15 * CGFloat(pow(1 - depth, 1.3)) }
+        /// Strictly by depth (the owner, 2026-09-14: "the further back a book is, the smaller it
+        /// should be and more blur"); no sharp exceptions.
+        var blur: CGFloat { 16 * CGFloat(pow(1 - depth, 1.25)) }
         var opacity: Double { 0.4 + depth * 0.6 }
 
         /// The columns the covers take in turn along the loop, as fractions of the width from the
@@ -86,7 +93,6 @@ struct CoverField: View {
             x = Self.columns[slot % Self.columns.count] + CGFloat(unit(2) - 0.5) * 0.1
             phase = (CGFloat(slot) + CGFloat(unit(3) - 0.5) * 0.4) / CGFloat(max(count, 1))
             lean = (unit(4) - 0.5) * 24
-            isSharp = !near && index % 7 == 3 && depth < 0.55
         }
     }
 
@@ -127,8 +133,13 @@ struct CoverField: View {
     }
 
     /// 0 before the hero begins to settle, 1 once it is at rest.
-    private var settle: Double {
-        smooth((elapsed - scene.settleStart) / Self.settleDuration)
+    private var arrive: Double {
+        smooth((elapsed - scene.settleStart) / Self.arriveDuration)
+    }
+
+    /// 0 until the hero has all but arrived, 1 once it is full size and the crowd is gone.
+    private var grow: Double {
+        smooth((elapsed - scene.settleStart - Self.growDelay) / Self.growDuration)
     }
 
     /// A cover's drift position at `time`: `phase` of the way up its loop at the start, upward
@@ -158,7 +169,6 @@ struct CoverField: View {
         p.depth = 0.95
         p.x = 0
         p.lean = 0
-        p.isSharp = false
         let loop = Self.loop(p, in: size)
         let alongAtSettle = loop / 2 - size.height * 0.22   // a fifth of the way down from the centre
         let phase = (alongAtSettle - p.speed * scene.settleStart) / loop
@@ -172,15 +182,16 @@ struct CoverField: View {
             // In the drift until the settle begins — timed to be in the lower half of the screen
             // then — and eased up the centre to its rest, growing on the way.
             let p = heroPlacement(index: item.index, in: size)
-            let s = settle
+            let a = arrive
+            let g = grow
             let drifting = driftY(p, at: min(elapsed, scene.settleStart), in: size)
-            let y = drifting + (size.height * Self.heroRest - drifting) * s
-            let height = p.height + (Self.heroHeight - p.height) * s
+            let y = drifting + (size.height * Self.heroRest - drifting) * a
+            let height = p.height + (Self.heroHeight - p.height) * g
             BookCover(relativePath: nil, paths: env.paths, height: height,
                       title: item.book.title, author: item.book.author, asset: item.book.coverName)
-                .blur(radius: p.blur * (1 - s))
+                .blur(radius: p.blur * (1 - a))
                 .offset(y: reduceMotion ? size.height * Self.heroRest : y)
-                .opacity(reduceMotion ? s : p.opacity + (1 - p.opacity) * s)
+                .opacity(reduceMotion ? a : p.opacity + (1 - p.opacity) * a)
         } else {
             let p = item.placement
             BookCover(relativePath: nil, paths: env.paths, height: p.height,
@@ -188,7 +199,7 @@ struct CoverField: View {
                 .rotationEffect(.degrees(p.lean))
                 .blur(radius: p.blur)
                 .offset(x: size.width * p.x, y: driftY(p, at: elapsed, in: size))
-                .opacity(p.opacity * (reduceMotion ? 0.6 : 1) * (1 - settle))
+                .opacity(p.opacity * (reduceMotion ? 0.6 : 1) * (1 - grow))
         }
     }
 

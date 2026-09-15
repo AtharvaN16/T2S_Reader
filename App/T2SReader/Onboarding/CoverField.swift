@@ -47,21 +47,44 @@ struct CoverField: View {
         var isSharp: Bool
 
         var height: CGFloat { 76 + CGFloat(depth) * 150 }
-        var speed: CGFloat { 9 + CGFloat(depth) * 38 }          // points per second, upward
+        /// Points per second, upward. A narrow spread: a wide one pulled neighbours together
+        /// within seconds and left clumps and gaps (the owner, 2026-09-14: "the spacing is random").
+        var speed: CGFloat { 16 + CGFloat(depth) * 12 }
         var blur: CGFloat { isSharp ? 0 : 15 * CGFloat(pow(1 - depth, 1.3)) }
         var opacity: Double { 0.4 + depth * 0.6 }
 
-        /// A small hash of the index, four ways, so the field is the same every launch. A book
-        /// that speaks is kept to the near half of the depth.
-        init(index: Int, near: Bool) {
+        /// The columns the covers take in turn along the loop, as fractions of the width from the
+        /// centre: each is on the other side from the one before, and a column repeats only every
+        /// few covers, so neighbours along the loop never stack.
+        static let columns: [CGFloat] = [-0.34, 0.34, 0.02, -0.26, 0.30, -0.08, 0.36, -0.36, 0.12, -0.20, 0.24, -0.32]
+
+        /// The first integer at or above two fifths of `count` that shares no factor with it, so
+        /// `index * stride % count` visits every slot once.
+        static func stride(for count: Int) -> Int {
+            guard count > 2 else { return 1 }
+            func gcd(_ a: Int, _ b: Int) -> Int { b == 0 ? a : gcd(b, a % b) }
+            var s = max(Int(Double(count) * 0.4), 1)
+            while gcd(s, count) != 1 { s += 1 }
+            return s
+        }
+
+        /// Placed by slot, not by chance: cover `index` of `count` takes an even share of the loop
+        /// and the next column in turn, with a little jitter on each, so the field is spaced at
+        /// the start and stays spaced. Depth and lean are hashed from the index, so the field is
+        /// the same every launch. A book that speaks is kept to the near half of the depth.
+        init(index: Int, count: Int, near: Bool) {
             func unit(_ salt: UInt32) -> Double {
                 var h = UInt32(truncatingIfNeeded: index) &* 2_654_435_761 &+ salt &* 40_503
                 h ^= h >> 13; h = h &* 1_274_126_177; h ^= h >> 16
                 return Double(h % 10_007) / 10_007
             }
             depth = near ? 0.62 + unit(1) * 0.38 : unit(1)
-            x = CGFloat(unit(2) - 0.5) * (near ? 0.9 : 1.15)
-            phase = CGFloat(unit(3))
+            // The slot is the index times a stride coprime with the count, so books that sit
+            // together in the manifest — the voiced ones do — are spread around the loop rather
+            // than arriving as a bunch.
+            let slot = (index * Self.stride(for: count)) % max(count, 1)
+            x = Self.columns[slot % Self.columns.count] + CGFloat(unit(2) - 0.5) * 0.1
+            phase = (CGFloat(slot) + CGFloat(unit(3) - 0.5) * 0.4) / CGFloat(max(count, 1))
             lean = (unit(4) - 0.5) * 24
             isSharp = !near && index % 7 == 3 && depth < 0.55
         }
@@ -94,7 +117,7 @@ struct CoverField: View {
             .map { index, book in
                 Placed(book: book,
                        index: index,
-                       placement: Placement(index: index, near: book.isVoiced || book.id == hero),
+                       placement: Placement(index: index, count: books.count, near: book.isVoiced || book.id == hero),
                        isHero: book.id == hero)
             }
             .sorted { a, b in
@@ -117,25 +140,27 @@ struct CoverField: View {
         return loop / 2 - along
     }
 
-    /// A cover's loop is well over two screens tall, so at any moment under half the field is on
-    /// screen and the rest is white space (the owner, 2026-09-14: "too crowded, not enough white
-    /// space"; Queue shows about a dozen at once).
+    /// The loop is well over two screens tall and the same for every cover, so at any moment under
+    /// half the field is on screen with white space between (the owner, 2026-09-14: "too crowded,
+    /// not enough white space"; Queue shows about a dozen at once), and a slot along it is the
+    /// same distance for a small cover as for a large one.
     private static func loop(_ placement: Placement, in size: CGSize) -> CGFloat {
-        size.height * 2.3 + placement.height * 1.6
+        size.height * 2.3 + 240
     }
 
     /// The hero's own placing: near, centred, upright, and timed so that as the settle begins it
-    /// is just below the bottom edge — it rises into its rest from below rather than sliding in
-    /// from wherever the drift had it (the owner, 2026-09-14: "Alice should not come from the
-    /// side"). Before that it drifts like any other cover.
+    /// is in the lower half of the screen — it has come up from the bottom with the others over
+    /// the seconds before, one of the moving books, and then leaves the drift straight up the
+    /// middle to its rest (the owner, 2026-09-14: "Alice should not come from the side", "should
+    /// be part of the books moving up, should not arrive from nowhere").
     private func heroPlacement(index: Int, in size: CGSize) -> Placement {
-        var p = Placement(index: index, near: true)
+        var p = Placement(index: index, count: books.count, near: true)
         p.depth = 0.95
         p.x = 0
         p.lean = 0
         p.isSharp = false
         let loop = Self.loop(p, in: size)
-        let alongAtSettle = loop / 2 - size.height * 0.55 - p.height / 2   // fully below the bottom edge
+        let alongAtSettle = loop / 2 - size.height * 0.22   // a fifth of the way down from the centre
         let phase = (alongAtSettle - p.speed * scene.settleStart) / loop
         p.phase = phase - floor(phase)
         return p
@@ -144,12 +169,12 @@ struct CoverField: View {
     @ViewBuilder
     private func card(_ item: Placed, in size: CGSize) -> some View {
         if item.isHero {
-            // In the drift until the settle begins — timed to be just below the screen then — and
-            // eased up the centre to its rest, growing on the way.
+            // In the drift until the settle begins — timed to be in the lower half of the screen
+            // then — and eased up the centre to its rest, growing on the way.
             let p = heroPlacement(index: item.index, in: size)
             let s = settle
-            let below = driftY(p, at: min(elapsed, scene.settleStart), in: size)
-            let y = below + (size.height * Self.heroRest - below) * s
+            let drifting = driftY(p, at: min(elapsed, scene.settleStart), in: size)
+            let y = drifting + (size.height * Self.heroRest - drifting) * s
             let height = p.height + (Self.heroHeight - p.height) * s
             BookCover(relativePath: nil, paths: env.paths, height: height,
                       title: item.book.title, author: item.book.author, asset: item.book.coverName)

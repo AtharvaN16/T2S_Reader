@@ -1,0 +1,366 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>05 · The pick — Storage stripped back, Prepare on its own page</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap">
+<link rel="stylesheet" href="style.css">
+<style>
+/* the iOS segmented storage line, and the plain rows this version is made of */
+.ios{display:flex;height:13px;border-radius:4px;overflow:hidden;gap:2px;background:var(--i3)}
+.ios i{display:block;height:100%}
+.lrow{display:flex;align-items:center;gap:12px;padding:11px 0}
+.lrow .n{flex:1;min-width:0;font-size:15.5px;font-weight:500;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lrow .v{font-size:14px;color:var(--i2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.list{background:var(--su);border-radius:12px;padding:2px 15px}
+.list .lrow + .lrow{border-top:1px solid rgba(0,0,0,.07)}
+.radio{width:21px;height:21px;border-radius:99px;box-shadow:inset 0 0 0 1.5px var(--i3);flex:0 0 auto}
+.radio.on{box-shadow:inset 0 0 0 6.5px var(--i)}
+.tick{width:21px;height:21px;border-radius:99px;background:var(--i);color:#fff;font-size:11px;font-weight:700;
+      display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.diff{font-family:var(--mono);font-size:11px;color:var(--ready);font-weight:700;letter-spacing:.05em}
+</style>
+
+<div class="wrap">
+<header><div class="col">
+  <div class="eyebrow">t2s reader · design · 2026-09-14 · 05</div>
+  <h1>The pick</h1>
+  <p class="lede">The segmented line, the grouped list, "Limit for rendered audio" — and Prepare
+     lifted off this screen onto a page of its own, where it stops being a number and becomes a
+     choice about books.</p>
+  <div class="nav">
+    <a href="index.html">00 · the answers</a>
+    <a href="01-prepare.html">01 · prepare</a>
+    <a href="02-cap.html">02 · the cap</a>
+    <a href="03-voice-model.html">03 · voice model</a>
+    <a href="04-per-document.html">04 · per document</a>
+    <a class="here" href="05-the-pick.html">05 · the pick</a>
+  </div>
+  <div class="meta"><b>Kept</b> the iOS segmented line · the grouped list · "Limit for rendered
+     audio"<br>
+     <b>Dropped</b> chapter segments per document · the hours pills · most of the copy<br>
+     <b>Moved</b> Prepare on charge → its own page, reached from Settings</div>
+</div></header>
+
+<!-- ───────────────────────── STORAGE ───────────────────────── -->
+<section>
+  <div class="shead"><div class="snum">01 / STORAGE</div>
+    <h2>Four things, in descending order of size, and nothing else</h2>
+    <p class="cnote">One picture at the top; three groups under it. Every row is a name, a size,
+      and at most one control — so a PDF, an article and a 24-chapter book are all the same shape
+      of row.</p></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph tall">
+      <div class="bar"><span>5:26</span><span>98%</span></div>
+      <div class="safe">
+        <div class="back">‹</div>
+        <div class="pt">Storage</div>
+
+        <div class="sec tight" style="margin-top:24px">
+          <div class="hrow"><span class="big sm">1.72 GB</span><span class="mt">used by this app</span></div>
+          <div class="ios">
+            <i style="width:35%;background:var(--gl)"></i>
+            <i style="width:32%;background:rgba(0,102,255,.34)"></i>
+            <i style="width:30%;background:var(--ac)"></i>
+            <i style="width:3%;background:var(--i)"></i></div>
+          <div class="key" style="margin-top:2px">
+            <span><b style="background:var(--gl)"></b>Voice 620.8 MB</span>
+            <span><b style="background:rgba(0,102,255,.34)"></b>Speed-up 561.6 MB</span>
+            <span><b style="background:var(--ac)"></b>Audio 535.5 MB</span>
+            <span><b style="background:var(--i)"></b>Books 41 MB</span></div>
+          <div class="lrow" style="padding-bottom:0"><span class="n mt" style="font-weight:400">Free on this iPhone</span>
+            <span class="v mts">18.4 GB</span></div>
+        </div>
+
+        <div class="sec tight">
+          <p class="sh">Voice</p>
+          <div class="list">
+            <div class="lrow"><span class="n">Model</span><span class="v">620.8 MB</span>
+              <span class="pl des sm">Delete</span></div>
+            <div class="lrow"><span class="n">Speed-up files</span><span class="v">561.6 MB</span>
+              <span class="pl sm">Clear</span></div>
+          </div>
+          <p class="mt">Deleting the model costs a 620 MB download. Speed-up files rebuild
+            themselves on the next charge.</p>
+        </div>
+
+        <div class="sec tight">
+          <p class="sh">Limit for rendered audio</p>
+          <div style="margin-top:2px">
+            <div class="sl"><div class="tr"></div><div class="fl" style="width:50%"></div>
+              <div class="kn" style="left:calc(50% - 12px)"></div></div>
+            <div class="ticks"><span>512 MB</span><span>1 GB</span><span>2 GB</span><span>4 GB</span></div>
+          </div>
+          <p class="mt" style="margin-top:6px">535.5 MB used. Over the limit, the audio you played
+            longest ago goes first.</p>
+        </div>
+
+        <div class="sec tight">
+          <p class="sh">Rendered audio</p>
+          <div class="list">
+            <div class="lrow"><span class="n">Thinking in Systems</span><span class="v">281 MB</span>
+              <span class="trash">🗑</span></div>
+            <div class="lrow"><span class="n">A Case of Exploding Mangoes</span><span class="v">147 MB</span>
+              <span class="trash">🗑</span></div>
+            <div class="lrow"><span class="n">The Anthropocene Reviewed</span><span class="v">107 MB</span>
+              <span class="trash">🗑</span></div>
+            <div class="lrow"><span class="n">Attention Is All You Need</span><span class="v">0.4 MB</span>
+              <span class="trash">🗑</span></div>
+          </div>
+          <div class="row" style="margin-top:12px"><span class="pl des">Delete all</span></div>
+        </div>
+      </div>
+    </div>
+      <figcaption><div class="cname">STORAGE <span class="tag rec">the pick</span></div>
+      <p class="cnote">The per-document list is <b>name · size · trash</b> and nothing more. No
+        chapter segments, no percentage: an article and a book are the same row, sorted by size,
+        and a document holding nothing simply isn't in the list.</p>
+      <p class="cnote">The voice's makeup is two rows rather than a card — the split is the whole
+        explanation, so it needs one sentence under it, not two paragraphs inside it.</p>
+      <p class="cnote">The segmented line is a <b>picture, not a budget</b>: the only limit on the
+        screen is the one that governs the only thing that grows by itself, and it says so in its
+        heading.</p>
+      <div class="cost"><b>New</b> per-document bytes (<code>AudioStore.bytes(for:)</code>, exists) ·
+        a plans-only Clear (<code>KokoroPlanCache.wipe</code>, exists) · Delete all · free-space
+        readout.<br>
+        <b>Gone</b> the hours pills, the per-row ProgressBar, the "0%", the word Evict.</div></figcaption></figure>
+
+    <figure class="unit"><div class="ph"><div class="safe">
+      <p class="sh">Rendered audio</p>
+      <div class="list" style="margin-top:10px">
+        <div class="lrow"><div class="cov a" style="width:26px;height:34px"></div>
+          <span class="n">Thinking in Systems</span><span class="v">281 MB</span>
+          <span class="trash">🗑</span></div>
+        <div class="lrow"><div class="cov b" style="width:26px;height:34px"></div>
+          <span class="n">A Case of Exploding…</span><span class="v">147 MB</span>
+          <span class="trash">🗑</span></div>
+        <div class="lrow"><div class="cov c" style="width:26px;height:34px"></div>
+          <span class="n">The Anthropocene…</span><span class="v">107 MB</span>
+          <span class="trash">🗑</span></div>
+      </div>
+    </div></div>
+      <figcaption><div class="cname">VARIANT · WITH COVERS <span class="tag alt">your call</span></div>
+      <p class="cnote">Same row, plus the 26×34 cover. Easier to recognise a book at a glance;
+        costs about 12 pt of row height and means a PDF or an article shows a placeholder cover
+        rather than nothing.</p>
+      <p class="cnote">I'd leave them out — the list is a bill, not a shelf — but it's one line
+        either way.</p></figcaption></figure>
+
+    <figure class="unit"><div class="ph"><div class="safe">
+      <p class="sh">Limit for rendered audio</p>
+      <div class="pills" style="margin-top:10px">
+        <span class="pl">512 MB</span><span class="pl">1 GB</span>
+        <span class="pl on">2 GB</span><span class="pl">4 GB</span></div>
+      <p class="mt" style="margin-top:10px">535.5 MB used. Over the limit, the audio you played
+        longest ago goes first.</p>
+    </div></div>
+      <figcaption><div class="cname">VARIANT · PILLS NOT SLIDER</div>
+      <p class="cnote">Keeps the four stops as pills, <b>wrapping</b> rather than overflowing, with
+        the labels rounded (512 MB, not 536.9 MB) so all four fit one line at normal text size.</p>
+      <p class="cnote">The slider is safer at accessibility sizes and reads as "a dial for a
+        quantity", which is what this is. The pills match the rest of the app's chips.</p></figcaption></figure>
+  </div>
+</section>
+
+<!-- ───────────────────────── PREPARE ───────────────────────── -->
+<section>
+  <div class="shead"><div class="snum">02 / PREPARE ON CHARGE, ITS OWN PAGE</div>
+    <h2>A toggle, a when, and a what — where the "what" is books, not hours</h2>
+    <p class="cnote">Reached from Settings as one row: <b>Prepare on charge · On, overnight ›</b>.
+      Nothing about it stays on Storage.</p></div>
+
+  <div class="rail">
+    <figure class="unit"><div class="ph tall">
+      <div class="bar"><span>5:26</span><span>98%</span></div>
+      <div class="safe">
+        <div class="back">‹</div>
+        <div class="pt">Prepare on<br>charge</div>
+
+        <div class="sec tight" style="margin-top:22px">
+          <div class="row"><span class="rt" style="flex:1">Prepare while charging</span>
+            <div class="tg on"></div></div>
+          <p class="mt">Audio is made while you charge, so listening later costs no battery.</p>
+        </div>
+
+        <div class="sec tight">
+          <p class="sh">When</p>
+          <div class="pills">
+            <span class="pl">Any time</span><span class="pl on">Overnight</span></div>
+          <div class="list" style="margin-top:4px">
+            <div class="lrow"><span class="n">Between</span>
+              <span class="v mts">11 PM – 7 AM</span><span class="chev">›</span></div>
+          </div>
+        </div>
+
+        <div class="sec tight">
+          <p class="sh">What</p>
+          <div class="list">
+            <div class="lrow"><div class="radio on"></div>
+              <div class="grow"><span class="rt">Keep up with my reading</span>
+                <span class="mt">The chapter you're in, in every book.</span></div></div>
+            <div class="lrow"><div class="radio"></div>
+              <div class="grow"><span class="rt">Only what I pick</span></div></div>
+          </div>
+        </div>
+
+        <div class="sec tight">
+          <div class="lrow" style="padding:0"><span class="n mt" style="font-weight:400">Ready now</span>
+            <span class="v mts">1h 32m · 268 MB</span></div>
+        </div>
+      </div>
+    </div>
+      <figcaption><div class="cname">A · THE PAGE, AUTOMATIC <span class="tag rec">default</span></div>
+      <p class="cnote">Out of the box it does the obvious thing and says it in six words:
+        <b>the chapter you're in, in every book.</b> No hours, no budget, no order to explain.</p>
+      <p class="cnote">"Ready now" at the foot is the one number worth keeping from the old screen —
+        proof it is working, not a control.</p>
+      <div class="callout warn" style="margin-top:8px;font-size:13.5px;padding-left:11px">
+        <b>Worth knowing before you pick "Overnight":</b> iOS decides when a background task
+        actually runs — we ask, it chooses. We can <i>refuse</i> to render outside 11 PM–7 AM, so
+        the promise "never while you're using the phone" holds; we can't promise it <i>will</i> run
+        at 2 AM. If the phone is charging at 8 PM under "Any time", it renders then.</div>
+      </figcaption></figure>
+
+    <figure class="unit"><div class="ph tall">
+      <div class="bar"><span>5:26</span><span>98%</span></div>
+      <div class="safe">
+        <div class="back">‹</div>
+        <div class="pt">Prepare on<br>charge</div>
+
+        <div class="sec tight" style="margin-top:22px">
+          <div class="row"><span class="rt" style="flex:1">Prepare while charging</span>
+            <div class="tg on"></div></div>
+        </div>
+
+        <div class="sec tight">
+          <p class="sh">When</p>
+          <div class="pills">
+            <span class="pl">Any time</span><span class="pl on">Overnight</span></div>
+        </div>
+
+        <div class="sec tight">
+          <p class="sh">What</p>
+          <div class="list">
+            <div class="lrow"><div class="radio"></div>
+              <span class="n">Keep up with my reading</span></div>
+            <div class="lrow"><div class="radio on"></div>
+              <span class="n">Only what I pick</span></div>
+          </div>
+        </div>
+
+        <div class="sec tight">
+          <div class="row"><p class="sh" style="flex:1">Picked</p>
+            <span class="mt">4h 06m · 712 MB</span></div>
+          <div class="list">
+            <div class="lrow"><span class="n">Thinking in Systems</span>
+              <span class="v">3 chapters</span><span class="chev">›</span></div>
+            <div class="lrow"><span class="n">A Case of Exploding Mangoes</span>
+              <span class="v">1 chapter</span><span class="chev">›</span></div>
+            <div class="lrow"><span class="n">Attention Is All You Need</span>
+              <span class="tick">✓</span></div>
+            <div class="lrow"><span class="n mt" style="font-weight:400">The Anthropocene Reviewed</span>
+              <span class="v">—</span><span class="chev">›</span></div>
+            <div class="lrow"><span class="n mt" style="font-weight:400">Piranesi</span>
+              <span class="v">—</span><span class="chev">›</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+      <figcaption><div class="cname">B · ONLY WHAT I PICK</div>
+      <p class="cnote">Every document in one list. <b>A book with chapters shows a count and a
+        chevron</b> — tap it and the chapter sheet opens. <b>A document without chapters — a PDF,
+        an article — has no sheet to open</b>, so the row itself is the switch and carries a tick.
+        That distinction is `chapters.count > 1`, which the app already computes.</p>
+      <p class="cnote">Picked books rise to the top; the rest stay below in dimmed type with a dash,
+        so the list is also the answer to "what have I picked".</p>
+      <p class="cnote">The total at the top of the group is the honest cost of the selection —
+        <b>4h 06m · 712 MB</b> — checked against the audio limit on the Storage page.</p>
+      <div class="cost"><b>New state</b> a persisted set of (document, chapters) to prepare. The
+        selection UI is the Book sheet's render mode; the difference is the bar's verb.</div></figcaption></figure>
+
+    <figure class="unit"><div class="ph tall">
+      <div class="bar"><span>5:26</span><span>98%</span></div>
+      <div class="safe" style="padding-top:22px">
+        <div class="card" style="background:var(--ra);box-shadow:0 -6px 30px rgba(0,0,0,.1);gap:14px">
+          <div class="row"><div class="cov a"></div>
+            <div class="grow"><span class="ttl">Thinking in Systems</span>
+              <span class="mt">Donella Meadows</span></div></div>
+
+          <div class="row"><p class="sh" style="flex:1">Chapters</p>
+            <span class="mt">Pick all</span></div>
+
+          <div style="display:flex;flex-direction:column">
+            <div class="lrow" style="padding:9px 0"><div class="grow">
+              <span class="rt">7 · Say What?</span><span class="mt">18 min</span></div>
+              <span class="wf">∿</span></div>
+            <div class="lrow" style="padding:9px 0"><div class="grow">
+              <span class="rt">8 · Living in a World of Systems</span><span class="mt">24 min</span></div>
+              <div class="radio on"></div></div>
+            <div class="lrow" style="padding:9px 0"><div class="grow">
+              <span class="rt">9 · Getting a Grip</span><span class="mt">21 min</span></div>
+              <div class="radio on"></div></div>
+            <div class="lrow" style="padding:9px 0"><div class="grow">
+              <span class="rt">10 · Leverage Points</span><span class="mt">31 min</span></div>
+              <div class="radio on"></div></div>
+            <div class="lrow" style="padding:9px 0"><div class="grow">
+              <span class="rt">11 · Dancing with Systems</span><span class="mt">16 min</span></div>
+              <div class="radio"></div></div>
+          </div>
+
+          <div style="margin-top:2px"><div class="bkey blue">Prepare 3 chapters</div></div>
+        </div>
+      </div>
+    </div>
+      <figcaption><div class="cname">C · THE CHAPTER SHEET</div>
+      <p class="cnote">The Book sheet's render mode, <b>unchanged but for the key</b>: radio marks,
+        the grey waveform on a chapter already on the device, "Pick all" in the header, one blue
+        key at the foot.</p>
+      <p class="cnote">The verb is the whole difference. Today it says <b>"Render 3 chapters"</b>
+        and spends the next ten minutes of battery. Here it says <b>"Prepare 3 chapters"</b> and
+        spends nothing until the phone is on a charger.</p>
+      <p class="cnote">Chapter 7 wears the waveform and no mark: it is already here, so there is
+        nothing to prepare.</p>
+      <div class="cost"><b>Reuse</b> `ChapterListView` in `.book` variant with `renderMarks` —
+        the same component, a different destination for the selection.</div></figcaption></figure>
+  </div>
+</section>
+
+<!-- ───────────────────────── WHAT THIS CHANGES ───────────────────────── -->
+<section>
+  <div class="shead"><div class="snum">03 / WHAT THIS CHANGES UNDERNEATH</div>
+    <h2>The one real mechanism change, and the two questions it raises</h2></div>
+
+  <p class="callout"><b>Prepare stops being a budget and becomes a selection.</b> Today
+    <code>RenderPolicy</code> tier 3 walks the continue-document then the Queue against one
+    <code>prepareBudgetSeconds</code>. Under this design "Keep up with my reading" is <i>the
+    resume chapter of every document</i> — a bound the policy already knows how to express (it is
+    the `manual` tier's chapter bound, applied to many documents) — and "Only what I pick" is an
+    explicit set. Neither needs hours.</p>
+
+  <table>
+    <tr><th>Open question</th><th>My call, unless you say otherwise</th></tr>
+    <tr><td><b>Does the hours budget survive at all?</b> "Everything in my Queue" has no equivalent
+      here — a reader who wants eight hours banked must now pick chapters by hand.</td>
+      <td>Let it go. A "Keep up with my reading" that covers every book's current chapter is already
+      more than three hours for most libraries, and picking is more honest than a number nobody can
+      translate. If you want the middle ground, "Keep up with my reading" could mean
+      <i>the current chapter and the next one</i>.</td></tr>
+    <tr><td><b>What happens when a picked chapter finishes rendering?</b> Does it stay picked
+      forever, or does the pick clear?</td>
+      <td>The pick clears when the chapter is on the device — so the list is always "still to do",
+      and a chapter deleted from Storage is simply no longer prepared. Otherwise the picks silently
+      accumulate into a list nobody prunes.</td></tr>
+    <tr><td><b>Overnight, exactly.</b> iOS grants background time when it wants to.</td>
+      <td>Treat the window as a <i>refusal</i>, not a schedule: outside 11 PM–7 AM a granted task
+      finishes immediately. The promise we can keep is "never while you're using it", which is the
+      one worth making.</td></tr>
+  </table>
+
+  <div class="rec">
+    <p><b>Where I need you:</b> the three rows above, plus two small ones on Storage — covers in the
+    per-document list or not, and slider or pills for the limit. Say the word on those and I'll
+    write the spec.</p>
+  </div>
+</section>
+
+</div>

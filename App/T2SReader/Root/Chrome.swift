@@ -12,6 +12,9 @@ final class Chrome {
     /// Set from outside Settings to push Storage: the "voice model removed" toast's action, which
     /// has to reach a page two levels in from wherever the reader tapped play.
     var opensStorage = false
+    /// Set by Settings' "Show the welcome again": the root clears the record and presents the
+    /// welcome over whatever page is up, then puts this back.
+    var showsWelcome = false
 }
 
 /// Stops the page swipe while a subpage is up. SwiftUI's paged `TabView` is a

@@ -95,6 +95,12 @@ struct PreferencesPage: View {
                         }
                     }
                     section("About") {
+                        // The welcome shows once per install; this is the way back to it, for a
+                        // reader who skipped it and for a photograph.
+                        Button { chrome.showsWelcome = true } label: {
+                            row("Show the welcome again")
+                        }
+                        .buttonStyle(.plain)
                         row("Fonts: Inter (SIL OFL) · Reader: Readium (BSD-3) · Extraction: Readability (Apache-2.0)")
                     }
                     Color.clear.frame(height: Spacing.bottomClearance)

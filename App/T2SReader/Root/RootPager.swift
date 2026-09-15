@@ -201,6 +201,14 @@ struct RootPager: View {
         // where it comes back into view instead: swiping to Home, closing the Reader over it, and a
         // chapter turning under a Home that is already on screen.
         .onChange(of: page) { _, shown in if shown == .queue { refreshHome() } }
+        // Settings' "Show the welcome again" (`Chrome.showsWelcome`): forget that it was seen and
+        // present it now, over Settings.
+        .onChange(of: chrome.showsWelcome) { _, wanted in
+            guard wanted else { return }
+            chrome.showsWelcome = false
+            OnboardingRecord.clear(defaults: .standard)
+            presentWelcomeIfNeeded()
+        }
         .onChange(of: env.player.chapterIndex) { _, _ in
             if page == .queue, readerDocument == nil { refreshHome() }
         }

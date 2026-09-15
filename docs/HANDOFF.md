@@ -28,13 +28,24 @@ short line in its voice, and Alice's longer passage in all five voices for the v
 manifest is the one source of what is said; edit it and rerun. Mind the glob: the manifest's name
 matches `onboarding-*.json`, so never `rm` that pattern in the resources folder.
 
+**Revised the same evening, after the owner studied Queue's field on Mobbin:** the crowd is
+continuous depth now (each cover's own distance sets size, speed, blur and dimness together, scattered
+past the edges, a few small ones sharp), it is 24 real Standard Ebooks covers (public domain, CC0 —
+`scripts/fetch-onboarding-covers.sh` reads the manifest's `standardEbooks` paths, fetches and
+downscales to 600 px; the row is in `docs/licenses.md`), seven books speak on the way up and the hero
+is silent until the reader taps Play under it (the ATC reference's "listen to this replay"), and the
+scene follows the app theme rather than forcing dark. The manifest is now the one place a book is
+added: an entry with a Standard Ebooks path, and optionally a voice and a line; then the two scripts.
+Photographs in both themes on the private simulator — note the app pins its theme from the device on
+first launch, so a light photograph needs a fresh install with the simulator already light.
+
 **Next:** beat two (the hero's lines fading in with the word tint, the five voice pills, the default
-voice written), then the question, the three benefits, the Pro mock, the hero import into the Reader,
-Settings' "Show the welcome again", and covers of our own for the five books (they are lettered
-placeholders now). Two things learned on the way: the shared `T2S Sim` is launched every few seconds
-by whichever session is photographing, which cut the scene short — a second simulator, `T2S Onb`,
-was created for this work; and the Kokoro package tests' DerivedData was already warm, so a render
-run is about four minutes.
+voice written; Play currently speaks the passage in Heart and turns into Continue), then the question,
+the three benefits, the Pro mock, the hero import into the Reader, and Settings' "Show the welcome
+again". Two things learned on the way: the shared `T2S Sim` is launched every few seconds by whichever
+session is photographing, which cut the scene short — a second simulator, `T2S Onb`, was created for
+this work; and the Kokoro package tests' DerivedData was already warm, so a render run is about four
+minutes.
 
 ## The cloud route is the build's, not the reader's (2026-09-13)
 

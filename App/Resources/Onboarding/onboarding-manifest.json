@@ -1,11 +1,19 @@
 {
-  "hero": "alice",
+  "hero": "alices-adventures-in-wonderland",
   "voices": ["af_heart", "af_bella", "af_nicole", "am_michael", "am_fenrir"],
   "books": [
+    {
+      "id": "alices-adventures-in-wonderland",
+      "title": "Alice's Adventures in Wonderland",
+      "author": "Lewis Carroll",
+      "standardEbooks": "lewis-carroll/alices-adventures-in-wonderland",
+      "passage": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it, \"and what is the use of a book,\" thought Alice, \"without pictures or conversations?\""
+    },
     {
       "id": "moby-dick",
       "title": "Moby-Dick",
       "author": "Herman Melville",
+      "standardEbooks": "herman-melville/moby-dick",
       "voice": "am_michael",
       "line": "Call me Ishmael."
     },
@@ -13,30 +21,65 @@
       "id": "pride-and-prejudice",
       "title": "Pride and Prejudice",
       "author": "Jane Austen",
+      "standardEbooks": "jane-austen/pride-and-prejudice",
       "voice": "af_bella",
       "line": "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife."
     },
     {
-      "id": "tale-of-two-cities",
+      "id": "a-tale-of-two-cities",
       "title": "A Tale of Two Cities",
       "author": "Charles Dickens",
+      "standardEbooks": "charles-dickens/a-tale-of-two-cities",
       "voice": "am_fenrir",
-      "line": "It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness."
+      "line": "It was the best of times, it was the worst of times."
     },
     {
-      "id": "great-gatsby",
+      "id": "the-great-gatsby",
       "title": "The Great Gatsby",
       "author": "F. Scott Fitzgerald",
+      "standardEbooks": "f-scott-fitzgerald/the-great-gatsby",
       "voice": "af_nicole",
       "line": "In my younger and more vulnerable years my father gave me some advice that I've been turning over in my mind ever since."
     },
     {
-      "id": "alice",
-      "title": "Alice's Adventures in Wonderland",
-      "author": "Lewis Carroll",
-      "voice": "af_heart",
-      "line": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do.",
-      "passage": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it, \"and what is the use of a book,\" thought Alice, \"without pictures or conversations?\""
-    }
+      "id": "anna-karenina",
+      "title": "Anna Karenina",
+      "author": "Leo Tolstoy",
+      "standardEbooks": "leo-tolstoy/anna-karenina",
+      "voice": "bf_emma",
+      "line": "All happy families are alike; each unhappy family is unhappy in its own way."
+    },
+    {
+      "id": "jane-eyre",
+      "title": "Jane Eyre",
+      "author": "Charlotte Brontë",
+      "standardEbooks": "charlotte-bronte/jane-eyre",
+      "voice": "af_sarah",
+      "line": "There was no possibility of taking a walk that day."
+    },
+    {
+      "id": "the-adventures-of-sherlock-holmes",
+      "title": "The Adventures of Sherlock Holmes",
+      "author": "Arthur Conan Doyle",
+      "standardEbooks": "arthur-conan-doyle/the-adventures-of-sherlock-holmes",
+      "voice": "bm_george",
+      "line": "To Sherlock Holmes she is always the woman."
+    },
+    { "id": "frankenstein", "title": "Frankenstein", "author": "Mary Shelley", "standardEbooks": "mary-shelley/frankenstein" },
+    { "id": "dracula", "title": "Dracula", "author": "Bram Stoker", "standardEbooks": "bram-stoker/dracula" },
+    { "id": "the-picture-of-dorian-gray", "title": "The Picture of Dorian Gray", "author": "Oscar Wilde", "standardEbooks": "oscar-wilde/the-picture-of-dorian-gray" },
+    { "id": "wuthering-heights", "title": "Wuthering Heights", "author": "Emily Brontë", "standardEbooks": "emily-bronte/wuthering-heights" },
+    { "id": "treasure-island", "title": "Treasure Island", "author": "Robert Louis Stevenson", "standardEbooks": "robert-louis-stevenson/treasure-island" },
+    { "id": "the-call-of-the-wild", "title": "The Call of the Wild", "author": "Jack London", "standardEbooks": "jack-london/the-call-of-the-wild" },
+    { "id": "little-women", "title": "Little Women", "author": "Louisa May Alcott", "standardEbooks": "louisa-may-alcott/little-women" },
+    { "id": "the-time-machine", "title": "The Time Machine", "author": "H. G. Wells", "standardEbooks": "h-g-wells/the-time-machine" },
+    { "id": "great-expectations", "title": "Great Expectations", "author": "Charles Dickens", "standardEbooks": "charles-dickens/great-expectations" },
+    { "id": "emma", "title": "Emma", "author": "Jane Austen", "standardEbooks": "jane-austen/emma" },
+    { "id": "the-wonderful-wizard-of-oz", "title": "The Wonderful Wizard of Oz", "author": "L. Frank Baum", "standardEbooks": "l-frank-baum/the-wonderful-wizard-of-oz" },
+    { "id": "heart-of-darkness", "title": "Heart of Darkness", "author": "Joseph Conrad", "standardEbooks": "joseph-conrad/heart-of-darkness" },
+    { "id": "the-adventures-of-huckleberry-finn", "title": "The Adventures of Huckleberry Finn", "author": "Mark Twain", "standardEbooks": "mark-twain/the-adventures-of-huckleberry-finn" },
+    { "id": "the-wind-in-the-willows", "title": "The Wind in the Willows", "author": "Kenneth Grahame", "standardEbooks": "kenneth-grahame/the-wind-in-the-willows" },
+    { "id": "crime-and-punishment", "title": "Crime and Punishment", "author": "Fyodor Dostoevsky", "standardEbooks": "fyodor-dostoevsky/crime-and-punishment" },
+    { "id": "the-odyssey", "title": "The Odyssey", "author": "Homer", "standardEbooks": "homer/the-odyssey" }
   ]
 }

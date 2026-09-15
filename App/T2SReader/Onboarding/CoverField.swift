@@ -2,80 +2,86 @@
 import SwiftUI
 import T2SApp
 
-/// The welcome's first scene: the sample books rise through a field of covers in depth parallax
-/// while their opening lines chatter past (design: `docs/superpowers/specs/2026-09-14-onboarding-design.md`;
-/// the owner's references, the Queue podcast app's rising cards and the ATC replay app's card that
-/// settles out of the drift). Depth, not motion sensing — far cards are small, blurred and slow,
-/// near cards large, sharp and fast, all drifting upward on one axis — and no tap: the voices
-/// start with the cards.
+/// The welcome's first scene: a crowd of book covers drifting upward in depth parallax, and the
+/// few that speak rising sharp through it (design: `docs/superpowers/specs/2026-09-14-onboarding-design.md`;
+/// the owner's references, the Queue podcast app's field of covers and the ATC replay app's card
+/// that settles out of the drift). Depth, not motion sensing, and no tap: the voices start with
+/// the cards.
 ///
-/// Everything is a function of `elapsed` on the scene's clock, through `RisingChoreography`: the
-/// card at the near, sharp layer is the one whose voice is up, and its voice's volume is the
-/// card's height on screen. The last book is the hero. It rises the same way but eases to rest
-/// top centre instead of leaving, and the field dims out behind it, the way the ATC app's red
-/// card is left alone on black.
+/// The crowd is continuous depth, the way Queue's is (the owner, 2026-09-14: "all books have
+/// different positions, parallax, sizes, there is no one blur plane and one visible plane"): every
+/// cover has its own distance, which sets its size, its speed, its blur and its dimness together,
+/// and they are scattered across the whole width with the edges cutting some off, so the field
+/// reads as wider than the phone. A few small ones are sharp, as a camera would have it. The
+/// placing is seeded from each cover's index, so the field is the same every launch.
 ///
-/// With Reduce Motion nothing travels: each book fades in and out at the centre for its slot, the
-/// field stands still and dim, and the hero fades in at its rest.
+/// The rising cards run on `RisingChoreography` through `elapsed`: each crosses the screen at the
+/// near, sharp layer while its voice is up. The last is the hero. It rises the same way but eases
+/// to rest top centre instead of leaving, and the crowd dims out behind it, the way the ATC app's
+/// red card is left alone on the ground.
+///
+/// With Reduce Motion nothing travels: each rising book fades in and out at the centre for its
+/// slot, the crowd stands still and dim, and the hero fades in at its rest.
 struct CoverField: View {
-    /// In rising order, the hero last.
-    var books: [OnboardingManifest.Book]
+    /// The books that rise, the hero last.
+    var rising: [OnboardingManifest.Book]
+    /// The books that only float.
+    var crowd: [OnboardingManifest.Book]
     var scene: RisingChoreography
     var elapsed: TimeInterval
 
     @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    static let nearHeight: CGFloat = 300
+    static let nearHeight: CGFloat = 280
     /// Where the hero rests, as a fraction of the height above the centre.
     static let heroRest: CGFloat = -0.16
-    /// How long the field takes to dim once the hero begins to settle.
-    static let fieldFade: TimeInterval = 1.1
+    /// How long the crowd takes to dim once the hero begins to settle.
+    static let crowdFade: TimeInterval = 1.1
 
-    /// The near layer's small variations per card, so five in a row do not read as one card
+    /// The near layer's small variations per card, so a run of them does not read as one card
     /// repeated: a lean and a shift, alternating.
-    private static let leans: [Double] = [-4, 3.5, -2.5, 4, 0]
-    private static let shifts: [CGFloat] = [-22, 18, -12, 24, 0]
+    private static let leans: [Double] = [-4, 3.5, -2.5, 4, -3, 2, 0]
+    private static let shifts: [CGFloat] = [-22, 18, -12, 24, -16, 10, 0]
 
-    /// The ambient field: which cover, how deep, where across the screen, how fast, and where on
-    /// its loop it starts. Fixed, so the choreography is the same every launch.
-    private struct FieldCard {
-        var book: Int
-        var layer: Layer
-        var x: CGFloat        // fraction of the width from the centre
-        var speed: CGFloat    // points per second, upward
-        var phase: CGFloat    // fraction of the loop
+    /// One floating cover: where it is in depth and across the screen, how fast it drifts, and
+    /// whether it is one of the sharp few. All derived from the index, once.
+    private struct Placement {
+        var depth: Double      // 0 far … 1 near
+        var x: CGFloat         // fraction of the width from the centre; beyond ±0.5 is off the edge
+        var phase: CGFloat     // fraction of the loop it starts at
         var lean: Double
-    }
+        var isSharp: Bool
 
-    private enum Layer {
-        case far, middle
-        var height: CGFloat { self == .far ? 118 : 188 }
-        var blur: CGFloat { self == .far ? 14 : 6 }
-        var opacity: Double { self == .far ? 0.5 : 0.82 }
-    }
+        var height: CGFloat { 84 + CGFloat(depth) * 156 }
+        var speed: CGFloat { 9 + CGFloat(depth) * 36 }          // points per second, upward
+        var blur: CGFloat { isSharp ? 0 : 15 * CGFloat(pow(1 - depth, 1.3)) }
+        var opacity: Double { 0.45 + depth * 0.55 }
 
-    private static let field: [FieldCard] = [
-        FieldCard(book: 1, layer: .far, x: -0.34, speed: 14, phase: 0.05, lean: -9),
-        FieldCard(book: 3, layer: .far, x: 0.36, speed: 12, phase: 0.42, lean: 7),
-        FieldCard(book: 0, layer: .far, x: 0.08, speed: 16, phase: 0.72, lean: -5),
-        FieldCard(book: 2, layer: .middle, x: -0.40, speed: 30, phase: 0.28, lean: -8),
-        FieldCard(book: 4, layer: .middle, x: 0.42, speed: 26, phase: 0.62, lean: 10),
-        FieldCard(book: 1, layer: .middle, x: 0.30, speed: 34, phase: 0.90, lean: -6),
-        FieldCard(book: 3, layer: .far, x: -0.12, speed: 11, phase: 0.20, lean: 4),
-        FieldCard(book: 0, layer: .middle, x: -0.18, speed: 28, phase: 0.08, lean: 6),
-    ]
+        /// A small hash of the index, three ways, so the field is the same every launch.
+        init(index: Int) {
+            func unit(_ salt: UInt32) -> Double {
+                var h = UInt32(truncatingIfNeeded: index) &* 2_654_435_761 &+ salt &* 40_503
+                h ^= h >> 13; h = h &* 1_274_126_177; h ^= h >> 16
+                return Double(h % 10_007) / 10_007
+            }
+            depth = unit(1)
+            x = CGFloat(unit(2) - 0.5) * 1.15
+            phase = CGFloat(unit(3))
+            lean = (unit(4) - 0.5) * 24
+            isSharp = index % 7 == 3 && depth < 0.55
+        }
+    }
 
     var body: some View {
         GeometryReader { geo in
             let size = geo.size
             ZStack {
-                ForEach(Array(Self.field.enumerated()), id: \.offset) { _, card in
-                    if card.book < books.count {
-                        fieldCard(card, in: size)
-                    }
+                // Far to near, so a near cover overlaps a far one.
+                ForEach(Array(placedCrowd.enumerated()), id: \.offset) { _, placed in
+                    crowdCard(placed.book, at: placed.placement, in: size)
                 }
-                ForEach(Array(books.enumerated()), id: \.offset) { index, book in
+                ForEach(Array(rising.enumerated()), id: \.offset) { index, book in
                     nearCard(book, index: index, in: size)
                 }
             }
@@ -84,10 +90,16 @@ struct CoverField: View {
         .accessibilityHidden(true)
     }
 
-    // MARK: The near layer
+    private var placedCrowd: [(book: OnboardingManifest.Book, placement: Placement)] {
+        crowd.enumerated()
+            .map { (book: $0.element, placement: Placement(index: $0.offset)) }
+            .sorted { $0.placement.depth < $1.placement.depth }
+    }
 
-    private var fieldOpacity: Double {
-        let t = (elapsed - scene.settleStart) / Self.fieldFade
+    // MARK: The rising cards
+
+    private var crowdOpacity: Double {
+        let t = (elapsed - scene.settleStart) / Self.crowdFade
         return 1 - min(max(t, 0), 1)
     }
 
@@ -97,7 +109,7 @@ struct CoverField: View {
         let p = scene.progress(of: index, at: elapsed)
         let travel = Self.nearHeight + size.height   // from fully below to fully above
         let cover = BookCover(relativePath: nil, paths: env.paths, height: Self.nearHeight,
-                              title: book.title, author: book.author)
+                              title: book.title, author: book.author, asset: book.coverName)
 
         if reduceMotion {
             // In place, fading: on for its slot, the hero on for good at its rest.
@@ -126,22 +138,21 @@ struct CoverField: View {
         }
     }
 
-    // MARK: The field
+    // MARK: The crowd
 
     @ViewBuilder
-    private func fieldCard(_ card: FieldCard, in size: CGSize) -> some View {
-        let book = books[card.book]
-        let loop = size.height + card.layer.height * 1.5
-        let travelled = reduceMotion ? 0 : card.speed * elapsed
+    private func crowdCard(_ book: OnboardingManifest.Book, at placement: Placement, in size: CGSize) -> some View {
+        let loop = size.height + placement.height * 1.6
+        let travelled = reduceMotion ? 0 : placement.speed * elapsed
         // Start `phase` of the way up the loop and drift upward; wrap to below when past the top.
-        let along = (card.phase * loop + travelled).truncatingRemainder(dividingBy: loop)
+        let along = (placement.phase * loop + travelled).truncatingRemainder(dividingBy: loop)
         let y = loop / 2 - along
-        BookCover(relativePath: nil, paths: env.paths, height: card.layer.height,
-                  title: book.title, author: book.author)
-            .rotationEffect(.degrees(card.lean))
-            .blur(radius: card.layer.blur)
-            .offset(x: size.width * card.x, y: y)
-            .opacity(card.layer.opacity * (reduceMotion ? 0.6 : 1) * fieldOpacity)
+        BookCover(relativePath: nil, paths: env.paths, height: placement.height,
+                  title: book.title, author: book.author, asset: book.coverName)
+            .rotationEffect(.degrees(placement.lean))
+            .blur(radius: placement.blur)
+            .offset(x: size.width * placement.x, y: y)
+            .opacity(placement.opacity * (reduceMotion ? 0.6 : 1) * crowdOpacity)
     }
 
     private func smooth(_ x: Double) -> Double {

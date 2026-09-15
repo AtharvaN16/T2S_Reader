@@ -3,33 +3,44 @@ import SwiftUI
 import T2SApp
 
 /// The welcome, presented over the pager on a fresh install (design:
-/// `docs/superpowers/specs/2026-09-14-onboarding-design.md`). This is the first scene — the covers
-/// rising to their chattering lines and the hero settling — with Skip from the first frame. The
-/// voice row, the question, the benefits and the Pro mock follow in later slices; until then the
-/// settled hero is followed by one Continue, which ends the flow the way Skip does.
+/// `docs/superpowers/specs/2026-09-14-onboarding-design.md`). This is the first scene — the crowd
+/// of covers, the voiced few rising through it with their lines chattering, and the hero settling
+/// silent — with Skip from the first frame. The settled hero waits for Play, the ATC reference's
+/// "listen to this replay": the reader chooses the clean listen. For now Play speaks the hero's
+/// passage in the default voice and is followed by Continue; the voice row, the question, the
+/// benefits and the Pro mock follow in later slices.
 ///
 /// The scene runs on the wall clock from the moment it appears, through `RisingChoreography`:
-/// the field draws from it and the player takes its gains from it, once a frame.
-/// Dark whatever the theme: the scene is covers on black.
+/// the field draws from it and the chatter takes its gains from it, once a frame. It follows the
+/// app's theme — covers on the ground, light or dark (the owner, 2026-09-14).
 struct OnboardingCover: View {
     var manifest: OnboardingManifest
     var onFinish: () -> Void
 
-    @State private var player: ClipPlayer
+    @State private var chatter: ClipPlayer
+    @State private var solo = SoloClipPlayer()
     @State private var startedAt: Date?
-    private let books: [OnboardingManifest.Book]
+    @State private var heroPlayed = false
+    private let rising: [OnboardingManifest.Book]
+    private let crowd: [OnboardingManifest.Book]
     private let scene: RisingChoreography
 
     init(manifest: OnboardingManifest, onFinish: @escaping () -> Void) {
         self.manifest = manifest
         self.onFinish = onFinish
-        let rising = manifest.risingOrder
-        books = rising
-        let player = ClipPlayer(urls: rising.map {
-            Bundle.main.url(forResource: OnboardingManifest.clipName(book: $0.id, voice: $0.voice), withExtension: "m4a")
-        })
-        _player = State(initialValue: player)
-        scene = RisingChoreography(count: rising.count, heroDuration: player.durations.last ?? ClipPlayer.fallbackDuration)
+        rising = manifest.risingOrder
+        crowd = manifest.crowd
+        _chatter = State(initialValue: ClipPlayer(urls: rising.map { book in
+            guard let voice = book.voice else { return nil }
+            return Bundle.main.url(forResource: OnboardingManifest.clipName(book: book.id, voice: voice), withExtension: "m4a")
+        }))
+        scene = RisingChoreography(count: rising.count)
+    }
+
+    /// The hero's passage in the row's first voice, the app's default.
+    private var heroClip: URL? {
+        guard let hero = manifest.heroBook, let voice = manifest.voices.first else { return nil }
+        return Bundle.main.url(forResource: OnboardingManifest.passageClipName(book: hero.id, voice: voice), withExtension: "m4a")
     }
 
     var body: some View {
@@ -37,8 +48,8 @@ struct OnboardingCover: View {
             let elapsed = startedAt.map { context.date.timeIntervalSince($0) } ?? 0
             let settled = elapsed >= scene.total
             ZStack {
-                Color.black.ignoresSafeArea()
-                CoverField(books: books, scene: scene, elapsed: elapsed)
+                Tokens.ground.ignoresSafeArea()
+                CoverField(rising: rising, crowd: crowd, scene: scene, elapsed: elapsed)
                     .ignoresSafeArea()
                 VStack {
                     HStack {
@@ -49,26 +60,39 @@ struct OnboardingCover: View {
                     .padding(.horizontal, Spacing.margin)
                     Spacer()
                     if settled {
-                        BarButton(label: "Continue") { finish() }
-                            .padding(.horizontal, Spacing.margin)
-                            .padding(.bottom, Spacing.section)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                        VStack(spacing: Spacing.row) {
+                            if !heroPlayed {
+                                Text("Hear the first lines")
+                                    .typeRole(.rowTitle)
+                                    .foregroundStyle(Tokens.ink2)
+                                Pill(label: "Play", glyph: "play.fill", style: .accent) {
+                                    heroPlayed = true
+                                    solo.play(heroClip)
+                                }
+                            } else {
+                                BarButton(label: "Continue") { finish() }
+                            }
+                        }
+                        .padding(.horizontal, Spacing.margin)
+                        .padding(.bottom, Spacing.section)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                 }
                 .animation(.snappy, value: settled)
+                .animation(.snappy, value: heroPlayed)
             }
             .onChange(of: context.date) { _, _ in
-                // The player is driven here rather than in the body, which must not mutate.
-                if startedAt != nil { player.update(gains: scene.gains(at: elapsed)) }
+                // The chatter is driven here rather than in the body, which must not mutate.
+                if startedAt != nil { chatter.update(gains: scene.gains(at: elapsed)) }
             }
         }
-        .preferredColorScheme(.dark)
         .onAppear { startedAt = Date() }
-        .onDisappear { player.stop() }
+        .onDisappear { chatter.stop(); solo.stop() }
     }
 
     private func finish() {
-        player.stop()
+        chatter.stop()
+        solo.stop()
         onFinish()
     }
 }

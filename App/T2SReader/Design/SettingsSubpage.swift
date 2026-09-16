@@ -16,6 +16,7 @@ import UIKit
 struct SettingsSubpage: ViewModifier {
     @Environment(\.dismiss) private var dismiss
     @Environment(Chrome.self) private var chrome
+    @Environment(AppEnvironment.self) private var env
 
     func body(content: Content) -> some View {
         content
@@ -33,13 +34,6 @@ struct SettingsSubpage: ViewModifier {
             .toolbar(.hidden, for: .navigationBar)
             .onAppear { chrome.subpageDepth += 1 }
             .onDisappear { chrome.subpageDepth -= 1 }
-            .overlay(alignment: .topLeading) {
-                Button { dismiss() } label: { CircleGlyph(systemName: "chevron.left") }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Back")
-                    .padding(.leading, Spacing.margin)
-                    .padding(.top, 12)
-            }
             // The bar plain, and measured. An overlay's reader sits inside the safe area and
             // reports its inset as zero, so `TopFade(inset:)` from it was a 30 pt bar at the status
             // bar's foot rather than one that holds through it; the content's top in the window is
@@ -56,8 +50,31 @@ struct SettingsSubpage: ViewModifier {
             .overlay {
                 GeometryReader { geo in
                     let top = geo.frame(in: .global).minY
-                    TopFade(inset: top).offset(y: -top)
+                    // The band's ramp, exactly as the root pages grow it. A pushed page used to
+                    // draw the plain 30 pt edge whatever was happening, so while a warm-up was up
+                    // its title stood crisp and hard-edged under the rows while every root page's
+                    // was veiled and read through — one element, two looks, decided by which screen
+                    // you happened to be on (owner, 2026-09-15: "the other pages don't have the
+                    // veil effect").
+                    let warming = env.appStatus.isShowing
+                    TopFade(inset: top,
+                            extra: warming ? TopFade.warmSolid : 0,
+                            fade: warming ? TopFade.warmFade : TopFade.fadeHeight)
+                        .offset(y: -top)
+                        .animation(.easeInOut(duration: StatusGlow.leave), value: warming)
                 }
+            }
+            // **After the ground, not before it.** This was applied first, so the fade above drew
+            // over it — harmless at 30 pt, where the circle sat in the ramp and stayed legible, and
+            // not harmless at all once the band grew that fade to its full 36 pt of solid: the
+            // circle went under it and a pushed page had no visible way back for as long as a
+            // warm-up lasted. A page's own control belongs above the page's own ground.
+            .overlay(alignment: .topLeading) {
+                Button { dismiss() } label: { CircleGlyph(systemName: "chevron.left") }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Back")
+                    .padding(.leading, Spacing.margin)
+                    .padding(.top, 12)
             }
     }
 }

@@ -232,6 +232,18 @@ struct RootPager: View {
             guard let job = env.chapterRenderer.lastFinished else { return }
             showRenderToast(job)
         }
+        // The card follows the queue even when nothing finished — a batch starting, a hold
+        // arriving, the last job leaving. `justFinished: nil` keeps every one of these silent.
+        .onChange(of: env.chapterRenderer.queue.count) { _, _ in updateRenderActivity(justFinished: nil) }
+        .onChange(of: env.chapterRenderer.hold) { _, _ in updateRenderActivity(justFinished: nil) }
+        // The sleep card needs no updates while it counts — the view ticks from the deadline on
+        // its own — so this fires only when the timer starts, changes or is cancelled.
+        .onChange(of: env.sleepTimer.active) { _, option in
+            let reading = SleepCardReading.make(option: option,
+                                                deadline: env.sleepTimer.deadlineDate,
+                                                chapterTitle: env.sleepTimer.sleepChapterTitle)
+            env.activities.updateSleep(reading, bookTitle: env.player.current?.document.title ?? "")
+        }
         .onChange(of: env.preferences.defaultRate) { _, rate in
             env.player.setRate(rate)
         }
@@ -351,38 +363,45 @@ struct RootPager: View {
         Task { await env.libraryModel.refresh() }
     }
 
-    /// The one message a finished chapter earns, with the one thing worth doing about it: audio
-    /// that is ready is ready *to play*, so the toast offers to play it. The cover carries the
-    /// book, which frees the line under the headline to name the chapter alone.
+    /// The one message a finished chapter earns, sent to exactly one surface.
+    ///
+    /// App on screen: the capsule at the top says it, wherever in the app the reader is — which
+    /// is the whole reason it exists, since the Book sheet's progress box only exists while that
+    /// sheet is open. App backgrounded: the Live Activity alerts instead. Never both (owner,
+    /// 2026-09-16).
     private func showRenderToast(_ job: ChapterRenderJob) {
         guard let book = env.libraryModel.summaries.first(where: { $0.id == job.documentID }) else { return }
         let cover = ToastContent.Cover(relativePath: book.document.coverImagePath,
                                        title: book.document.title,
                                        isPDF: book.document.sourceType == .pdf)
         let chapters = env.libraryModel.progress(for: book.id)?.chapterCount ?? 0
-        // A document with one chapter is not a book with a chapter in it — an article, or a PDF the
-        // reader imported — and its one piece has no name worth printing, so the line takes the
-        // document's own title instead.
-        let hasChapters = chapters > 1
-        let name = hasChapters ? ChapterLabel.text(for: job.title, ordinal: job.chapterIndex + 1)
-                               : book.document.title
+        let message = ChapterReadyMessage.make(job: job, documentTitle: book.document.title,
+                                               chapterCount: chapters)
+        let play: (() -> Void)? = message.isFailure
+            ? nil
+            : { playRendered(book, chapter: chapters > 1 ? job.chapterIndex : nil) }
 
-        if case .failed(let message) = job.state {
-            env.toasts.show(ToastContent(title: hasChapters ? "Chapter couldn't be rendered"
-                                                            : "Couldn't be rendered",
-                                         detail: message, actionLabel: nil, cover: cover))
-            return
+        switch Announcement.route(isForeground: scenePhase == .active) {
+        case .island:
+            env.island.show(message, cover: cover, action: play)
+        case .liveActivity:
+            updateRenderActivity(justFinished: message.isFailure ? nil : message.detail)
         }
-        // The sentence, not the label: "Chapter 4: The Siege of Delhi has finished rendering" says
-        // both which one and what happened to it, where a bare name left the second half to the
-        // headline (owner, 2026-09-14).
-        env.toasts.show(ToastContent(title: hasChapters ? "Chapter ready to play"
-                                                        : "Document ready to play",
-                                     detail: "\(name) has finished rendering",
-                                     actionLabel: "Play", actionGlyph: "play.fill",
-                                     actionIsGlyph: true, cover: cover)) {
-            playRendered(book, chapter: hasChapters ? job.chapterIndex : nil)
+    }
+
+    /// Pushes the queue's current state to the Live Activity. `justFinished` is what makes the
+    /// update break through: a chapter landing is the only thing worth a banner.
+    private func updateRenderActivity(justFinished: String?) {
+        let jobs = env.chapterRenderer.queue
+        let book = jobs.first.flatMap { job in
+            env.libraryModel.summaries.first { $0.id == job.documentID }
         }
+        let title = book?.document.title ?? ""
+        let reading = RenderCardReading.make(jobs: jobs, bookTitle: title,
+                                             hold: env.chapterRenderer.hold,
+                                             justFinished: justFinished)
+        env.activities.updateRender(reading, bookTitle: title,
+                                    coverPath: book?.document.coverImagePath)
     }
 
     /// Opens the book and starts it, from the chapter that was just made when there is one.

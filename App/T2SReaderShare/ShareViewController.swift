@@ -120,7 +120,7 @@ private struct ShareImportView: View {
                 .frame(maxWidth: .infinity)
             }
             Spacer(minLength: 24)
-            RaisedKey(label: "Add", busyLabel: service.status == .importing ? "Adding…" : nil, action: add)
+            RaisedKey(label: "Add", glyph: "plus", busyLabel: service.status == .importing ? "Adding…" : nil, action: add)
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -226,6 +226,7 @@ private struct ShareMark: View {
 /// shows, because a raised key that does nothing would be a lie.
 private struct RaisedKey: View {
     var label: String
+    var glyph: String? = nil
     var busyLabel: String? = nil
     var action: () -> Void
 
@@ -234,6 +235,7 @@ private struct RaisedKey: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 if busy { ProgressView().tint(ShareTokens.ink2) }
+                else if let glyph { Image(systemName: glyph).font(.system(size: 15, weight: .bold)) }
                 Text(busyLabel ?? label).font(.headline)
             }
             .lineLimit(1)

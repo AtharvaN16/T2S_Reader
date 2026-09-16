@@ -46,7 +46,13 @@ struct SleepActivityWidget: Widget {
     @ViewBuilder
     private func countdown(_ state: SleepActivityAttributes.ContentState) -> some View {
         if let deadline = state.deadline {
-            Text(timerInterval: Date.now...deadline, countsDown: true)
+            // Clamped, because `Date.now...deadline` *traps* once the deadline is in the past —
+            // "Range requires lowerBound <= upperBound" — and nothing guarantees the activity was
+            // ended in time. `SleepTimer.tick` runs from the app's ticker, which stops being
+            // serviced the moment iOS suspends the app, and a paused-and-pocketed app with a live
+            // sleep timer is exactly what this card is for. The extension re-renders on unlock and
+            // would crash there (review I5). Settled, it reads 0:00, which is the truth.
+            Text(timerInterval: min(Date.now, deadline)...deadline, countsDown: true)
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
         } else {

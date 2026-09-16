@@ -21,11 +21,27 @@ struct MockIsland: View {
     /// corner radius so the two silhouettes are continuous.
     private var hasIsland: Bool { IslandGeometry.deviceHasIsland }
 
+    /// The safe-area top inset on every Dynamic Island device: a 54 pt status bar plus 5 pt.
+    /// The system draws its clock and glyphs somewhere in here, on top of every window
+    /// including this capsule's, so the capsule's own words must start no higher than this.
+    private static let statusBarInset: CGFloat = 59
+
+    /// Space between the capsule's background top (anchored at `IslandGeometry.cutoutTop`, so
+    /// the capsule reads as a continuation of the real cutout) and the content's top. On an
+    /// island device this is padded out so the content clears the status bar; the background
+    /// itself does not move, so the capsule simply grows taller. On a device with no island the
+    /// content already sits below the status bar via the outer top padding, so this stays the
+    /// original, tighter inset.
+    private var contentTopInset: CGFloat {
+        hasIsland ? Self.statusBarInset - IslandGeometry.cutoutTop : 14
+    }
+
     var body: some View {
         content
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.top, contentTopInset)
+            .padding(.bottom, 14)
             .background(
                 RoundedRectangle(cornerRadius: hasIsland ? IslandGeometry.cutoutHeight : 22,
                                  style: .continuous)

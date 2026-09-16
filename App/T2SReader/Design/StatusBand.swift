@@ -1,5 +1,6 @@
 // App/T2SReader/Design/StatusBand.swift
 import Foundation
+import Observation
 import SwiftUI
 import T2SApp
 
@@ -26,7 +27,10 @@ import T2SApp
 /// This file only draws it.
 struct StatusRows: View {
     @Environment(AppEnvironment.self) private var env
-    @Environment(\.readerPalette) private var palette
+    /// The band's colours, from the app's own object rather than from `\.readerPalette`: these
+    /// rows are drawn in a window of their own, which inherits no environment. See
+    /// `StatusAppearance`.
+    private var palette: ReaderPalette { env.statusAppearance.palette }
     /// The safe-area top inset, from a host whose `GeometryProxy` still reports it: this view
     /// spans the screen with `ignoresSafeArea`, and a proxy under that reports the insets it now
     /// covers as zero.
@@ -185,20 +189,26 @@ struct StatusRows: View {
 }
 
 /// The status band: both lit rims and the three rows, laid over whatever the screen has already
-/// painted.
+/// painted — and, since 2026-09-15, drawn in a window of its own rather than in any page's view
+/// tree. `StatusBandHost` puts it there; the note on `StatusBandWindow.swift` says why a window.
 ///
 /// **It does not own the ground the rows stand on, and that is on purpose.** The obvious design
 /// has the band paint its own `TopFade`, and it was written that way first. It cannot work: the
-/// three hosts want three different grounds. The Reader wants solid through the rows' full reach,
-/// because `topBar` brings its own ground and picks up where they end. The root pager wants its
-/// solid stopped short at 36 and a 116 pt ramp below it, because the page title behind it scrolls
-/// and has to be read *through* the fade rather than covered by it. A pushed Settings page wants
-/// the measured, offset one it already has, because UIKit has spent its top inset and a plain
-/// `ignoresSafeArea` there is a no-op. A band that painted one ground for all three would have
-/// covered the root pages' titles — the exact defect `TopFade.warmSolid` was tuned to avoid.
+/// three surfaces that show the band want three different grounds. The Reader wants solid through
+/// the rows' full reach, because `topBar` brings its own ground and picks up where they end. The
+/// root pager wants its solid stopped short at 36 and a 116 pt ramp below it, because the page
+/// title behind it scrolls and has to be read *through* the fade rather than covered by it. A
+/// pushed Settings page wants the measured, offset one it already has, because UIKit has spent its
+/// top inset and a plain `ignoresSafeArea` there is a no-op. A band that painted one ground for all
+/// three would have covered the root pages' titles — the exact defect `TopFade.warmSolid` was tuned
+/// to avoid. So each host keeps the `TopFade` it already had, and the band is the light and the
+/// words. The Reader hands its own fade the book's paper, which is the whole reason `TopFade` takes
+/// a colour at all.
 ///
-/// So each host keeps the `TopFade` it already had, and the band is the light and the words. The
-/// colour is still fixed, because `TopFade` takes one now and the Reader hands it the book's paper.
+/// A second reason now, and a stronger one: those grounds cannot live up here even if they agreed.
+/// The Reader's ground must sit *under* the Reader's chrome and over the Reader's text; this window
+/// is above everything. A band that painted the Reader's ground from here would paint it over the
+/// book's title bar.
 ///
 /// **One layer, on top.** This is the arrangement `WarmUpVeil` arrived at the hard way. The light
 /// used to sit *behind* the pages with every ground bar painting a matching copy of the same ramp
@@ -206,39 +216,63 @@ struct StatusRows: View {
 /// not, the glow was cut off at the bar's foot with nothing in the code to say why. Drawn over the
 /// page instead, it needs nothing underneath to cooperate.
 ///
-/// **And one owner.** Every screen used to install this by hand — six `StatusRim`s, two `StatusRows`,
-/// two differently-configured `TopFade`s and three separate copies of the same fade animation, which
-/// had to agree on the same frame or the Reader's title stepped down into rows that were not there.
-/// A host says `.appStatusBand()` and nothing else.
-private struct StatusBand: ViewModifier {
+/// **And one owner — now literally one.** Every screen used to install this by hand: six
+/// `StatusRim`s, two `StatusRows`, two differently-configured `TopFade`s and three separate copies
+/// of the same fade animation, which had to agree on the same frame or the Reader's title stepped
+/// down into rows that were not there. That became one `.appStatusBand()` per host, and then this:
+/// no host says anything at all. The flags that modifier carried went with it, and they are worth
+/// recording because both were about *two bands existing*:
+///
+/// - `showsRows: false` was for a pushed Settings page, which shows the light alone while the root
+///   pager draws the rows over the push. With one band there is one set of rows and nothing is
+///   drawn over anything.
+/// - `showsRims: false` was for the root pager while a Settings subpage was up, because that page
+///   painted its own pair and **two transparent rims add**. Two opaque ramps hid this for months —
+///   the top one simply won — but a rim is a glow with no ground under it, so the Voice page wore
+///   twice the light below the bar's foot and a 30 pt step from one to two through its fade
+///   (owner, 2026-09-12: "there is a top fade messing with the glow"). One band in existence is the
+///   real fix for that, and the gate is gone because there is no longer a second pair to gate.
+///
+/// A pushed Settings page gains an edge it never had. The root pager's foot glow went with the
+/// push, so on the Voice page the light simply stopped at the top of the screen (owner, 2026-09-12:
+/// "there is no glow in the bottom"), and the page's own hand-placed pair could not fix it — the
+/// one place a rim still cannot reach from inside a page is the top of a pushed page, where UIKit
+/// has spent the inset (see `StatusRim`). One band above every presentation lights both edges of
+/// the screen wherever the reader is, and has no page's spent inset to work around.
+///
+/// The Reader is the surface that proves the point. It only ever had a copy of its own because a
+/// `fullScreenCover` is a separate presentation the pager's band could not reach into; without that
+/// copy, opening a book while the voice was still downloading took the status off the screen and
+/// left two glowing rims with nothing between them to say what they were for (owner, 2026-09-13:
+/// "it removes the warmup glow and progress indicator ... I need to be aware of the status"). A
+/// window is above every presentation, so there is nothing left to reach into.
+struct StatusBandOverlay: View {
     @Environment(AppEnvironment.self) private var env
-    /// Whether this host draws the rows. A pushed Settings page shows the light alone, as it
-    /// always has — the root pager draws the rows over the push.
-    var showsRows: Bool
 
-    /// Whether this host draws the rims.
-    ///
-    /// The root pager passes false while a Settings subpage is up, because that page paints its
-    /// own pair and **two transparent rims add**. Two opaque ramps hid this for months — the top
-    /// one simply won — but the rim is a glow with no ground under it, so the Voice page wore
-    /// twice the light below the bar's foot and a 30 pt step from one to two through its fade
-    /// (owner, 2026-09-12: "there is a top fade messing with the glow"). The old hand-placed pair
-    /// was gated for exactly this reason, and the gate has to survive the move into one modifier.
-    var showsRims: Bool
-
-    func body(content: Content) -> some View {
+    var body: some View {
         let showing = env.appStatus.isShowing
-        content
-            .overlay { if showsRims { rims } }
-            .overlay {
-                if showsRows {
-                    GeometryReader { geo in
-                        StatusRows(band: geo.frame(in: .global).minY)
-                    }
-                    .allowsHitTesting(false)
-                }
+        ZStack {
+            rims
+            // The safe-area inset the rows stand under, measured here rather than inside them:
+            // `StatusRows` spans the screen with `ignoresSafeArea`, and a proxy under that reports
+            // the inset it now covers as zero. This reader is the last view still inside it.
+            GeometryReader { geo in
+                StatusRows(band: geo.frame(in: .global).minY)
             }
-            .animation(.easeInOut(duration: StatusGlow.fadeOut), value: showing)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Belt and braces over `PassthroughWindow`: nothing in here is ever touchable, whatever
+        // this view is later hosted in.
+        .allowsHitTesting(false)
+        .animation(.easeInOut(duration: StatusGlow.fadeOut), value: showing)
+        // The app's light or dark, declared a second time, for the same reason the palette is
+        // handed across: `AppTheme` writes its override onto the window it is applied in
+        // (`WindowTheme`), and this is a different window. Without this a reader who had chosen
+        // dark on a light phone would get a band in light ink over a dark app — and, since the
+        // status bar takes its style from the frontmost window, a light status bar with it. `nil`
+        // for `.system`, which is the absence of an override rather than a third choice, so the
+        // device's own setting comes through exactly as it does everywhere else.
+        .preferredColorScheme(env.preferences.theme.colorScheme)
     }
 
     /// Both rims read one reading on one frame, so head and foot can never disagree about the
@@ -253,14 +287,29 @@ private struct StatusBand: ViewModifier {
     }
 }
 
-extension View {
-    /// Draws the app's status band over this surface: both lit rims, and the three rows.
-    ///
-    /// The ground under the rows is the host's own `TopFade` — see the note on `StatusBand` for
-    /// why the band cannot paint one that suits all three surfaces. Pass `showsRows: false` for a
-    /// surface that shows the light alone, and `showsRims: false` for one that is about to have
-    /// another surface pushed over it that paints its own.
-    func appStatusBand(showsRows: Bool = true, showsRims: Bool = true) -> some View {
-        modifier(StatusBand(showsRows: showsRows, showsRims: showsRims))
-    }
+/// What colour the band paints in, carried by hand because a window cannot inherit an environment.
+///
+/// The band has a palette at all for one reason: the Reader. Everywhere else in the app the paper
+/// *is* `ReaderPalette.app`, so the band's ink, its bar track and its light are the app's own greys
+/// and blue and nothing has to be told anything. Inside the Reader the page is one of sixteen
+/// papers, and a band that went on painting app grey put a white slab and a fixed blue across the
+/// top of a Cherry or Cobalt page — the defect the owner reported on 2026-09-15 ("the warm-up glow
+/// in the reader looks weird, it has like a different color sometimes"), which is invisible on the
+/// default Paper and glaring on the pop ones.
+///
+/// `@Environment(\.readerPalette)` answered that while the band was applied inside `ReaderPage`'s
+/// body. It cannot now: the band lives in its own `UIWindow` (`StatusBandHost`), and a window is
+/// the root of its own view tree — no environment value set anywhere in the app's window flows into
+/// it. So the Reader *pushes* its paper here when it appears and whenever the reader changes it,
+/// and puts `.app` back when it leaves, and every part of the band reads this one object.
+///
+/// It is deliberately the smallest possible object. Not "the Reader's state, shared" — one palette,
+/// written by whoever owns the screen, read by the band. Anything more and the band would start
+/// knowing which page is up, which is exactly what taking it out of the view tree was meant to end.
+@MainActor
+@Observable
+final class StatusAppearance {
+    /// The paper the band paints on. `.app` outside the Reader, which is the app's own greys, so
+    /// nothing outside the Reader has to set anything.
+    var palette: ReaderPalette = .app
 }

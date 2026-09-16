@@ -253,7 +253,10 @@ enum StatusRamp {
 /// colour they are ending on (`StatusBand`).
 struct StatusRim: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.readerPalette) private var palette
+    @Environment(AppEnvironment.self) private var env
+    /// The light's colours, from the app's own object rather than from `\.readerPalette`: the band
+    /// is drawn in a window of its own, which inherits no environment. See `StatusAppearance`.
+    private var palette: ReaderPalette { env.statusAppearance.palette }
     /// Which edge of the screen the lit rim faces.
     var edge: VerticalEdge = .bottom
     /// Nil while nothing is showing; the band's tone once there is a reading.

@@ -76,6 +76,15 @@ struct RootPager: View {
                 // A page pushed from Settings owns the screen (owner, 2026-09-10): the bar and
                 // its fill go, and `PagerLock` (in `PreferencesPage`) holds the pager still, so the
                 // only swipe left is the one back to Settings.
+                //
+                // Plain ground and nothing else. The status band's foot glow is laid over this
+                // whole stack from a window above it (`StatusBandHost`), so nothing down here has
+                // to paint a matching copy of the light for the two to meet without a join. It was
+                // the other way round until 2026-09-12 — a veil behind the pages, with every bar
+                // painting the same ramp into itself — and that only works while every layer
+                // between the veil and the bar stays transparent. Where one was not, the glow was
+                // cut off at the bar's foot with nothing in the code to say why (the Voice page's
+                // seam, 2026-09-10, and the cut the owner kept seeing here).
                 if !chrome.isSubpageOpen {
                     bottomFill(inset: geo.safeAreaInsets.bottom)
                         .transition(.opacity)
@@ -83,7 +92,7 @@ struct RootPager: View {
                 // The pager's own top edge, which it keeps whether or not a job is running: a root
                 // page always needs one. It is gated with a pushed page like the fill above — that
                 // page paints its own — and it is ground only. The light that goes over it is the
-                // status band's, at the foot of this stack.
+                // status band's, drawn in a window of its own above this one (`StatusBandHost`).
                 if !chrome.isSubpageOpen {
                     // The fade grows to hold the band's rows while they are up, and eases back on
                     // the band's own timing so the two leave together rather than the ground
@@ -119,34 +128,6 @@ struct RootPager: View {
                     .padding(.bottom, Spacing.grid + 152)
             }
             .animation(.snappy, value: chrome.isSubpageOpen)
-            // The status band — ground, both lit rims, the rows — in one line and laid over
-            // everything this stack has painted, `bottomFill` included.
-            //
-            // **On top, not underneath.** It used to be the other way round: a `WarmUpVeil` at the
-            // back of this stack, under the pages, with the bottom bar painting the same ramp into
-            // itself so the two met without a join. That only ever worked while every layer between
-            // the veil and the bar stayed transparent, and where one was not the glow was cut off at
-            // the bar's foot — the Voice page's seam of 2026-09-10, and the cut the owner kept
-            // seeing here. A rim is the glow with no ground under it, so laid on top it needs
-            // nothing underneath to cooperate: one layer, uncuttable, and the mini-player still
-            // rides over it. It is why `bottomFill` above is plain ground and nothing else.
-            //
-            // **Not gated on the subpage, where the hand-placed pair was.** Both rims used to go
-            // with a pushed page, because that page paints its own and this pair drew a second copy
-            // over them; two opaque ramps did not show it — the top one simply won — but two rims
-            // are transparent and *add*, so the Voice page wore twice the glow below the bar's foot
-            // and a 30 pt ramp from one to two through its fade (owner, 2026-09-12: "there is a top
-            // fade messing with the glow"). One modifier owns the arrangement now and a pushed page
-            // adopts it through the same door, so the overlap is the band's to settle rather than
-            // this stack's — worth a look under `T2S_WARMUP=1` on the Voice page before this ships.
-            // The rows were never gated either way: they belong wherever the reader is.
-            // The rims go with a pushed Settings page, exactly as the hand-placed pair did: that
-            // page paints its own, and two transparent rims add. Two opaque ramps hid this for
-            // months — the top one simply won — but the Voice page wore twice the light below the
-            // bar's foot and a 30 pt step from one to two through its fade (owner, 2026-09-12:
-            // "there is a top fade messing with the glow"). The rows are *not* gated: they belong
-            // wherever the reader is, and a pushed page draws none of its own.
-            .appStatusBand(showsRims: !chrome.isSubpageOpen)
         }
         .environment(chrome)
         .background(Tokens.ground.ignoresSafeArea())

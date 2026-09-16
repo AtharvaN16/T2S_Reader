@@ -25,6 +25,12 @@ struct T2SReaderApp: App {
                 RootPager()
                     .environment(environment)
                     .onAppear {
+                        // The status band, in a window one level above this one, for the life of
+                        // the app. Here rather than in a scene delegate: this is the first moment
+                        // the scene is certainly connected and the environment certainly exists,
+                        // and it costs the app no `UIApplicationDelegateAdaptor` it does not
+                        // otherwise have. `attach` is idempotent — this closure can run again.
+                        StatusBandHost.attach(to: environment)
                         environment.audioSession.activate(pausing: {
                                                               let wasPlaying = environment.coordinator.state == .playing || environment.coordinator.state == .catchingUp
                                                               environment.coordinator.pause()

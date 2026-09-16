@@ -42,13 +42,24 @@ enum Tokens {
     /// blue greys before it brightens. This one is azure-leaning — 216°, where blue is at its most
     /// awake — with the red channel at zero, so the spread between the channels is the whole 255
     /// and there is nothing left in it to dilute. Dark is untouched, on the owner's word.
-    static let glow = dynamic(light: 0x0066FF, dark: 0x5F84FF)
+    static let glow = dynamic(light: glowDeep, dark: glowLifted)
+    /// The blue's two shades as raw values, and the green's.
+    ///
+    /// A `Color` resolves by the system trait, which is the right answer everywhere but one: the
+    /// Reader's paper is a ground the app's light and dark do not describe — Cobalt's page is a mid
+    /// blue in *light* mode — so `ReaderPalette.glow` picks between these by the luminance of the
+    /// page the light will actually fall on. They live here, not there, so the blue has one home
+    /// and tuning it moves both the app's light and every paper's.
+    static let glowDeep: UInt32 = 0x0066FF
+    static let glowLifted: UInt32 = 0x5F84FF
+    static let glowReadyDeep: UInt32 = 0x12A150
+    static let glowReadyLifted: UInt32 = 0x37D97C
     static let glowSoft = dynamic(light: 0x0066FF, dark: 0x5F84FF, lightAlpha: 0.18, darkAlpha: 0.24)
     static let glowFaint = dynamic(light: 0x0066FF, dark: 0x5F84FF, lightAlpha: 0.08, darkAlpha: 0.14)
     /// The last beat of the warm-up, when the voice is ready (owner, 2026-09-10: "just as the model
     /// is ready, change the glow to green before ending the animation"): the same light, green — a
     /// deeper green than `positive`, which is a tick on a row, not a light on the screen's edge.
-    static let glowReady = dynamic(light: 0x12A150, dark: 0x37D97C)
+    static let glowReady = dynamic(light: glowReadyDeep, dark: glowReadyLifted)
     /// The raised key's face, lit from above: the reference's gradient, royal blue at the top rim
     /// falling to indigo at the foot. One object in both themes, like a book's cloth — a key does
     /// not change colour when the room does — but a touch lighter on black so its bevel still reads.

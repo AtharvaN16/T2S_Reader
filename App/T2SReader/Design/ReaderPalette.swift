@@ -49,15 +49,25 @@ struct ReaderPalette: Equatable {
     var positive: Color
     /// The status band's light while a job runs, and the colour its last beat ends on.
     ///
-    /// **The app's blue and green on every paper, including the pop ones.** The first cut had
-    /// the pop papers take `accent` and `positive` so the light would come from the paper
-    /// rather than clash with it — but both of those are `mixed(0.70)` in the pop branch below,
-    /// *the same value*, so the ending would have arrived in exactly the colour of the wait and
-    /// the whole last beat of a warm-up would have said nothing on six papers. The ending is
-    /// carried by hue, and a pop paper has already spent its hue on the page.
+    /// **The hue never moves: blue for the wait, green for done.** That pair is a learned signal —
+    /// a reader comes to know the blue as "the voice is warming up" — and a warm-up is one app-wide
+    /// event that surfaces on whatever screen you are on, so a light that changed hue with the
+    /// paper would change identity as you navigated between Home and a book (owner, 2026-09-15).
     ///
-    /// They are members rather than direct `Tokens` reads so that a paper *can* speak for the
-    /// light later, with a photograph in hand, without every call site changing again.
+    /// **What adapts is the shade, the way it already adapts to light and dark.** `Tokens.glow`
+    /// carries two blues — a deep `#0066FF` for a light ground and a lifted `#5F84FF` for a dark
+    /// one — because the same blue cannot read on both. A paper is a ground the app's own light and
+    /// dark do not describe: Cobalt's page is a mid blue in *light* mode, and the deep blue meant
+    /// for white all but vanished on it. So the shade is picked from the luminance of the page the
+    /// light will actually fall on, rather than from the system trait.
+    ///
+    /// This replaced a rule that took the hue from the paper, and the frames that killed it are
+    /// worth keeping. Deriving the light from the page guarantees the light and the page are the
+    /// same colour, which is the one thing a light must not be: Cherry's derived red over `#FF6B60`
+    /// disappeared as completely as Lime's green over `#7BE84F`, leaving a warm-up with no
+    /// indicator at all. Worse, on the green papers the *wait* wore the colour that means finished,
+    /// announcing "ready" for the whole minute it was not. Sepia's amber was genuinely lovely; it
+    /// was not worth the other fifteen.
     var glow: Color
     var glowReady: Color
     /// True when the chrome must come from the paper rather than from `Tokens`.
@@ -84,8 +94,12 @@ struct ReaderPalette: Equatable {
         unread = Self.dynamic(light: Self.mix(face.lightInk, face.lightPage, 0.30),
                               dark: Self.mix(face.darkInk, face.darkPage, 0.34))
         isPop = pop
-        glow = Tokens.glow
-        glowReady = Tokens.glowReady
+        // Each face picks its own shade from its own page, so the light is chosen against the
+        // ground it lands on rather than against whichever mode the phone happens to be in.
+        glow = Self.dynamic(light: Self.shade(of: face.lightPage, Tokens.glowDeep, Tokens.glowLifted),
+                            dark: Self.shade(of: face.darkPage, Tokens.glowDeep, Tokens.glowLifted))
+        glowReady = Self.dynamic(light: Self.shade(of: face.lightPage, Tokens.glowReadyDeep, Tokens.glowReadyLifted),
+                                 dark: Self.shade(of: face.darkPage, Tokens.glowReadyDeep, Tokens.glowReadyLifted))
         if pop {
             wash = mixed(0.12)
             mark = mixed(0.26)
@@ -162,6 +176,29 @@ struct ReaderPalette: Equatable {
             out |= UInt32((ca * t + cb * (1 - t)).rounded()) << UInt32(shift)
         }
         return out
+    }
+
+
+    /// A page colour as a light: its hue, at a light's saturation and brightness. `nil` when the
+    /// page has no hue to take — see `glow` for why that falls back to the app's blue rather than
+    /// to some arbitrary rotation of a grey.
+    ///
+    /// The turn through HSB is written out rather than borrowed from `UIColor.getHue` because this
+    /// runs at palette construction for a `let` table of hex numbers, with no colour space and no
+    /// trait collection in sight — the inputs here are sRGB integers and nothing else.
+    /// Which of a light's two shades reads on `page`: the deep one on a light ground, the lifted
+    /// one on a dark ground. Relative luminance by the sRGB coefficients, without the gamma step —
+    /// this is choosing between two values, not measuring a contrast ratio, and no page in the
+    /// table sits near enough to the line for the curve to change the answer.
+    ///
+    /// The threshold is 0.45 rather than 0.5 so the mid papers fall to the lifted shade. Cobalt
+    /// (`#5D97FF`, ~0.40) and Violet (`#B184FF`, ~0.50) are the cases: both are saturated mid
+    /// colours where the deep blue has almost no contrast left, and both look right lit.
+    private static func shade(of page: UInt32, _ deep: UInt32, _ lifted: UInt32) -> UInt32 {
+        let r = Double((page >> 16) & 0xFF) / 255
+        let g = Double((page >> 8) & 0xFF) / 255
+        let b = Double(page & 0xFF) / 255
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.45 ? deep : lifted
     }
 
     private static func dynamic(light: UInt32, dark: UInt32) -> Color {

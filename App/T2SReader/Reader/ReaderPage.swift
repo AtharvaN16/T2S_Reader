@@ -53,11 +53,11 @@ struct ReaderPage: View {
     /// how tall the ground under it is. Zero when nothing is showing, so neither reader needs a
     /// gate of its own.
     ///
-    /// Read from the model rather than from `\.statusBandHeight`, which the band publishes and
-    /// which would be the tidier source — except that it cannot reach here. `.appStatusBand()` is
-    /// applied *inside* this body, so the environment it sets flows to that stack's descendants
-    /// and never back up to this view's own `@Environment` properties. It read a silent zero:
-    /// no second header, but no ground and no step-down either.
+    /// Read from the model, which is the only thing this page and the band both see. The band
+    /// does not publish its height into this view tree and cannot: since 2026-09-15 it is drawn in
+    /// a `UIWindow` of its own (`StatusBandHost`), so there is no environment value and no
+    /// preference travelling between the two. `StatusRows.bandHeight` is the shared constant, and
+    /// the model says whether anything is standing in it.
     private var statusBandHeight: CGFloat {
         env.appStatus.isShowing ? StatusRows.bandHeight : 0
     }
@@ -129,9 +129,18 @@ struct ReaderPage: View {
         // want three different grounds and this one wants solid through the rows' full reach —
         // `topBar` brings its own ground and picks up where they end, so there is nothing to see
         // through and every reason to give the bar and its megabytes an opaque page to sit on. See
-        // `StatusBand` for the other two. The inset is measured rather than read off `safeAreaInsets`:
-        // this reader is a child of a stack that already sits inside the safe area, so it reports its
+        // `StatusBandOverlay` for the other two, and for the second reason the band cannot paint
+        // this: the band is in a window above everything, and this ground has to sit *under* the
+        // book's title bar. The inset is measured rather than read off `safeAreaInsets`: this
+        // reader is a child of a stack that already sits inside the safe area, so it reports its
         // own inset as zero.
+        //
+        // Outside the chrome's fade, and deliberately not painted into `topBar`. A warm-up is the
+        // app's state, not the bar's, and tapping the text away must not take the ground out from
+        // under the rows: the bar's ground goes when the chrome does, and the rows — which are
+        // above this page entirely — would be left standing on bare book text. It never *looked*
+        // as though the bar going took the light with it, because the veil underneath carried the
+        // same pixels; the bar going was invisible only by luck.
         .overlay {
             GeometryReader { geo in
                 TopFade(inset: geo.frame(in: .global).minY,
@@ -142,26 +151,21 @@ struct ReaderPage: View {
             }
             .allowsHitTesting(false)
         }
+        // The band's paper, handed across to the window the band is drawn in. It cannot read
+        // `\.readerPalette` from here — a `UIWindow` is the root of its own view tree and inherits
+        // no environment — so the page that owns the paper pushes it, and puts the app's own back
+        // when it leaves. Without this the top of the band goes on painting app grey over Cherry
+        // or Cobalt, which is the defect that started all of this (owner, 2026-09-15: "the warm-up
+        // glow in the reader looks weird, it has like a different color sometimes").
         //
-        // One layer over the page, never painted into the chrome. The light used to be a
-        // `WarmUpVeil` behind `ReaderTextView` with the header painting a matching copy of the same
-        // ramp into itself, which holds only for as long as every layer between the two stays
-        // transparent — and a `UIViewRepresentable` is the last thing to bet that on.
-        //
-        // Outside the chrome's fade, too: a warm-up is the app's state, not the bar's, and tapping
-        // the text away must not take the status with it. That is also why the rows stand on the
-        // band's own ground rather than on `topBar`'s — the bar's ground goes when the chrome does,
-        // and the rows would be left over bare book text. It never *looked* as though the bar going
-        // took the light with it, because the veil underneath carried the same pixels; the bar
-        // going was invisible only by luck.
-        //
-        // And the Reader is a `fullScreenCover` over the root pager, so the pager's band cannot
-        // reach in here. Without this line, opening a book while the voice was still downloading
-        // took the whole of the status off the screen and left two glowing rims with nothing
-        // between them to say what they were for (owner, 2026-09-13: "it removes the warmup glow
-        // and progress indicator ... I need to be aware of the status"). The rims are the mood; the
-        // rows are the part that answers "how much longer".
-        .appStatusBand()
+        // `onDisappear` resets rather than trusting the next screen to set its own: every other
+        // surface in the app wants `.app`, and a Reader that left its paper behind would tint the
+        // band on the library page it just returned to.
+        .onAppear { env.statusAppearance.palette = palette }
+        .onChange(of: env.preferences.readerPaper) { _, paper in
+            env.statusAppearance.palette = ReaderPalette(paper)
+        }
+        .onDisappear { env.statusAppearance.palette = .app }
         // The Reader is a `fullScreenCover`, which is its own presentation: the pager's copy of the
         // app-wide light and dark cannot reach it, and an override applied when it opened is not
         // re-applied when the reader flips the switch inside it (owner, 2026-09-14).

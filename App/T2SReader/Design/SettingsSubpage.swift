@@ -40,31 +40,25 @@ struct SettingsSubpage: ViewModifier {
                     .padding(.leading, Spacing.margin)
                     .padding(.top, 12)
             }
-            // The bar plain, the glow over it. Both are anchored by measurement: an overlay's
-            // reader sits inside the safe area and reports its inset as zero, so `TopFade(inset:)`
-            // from it was a 30 pt bar at the status bar's foot rather than one that holds through
-            // it. The content's top in the window is the inset the bar must cover, and the same
-            // shift puts the rim's lit edge on the window's top edge instead of the content's.
+            // The bar plain, and measured. An overlay's reader sits inside the safe area and
+            // reports its inset as zero, so `TopFade(inset:)` from it was a 30 pt bar at the status
+            // bar's foot rather than one that holds through it; the content's top in the window is
+            // the inset the bar must cover, and the offset takes it there.
+            //
+            // The light over it is the status band's, drawn in a window above this page
+            // (`StatusBandHost`) and not installed here at all. This page painted its own rims
+            // until 2026-09-15, and the measured shift above was deliberately *not* applied to
+            // them: a rim takes itself to the window's edge, so the offset carried its lit edge
+            // another status bar past it, off the screen, leaving the sides lit and the top gone
+            // (owner, 2026-09-12, twice on the Voice page — cut at the content's top without it,
+            // hoisted off the top with both). From its own window there is no content's-top left
+            // to correct for.
             .overlay {
                 GeometryReader { geo in
                     let top = geo.frame(in: .global).minY
                     TopFade(inset: top).offset(y: -top)
                 }
             }
-            // The light alone: a pushed page has never shown the rows, and the root pager draws
-            // them over the push. `showsRows: false` keeps that as it was.
-            //
-            // The band's rims anchor themselves to the window's edges, and are *not* given the
-            // measured shift their neighbour above uses. Both together was one shift too many: a
-            // rim's own `ignoresSafeArea` already takes it to the window's top edge, so the offset
-            // took the lit edge another status bar past it, off the screen, leaving the sides lit
-            // and the top of the glow gone (owner, 2026-09-12, twice on the Voice page — cut at
-            // the content's top without this, hoisted off the top with both).
-            //
-            // The foot is an edge a pushed page never had: the root pager's bottom glow goes when
-            // a subpage takes the screen, so the light simply stopped at the top of the page
-            // (owner, 2026-09-12: "there is no glow in the bottom"). The band lights both.
-            .appStatusBand(showsRows: false)
     }
 }
 

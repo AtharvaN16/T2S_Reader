@@ -61,6 +61,11 @@ final class AppEnvironment {
     /// band shows one job at a time by rank, and a second model would be a second opinion about
     /// which one that is.
     let appStatus = AppStatusModel()
+    /// What colour the status band paints in. It lives here, beside the slot it draws, because the
+    /// band is drawn in a `UIWindow` of its own and a window inherits no SwiftUI environment: the
+    /// Reader's paper has to be handed across rather than read from `\.readerPalette`. See
+    /// `StatusAppearance`.
+    let statusAppearance = StatusAppearance()
     /// What Settings → Storage shows and does for the downloaded voice model.
     let kokoroModel: KokoroModelStore
     /// Messages raised outside the view that shows them — today, the one under a play tapped after

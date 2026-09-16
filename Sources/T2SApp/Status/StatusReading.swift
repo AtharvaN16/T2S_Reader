@@ -35,6 +35,11 @@ public struct StatusReading: Sendable, Equatable {
     /// Past this much of the bar the cycle stops on its last message and stays there — "almost
     /// done" is the truest thing left, and rotating off it reads as the wait starting over.
     public static let stickPoint = 0.92
+    /// How long the ending's colour takes to arrive, in seconds. The blue takes a second and a
+    /// half to breathe in and the ending is eased over the same span, on the breath's own curve,
+    /// rather than cutting in over a quarter-second — at that speed the green does not read as the
+    /// wait finishing, it reads as a flash (owner, 2026-09-12).
+    public static let readyEase: Double = 1.4
 
     public var kind: StatusKind
     /// Names what is happening. Never moves.

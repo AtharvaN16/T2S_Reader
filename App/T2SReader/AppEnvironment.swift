@@ -57,6 +57,10 @@ final class AppEnvironment {
     let deviceMonitor: DeviceMonitor
     /// What Preferences tells the reader about the on-device engine on this device.
     let kokoroStatus: KokoroStatusModel
+    /// The status band's slot, and the jobs registered to speak in it. One for the whole app: the
+    /// band shows one job at a time by rank, and a second model would be a second opinion about
+    /// which one that is.
+    let appStatus = AppStatusModel()
     /// What Settings → Storage shows and does for the downloaded voice model.
     let kokoroModel: KokoroModelStore
     /// Messages raised outside the view that shows them — today, the one under a play tapped after
@@ -171,6 +175,11 @@ final class AppEnvironment {
                 await MainActor.run { if player.current?.id == id { player.unload() } }
             }
         }
+        // The voice warm-up is the band's first client, and for now its only one. Registered here
+        // rather than by a view: the wait begins at launch, long before any screen that draws it
+        // appears, and a source installed on a view's first appearance would be a source that
+        // missed the beginning of the only job it speaks for.
+        appStatus.register(VoiceStatusSource(status: kokoroStatus, player: player, appStatus: appStatus))
     }
 
     static func live() throws -> AppEnvironment {

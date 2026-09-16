@@ -8,7 +8,7 @@ import UIKit
 /// system bar is hidden for that; the swipe from the left edge still pops, see below.
 ///
 /// Its ground is plain and opaque — a pushed page has to be, or the root shows through the push —
-/// and the warm-up glow is a `WarmRim` laid over the whole thing, as on the root pager. It used to
+/// and the app's status band is laid over the whole thing, as on the root pager. It used to
 /// paint the ramp into both the page ground and the bar, because a plain ground here hid the glow
 /// and left only the bar's slice of it, cut off at the bar's foot (owner, 2026-09-10). Two copies
 /// of the ramp meant two things to keep lined up, and both of them slipped at least once. One copy,
@@ -51,17 +51,20 @@ struct SettingsSubpage: ViewModifier {
                     TopFade(inset: top).offset(y: -top)
                 }
             }
-            // The rim anchors itself to the window's edges (`WarmRim`), and is *not* given the
-            // measured shift its neighbour above uses. Both together was one shift too many: the
+            // The light alone: a pushed page has never shown the rows, and the root pager draws
+            // them over the push. `showsRows: false` keeps that as it was.
+            //
+            // The band's rims anchor themselves to the window's edges, and are *not* given the
+            // measured shift their neighbour above uses. Both together was one shift too many: a
             // rim's own `ignoresSafeArea` already takes it to the window's top edge, so the offset
             // took the lit edge another status bar past it, off the screen, leaving the sides lit
             // and the top of the glow gone (owner, 2026-09-12, twice on the Voice page — cut at
             // the content's top without this, hoisted off the top with both).
-            .overlay { WarmRim(edge: .top) }
-            // And the foot, which a pushed page never had: the root pager's bottom glow goes when
+            //
+            // The foot is an edge a pushed page never had: the root pager's bottom glow goes when
             // a subpage takes the screen, so the light simply stopped at the top of the page
-            // (owner, 2026-09-12: "there is no glow in the bottom").
-            .overlay { WarmRim(edge: .bottom) }
+            // (owner, 2026-09-12: "there is no glow in the bottom"). The band lights both.
+            .appStatusBand(showsRows: false)
     }
 }
 

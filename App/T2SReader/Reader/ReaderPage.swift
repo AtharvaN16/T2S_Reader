@@ -49,6 +49,19 @@ struct ReaderPage: View {
     /// takes it from the environment, which is what keeps it to this screen.
     private var palette: ReaderPalette { ReaderPalette(env.preferences.readerPaper) }
 
+    /// How far the Reader's own chrome stands off the top while the status band is showing, and
+    /// how tall the ground under it is. Zero when nothing is showing, so neither reader needs a
+    /// gate of its own.
+    ///
+    /// Read from the model rather than from `\.statusBandHeight`, which the band publishes and
+    /// which would be the tidier source — except that it cannot reach here. `.appStatusBand()` is
+    /// applied *inside* this body, so the environment it sets flows to that stack's descendants
+    /// and never back up to this view's own `@Environment` properties. It read a silent zero:
+    /// no second header, but no ground and no step-down either.
+    private var statusBandHeight: CGFloat {
+        env.appStatus.isShowing ? StatusRows.bandHeight : 0
+    }
+
     var body: some View {
         let reader = env.readerModel
         ZStack {
@@ -71,7 +84,7 @@ struct ReaderPage: View {
             } else if env.kokoroStatus.status.isWarming {
                 VStack(spacing: 10) {
                     WarmingDot()
-                    Text("Preparing the voice…").typeRole(.meta).foregroundStyle(Tokens.glow)
+                    Text("Preparing the voice…").typeRole(.meta).foregroundStyle(palette.glow)
                 }
             } else {
                 ProgressView().tint(palette.ink)
@@ -104,65 +117,51 @@ struct ReaderPage: View {
                 bottomBar.opacity(chromeVisible ? 1 : 0)
             }
             .animation(.easeInOut(duration: 0.2), value: chromeVisible)
-
-            // The warm-up's ground, and it goes here — under the rims — for the same reason the
-            // root pager's `TopFade` sits under them: the band is opaque, and drawn after the rims
-            // it paints the top of the glow out. (It did, on the first cut of this: the Reader wore
-            // a lit bezel down both sides and a bare grey crown.) The rows themselves go last, over
-            // everything, exactly as the pager stacks them.
-            //
-            // Solid through the rows' own reach rather than the pager's `warmSolid`. The pager
-            // stops its solid short at 36 so a page title can be read through the ramp; the thing
-            // below the rows here is `topBar`, which brings its own ground and picks up where they
-            // end, so there is nothing to see through and every reason to give the bar and its
-            // megabytes an opaque page to sit on.
-            //
-            // The inset is measured rather than read off `safeAreaInsets`, which is the trap
-            // `SettingsSubpage` documents: this reader is a child of a stack that already sits
-            // inside the safe area, so it reports its own inset as zero. The distance from the
-            // window's top down to this frame is the inset this and the rows both want.
-            GeometryReader { geo in
-                TopFade(inset: geo.frame(in: .global).minY, extra: WarmUpLine.bandHeight)
-                    .opacity(isWarmUpShowing ? 1 : 0)
-                    .animation(.easeInOut(duration: WarmUpVeil.fadeOut), value: isWarmUpShowing)
-            }
-
-            // The glow over the header rather than painted into it, as on the root pager: one
-            // layer on top, so nothing between it and the page can cut it. It used to be a
-            // `WarmUpVeil` behind `ReaderTextView` with the header painting a matching copy, which
-            // held only for as long as the text view stayed transparent — a `UIViewRepresentable`
-            // is the last layer to bet that on. Outside the chrome's fade, too: a warm-up is the
-            // app's state, not the bar's, and tapping the text away should not take the light with
-            // it (it never looked as though it did, because the veil underneath carried the same
-            // pixels — the bar going was invisible only by luck).
-            WarmRim(edge: .top)
-            // And the foot, over the bottom bar's ground for the same reason the head's is over
-            // the header: that ground is opaque through the home-indicator inset and would paint
-            // the light out. It hung off the bar's own background until 2026-09-12, and because
-            // that background had already bled into the inset, the rim's lit edge landed on the
-            // inset's inner boundary instead of the glass — the glow stopped 34 pt short of the
-            // bottom of the screen (see `WarmRim`). A sibling here cannot be shortened by anything
-            // the bar does.
-            WarmRim(edge: .bottom)
-
-            // The warm-up's words and bar, which until 2026-09-13 were drawn on the root pager
-            // alone. The Reader is a `fullScreenCover` over that pager, so opening a book while the
-            // voice was still downloading took the whole of the status off the screen and left two
-            // glowing rims with nothing between them to say what they were for (owner: "it removes
-            // the warmup glow and progress indicator ... I need to be aware of the status"). The
-            // rims are the mood; the line is the part that answers "how much longer".
-            //
-            // Outside the chrome's fade, like the rims and for the same reason: a warm-up is the
-            // app's state, not the bar's, and tapping the text away must not take the status with
-            // it. That is also why the rows lean on the band above rather than on `topBar`'s
-            // ground — the bar's ground goes when the chrome does, and the rows would be left over
-            // bare book text. `topBar` still steps down by `bandHeight` while this is up (see its
-            // `.padding`) so the title clears the rows rather than sitting in them.
-            GeometryReader { geo in
-                WarmUpLine(band: geo.frame(in: .global).minY)
-            }
         }
         .environment(\.readerPalette, palette)
+        // The ground the rows stand on, and it is the book's paper. `TopFade` painted `Tokens.ground`
+        // unconditionally until 2026-09-15, so while a warm-up was up the top 54 pt of the Reader was
+        // app grey standing on whatever paper the reader had chosen — near enough to miss on Paper,
+        // a seam on Sepia, and a white slab across the top of Cherry (owner: "the warm-up glow in the
+        // reader looks weird, it has like a different color sometimes").
+        //
+        // The host paints this rather than the band, because the three surfaces that show the band
+        // want three different grounds and this one wants solid through the rows' full reach —
+        // `topBar` brings its own ground and picks up where they end, so there is nothing to see
+        // through and every reason to give the bar and its megabytes an opaque page to sit on. See
+        // `StatusBand` for the other two. The inset is measured rather than read off `safeAreaInsets`:
+        // this reader is a child of a stack that already sits inside the safe area, so it reports its
+        // own inset as zero.
+        .overlay {
+            GeometryReader { geo in
+                TopFade(inset: geo.frame(in: .global).minY,
+                        extra: StatusRows.bandHeight,
+                        colour: palette.page)
+                    .opacity(statusBandHeight > 0 ? 1 : 0)
+                    .animation(.easeInOut(duration: StatusGlow.fadeOut), value: statusBandHeight)
+            }
+            .allowsHitTesting(false)
+        }
+        //
+        // One layer over the page, never painted into the chrome. The light used to be a
+        // `WarmUpVeil` behind `ReaderTextView` with the header painting a matching copy of the same
+        // ramp into itself, which holds only for as long as every layer between the two stays
+        // transparent — and a `UIViewRepresentable` is the last thing to bet that on.
+        //
+        // Outside the chrome's fade, too: a warm-up is the app's state, not the bar's, and tapping
+        // the text away must not take the status with it. That is also why the rows stand on the
+        // band's own ground rather than on `topBar`'s — the bar's ground goes when the chrome does,
+        // and the rows would be left over bare book text. It never *looked* as though the bar going
+        // took the light with it, because the veil underneath carried the same pixels; the bar
+        // going was invisible only by luck.
+        //
+        // And the Reader is a `fullScreenCover` over the root pager, so the pager's band cannot
+        // reach in here. Without this line, opening a book while the voice was still downloading
+        // took the whole of the status off the screen and left two glowing rims with nothing
+        // between them to say what they were for (owner, 2026-09-13: "it removes the warmup glow
+        // and progress indicator ... I need to be aware of the status"). The rims are the mood; the
+        // rows are the part that answers "how much longer".
+        .appStatusBand()
         // The Reader is a `fullScreenCover`, which is its own presentation: the pager's copy of the
         // app-wide light and dark cannot reach it, and an override applied when it opened is not
         // re-applied when the reader flips the switch inside it (owner, 2026-09-14).
@@ -228,11 +227,6 @@ struct ReaderPage: View {
         }
     }
 
-    /// Whether the voice warm-up is on screen. The head's ground and the header's step down both
-    /// read it, and they have to agree with each other and with `WarmUpLine`'s own copy on the same
-    /// frame, or the title steps down into rows that are not there.
-    private var isWarmUpShowing: Bool { WarmUpVeil.isShowing(env) }
-
     /// The first numbered chapter, while the playhead is before it.
     private var skipTarget: (index: Int, number: Int?)? {
         guard let bodyStart, let index = env.player.chapterIndex, index < bodyStart.index else { return nil }
@@ -284,10 +278,11 @@ struct ReaderPage: View {
                 .padding(.bottom, -48)                                     // hangs below the bar, over the text
                 .ignoresSafeArea(edges: .top)
         }
-        // The warm-up's three rows reach `inset + WarmUpLine.bandHeight`, and once the line
-        // followed the reader in here (2026-09-13) the title sat straight through them. The bar
-        // steps down by exactly that while the wait is up, on the glow's own timing so the two move
-        // together, and the rows take the space it leaves.
+        // One header, not two. The bar used to pad down by exactly the band's height while a wait
+        // was up, on the glow's own timing, so a warm-up stacked the status band above the book's
+        // title bar (owner, 2026-09-15). It reads the band's height from the environment now, so
+        // there is one number and one animation rather than two of each kept in step by hand — and
+        // the height is zero while nothing is showing, so there is no gate to keep in step either.
         //
         // **After the background, not before it.** Folding the step into `.padding(.top)` above is
         // the obvious way and it is wrong: that padding is inside the bar's frame, so the ground
@@ -297,8 +292,8 @@ struct ReaderPage: View {
         // out here moves the bar and its ground together and leaves the mask the proportions it
         // was drawn for. The gap it opens above the bar is `TopFade`'s, which is up whenever these
         // rows are.
-        .padding(.top, isWarmUpShowing ? WarmUpLine.bandHeight : 0)
-        .animation(.easeInOut(duration: WarmUpVeil.fadeOut), value: isWarmUpShowing)
+        .padding(.top, statusBandHeight)
+        .animation(.easeInOut(duration: StatusGlow.fadeOut), value: statusBandHeight)
     }
 
     /// The shape of a ground bar, as a mask over the ground it paints: easing between solid and

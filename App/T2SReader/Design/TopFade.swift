@@ -53,7 +53,13 @@ struct TopFade: View {
     /// eased curve spread over more points has a shallower slope everywhere, so there is less of a
     /// gradient across any one row of the page. It now clears at 152 rather than 104, which puts
     /// the foot of it below the section header instead of on top of it.
-    static let warmSolid: CGFloat = 36
+    ///
+    /// The solid is the band's own reach less 18, rather than a number of its own: the rows end at
+    /// `StatusRows.bandHeight` below the inset, and those 18 pt are what keeps the band's hard edge
+    /// off the top of a page title — stop short by less and the cut lands on the letters again. The
+    /// ramp is not derived from anything: 116 is how long it has to be to read as smooth, found by
+    /// eye, and it answers to the title below rather than to the band above.
+    static let warmSolid: CGFloat = StatusRows.bandHeight - 18
     static let warmFade: CGFloat = 116
 
     var body: some View {

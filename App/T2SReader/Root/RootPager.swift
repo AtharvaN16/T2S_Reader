@@ -80,41 +80,20 @@ struct RootPager: View {
                     bottomFill(inset: geo.safeAreaInsets.bottom)
                         .transition(.opacity)
                 }
-                // The bar is the bar again — plain ground, its own job — and the glow goes over it
-                // rather than being painted by it (owner, 2026-09-12: "why can't the glow stay on a
-                // higher z index?"). It used to be the other way round: a `WarmUpVeil` at the back of
-                // this stack, under the pages, with the bar painting the same ramp so the two met
-                // without a join. That only ever worked while every layer between the veil and the
-                // bar stayed transparent, and where one was not, the glow was cut off at the bar's
-                // foot — the Voice page's seam of 2026-09-10, and the cut the owner kept seeing here.
-                // The rim is the glow with no ground under it, so laid on top it needs nothing
-                // underneath to cooperate: one layer, uncuttable, and the line still rides over it.
-                //
-                // Both go with a pushed page, like the fill above: that page paints its own bar and
-                // its own rim, and this pair was drawing a second copy over them. Two opaque ramps
-                // did not show it — the top one simply won — but two rims are transparent and add,
-                // so the Voice page wore twice the glow below the bar's foot and a 30 pt ramp from
-                // one to two through its fade (owner, 2026-09-12: "there is a top fade messing with
-                // the glow"). The warm-up's line is not gated: it belongs wherever the reader is.
+                // The pager's own top edge, which it keeps whether or not a job is running: a root
+                // page always needs one. It is gated with a pushed page like the fill above — that
+                // page paints its own — and it is ground only. The light that goes over it is the
+                // status band's, at the foot of this stack.
                 if !chrome.isSubpageOpen {
-                    // The fade grows to hold the warm-up's rows while they are up, and eases back
-                    // on the glow's own timing so the two leave together rather than the ground
-                    // snapping out from under a line that is still fading.
-                    let warming = WarmUpVeil.isShowing(env)
+                    // The fade grows to hold the band's rows while they are up, and eases back on
+                    // the band's own timing so the two leave together rather than the ground
+                    // snapping out from under rows that are still fading.
+                    let warming = env.appStatus.isShowing
                     TopFade(inset: geo.safeAreaInsets.top,
                             extra: warming ? TopFade.warmSolid : 0,
                             fade: warming ? TopFade.warmFade : TopFade.fadeHeight)
-                        .animation(.easeInOut(duration: WarmUpVeil.fadeOut), value: warming)
-                    WarmRim(edge: .top)
-                    // The foot's rim is a sibling of the head's, not a passenger on `bottomFill`.
-                    // It rode on the fill while the fill was the only thing that reached past the
-                    // home indicator; the rim reaches on its own now, and hanging it off a host
-                    // that bleeds its own safe area is the arrangement that cost the Reader its
-                    // bottom 34 pt (see `WarmRim`). Above the fill, below the mini-player, as
-                    // before.
-                    WarmRim(edge: .bottom)
+                        .animation(.easeInOut(duration: StatusGlow.fadeOut), value: warming)
                 }
-                WarmUpLine(band: geo.safeAreaInsets.top)
 
                 if !chrome.isSubpageOpen {
                     // 10 to the marks, not 12: the row below is 22 pt now where the icons were 32,
@@ -140,6 +119,34 @@ struct RootPager: View {
                     .padding(.bottom, Spacing.grid + 152)
             }
             .animation(.snappy, value: chrome.isSubpageOpen)
+            // The status band — ground, both lit rims, the rows — in one line and laid over
+            // everything this stack has painted, `bottomFill` included.
+            //
+            // **On top, not underneath.** It used to be the other way round: a `WarmUpVeil` at the
+            // back of this stack, under the pages, with the bottom bar painting the same ramp into
+            // itself so the two met without a join. That only ever worked while every layer between
+            // the veil and the bar stayed transparent, and where one was not the glow was cut off at
+            // the bar's foot — the Voice page's seam of 2026-09-10, and the cut the owner kept
+            // seeing here. A rim is the glow with no ground under it, so laid on top it needs
+            // nothing underneath to cooperate: one layer, uncuttable, and the mini-player still
+            // rides over it. It is why `bottomFill` above is plain ground and nothing else.
+            //
+            // **Not gated on the subpage, where the hand-placed pair was.** Both rims used to go
+            // with a pushed page, because that page paints its own and this pair drew a second copy
+            // over them; two opaque ramps did not show it — the top one simply won — but two rims
+            // are transparent and *add*, so the Voice page wore twice the glow below the bar's foot
+            // and a 30 pt ramp from one to two through its fade (owner, 2026-09-12: "there is a top
+            // fade messing with the glow"). One modifier owns the arrangement now and a pushed page
+            // adopts it through the same door, so the overlap is the band's to settle rather than
+            // this stack's — worth a look under `T2S_WARMUP=1` on the Voice page before this ships.
+            // The rows were never gated either way: they belong wherever the reader is.
+            // The rims go with a pushed Settings page, exactly as the hand-placed pair did: that
+            // page paints its own, and two transparent rims add. Two opaque ramps hid this for
+            // months — the top one simply won — but the Voice page wore twice the light below the
+            // bar's foot and a 30 pt step from one to two through its fade (owner, 2026-09-12:
+            // "there is a top fade messing with the glow"). The rows are *not* gated: they belong
+            // wherever the reader is, and a pushed page draws none of its own.
+            .appStatusBand(showsRims: !chrome.isSubpageOpen)
         }
         .environment(chrome)
         .background(Tokens.ground.ignoresSafeArea())

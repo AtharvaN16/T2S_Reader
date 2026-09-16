@@ -239,7 +239,7 @@ struct VoiceListPage: View {
     }
 
     /// One row: the name with its ♀ / ♂ mark and, on the default voice, a "Default" tag; the
-    /// character line under it; then a waveform (hear), a heart (keep) and a radio (choose). The
+    /// character line under it; then a play button (hear), a heart (keep) and a radio (choose). The
     /// name and the radio are one button; the other two are their own.
     private func row(_ option: VoiceOption) -> some View {
         let isSelected = option.id == selectedID
@@ -278,7 +278,7 @@ struct VoiceListPage: View {
                     if rendering {
                         ProgressView().tint(Tokens.ink)
                     } else {
-                        Image(systemName: previewing ? "pause.fill" : "waveform")
+                        Image(systemName: previewing ? "pause.fill" : "play.fill")
                             .font(.system(size: 20, weight: .medium))
                             .foregroundStyle(previewing ? Tokens.ink : Tokens.ink2)
                     }

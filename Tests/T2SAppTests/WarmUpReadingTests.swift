@@ -192,4 +192,24 @@ import Testing
         #expect(reading.title == "Preparing the voice")
         #expect(reading.value == "40s")
     }
+
+    // MARK: the bridge to the band
+
+    @Test func theBandReadingCarriesTheSameWordsAndShape() {
+        let warm = WarmUpReading(phase: .downloading(received: 123, total: 350), progress: 0.4)
+        let reading = warm.reading
+        #expect(reading.kind == .voice)
+        #expect(reading.title == warm.title)
+        #expect(reading.messages == warm.messages)
+        #expect(reading.value == warm.value)
+        #expect(reading.segments == warm.segments)
+        #expect(reading.tone == .waiting)
+        #expect(reading.message(elapsed: 0) == warm.message(elapsed: 0))
+        #expect(reading.message(elapsed: 4) == warm.message(elapsed: 4))
+    }
+
+    @Test func aFailedWaitCrossesOverAsFailed() {
+        #expect(WarmUpReading(phase: .failed(.warmUp), progress: 0.8).reading.tone == .failed)
+        #expect(WarmUpReading(phase: .ready(buildingBackgroundSet: false), progress: 1).reading.tone == .ready)
+    }
 }

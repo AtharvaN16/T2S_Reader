@@ -47,6 +47,19 @@ struct ReaderPalette: Equatable {
     var destructive: Color
     /// A chapter already heard, a thing that finished.
     var positive: Color
+    /// The status band's light while a job runs, and the colour its last beat ends on.
+    ///
+    /// **The app's blue and green on every paper, including the pop ones.** The first cut had
+    /// the pop papers take `accent` and `positive` so the light would come from the paper
+    /// rather than clash with it — but both of those are `mixed(0.70)` in the pop branch below,
+    /// *the same value*, so the ending would have arrived in exactly the colour of the wait and
+    /// the whole last beat of a warm-up would have said nothing on six papers. The ending is
+    /// carried by hue, and a pop paper has already spent its hue on the page.
+    ///
+    /// They are members rather than direct `Tokens` reads so that a paper *can* speak for the
+    /// light later, with a photograph in hand, without every call site changing again.
+    var glow: Color
+    var glowReady: Color
     /// True when the chrome must come from the paper rather than from `Tokens`.
     var isPop: Bool
 
@@ -71,6 +84,8 @@ struct ReaderPalette: Equatable {
         unread = Self.dynamic(light: Self.mix(face.lightInk, face.lightPage, 0.30),
                               dark: Self.mix(face.darkInk, face.darkPage, 0.34))
         isPop = pop
+        glow = Tokens.glow
+        glowReady = Tokens.glowReady
         if pop {
             wash = mixed(0.12)
             mark = mixed(0.26)

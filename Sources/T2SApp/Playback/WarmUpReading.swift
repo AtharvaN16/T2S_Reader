@@ -45,16 +45,16 @@ public struct WarmUpReading: Sendable {
     public enum Tone: Sendable, Hashable { case waiting, ready, failed }
 
     /// How long one message is held before the next, in seconds.
-    public static let dwell: Double = 3.2
+    public static let dwell = StatusReading.dwell
 
     /// Under this many seconds left there is nothing worth cycling: a message would be swapped once
     /// and the wait would be over. The clock carries those launches alone.
-    public static let cycleFloor = 12
+    public static let cycleFloor = StatusReading.cycleFloor
 
     /// Past this much of the bar the cycle stops on its last message and stays there — "almost
     /// done" is the truest thing the line has left, and rotating off it to "one-time install" reads
     /// as the wait starting over (owner, 2026-09-12).
-    public static let stickPoint = 0.92
+    public static let stickPoint = StatusReading.stickPoint
 
     public let phase: Phase
     /// 0…1 across the whole launch, never retreating. On a failure this is where the wait reached.
@@ -195,6 +195,23 @@ public struct WarmUpReading: Sendable {
             afterAnInstall ? [46, 18, 18] : [1]
         case .checking, .waitingForNetwork, .downloading, .retrying, .failed(.install):
             [1]
+        }
+    }
+
+    // MARK: the band
+
+    /// This wait, as the band's own value. The phases stay here; only the shape crosses over.
+    public var reading: StatusReading {
+        StatusReading(kind: .voice, title: title, messages: messages, value: value,
+                      progress: progress, segments: segments, tone: bandTone,
+                      collapsesSubtext: collapsesSubtext)
+    }
+
+    private var bandTone: StatusReading.Tone {
+        switch tone {
+        case .waiting: .waiting
+        case .ready: .ready
+        case .failed: .failed
         }
     }
 }

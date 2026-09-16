@@ -26,6 +26,10 @@ struct TopFade: View {
     /// title dissolves under it rather than meeting an edge; see `warmFade`.
     var fade: CGFloat = fadeHeight
     static let fadeHeight: CGFloat = 30
+    /// The ground this paints. `Tokens.ground` is the app's, and is what every caller outside
+    /// the Reader wants; the Reader passes its paper, because a band of app grey across the top
+    /// of a chosen paper is the seam the owner reported on 2026-09-15.
+    var colour: Color = Tokens.ground
 
     /// The warm-up's ground, as a solid band and a fade over it, both passed by the root pager.
     ///
@@ -59,7 +63,7 @@ struct TopFade: View {
         // so bar and page were one surface, and that only held while every layer under the bar was
         // transparent. The glow is a `WarmRim` over this now (`RootPager`), which needs nothing of
         // the bar.
-        Tokens.ground
+        colour
             .mask(Self.shape(solidThrough: solid, fade: fade))
             .frame(height: height)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -96,9 +100,11 @@ struct EdgeFade: View {
     /// Shorter at the top, where the content passes under a header that is already there, and
     /// taller at the foot, where there is nothing below it to stop the eye.
     var height: CGFloat = 28
+    /// As `TopFade.colour`: the app's ground unless a caller is standing on its own paper.
+    var colour: Color = Tokens.ground
 
     var body: some View {
-        Tokens.ground
+        colour
             .mask(TopFade.shape(solidThrough: 0, fade: height).scaleEffect(y: edge == .bottom ? -1 : 1))
             .frame(height: height)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: edge == .bottom ? .bottom : .top)

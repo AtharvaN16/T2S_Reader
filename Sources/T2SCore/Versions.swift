@@ -2,8 +2,12 @@
 /// Persisted timelines record all three; a mismatch forces re-derivation (spec §3.7.4).
 public enum Versions {
     public static let schema = 1
+    /// 3 (2026-09-16): consecutive blocks a reader cut out of one source element are put back
+    /// together before segmenting (`TimelineBuilder.joined`). Worth the re-derivation: a chapter
+    /// heading broken by a `<br/>` left its number a one-word utterance, which Kokoro reads up to an
+    /// octave above the voice's narration pitch.
     /// 2 (2026-09-06): consecutive sentences of a block pack into one utterance (`Segmenter.packLength`).
-    public static let segmenter = 2
+    public static let segmenter = 3
     /// 4 (2026-09-09): a footnote number glued to sentence-final punctuation is dropped
     /// (`StripCitationsRule.footnotes`) — every chapter of a footnoted book said them aloud, so this
     /// one is worth the re-derivation it costs.

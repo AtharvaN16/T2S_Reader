@@ -16,6 +16,10 @@ struct MockIsland: View {
     var cover: ToastContent.Cover?
     var action: (() -> Void)?
     var onDismiss: () -> Void
+    /// The capsule's frame in window coordinates, published as it lays out and `.zero` on the way
+    /// out. `IslandWindow` has no other way to know where it may accept a touch — SwiftUI hands a
+    /// `hitTest` caller the hosting view and nothing under it (`MockIslandWindow.swift`).
+    var onCapsuleFrame: (CGRect) -> Void = { _ in }
 
     /// Collapsed, the capsule is exactly the cutout. Expanded it keeps the cutout's width as its
     /// corner radius so the two silhouettes are continuous.
@@ -47,11 +51,19 @@ struct MockIsland: View {
                                  style: .continuous)
                     .fill(.black)
             )
+            // Tap-to-dismiss over the black rectangle and nothing else. This used to sit above the
+            // full-screen frame below, where it covered the whole screen — unnoticed only because
+            // the window was refusing every touch anyway, and it would have swallowed the app
+            // whole the moment the window started answering.
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onDismiss)
+            // Measured at exactly the same place, so every point the window accepts is a point
+            // this capsule can use, and the margins around it stay the app's.
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onCapsuleFrame($0) }
+            .onDisappear { onCapsuleFrame(.zero) }
             .padding(.horizontal, hasIsland ? 10 : Spacing.margin)
             .padding(.top, hasIsland ? IslandGeometry.cutoutTop : 8)
             .frame(maxHeight: .infinity, alignment: .top)
-            .contentShape(Rectangle())
-            .onTapGesture(perform: onDismiss)
             .transition(.scale(scale: 0.4, anchor: .top).combined(with: .opacity))
             .accessibilityElement(children: .combine)
             .accessibilityLabel("\(message.title), \(message.detail)")

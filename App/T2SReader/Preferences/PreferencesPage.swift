@@ -8,6 +8,7 @@ struct PreferencesPage: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(Chrome.self) private var chrome
     @State private var showAppearance = false
+    @State private var showHowItWorks = false
     /// What "System default" actually resolves to on this device: Kokoro Heart where the Core ML
     /// route is available, the system voice otherwise (spec §6). Resolved in `.task` because
     /// `VoiceRouteResolving` is `async`, not because the answer is slow: resolving `"default"`
@@ -95,6 +96,13 @@ struct PreferencesPage: View {
                         }
                     }
                     section("About") {
+                        // First in About, above the welcome: the welcome is a thing to be shown
+                        // again, this is a thing to be read, and a reader who has come looking for
+                        // "why is my phone warm" is looking for prose.
+                        Button { showHowItWorks = true } label: {
+                            row("How the app works")
+                        }
+                        .buttonStyle(.plain)
                         // The welcome shows once per install; this is the way back to it, for a
                         // reader who skipped it and for a photograph.
                         Button { chrome.showsWelcome = true } label: {
@@ -120,6 +128,7 @@ struct PreferencesPage: View {
             .navigationDestination(isPresented: Bindable(chrome).opensStorage) { StoragePage() }
         }
         .sheet(isPresented: $showAppearance) { ReaderPreferencesSheet(showsReaderControls: false) }
+        .sheet(isPresented: $showHowItWorks) { HowItWorksSheet() }
         .task {
             resolvedDefaultVoiceID = await env.voiceRouting.effectiveVoiceID(VoiceOption.systemDefault.id)
             await env.storage.refresh()

@@ -938,6 +938,19 @@ against a pipeline that is already proven.
 
 ## 11. Changelog
 
+**rev 23 (2026-09-16)** — Settings explains the app to the reader who wants to know
+
+- **§2.4.5** About gains **How the app works**, a sheet of six points: the speech is made on
+  this iPhone and nothing read or heard is sent anywhere; the voice is a one-time 620 MB download
+  and then needs no network; audio is rendered a little ahead of the playhead; what is rendered is
+  kept, so a second listen is free; the phone may warm up and rendering stops itself when it does;
+  the voice is synthesized rather than performed; and with iCloud sync on only positions and
+  bookmarks travel. Every one of those already had a line somewhere — the hold card, Storage's
+  delete warning, the sync row's subtitle — but each was only met at the moment it bit, and
+  only by the reader it bit. The words are `HowItWorks` in T2SApp rather than in the view, so the
+  claims can be tested on the Mac; the download point is omitted in the build with no model to
+  fetch.
+
 **rev 22 (2026-09-11)** — Home's swipe and Archive, and "render whole document" trimmed to a chapter
 - **§2.4.5** the Home row's full-swipe-to-archive and its "Archive" menu item are gone: with Home
   down to the three most recently played (rev 18's `notePlaying`, not a queue a reader manages),

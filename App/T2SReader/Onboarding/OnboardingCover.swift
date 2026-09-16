@@ -131,6 +131,12 @@ struct OnboardingCover: View {
             //
             // The passage still runs on the player's own clock, not this one, so `page` reads
             // along normally. Nothing here compiles into a release build.
+            // And which voice it starts on, since a simulator cannot tap a pill and the whole
+            // point of the row is that each voice brings its own colour and its own form of light.
+            if let voice = ProcessInfo.processInfo.environment["T2S_ONBOARDING_VOICE"],
+               manifest.voices.contains(voice) {
+                selectedVoice = voice
+            }
             switch ProcessInfo.processInfo.environment["T2S_ONBOARDING"] {
             case "reel":
                 frozen = script.reelEnd * 0.6

@@ -143,6 +143,36 @@ floor, and `ChatterScheduleTests` updated where the settle is gone. The views ar
 type-checking against the simulator SDK and photographed on the private `T2S Onb` simulator, since
 the full app build has a pre-existing `'Document' is ambiguous` failure unrelated to this work.
 
+## What the photographs changed
+
+Built, then photographed on the private `T2S Onb` simulator in both themes. Six things looked right
+in the code and wrong on the glass; they are recorded here because each one is a rule about this
+screen rather than a typo.
+
+1. **A padded passage cuts; a full-bleed one dissolves.** Starting the text below the crown put its
+   scroll view's hard edge in clear air under the caption. The passage runs the whole height and the
+   two grounds cover its ends: it is cut where the ground is opaque and fades on the ramps.
+2. **`scrollTo(anchor: .center)` cannot scroll above its own content start.** Without room at each
+   end, the opening words stay pinned at the top — under the crown's fade, which is the one place
+   the word being spoken must never be.
+3. **A veil must overshoot.** Ending the travel with the ramp's foot on the crown leaves the last
+   few points of screen under its clear end, and the beat underneath shows as a sliver.
+4. **The pill's colour is not the glow's.** The pill's brightness is pitched for white text standing
+   on it; laid over the near-white ground as a wash it is a brown stain, not light.
+5. **An envelope's floor is most of every frame.** Mapped straight to opacity, the glow is at a
+   fifth strength almost always. The level has to read as presence: the floor buys most of the
+   brightness, the words buy the rest.
+6. **The glow has to be masked to the crown.** It is drawn over the passage by necessity — the
+   crown's solid ground is what hides the text — so unmasked it tints the first readable lines.
+
+## Open questions for the owner
+
+- **The rake, at 46°.** Records can be laid near-flat because a record is legible flat; a book laid
+  that far back loses its cover art, and the topmost covers in the reel read as shapes rather than
+  as books. `CoverField.tilt`.
+- **The skew's reference.** Still the MD Vinyl reading, not the linked screen. See the assumption
+  above.
+
 ## Out of scope
 
 Beats three to five of the 2026-09-14 design. The Reader itself. The voice catalogue. Any change to

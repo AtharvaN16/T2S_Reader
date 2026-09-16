@@ -43,10 +43,16 @@ struct RisingVeil<Content: View>: View {
     /// putting it above the crown gives one that is wholly covered — with no extra frame, offset
     /// or clip to keep in step.
     private func sheet(in size: CGSize) -> some View {
-        // The ramp's height as a share of the screen's, and the distance the edge has to travel:
-        // the screen plus the ramp, so the ramp itself clears the crown rather than parking on it.
+        // The ramp's height as a share of the screen's, and where its foot has reached.
+        //
+        // The travel is the screen *plus a ramp at each end*: the ramp starts wholly below the
+        // foot, so nothing is covered at rest, and finishes wholly above the crown, so everything
+        // is. Ending the journey with the ramp's foot on the crown — which is what `(1 + ramp) *
+        // (1 - progress)` did — left the last few points of the screen under the clear end of the
+        // ramp, and a sliver of the beat underneath showed along the top edge. Caught in the
+        // photograph of the name, where a cover was still visible above it.
         let ramp = edge / max(size.height, 1)
-        let bottom = (1 + ramp) * (1 - progress)
+        let bottom = (1 + ramp) - progress * (1 + 2 * ramp)
         return LinearGradient(stops: BottomFade.stops(color: .black),
                               startPoint: UnitPoint(x: 0.5, y: bottom - ramp),
                               endPoint: UnitPoint(x: 0.5, y: bottom))

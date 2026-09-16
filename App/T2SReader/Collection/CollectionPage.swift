@@ -22,7 +22,7 @@ struct CollectionPage: View {
             }
         }
 
-        func includes(_ document: Document) -> Bool {
+        func includes(_ document: T2SCore.Document) -> Bool {
             switch self {
             case .all: return true
             case .books: return document.sourceType == .epub

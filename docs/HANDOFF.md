@@ -862,7 +862,11 @@ What remains, in order:
    out of Files or Safari's downloads, not only out of Apple Books: the owner's phone (2026-09-16)
    could only reach t2s by saving a downloaded EPUB into Books first and sharing it from there.
    The book-link download (`BookDownloading`) is the way round that; whether the share sheet itself
-   is at fault is still unmeasured.
+   is at fault is still unmeasured. One sender is measured, though: **AirDrop from the Mac** put a
+   book in the library that was only its title, because the item carries the file's name as plain
+   text beside its bytes and the old fixed question order took the name (owner, 2026-09-16).
+   `SharedItemKind` decides by what the item actually carries; re-test that one specifically, and
+   note that an item we cannot place now names the types it offered in its failure string.
 6. **Kokoro's gate: the Core ML route is open, the MLX route is not.** Core ML runs on measured
    constants — `KokoroCoreMLDecision.current` carries the A13's RTF 0.181 and 119 MB, every rate up
    to 4x is offered, `KokoroTokenTimingMapper` returns real word timings, and Kokoro Heart is the

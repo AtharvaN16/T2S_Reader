@@ -1,0 +1,28 @@
+import Foundation
+import Testing
+@testable import T2SApp
+
+@Suite struct IslandGeometryTests {
+    @Test func knownIslandDevicesAreRecognised() {
+        // iPhone 14 Pro / 14 Pro Max, 15 / 15 Plus, 15 Pro / 15 Pro Max.
+        for machine in ["iPhone15,2", "iPhone15,3", "iPhone15,4", "iPhone15,5",
+                        "iPhone16,1", "iPhone16,2"] {
+            #expect(IslandGeometry.hasIsland(machine: machine), "\(machine) has an island")
+        }
+    }
+
+    @Test func notchAndOlderDevicesAreNot() {
+        // 11 Pro (the owner's test phone), SE 3, and the 16e — which has a notch, not an island.
+        for machine in ["iPhone12,3", "iPhone14,6", "iPhone17,5"] {
+            #expect(!IslandGeometry.hasIsland(machine: machine), "\(machine) has no island")
+        }
+    }
+
+    /// The fail-safe, and the whole reason the list is allowed to be incomplete: a phone that
+    /// ships after this list was written gets the plain card, not a capsule through its notch.
+    @Test func unknownIdentifiersFallBackToNoIsland() {
+        #expect(!IslandGeometry.hasIsland(machine: "iPhone99,1"))
+        #expect(!IslandGeometry.hasIsland(machine: ""))
+        #expect(!IslandGeometry.hasIsland(machine: "arm64"))
+    }
+}

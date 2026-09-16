@@ -71,6 +71,12 @@ final class AppEnvironment {
     /// Messages raised outside the view that shows them — today, the one under a play tapped after
     /// the voice model was deleted (`ToastCenter`).
     let toasts = ToastCenter()
+    /// The mock Dynamic Island's centre — what the capsule is showing, and whether Play does
+    /// anything about it.
+    let island = MockIslandCenter()
+    /// Starts, updates and ends the app's two Live Activities. See its own doc comment for why
+    /// both live on one object.
+    let activities = ActivityDirector()
     /// The on-device engine's composition, kept for what only its build can do — the timing log's
     /// line at the fill's edges (`noteFill`); its parts are the properties above.
     let kokoro: KokoroComposition

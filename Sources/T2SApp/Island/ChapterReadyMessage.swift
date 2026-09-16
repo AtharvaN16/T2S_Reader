@@ -25,11 +25,18 @@ public enum Announcement: Equatable, Sendable {
 public struct ChapterReadyMessage: Equatable, Sendable {
     public var title: String
     public var detail: String
+    /// What the thing is called, on its own: "Chp 4: The Siege of Delhi", or the document's own
+    /// title when it has no chapters worth naming. `detail` is this name inside a sentence, so a
+    /// surface that wants to compose its own sentence needs the name rather than the sentence —
+    /// the Live Activity was handed `detail` and read "…has finished rendering is ready"
+    /// (review I1).
+    public var name: String
     public var isFailure: Bool
 
-    public init(title: String, detail: String, isFailure: Bool) {
+    public init(title: String, detail: String, name: String, isFailure: Bool) {
         self.title = title
         self.detail = detail
+        self.name = name
         self.isFailure = isFailure
     }
 
@@ -38,16 +45,16 @@ public struct ChapterReadyMessage: Equatable, Sendable {
     public static func make(job: ChapterRenderJob, documentTitle: String,
                             chapterCount: Int) -> ChapterReadyMessage {
         let hasChapters = chapterCount > 1
-        if case .failed(let reason) = job.state {
-            return ChapterReadyMessage(
-                title: hasChapters ? "Chapter couldn't be rendered" : "Couldn't be rendered",
-                detail: reason, isFailure: true)
-        }
         let name = hasChapters
             ? ChapterLabel.text(for: job.title, ordinal: job.chapterIndex + 1)
             : documentTitle
+        if case .failed(let reason) = job.state {
+            return ChapterReadyMessage(
+                title: hasChapters ? "Chapter couldn't be rendered" : "Couldn't be rendered",
+                detail: reason, name: name, isFailure: true)
+        }
         return ChapterReadyMessage(
             title: hasChapters ? "Chapter ready to play" : "Document ready to play",
-            detail: "\(name) has finished rendering", isFailure: false)
+            detail: "\(name) has finished rendering", name: name, isFailure: false)
     }
 }

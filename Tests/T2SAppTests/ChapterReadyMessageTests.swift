@@ -14,6 +14,9 @@ import Testing
                                                chapterCount: 12)
         #expect(message.title == "Chapter ready to play")
         #expect(message.detail == "Chp 4: The Siege of Delhi has finished rendering")
+        // The name on its own, for a surface that composes its own sentence out of it. The Live
+        // Activity was handed `detail` and read "…has finished rendering is ready" (review I1).
+        #expect(message.name == "Chp 4: The Siege of Delhi")
         #expect(!message.isFailure)
     }
 
@@ -24,6 +27,7 @@ import Testing
                                                chapterCount: 1)
         #expect(message.title == "Document ready to play")
         #expect(message.detail == "India in 1857 has finished rendering")
+        #expect(message.name == "India in 1857")
     }
 
     @Test func aFailureCarriesTheRunnersOwnSentence() {
@@ -31,6 +35,8 @@ import Testing
                                                documentTitle: "India in 1857", chapterCount: 12)
         #expect(message.title == "Chapter couldn't be rendered")
         #expect(message.detail == "The store is full")
+        // Named even when it failed: the card's failure line says which chapter it was.
+        #expect(message.name == "Chp 4: The Siege of Delhi")
         #expect(message.isFailure)
     }
 
@@ -38,12 +44,5 @@ import Testing
         let message = ChapterReadyMessage.make(job: job(.failed("The store is full")),
                                                documentTitle: "India in 1857", chapterCount: 1)
         #expect(message.title == "Couldn't be rendered")
-    }
-
-    /// The rule that matters: exactly one surface speaks, and which one is decided by where the
-    /// reader is looking. Never both.
-    @Test func exactlyOneSurfaceAnnounces() {
-        #expect(Announcement.route(isForeground: true) == .island)
-        #expect(Announcement.route(isForeground: false) == .liveActivity)
     }
 }

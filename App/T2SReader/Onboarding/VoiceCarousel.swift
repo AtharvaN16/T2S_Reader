@@ -2,101 +2,94 @@
 import SwiftUI
 import T2SApp
 
-/// The voice picker, floating over the lower part of the read-along text: one big rounded-
-/// rectangle container at a time, each its own colour, the next peeking in faded at the edge,
-/// swiped between and snapped to the centre (the owner, 2026-09-15: "make each pill rounded
-/// rectangular containers each with different colors … the voice boxes are over the text"). The
-/// container on screen is the choice — the caller plays the passage in it, and Continue makes it
-/// the default. When the voice has finished, a replay glyph appears inside it and a tap plays it
-/// again.
+/// The voice picker at the crown of the welcome's page: one compact pill per voice in a row that
+/// scrolls sideways, the chosen one filled with its own colour and the rest quiet (design:
+/// `docs/superpowers/specs/2026-09-16-onboarding-reel-welcome-page-design.md`; the owner,
+/// 2026-09-16: "we can have the voice pills on the top of the screen, over a tall fade").
+///
+/// This was a carousel of 72 pt coloured containers along the foot, one at a time with the next
+/// peeking in — right when the picker was the last thing on the screen and the reader's thumb was
+/// already there. At the crown it has to answer a different question: the reader is looking at the
+/// passage, and the row above it is a caption saying *this is the voice you are hearing, and here
+/// are the others*. A row of pills says that in one glance where one big box at a time says it
+/// over several swipes, and it leaves the passage the whole of the screen.
+///
+/// The pill on screen is the choice — the caller plays the passage in it, and Continue makes it
+/// the default. A tap on another pill moves to it; a tap on the chosen one, once its passage has
+/// been heard through, plays it again.
+///
+/// The colours are `VoicePalette`'s, which the glow above reads too, so the light at the crown and
+/// the filled pill under it are always the same hue.
 struct VoiceCarousel: View {
     /// Kokoro voice names, `af_heart`.
     var voices: [String]
     @Binding var selected: String
-    /// True once the passage has been heard through in the chosen voice: the container offers replay.
+    /// True once the passage has been heard through in the chosen voice: the pill offers replay.
     var isFinished: Bool
     var onReplay: () -> Void
 
     @State private var scrolled: String?
 
-    /// The container's share of the width; what is left either side is the peek.
-    static let boxShare: CGFloat = 0.72
-    static let boxHeight: CGFloat = 72
-    static let cornerRadius: CGFloat = 22
+    static let height: CGFloat = 40
 
     var body: some View {
-        GeometryReader { geo in
-            let width = geo.size.width * Self.boxShare
-            ScrollView(.horizontal) {
-                HStack(spacing: Spacing.grid + 4) {
-                    ForEach(voices, id: \.self) { voice in
-                        box(voice, width: width)
-                            .id(voice)
-                            .scrollTransition(.interactive, axis: .horizontal) { content, phase in
-                                content
-                                    .opacity(phase.isIdentity ? 1 : 0.55)
-                                    .scaleEffect(phase.isIdentity ? 1 : 0.92)
-                            }
-                    }
+        ScrollView(.horizontal) {
+            HStack(spacing: Spacing.grid) {
+                ForEach(voices, id: \.self) { voice in
+                    pill(voice)
+                        .id(voice)
                 }
-                .scrollTargetLayout()
             }
-            .scrollIndicators(.hidden)
-            .scrollTargetBehavior(.viewAligned)
-            .scrollPosition(id: $scrolled, anchor: .center)
-            .contentMargins(.horizontal, (geo.size.width - width) / 2, for: .scrollContent)
-            .onChange(of: scrolled) { _, voice in
-                if let voice, voice != selected { selected = voice }
-            }
-            .onChange(of: selected) { _, voice in
-                if scrolled != voice { withAnimation(.snappy) { scrolled = voice } }
-            }
-            .onAppear { scrolled = selected }
+            .scrollTargetLayout()
+            .padding(.horizontal, Spacing.margin)
         }
-        .frame(height: Self.boxHeight)
+        .scrollIndicators(.hidden)
+        // Aligned rather than paged: the row is a row, and a reader flicking it should be able to
+        // land between two pills the way any pill row in the app does. The chosen pill is brought
+        // to the centre when it changes, which is what keeps a tap at the far edge from leaving
+        // the choice half off the screen.
+        .scrollTargetBehavior(.viewAligned)
+        .scrollPosition(id: $scrolled, anchor: .center)
+        .frame(height: Self.height)
+        .onChange(of: selected) { _, voice in
+            if scrolled != voice { withAnimation(.snappy) { scrolled = voice } }
+        }
+        .onAppear { scrolled = selected }
     }
 
-    /// The big container: its own colour, the voice's name, and once heard, a replay glyph. A tap
-    /// on the centred one replays; a tap on the peeking one selects it. Lifted with a shadow of
-    /// its own colour, since it sits over the text rather than beside it.
-    private func box(_ voice: String, width: CGFloat) -> some View {
+    /// One voice: its first name, filled with its own colour when it is the choice and quiet when
+    /// it is not, with a replay glyph inside the chosen one once its passage has been heard.
+    private func pill(_ voice: String) -> some View {
         let isSelected = voice == selected
-        let colour = Self.colour(for: voice, in: voices)
+        let colour = VoicePalette.colour(for: voice, in: voices)
         return Button {
             if isSelected { onReplay() } else { selected = voice }
         } label: {
-            HStack(spacing: Spacing.grid) {
-                Text(Self.displayName(voice))
-                    .typeRole(.groupTitle)
+            HStack(spacing: 6) {
                 if isSelected, isFinished {
                     Image(systemName: "arrow.counterclockwise")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .transition(.scale.combined(with: .opacity))
                 }
+                Text(VoicePalette.displayName(voice))
+                    .typeRole(.pill)
             }
-            .foregroundStyle(Tokens.onAccent)
-            .frame(width: width, height: Self.boxHeight)
-            .background(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous).fill(colour))
-            .shadow(color: colour.opacity(0.45), radius: 12, y: 6)
+            .foregroundStyle(isSelected ? Tokens.onAccent : Tokens.ink)
+            .padding(.horizontal, 16)
+            .frame(height: Self.height)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(isSelected ? AnyShapeStyle(colour) : AnyShapeStyle(Tokens.surface))
+            }
+            // Only the chosen pill is lifted, and in its own colour: the row sits over the
+            // passage, so an unlifted pill would read as a word in the text rather than a control.
+            .shadow(color: isSelected ? colour.opacity(0.4) : .clear, radius: 10, y: 4)
+            .animation(.snappy, value: isSelected)
             .animation(.snappy, value: isFinished)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(isSelected && isFinished ? "\(Self.displayName(voice)), play again" : Self.displayName(voice))
-    }
-
-    /// Each voice its own colour, spaced around the wheel by its place in the row so neighbours
-    /// never look alike — scales to any number of voices, since a book added to the manifest adds
-    /// a voice to this row too.
-    static func colour(for voice: String, in voices: [String]) -> Color {
-        let index = voices.firstIndex(of: voice) ?? 0
-        let count = max(voices.count, 1)
-        let hue = (Double(index) / Double(count) + 0.02).truncatingRemainder(dividingBy: 1)
-        return Color(hue: hue, saturation: 0.58, brightness: 0.62)
-    }
-
-    /// `af_heart` → `Heart`.
-    static func displayName(_ voice: String) -> String {
-        let stem = voice.split(separator: "_").last.map(String.init) ?? voice
-        return stem.prefix(1).uppercased() + stem.dropFirst()
+        .accessibilityLabel(isSelected && isFinished
+                            ? "\(VoicePalette.displayName(voice)), play again"
+                            : VoicePalette.displayName(voice))
     }
 }

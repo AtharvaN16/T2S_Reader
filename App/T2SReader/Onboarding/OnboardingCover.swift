@@ -36,6 +36,8 @@ struct OnboardingCover: View {
     @State private var selectedVoice: String
     @State private var hasHeard = false
     @State private var timings: [String: OnboardingClipTimings] = [:]
+    /// Debug only: a clock pinned at one instant, so a beat can be photographed. See `onAppear`.
+    @State private var frozen: TimeInterval?
 
     private let schedule: ChatterSchedule
     private let script: WelcomeScript
@@ -79,7 +81,7 @@ struct OnboardingCover: View {
         GeometryReader { geo in
             let insets = geo.safeAreaInsets
             TimelineView(.animation) { context in
-                let elapsed = startedAt.map { context.date.timeIntervalSince($0) } ?? 0
+                let elapsed = frozen ?? startedAt.map { context.date.timeIntervalSince($0) } ?? 0
                 ZStack {
                     // The ground throughout (the owner, 2026-09-15: "don't change backgrounds for
                     // voice, keep the default bg") — an earlier cut washed it a hue per voice.
@@ -105,7 +107,7 @@ struct OnboardingCover: View {
                     skip(insets)
                 }
                 .onChange(of: context.date) { _, _ in
-                // Driven here rather than in the body, which must not mutate.
+                    // Driven here rather than in the body, which must not mutate.
                     guard startedAt != nil else { return }
                     chatter.update(gains: schedule.gains(at: elapsed))
                     advance(to: script.beat(at: elapsed), settled: elapsed >= script.pageSettled)
@@ -116,17 +118,33 @@ struct OnboardingCover: View {
         .onAppear {
             startedAt = Date()
             #if DEBUG
-            // A script-driven simulator cannot wait out the reel: `T2S_ONBOARDING=page` in a debug
-            // build lands on beat three at once, both veils home, for a photograph. `=welcome`
-            // stops on the name.
+            // A script-driven simulator cannot wait out a 35-second reel, and three of the frames
+            // worth looking at last about a second each. `T2S_ONBOARDING` pins the scene's clock
+            // at one instant and leaves it there, so a screenshot taken whenever it lands shows
+            // the same thing:
+            //
+            //   reel     the field alone, mid-drift
+            //   rising   the first veil half way up, the name coming out of the reel
+            //   welcome  the name alone, both feet on the ground
+            //   opening  the second veil half way up, the page coming out of the name
+            //   page     the page settled, the passage playing  (`reading` is the old name for it)
+            //
+            // The passage still runs on the player's own clock, not this one, so `page` reads
+            // along normally. Nothing here compiles into a release build.
             switch ProcessInfo.processInfo.environment["T2S_ONBOARDING"] {
+            case "reel":
+                frozen = script.reelEnd * 0.6
+            case "rising":
+                frozen = script.welcomeStart + script.rise * 0.45
+            case "welcome":
+                frozen = script.welcomeStart + script.rise
+            case "opening":
+                frozen = script.pageStart + script.rise * 0.45
+                beat = .page
             case "page", "reading":
-                startedAt = Date().addingTimeInterval(-(script.pageSettled + 0.1))
+                frozen = script.pageSettled + 0.1
                 beat = .page
                 play(selectedVoice)
-            case "welcome":
-                startedAt = Date().addingTimeInterval(-(script.welcomeStart + WelcomeScript.defaultRise))
-                beat = .welcome
             default:
                 break
             }
@@ -156,12 +174,15 @@ struct OnboardingCover: View {
         ZStack {
             Tokens.ground
 
+            // Full-bleed, top to bottom, with no padding of its own. The crown's solid ground and
+            // the foot's cover its two ends, so the block is *cut* where the ground is opaque and
+            // *fades* on the ramps below and above that — which is what makes the words rise out
+            // of one fade and sink into the other. Padded to start below the crown instead, it
+            // scrolled up into a hard edge in clear air just under the caption.
             ReadAlongPassage(timings: passageTimings(selectedVoice),
                              fallback: heroBook?.passage ?? heroBook?.line ?? "",
                              time: solo.currentTime,
                              isFinished: hasHeard && !solo.isPlaying)
-                .padding(.top, insets.top + Self.textTop)
-                .padding(.bottom, insets.bottom + Self.textBottom)
 
             VStack(spacing: 0) {
                 crown(insets)
@@ -176,13 +197,25 @@ struct OnboardingCover: View {
     /// the passage up under both.
     private func crown(_ insets: EdgeInsets) -> some View {
         ZStack(alignment: .top) {
+            // Bottom of the three: solid ground as far as the caption's foot, then the app's own
+            // curve read upward. The solid is what the passage is cut against — a cut on opaque
+            // ground is invisible — and the ramp is what it dissolves into on the way up.
+            VStack(spacing: 0) {
+                Tokens.ground
+                    .frame(height: insets.top + Self.crownSolid)
+                LinearGradient(stops: BottomFade.stops(color: Tokens.ground),
+                               startPoint: .bottom, endPoint: .top)
+                    .frame(height: Self.topFade)
+            }
+
+            // The light, over the ground so it is seen at all, under the row so the names stay
+            // legible across the brightest part of it.
             VoiceGlow(voice: selectedVoice,
                       voices: manifest.voices,
                       level: VoiceEnvelope(timings: passageTimings(selectedVoice)).level(at: solo.currentTime))
 
-            // Over the glow, and over the fade that stands behind both: the row has to be legible
-            // against the brightest part of the light. Clear of the Skip pill, which keeps the
-            // same corner it has held since the first frame of the reel.
+            // Clear of the Skip pill, which keeps the corner it has held since the reel's first
+            // frame.
             VStack(spacing: Spacing.grid) {
                 VoiceCarousel(voices: manifest.voices, selected: $selectedVoice,
                               isFinished: hasHeard && !solo.isPlaying) { play(selectedVoice) }
@@ -192,13 +225,7 @@ struct OnboardingCover: View {
             }
             .padding(.top, insets.top + Spacing.section + Spacing.row)
         }
-        .background(alignment: .top) {
-            // The app's own curve read upward, and tall: the passage runs the whole height of the
-            // screen behind this, and the ramp has to reach past the caption as well as the pills.
-            LinearGradient(stops: BottomFade.stops(color: Tokens.ground), startPoint: .bottom, endPoint: .top)
-                .frame(height: Self.topFade)
-                .ignoresSafeArea(edges: .top)
-        }
+        .allowsHitTesting(true)
     }
 
     /// The foot: Continue behind the tall bottom fade that carries the passage out of sight under
@@ -226,13 +253,17 @@ struct OnboardingCover: View {
         .ignoresSafeArea()
     }
 
-    /// How far the crown reaches below the safe area, and so where the passage's first line can
-    /// start without landing in the pills. Shorter than `topFade` because the last of the ramp is
-    /// nearly clear and a line is meant to dissolve into it rather than begin below it.
-    static let textTop: CGFloat = 170
-    static let topFade: CGFloat = 320
+    /// Solid ground below the safe area, reaching the foot of the caption: the row of pills and
+    /// the line under it both stand on it, so nothing of the passage reads through either. The
+    /// number is the row's own reach — `Spacing.section + Spacing.row` of clearance for the Skip
+    /// pill, the pills, the gap, the caption's line — with a little air under it.
+    static let crownSolid: CGFloat = 164
+    /// The ramp below that solid, which the passage dissolves into on its way up.
+    static let topFade: CGFloat = 150
+    /// Taller than a bar's usual 72: the passage runs the whole height of the screen, so the ramp
+    /// has to carry it out of sight well above the key (the owner, 2026-09-15: "the bottom fade
+    /// should be taller").
     static let bottomFade: CGFloat = 200
-    static let textBottom: CGFloat = 120
 
     /// One place the beat changes, so the audio and the flag never disagree: the chatter stops as
     /// the name goes up, and the passage starts once the page is fully uncovered rather than while

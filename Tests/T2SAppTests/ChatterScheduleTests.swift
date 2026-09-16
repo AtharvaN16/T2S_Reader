@@ -43,16 +43,18 @@ import Testing
         #expect(quick.start(of: 1) == lead + 0.5)
     }
 
-    @Test func theSettleBeginsAsTheLastLineTailsOff() {
-        #expect(schedule.settleStart == schedule.end(of: 2) - 0.5)
-        #expect(schedule.total == schedule.settleStart + ChatterSchedule.settleLength)
+    /// The reel gives way only once the last line has fully tailed off, so the app's name never
+    /// lands over a voice still speaking.
+    @Test func theChatterEndsWithItsLastLine() {
+        #expect(schedule.chatterEnd == schedule.end(of: 2))
+        #expect(schedule.gain(of: 2, at: schedule.chatterEnd) == 0)
     }
 
-    @Test func noChatterStillSettles() {
+    /// A bundle with no rendered clips still runs a reel worth watching before the name.
+    @Test func noChatterStillRunsAReel() {
         let silent = ChatterSchedule(durations: [])
         #expect(silent.gains(at: 1).isEmpty)
-        #expect(silent.settleStart > 0)
-        #expect(silent.total > silent.settleStart)
+        #expect(silent.chatterEnd == ChatterSchedule.lead + ChatterSchedule.silentReel)
     }
 
     @Test func gainsCoverEveryLine() {

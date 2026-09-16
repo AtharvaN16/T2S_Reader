@@ -2,11 +2,11 @@
 import SwiftUI
 import T2SApp
 
-/// The welcome's first scene: one field of book covers drifting upward in depth parallax while a
-/// few opening lines chatter past, and the hero settling out of the crowd at the end (design:
-/// `docs/superpowers/specs/2026-09-14-onboarding-design.md`; the owner's references, the Queue
-/// podcast app's field of covers and the ATC replay app's card that settles out of the drift).
-/// Depth, not motion sensing, and no tap: the voices start with the field.
+/// The welcome's reel: one field of book covers drifting upward in depth parallax, laid back in
+/// perspective, while a few opening lines chatter past (design:
+/// `docs/superpowers/specs/2026-09-16-onboarding-reel-welcome-page-design.md`; the owner's
+/// reference, the Queue podcast app's field of covers). Depth, not motion sensing, and no tap: the
+/// voices start with the field.
 ///
 /// One field, no lanes (the owner, 2026-09-14: "there are no separate planes … the covers are
 /// just for show, the audio need not align perfectly"). Every cover has its own distance, which
@@ -16,38 +16,43 @@ import T2SApp
 /// up, but they drift where they drift. The placing is seeded from each cover's index, so the
 /// field is the same every launch.
 ///
-/// The hero is one cover in the field until `ChatterSchedule.settleStart`; then it leaves its
-/// drift for the rest top centre at the size it had, and only once there grows to `heroHeight`
-/// while the rest of the field dims out — the ATC app's red card left alone on the ground. When
-/// the lines are read (`lift`) it moves up and shrinks to make room for them.
+/// **No hero.** A cover used to leave the drift as the last line tailed off, climb to the top,
+/// grow, and stand alone while the rest of the field dimmed away — the ATC replay app's red card.
+/// The owner asked for that focus to go (2026-09-16: "let us remove the focus on Alice in
+/// Wonderland"); the reel now runs unbroken until the welcome's veil covers it, and Alice is one
+/// book in it like any other.
 ///
-/// With Reduce Motion nothing travels: the field stands still and dim, and the hero fades in at
-/// its rest.
+/// **The skew** is what the reel gained in exchange (the owner, 2026-09-16, of a Mobbin screen:
+/// "see how it shows this skew, that's the way we need to proceed"). Each cover is laid back about
+/// its own horizontal axis under a perspective divide, so it reads as a plane going away from the
+/// reader rather than a rectangle sliding up the glass. The lean is not uniform: `tilt` is the
+/// lean at the crown of the screen and it eases in from almost nothing at the foot, so a cover
+/// enters square-on and is well laid back by the time it leaves — the reel goes over a horizon.
+///
+/// With Reduce Motion nothing travels: the field stands still, dim, and square-on, since a skew
+/// that never moves is only a distortion.
 struct CoverField: View {
     var books: [OnboardingManifest.Book]
+    /// Only to keep the book whose passage beat three reads in the near half of the field, so it
+    /// is one of the sharp ones as it goes by. It gets no other treatment.
     var hero: String
-    var schedule: ChatterSchedule
     var elapsed: TimeInterval
-    /// 0 with the hero at its rest, 1 with it lifted and small above the lines being read.
-    var lift: Double = 0
 
     @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    static let heroHeight: CGFloat = 280
-    static let liftedHeight: CGFloat = 150
-    /// Where the hero rests, as a fraction of the height above the centre; and where it goes when
-    /// lifted for the lines.
-    static let heroRest: CGFloat = -0.16
-    static let heroLifted: CGFloat = -0.31
-    /// The settle is two beats (the owner, 2026-09-14: "settle into position, and then expand in
-    /// size, while the background fades, not jump to position"): from `settleStart` the hero
-    /// leaves the drift for its rest at the size it had, over `arriveDuration`; then, from
-    /// `growDelay` after the start, it grows to `heroHeight` over `growDuration` while the crowd
-    /// fades on the same clock.
-    static let arriveDuration: TimeInterval = 1.3
-    static let growDelay: TimeInterval = 1.1
-    static let growDuration: TimeInterval = 1.4
+    /// How far a cover is laid back by the time it reaches the crown of the screen, in degrees
+    /// about the horizontal axis. This is the whole of the skew: one number to turn if the
+    /// reference meant a shallower rake or a steeper one.
+    static let tilt: Double = 46
+    /// The eye's distance from the plane, as `rotation3DEffect` reckons it — smaller is a wider
+    /// lens and a harder divide. Gentle, because a cover is small on the screen and a hard
+    /// perspective on a 150 pt rectangle reads as a glitch rather than as depth.
+    static let perspective: CGFloat = 0.55
+    /// Where the lean has fully come in, as a fraction of the height above the foot. A cover is
+    /// square-on as it enters and reaches its full rake by two thirds of the way up, so the top of
+    /// the screen is a settled rake rather than a rotation still in progress.
+    static let rakeReach: CGFloat = 0.66
 
     /// One floating cover: where it is in depth and across the screen, and how fast it drifts.
     /// All derived from the index, once.
@@ -100,7 +105,10 @@ struct CoverField: View {
             let slot = (index * Self.stride(for: count)) % max(count, 1)
             x = Self.columns[slot % Self.columns.count] + CGFloat(unit(2) - 0.5) * 0.1
             phase = (CGFloat(slot) + CGFloat(unit(3) - 0.5) * 0.4) / CGFloat(max(count, 1))
-            lean = (unit(4) - 0.5) * 24
+            // Cut to a third of what it was: the roll used to be the only thing keeping the field
+            // from looking machined, and now that every cover is raked it only has to break the
+            // rows up. At its old ±12° it fought the rake and the covers read as tumbling.
+            lean = (unit(4) - 0.5) * 8
         }
     }
 
@@ -108,15 +116,13 @@ struct CoverField: View {
         var book: OnboardingManifest.Book
         var index: Int
         var placement: Placement
-        var isHero: Bool
     }
 
     var body: some View {
         GeometryReader { geo in
             let size = geo.size
             ZStack {
-                // Far to near, so a near cover overlaps a far one; the hero last of all, so its
-                // settle rides over everything.
+                // Far to near, so a near cover overlaps a far one.
                 ForEach(Array(placed.enumerated()), id: \.offset) { _, item in
                     card(item, in: size)
                 }
@@ -131,23 +137,9 @@ struct CoverField: View {
             .map { index, book in
                 Placed(book: book,
                        index: index,
-                       placement: Placement(index: index, count: books.count, near: book.isVoiced || book.id == hero),
-                       isHero: book.id == hero)
+                       placement: Placement(index: index, count: books.count, near: book.isVoiced || book.id == hero))
             }
-            .sorted { a, b in
-                if a.isHero != b.isHero { return b.isHero }
-                return a.placement.depth < b.placement.depth
-            }
-    }
-
-    /// 0 before the hero begins to settle, 1 once it is at rest.
-    private var arrive: Double {
-        smooth((elapsed - schedule.settleStart) / Self.arriveDuration)
-    }
-
-    /// 0 until the hero has all but arrived, 1 once it is full size and the crowd is gone.
-    private var grow: Double {
-        smooth((elapsed - schedule.settleStart - Self.growDelay) / Self.growDuration)
+            .sorted { $0.placement.depth < $1.placement.depth }
     }
 
     /// A cover's drift position at `time`: `phase` of the way up its loop at the start, upward
@@ -167,54 +159,34 @@ struct CoverField: View {
         size.height * 2.3 + 240
     }
 
-    /// The hero's own placing: near, centred, upright, and timed so that as the settle begins it
-    /// is in the lower half of the screen — it has come up from the bottom with the others over
-    /// the seconds before, one of the moving books, and then leaves the drift straight up the
-    /// middle to its rest (the owner, 2026-09-14: "Alice should not come from the side", "should
-    /// be part of the books moving up, should not arrive from nowhere").
-    private func heroPlacement(index: Int, in size: CGSize) -> Placement {
-        var p = Placement(index: index, count: books.count, near: true)
-        p.depth = 0.95
-        p.x = 0
-        p.lean = 0
-        let loop = Self.loop(in: size)
-        let alongAtSettle = loop / 2 - size.height * 0.22   // a fifth of the way down from the centre
-        let phase = (alongAtSettle - p.speed * schedule.settleStart) / loop
-        p.phase = phase - floor(phase)
-        return p
+    /// How far a cover at `y` — measured from the centre of the screen, negative upward — is laid
+    /// back, in degrees. Nothing at the foot, `tilt` from `rakeReach` of the way up, eased between
+    /// so no cover crosses a kink on its way. Covers below the screen are raked as the foot is,
+    /// which matters because the loop is taller than the screen and a cover spends most of its
+    /// life off it.
+    static func rake(atY y: CGFloat, in size: CGSize) -> Double {
+        guard size.height > 0 else { return 0 }
+        let fromFoot = (size.height / 2 - y) / max(size.height * rakeReach, 1)
+        let t = min(max(Double(fromFoot), 0), 1)
+        return tilt * (t * t * (3 - 2 * t))
     }
 
     @ViewBuilder
     private func card(_ item: Placed, in size: CGSize) -> some View {
-        if item.isHero {
-            // In the drift until the settle begins — timed to be in the lower half of the screen
-            // then — eased up the centre to its rest, grown once there, and lifted for the lines.
-            let p = heroPlacement(index: item.index, in: size)
-            let a = arrive
-            let g = grow
-            let drifting = driftY(p, at: min(elapsed, schedule.settleStart), in: size)
-            let rest = size.height * (Self.heroRest + (Self.heroLifted - Self.heroRest) * lift)
-            let y = drifting + (rest - drifting) * a
-            let full = Self.heroHeight + (Self.liftedHeight - Self.heroHeight) * lift
-            let height = p.height + (full - p.height) * g
-            BookCover(relativePath: nil, paths: env.paths, height: height,
-                      title: item.book.title, author: item.book.author, asset: item.book.coverName)
-                .blur(radius: p.blur * (1 - a))
-                .offset(y: reduceMotion ? rest : y)
-                .opacity(reduceMotion ? a : p.opacity + (1 - p.opacity) * a)
-        } else {
-            let p = item.placement
-            BookCover(relativePath: nil, paths: env.paths, height: p.height,
-                      title: item.book.title, author: item.book.author, asset: item.book.coverName)
-                .rotationEffect(.degrees(p.lean))
-                .blur(radius: p.blur)
-                .offset(x: size.width * p.x, y: driftY(p, at: elapsed, in: size))
-                .opacity(p.opacity * (reduceMotion ? 0.6 : 1) * (1 - grow))
-        }
-    }
-
-    private func smooth(_ x: Double) -> Double {
-        let t = min(max(x, 0), 1)
-        return t * t * (3 - 2 * t)
+        let p = item.placement
+        let y = driftY(p, at: elapsed, in: size)
+        BookCover(relativePath: nil, paths: env.paths, height: p.height,
+                  title: item.book.title, author: item.book.author, asset: item.book.coverName)
+            .rotationEffect(.degrees(p.lean))
+            // The rake, last of the two, so the roll happens in the cover's own plane and the
+            // perspective is applied to the result — roll first and the lean would be raked with
+            // it, which slews the cover sideways instead of laying it back.
+            .rotation3DEffect(.degrees(reduceMotion ? 0 : Self.rake(atY: y, in: size)),
+                              axis: (x: 1, y: 0, z: 0),
+                              anchor: .center,
+                              perspective: Self.perspective)
+            .blur(radius: p.blur)
+            .offset(x: size.width * p.x, y: y)
+            .opacity(p.opacity * (reduceMotion ? 0.6 : 1))
     }
 }

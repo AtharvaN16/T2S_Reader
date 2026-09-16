@@ -7,6 +7,52 @@ older and dated as marked. The dated per-session entries that used to stack here
 for the lot, `git log` for the rest), and what mattered from them lives in `crashreport.md`,
 `docs/research/` and the specs._
 
+## Onboarding rebuilt in three beats: the reel, the name, the page (2026-09-16)
+
+Design: `docs/superpowers/specs/2026-09-16-onboarding-reel-welcome-page-design.md`, which supersedes
+beats one and two of the 2026-09-14 design below. Beats three to five of that document (the question,
+the benefits page, the mock Pro screen) are untouched and still unbuilt.
+
+The owner asked for the focus on Alice to go (2026-09-16: "let us remove the focus on Alice in
+Wonderland"). So the scene no longer resolves onto a hero. It is three beats wiped between rather
+than two cut together, and it plays itself through — the Play key that used to stand between them is
+gone:
+
+1. **The reel.** Every book drifts upward in one field as before, but **skewed**: each cover is laid
+   back about its horizontal axis under a perspective divide, square-on at the foot and fully raked
+   by two thirds of the way up, so the reel goes over a horizon. `CoverField.tilt` is the whole of
+   it — one number. No cover leaves the drift, none grows, the field never dims.
+2. **The name.** As the last line tails off a veil rises foot-to-crown and uncovers *Welcome to T2S*
+   standing on it, then holds. `RisingVeil` is a travelling `LinearGradient` whose unit points sit
+   outside `0...1`, so the soft edge clears the foot at rest and clears the crown when home; the
+   curve is `BottomFade.stops`, the app's own.
+3. **The page.** The same veil rises again and brings up the passage. The voice's light blooms at the
+   crown (`VoiceGlow`), the voices are a row of compact pills under it over a tall top fade
+   (`VoiceCarousel`, rewritten from the 72 pt box carousel that used to sit along the foot), the
+   words light as they are spoken and follow themselves the way the Reader's page does, and Continue
+   sits at the foot behind the tall bottom fade.
+
+**The glow does not listen to the player.** `AVAudioPlayer`'s metering reports output, which
+`T2S_SILENT=1` pins at zero — a metered glow would be dead in every simulator photograph. It reads
+the clip's word timings instead (`VoiceEnvelope`, attack then capped decay to a floor), which is
+silent-safe, identical on every run and testable without an audio session. Each voice gets a *form*
+as well as a colour — orb, band, lobes, ring, core, cycled by its place in the row — and
+`VoicePalette` is the one hue source the pills and the bloom share.
+
+New pure types in `T2SApp`, with tests: `WelcomeScript` (the three beats' clock and the two sweeps)
+and `VoiceEnvelope`. `ChatterSchedule` lost `settleStart`/`settleLength`/`total` — the settle was the
+hero's — and gained `chatterEnd`, where the reel gives way.
+
+**Debug hooks:** `T2S_ONBOARDING=page` lands on beat three with both veils home (`=reading` still
+works, same thing); `=welcome` stops on the name. Photograph on the private `T2S Onb` simulator.
+
+**Assumption to check with the owner.** The brief linked a Mobbin screen for the skew, which could
+not be opened — the Mobbin MCP searches by description and has no fetch-by-id, and the page answers
+403 unauthenticated. The rake is read from MD Vinyl's onboarding
+(`mobbin.com/screens/1cbd7282-83e7-48cd-b46a-43d8839aa023`), the nearest skewed screen the search
+surfaced. If that is the wrong family, `CoverField.tilt`, `perspective` and `rakeReach` are the three
+numbers to turn.
+
 ## Onboarding, first slice: the cover scene and its chatter (2026-09-14)
 
 Design: `docs/superpowers/specs/2026-09-14-onboarding-design.md` (five screens; the owner's

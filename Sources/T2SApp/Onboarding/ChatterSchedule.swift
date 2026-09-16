@@ -7,8 +7,9 @@ import Foundation
 /// Lines play whole, one after another: each rises over `fadeIn`, holds, and falls away over its
 /// last `crossfade` seconds while the next line rises under it, so the voices hand over rather
 /// than cut. Each has its own base gain, so the chatter has near and far voices. The field is not
-/// tied to any of this — the covers drift for show — except that the hero begins to settle as the
-/// last line tails off, and the scene ends once it has grown into its rest.
+/// tied to any of this — the covers drift for show — except that `chatterEnd` is where the reel
+/// gives way to the welcome's first veil (`WelcomeScript`), so the app's name never lands over a
+/// voice still speaking.
 ///
 /// Pure, so the timing can be tested and the field, the player and the cover agree.
 public struct ChatterSchedule: Hashable, Sendable {
@@ -21,8 +22,9 @@ public struct ChatterSchedule: Hashable, Sendable {
     public static let defaultCrossfade: TimeInterval = 1.2
     /// A pause at the start before the first voice, and the field alone when there is none.
     public static let lead: TimeInterval = 1.0
-    /// From the settle's start to the scene's end: the hero arriving, then growing.
-    public static let settleLength: TimeInterval = 2.8
+    /// How long the reel runs alone when there is no chatter at all — a bundle without the
+    /// rendered clips, which is what a fresh checkout has before `render-onboarding-clips.sh`.
+    public static let silentReel: TimeInterval = 6
     /// Near and far voices, cycled over the lines.
     public static let baseGains: [Float] = [0.85, 0.6, 1.0, 0.7]
 
@@ -46,14 +48,12 @@ public struct ChatterSchedule: Hashable, Sendable {
 
     public func end(of index: Int) -> TimeInterval { start(of: index) + durations[index] }
 
-    /// When the hero begins to settle: as the last line tails off, or after the lead alone.
-    public var settleStart: TimeInterval {
-        guard count > 0 else { return Self.lead + 2 }
-        return max(end(of: count - 1) - crossfade * 0.5, start(of: count - 1))
+    /// When the last line has fully tailed off, and so when the reel has said all it has to say.
+    /// The welcome's first veil starts here (`WelcomeScript.reelEnd`).
+    public var chatterEnd: TimeInterval {
+        guard count > 0 else { return Self.lead + Self.silentReel }
+        return end(of: count - 1)
     }
-
-    /// The scene's end: the hero at rest and full size.
-    public var total: TimeInterval { settleStart + Self.settleLength }
 
     /// The line's volume at `time`, 0...1 with its base gain: up over `fadeIn`, held, and down
     /// over its last `crossfade` seconds.

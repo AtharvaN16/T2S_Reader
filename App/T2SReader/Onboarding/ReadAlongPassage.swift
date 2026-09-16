@@ -63,6 +63,10 @@ struct ReadAlongPassage: View {
     /// `FlowLayout` spaces rows in points where the Reader sets a multiple.
     static var bodyFont: Font { .custom("Inter-Regular", size: ReaderTypesetter.bodySize) }
     static var lineGap: CGFloat { ReaderTypesetter.bodySize * (1.5 - 1.22) }
+    /// Blank room at each end of the block, so the first and last words can reach the middle.
+    /// A little under half a phone's height: enough on every size, and it costs nothing when the
+    /// passage is long because it is never scrolled that far.
+    static let centringRoom: CGFloat = 300
 
     var body: some View {
         let tokens = tokens
@@ -84,6 +88,13 @@ struct ReadAlongPassage: View {
             }
             .scrollDisabled(true)
             .scrollIndicators(.hidden)
+            // Room above the first word and below the last, so *any* word can be brought to the
+            // middle. Without it `scrollTo(_:anchor: .center)` cannot scroll above the content's
+            // own start, so the opening words stay pinned at the top — under the crown's fade,
+            // where the one word being spoken is the one thing that must never be — and the block
+            // only begins to follow once enough of it has gone by. The Reader's page has the same
+            // room for the same reason.
+            .contentMargins(.vertical, Self.centringRoom, for: .scrollContent)
             .onChange(of: current) { _, index in
                 guard let index else { return }
                 withAnimation(.smooth(duration: 0.5)) { proxy.scrollTo(index, anchor: .center) }

@@ -246,7 +246,7 @@ final class NowPlayingController {
         commandTargets.append((command, command.addTarget(handler: handler)))
     }
 
-    private func artwork(for document: Document) -> MPMediaItemArtwork {
+    private func artwork(for document: T2SCore.Document) -> MPMediaItemArtwork {
         if let cached = artworkCache[document.id] { return cached }
         let path = document.coverImagePath.map(paths.url(forRelativePath:)) ?? paths.coverURL(document.id)
         guard let image = UIImage(contentsOfFile: path.path) else { return fallbackArtwork }

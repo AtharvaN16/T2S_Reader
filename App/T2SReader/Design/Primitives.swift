@@ -228,7 +228,7 @@ struct Artwork: View {
     var radius: CGFloat
     /// What to draw instead of a grey block when there is no image: the mini-player passes its
     /// document so a placeholder book or a pasted text keeps its identity at 36 pt too.
-    var document: Document? = nil
+    var document: T2SCore.Document? = nil
 
     /// Internal, not private: `BookCover` reads the same cache, and needs the decoded size for
     /// its proportions.
@@ -261,7 +261,7 @@ struct Artwork: View {
 /// text its paper with the kind's glyph — the same three faces `BookCover` and `SheetCover`
 /// draw at shelf size, so the mini-player's art matches the row the book came from.
 private struct CoverMark: View {
-    var document: Document
+    var document: T2SCore.Document
     var size: CGFloat
     var radius: CGFloat
 

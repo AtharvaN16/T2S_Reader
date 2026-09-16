@@ -4,11 +4,17 @@ import T2SApp
 /// The voice list, for Settings (the default voice) and for one document (`VoiceChangeSheet`).
 ///
 /// Round 6 (2026-09-10, from the owner's first look at round 5 on the phone): no avatar disc — the
-/// name carries a ♀ / ♂ mark and, on the voice that plays by default, a "Default" tag; the old
-/// "Default" pointer row is gone with it. Three marks at the end of every row, each its own verb:
-/// a waveform (hear), a heart (keep), a radio (choose). Choosing moves the radio and slides a bar
-/// up from the foot, so nothing applies until a key is pressed and nothing needs a mode. Sections
-/// by accent under no group title.
+/// name carries its kind and, on the voice that plays by default, a "Default" tag; the old
+/// "Default" pointer row is gone with it. Choosing moves the radio and slides a bar up from the
+/// foot, so nothing applies until a key is pressed and nothing needs a mode. Sections by accent
+/// under no group title.
+///
+/// **Hearing is the row; choosing is the radio** (owner, 2026-09-16). The ♀ / ♂ marks are gone and
+/// the name itself is pink or blue, which frees the space beside it for the sample's waveform while
+/// it plays. The hear button went with them: the whole body of the row is the play control now, so
+/// auditioning the list costs one tap per voice and never moves the selection. The waveform is the
+/// Player's `waveform` mark — on the book sheet it means audio being *made*, here audio being
+/// *heard* — which is why nothing else in this page may wear it.
 ///
 /// **One key, and a line you can tick** (owner, 2026-09-12). The document's bar carried two keys
 /// for a while — "Done" beside a quieter "Make default" — and they were never a primary and its
@@ -238,9 +244,11 @@ struct VoiceListPage: View {
         .padding(.bottom, 20)
     }
 
-    /// One row: the name with its ♀ / ♂ mark and, on the default voice, a "Default" tag; the
-    /// character line under it; then a play button (hear), a heart (keep) and a radio (choose). The
-    /// name and the radio are one button; the other two are their own.
+    /// One row: the name — pink for a female voice, blue for a male one, in place of the ♀ / ♂ marks
+    /// that used to follow it — with the sample's waveform beside it while it plays and, on the
+    /// default voice, a "Default" tag; the character line under it; then a heart (keep) and a radio
+    /// (choose). The body of the row is one button and it *hears* the voice; choosing is the radio's
+    /// job alone (owner, 2026-09-16), so a reader can audition the list without changing anything.
     private func row(_ option: VoiceOption) -> some View {
         let isSelected = option.id == selectedID
         let isDefault = option.id == defaultID
@@ -248,14 +256,19 @@ struct VoiceListPage: View {
         let rendering = previewing && env.voicePreview.isRendering
         let isFavorite = env.preferences.favoriteVoiceIDs.contains(option.id)
         return HStack(spacing: 4) {
-            Button { pending = option } label: {
+            Button { env.voicePreview.toggle(option.id) } label: {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
                         Text(option.name)
                             .typeRole(.rowTitle)
-                            .foregroundStyle(Tokens.ink)
+                            .foregroundStyle(nameColor(option.gender))
                             .lineLimit(1)
-                        if let gender = option.gender { GenderMark(gender: gender) }
+                        if rendering {
+                            ProgressView().controlSize(.mini).tint(Tokens.ink2)
+                        } else if previewing {
+                            PreviewWaveform(duration: env.voicePreview.previewDuration)
+                                .id(option.id)
+                        }
                         if isDefault { tag("Default") }
                     }
                     if let detail = option.detail {
@@ -271,23 +284,7 @@ struct VoiceListPage: View {
             }
             .buttonStyle(.plain)
             .accessibilityAddTraits(isSelected ? [.isSelected] : [])
-            .accessibilityHint("Chooses this voice")
-
-            Button { env.voicePreview.toggle(option.id) } label: {
-                ZStack {
-                    if rendering {
-                        ProgressView().tint(Tokens.ink)
-                    } else {
-                        Image(systemName: previewing ? "pause.fill" : "play.fill")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundStyle(previewing ? Tokens.ink : Tokens.ink2)
-                    }
-                }
-                .frame(width: 40, height: 40)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(previewing ? "Stop preview" : "Preview \(option.name)")
+            .accessibilityLabel(previewing ? "Stop previewing \(option.name)" : "Hear \(option.name)")
 
             if showsFavorites, option.gender != nil {                                // only the on-device voices are starred
                 HeartButton(isOn: isFavorite,
@@ -304,6 +301,16 @@ struct VoiceListPage: View {
         }
         .frame(minHeight: 56)
         .padding(.vertical, Spacing.grid)   // room between rows, on top of the tap-target minimum
+    }
+
+    /// A voice with no gender — the system default, and the cloud voices that do not declare one —
+    /// stays in the page's ink rather than being forced into one of the two families.
+    private func nameColor(_ gender: VoiceGender?) -> Color {
+        switch gender {
+        case .female: Tokens.voiceFemale
+        case .male: Tokens.voiceMale
+        case nil: Tokens.ink
+        }
     }
 
     /// Light blue with dark blue text (owner, 2026-09-10): a grey tag on grey rows was missed.
@@ -336,5 +343,33 @@ struct VoiceListPage: View {
         case .unavailable(let reason):
             return "Not available on this device: \(reason) Documents set to a Kokoro voice play with the system default voice."
         }
+    }
+}
+
+/// The SF `waveform` filling left to right as the sample plays — the same mark the Player uses for
+/// audio being made, here for audio being heard. A preview is one finished buffer played straight
+/// through, so the fill is a linear animation over the sample's own length rather than a polled
+/// position: nothing can seek or stall inside it, and a timer per visible row would cost more than
+/// the mark is worth.
+private struct PreviewWaveform: View {
+    var duration: TimeInterval
+    @State private var fill: CGFloat = 0
+    private static let box: CGFloat = 18
+
+    var body: some View {
+        let glyph = Image(systemName: "waveform").font(.system(size: 14, weight: .semibold))
+        ZStack(alignment: .leading) {
+            glyph.foregroundStyle(Tokens.ink3)
+            glyph.foregroundStyle(Tokens.accent)
+                .mask(alignment: .leading) { Rectangle().frame(width: Self.box * fill) }
+        }
+        .frame(width: Self.box, height: Self.box)
+        .onAppear {
+            // A zero length means the sample's duration never arrived; leave the mark grey rather
+            // than flash a full orange one.
+            guard duration > 0 else { return }
+            withAnimation(.linear(duration: duration)) { fill = 1 }
+        }
+        .accessibilityHidden(true)                                  // the row's own label says it is playing
     }
 }

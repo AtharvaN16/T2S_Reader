@@ -184,7 +184,7 @@ final class AppEnvironment {
         // rather than by a view: the wait begins at launch, long before any screen that draws it
         // appears, and a source installed on a view's first appearance would be a source that
         // missed the beginning of the only job it speaks for.
-        appStatus.register(VoiceStatusSource(status: kokoroStatus, player: player, appStatus: appStatus))
+        appStatus.register(VoiceStatusSource(status: kokoroStatus, player: player))
     }
 
     static func live() throws -> AppEnvironment {

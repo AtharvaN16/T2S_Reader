@@ -179,13 +179,6 @@ struct ReaderPalette: Equatable {
     }
 
 
-    /// A page colour as a light: its hue, at a light's saturation and brightness. `nil` when the
-    /// page has no hue to take — see `glow` for why that falls back to the app's blue rather than
-    /// to some arbitrary rotation of a grey.
-    ///
-    /// The turn through HSB is written out rather than borrowed from `UIColor.getHue` because this
-    /// runs at palette construction for a `let` table of hex numbers, with no colour space and no
-    /// trait collection in sight — the inputs here are sRGB integers and nothing else.
     /// Which of a light's two shades reads on `page`: the deep one on a light ground, the lifted
     /// one on a dark ground. Relative luminance by the sRGB coefficients, without the gamma step —
     /// this is choosing between two values, not measuring a contrast ratio, and no page in the

@@ -143,11 +143,21 @@ struct ReaderPage: View {
         // same pixels; the bar going was invisible only by luck.
         .overlay {
             GeometryReader { geo in
+                // `extra` is the *animating* height, not the constant, and that is the whole of the
+                // ending's look. Held at `StatusRows.bandHeight` the ground kept its full depth and
+                // dissolved by opacity over 1.5 s while `topBar` travelled the same 54 pt by
+                // position — so halfway through, a half-transparent ground let the book's text
+                // through a strip the header had not yet reached, and the reader watched a hole
+                // open at the top of the page and then be filled in by the title bar (owner,
+                // 2026-09-15: "it leaves like a hole in the reader UI ... it looks really bad").
+                // Two kinds of animation doing one job. Tied to the same number, the ground's foot
+                // and the header's crown are the same edge on every frame: the band retracts
+                // upward and the header follows it, and no text is ever uncovered.
                 TopFade(inset: geo.frame(in: .global).minY,
-                        extra: StatusRows.bandHeight,
+                        extra: statusBandHeight,
                         colour: palette.page)
                     .opacity(statusBandHeight > 0 ? 1 : 0)
-                    .animation(.easeInOut(duration: StatusGlow.fadeOut), value: statusBandHeight)
+                    .animation(.easeInOut(duration: StatusGlow.leave), value: statusBandHeight)
             }
             .allowsHitTesting(false)
         }
@@ -297,7 +307,7 @@ struct ReaderPage: View {
         // was drawn for. The gap it opens above the bar is `TopFade`'s, which is up whenever these
         // rows are.
         .padding(.top, statusBandHeight)
-        .animation(.easeInOut(duration: StatusGlow.fadeOut), value: statusBandHeight)
+        .animation(.easeInOut(duration: StatusGlow.leave), value: statusBandHeight)
     }
 
     /// The shape of a ground bar, as a mask over the ground it paints: easing between solid and

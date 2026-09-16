@@ -183,8 +183,24 @@ import Testing
     }
 
     @Test func thePhasesAfterADownloadDivideTheBarInThree() {
-        let reading = WarmUpReading(phase: .preparing(step: 3, of: 8, secondsLeft: 40), progress: 0.7)
+        // `afterAnInstall: true` is what the name always meant. It was omitted, and the assertion
+        // passed on a rule that divided the bar for every launch — which is the rule that made an
+        // everyday warm-up collapse three segments into one at ready.
+        let reading = WarmUpReading(phase: .preparing(step: 3, of: 8, secondsLeft: 40),
+                                    progress: 0.7, afterAnInstall: true)
         #expect(reading.segments.count == 3)
+    }
+
+    /// The bar's shape is a launch's property, not a phase's: whatever it is during the wait, it is
+    /// still that on the last beat, so the ending fills and recolours a bar that is already there.
+    @Test func theBarKeepsItsShapeThroughTheEndingItIsFilling() {
+        for afterAnInstall in [false, true] {
+            let waiting = WarmUpReading(phase: .preparing(step: 3, of: 8, secondsLeft: 40),
+                                        progress: 0.7, afterAnInstall: afterAnInstall)
+            let ready = WarmUpReading(phase: .ready(buildingBackgroundSet: false),
+                                      progress: 1, afterAnInstall: afterAnInstall)
+            #expect(waiting.segments == ready.segments)
+        }
     }
 
     @Test func preparingNamesTheStepAndKeepsItsClock() {

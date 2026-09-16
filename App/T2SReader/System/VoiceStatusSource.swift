@@ -13,15 +13,9 @@ final class VoiceStatusSource: StatusSource {
     let kind: StatusKind = .voice
     private let status: KokoroStatusModel
     private let player: PlayerModel
-    /// The slot this source speaks in, held `unowned` because the model owns the graph that owns
-    /// this source: `AppEnvironment` builds both and outlives both, so a strong reference here
-    /// would be a cycle and a weak one would be an optional that is never nil.
-    private unowned let appStatus: AppStatusModel
-
-    init(status: KokoroStatusModel, player: PlayerModel, appStatus: AppStatusModel) {
+    init(status: KokoroStatusModel, player: PlayerModel) {
         self.status = status
         self.player = player
-        self.appStatus = appStatus
     }
 
     /// Warming, or holding the beat that ends a warm-up. Nothing about playback: what the reader
@@ -42,9 +36,14 @@ final class VoiceStatusSource: StatusSource {
     /// The alarm the old rule was avoiding is answered by the words rather than by hiding the
     /// light: the band names the phase, so a breathing rim over a book that is reading aloud is
     /// captioned "Downloading the voice" and not left to be guessed at.
-    /// Whether the wait wants the band on screen: warming, or holding the beat that ends a
-    /// warm-up. Going false is what starts the fade.
+    ///
+    /// Going false is what starts the band's fade.
     var isActive: Bool { status.status.isWarming || status.isHoldingReadyBeat }
+
+    /// When this warm-up's last beat began, which is the date the band eases its ending's colour
+    /// from. `KokoroStatusModel` stops clearing this once it is set — the green, "Voice ready" and
+    /// the full bar are all read from it and have to outlast the fade they start.
+    var endedAt: Date? { status.readyAt }
 
     func reading(now: Date) -> StatusReading? {
         // Deliberately a wider gate than ``isActive``, and the two part company for exactly one
@@ -58,8 +57,6 @@ final class VoiceStatusSource: StatusSource {
         // struct a frame and is exactly what the old `WarmUpLine` did — it resolved forever too,
         // and was simply not on screen.
         guard isActive || status.readyAt != nil else { return nil }
-        // The beat is one date, so the rims and the rows turn on the same frame.
-        if status.readyAt != appStatus.endedAt { appStatus.markEnding(at: status.readyAt) }
         return WarmUpReading(phase: phase(now: now),
                              progress: progress(now: now),
                              afterAnInstall: status.launchIncludedInstall).reading

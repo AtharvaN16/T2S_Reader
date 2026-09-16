@@ -11,6 +11,10 @@ public protocol StatusSource: AnyObject {
     /// Whether this job wants the band on screen. Going false is what starts the fade.
     var isActive: Bool { get }
 
+    /// When this job's last beat began, or nil while it is still running. The band eases its
+    /// ending's colour from this date.
+    var endedAt: Date? { get }
+
     /// This job's state as the band would say it, or nil when the job has nothing to show.
     ///
     /// **This must keep answering through the fade that ``isActive`` going false starts**, and
@@ -48,37 +52,41 @@ public final class AppStatusModel {
         sources.sort { $0.kind.rank < $1.kind.rank }
     }
 
-    /// What the band draws at `now`: the highest-ranked source with something to say.
+    /// What the band draws at `now`: the highest-ranked source with something to say, preferring
+    /// one that is still asking for the band over one that is only finishing its sentence.
     ///
-    /// Not the same question as ``isShowing``, and the gap between them is deliberate — see the
-    /// note on `StatusSource.reading(now:)`. This one keeps answering through the fade, so the
-    /// band has something to draw while it goes.
+    /// The two passes are the whole of it. A source keeps answering through the fade after it goes
+    /// inactive, so a single pass by rank would let a warm-up that ended an hour ago outrank a
+    /// render that is running right now — the band would sit on "Voice ready" for the whole job.
+    /// Latent while the voice is the only source, and a trap laid for the second one.
     public func current(now: Date) -> StatusReading? {
+        for source in sources where source.isActive {
+            if let reading = source.reading(now: now) { return reading }
+        }
         for source in sources {
             if let reading = source.reading(now: now) { return reading }
         }
         return nil
     }
 
-    /// Whether the band is up — the fade gate, and a plain `Bool` because an `.animation(value:)`
-    /// cannot be driven by something that changes every frame.
-    ///
-    /// Asked of ``StatusSource/isActive`` rather than of `current(now:) != nil`: a source's words
-    /// outlive its claim on the band by exactly one fade, so a gate read off the words would never
-    /// go false and the band would never leave the screen.
-    public var isShowing: Bool { sources.contains(where: \.isActive) }
-
-    // MARK: the ending
-
     /// How far into the ending's colour, 0…1, eased on the breath's own curve. Smoothstep, as the
     /// cosine is at its ends, so the ending arrives the way the light moved rather than flashing.
+    ///
+    /// Read from whichever source owns the slot rather than from a date this model stores. It was
+    /// stored, and the source set it from inside `reading(now:)` — which the band calls from a
+    /// `TimelineView` body, so an `@Observable` property was being written during view update, on
+    /// exactly the frame the ending's cross-fade begins. Asking costs nothing and mutates nothing.
     public func endSettle(now: Date) -> Double {
-        guard let endedAt else { return 0 }
+        guard let endedAt = speaking?.endedAt else { return 0 }
         let t = min(1, max(0, now.timeIntervalSince(endedAt) / StatusReading.readyEase))
         return t * t * (3 - 2 * t)
     }
 
-    /// When the showing job began its last beat, set by the source that owns the slot.
-    public private(set) var endedAt: Date?
-    public func markEnding(at date: Date?) { endedAt = date }
+    /// The source currently holding the slot, by the same order ``current(now:)`` uses.
+    private var speaking: (any StatusSource)? {
+        sources.first(where: { $0.isActive }) ?? sources.first
+    }
+
+    public var isShowing: Bool { sources.contains(where: \.isActive) }
+
 }

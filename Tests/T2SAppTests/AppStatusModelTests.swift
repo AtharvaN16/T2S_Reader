@@ -11,6 +11,7 @@ import Testing
     private final class Fake: StatusSource {
         let kind: StatusKind
         var isActive: Bool
+        var endedAt: Date?
         var reading: StatusReading?
         /// `showing` sets both, which is the ordinary case. `fading` is the one that matters:
         /// a job whose claim on the band has ended but whose words must survive the fade out.

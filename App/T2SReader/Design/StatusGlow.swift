@@ -63,6 +63,18 @@ enum StatusGlow {
     /// date lives now.
     static let fadeOut: Double = 1.5
 
+    /// How long everything that is *not* light takes to leave: the rows, the ground under them, and
+    /// the host header that steps aside for them.
+    ///
+    /// They used to leave on `fadeOut` too, and one duration for two kinds of thing was the whole
+    /// defect. A glow dying over a second and a half reads as a light going out; words and a bar
+    /// doing it read as stuck, and a header sliding 54 pt over it reads as a collapse. Worse, an
+    /// opaque ground fading by *opacity* while a header travels by *position* uncovers the page
+    /// between them — the reader watched a hole open at the top and be filled in by the title bar
+    /// (owner, 2026-09-15). Everything on this number moves together and nothing is uncovered; the
+    /// light alone takes its time.
+    static let leave: Double = 0.35
+
     /// How far into the ending's colour, eased on the same curve the breath uses. The blue takes a
     /// second and a half to breathe in; the ending takes the same to arrive, rather than cutting in
     /// over a quarter-second and reading as a flash (owner, 2026-09-12).

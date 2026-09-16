@@ -81,7 +81,10 @@ struct StatusRows: View {
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)
-        .animation(.easeInOut(duration: StatusGlow.fadeOut), value: showing)
+        // `StatusGlow.leave`, not `fadeOut`. A second and a half is the right length for a light to
+        // die away and much too long for words and a bar, which simply looked stuck — and it has to
+        // be the same length the Reader's ground and header move in, or one uncovers the other.
+        .animation(.easeInOut(duration: StatusGlow.leave), value: showing)
     }
 
     // MARK: drawing
@@ -119,12 +122,17 @@ struct StatusRows: View {
                 .opacity(reading.collapsesSubtext ? 0 : 1)
                 .padding(.top, reading.collapsesSubtext ? 0 : 2)
                 .clipped()
+                .animation(.easeInOut(duration: 0.34), value: reading.collapsesSubtext)
 
             bar(reading, tint: barTint)
                 .padding(.top, 7)
         }
         .frame(maxWidth: .infinity)
-        .animation(.easeInOut(duration: 0.34), value: reading.collapsesSubtext)
+        // Scoped to the row that collapses, never to the stack. On the whole `VStack` it also
+        // caught the *title's* text change — and the one moment both happen at once is the turn to
+        // ready, so "Warming up the voice" and "Voice ready" cross-dissolved on top of each other
+        // as a legible double exposure (owner, 2026-09-15: "I can see ghosting"). The title is one
+        // slot whose words change; it should cut, not dissolve.
     }
 
     /// The faint row. The two slots sit either side of a separator that exists only when both of
@@ -252,7 +260,7 @@ struct StatusBandOverlay: View {
     var body: some View {
         let showing = env.appStatus.isShowing
         ZStack {
-            rims
+            if showing { rims.transition(.opacity) }
             // The safe-area inset the rows stand under, measured here rather than inside them:
             // `StatusRows` spans the screen with `ignoresSafeArea`, and a proxy under that reports
             // the inset it now covers as zero. This reader is the last view still inside it.
@@ -277,6 +285,14 @@ struct StatusBandOverlay: View {
 
     /// Both rims read one reading on one frame, so head and foot can never disagree about the
     /// colour they are ending on.
+    ///
+    /// **Gated on `showing`, and it has to be.** The rims light on `tone != nil`, and a source goes
+    /// on answering long after it has stopped asking for the band — the voice's `readyAt` is never
+    /// cleared, by design, so its reading outlives every warm-up. Without the gate above, the
+    /// rims fed from that reading simply never went out: every launch ended with green top and
+    /// bottom rims lit for the rest of the session. The gate is also what stops this `TimelineView`
+    /// ticking at the refresh rate for the app's whole life, re-compositing two blurred 36 pt
+    /// strokes and a dither tile over a band nobody can see.
     @ViewBuilder private var rims: some View {
         TimelineView(.animation) { context in
             let reading = env.appStatus.current(now: context.date)

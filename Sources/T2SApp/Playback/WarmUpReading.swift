@@ -187,11 +187,18 @@ public struct WarmUpReading: Sendable {
     /// Relative segment widths for the bar. One entry is a plain bar. A download is one continuous
     /// byte count, so it stays plain; only once the install's phases are behind it does the bar
     /// divide — download, prepare, warm — proportioned to how long each really takes.
+    ///
+    /// **The shape is decided once per launch, by `afterAnInstall`, and never changes again.** It
+    /// used to be `.preparing`'s alone to divide, unconditionally, while `.ready` divided only
+    /// after an install — so an everyday launch drew three segments all the way through the wait
+    /// and then collapsed them into one on the very last beat. The bar re-laid itself out at the
+    /// exact moment it should have been doing one thing only: filling, and turning green (owner,
+    /// 2026-09-15: "the progress indicator itself turns into the green bar, so you don't have to
+    /// reanimate the bar again"). A launch that paid for an install keeps its three parts from the
+    /// handoff to the end; one that did not is a single bar throughout.
     public var segments: [Double] {
         switch phase {
-        case .preparing, .hostedVoiceSpeaking:
-            [46, 18, 18]
-        case .warming, .ready, .failed(.warmUp):
+        case .preparing, .hostedVoiceSpeaking, .warming, .ready, .failed(.warmUp):
             afterAnInstall ? [46, 18, 18] : [1]
         case .checking, .waitingForNetwork, .downloading, .retrying, .failed(.install):
             [1]

@@ -29,6 +29,14 @@ public final class SleepTimer {
     private let player: PlayerModel
     private let clock: @Sendable () -> Date
     private var deadline: Date?
+    /// The deadline, for a Live Activity that counts down from it without the app waking up.
+    /// Read-only: the timer owns when it ends, and nothing outside may move it.
+    public var deadlineDate: Date? { deadline }
+
+    /// The chapter the reader was in when an `.endOfChapter` sleep began, for the card that
+    /// names it. Nil for a timed sleep.
+    public var sleepChapterTitle: String? { chapterTitleAtStart }
+
     private var chapterAtStart: Int?
     private var chapterTitleAtStart: String?
 

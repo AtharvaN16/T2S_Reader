@@ -1,5 +1,9 @@
 #!/usr/bin/env swift
 // scripts/make-app-icon.swift — draws the app icon. Run: `swift scripts/make-app-icon.swift [output.png]`.
+// With no argument it writes two copies of the same pixels: the icon itself, and `AppMark`, the
+// image the Import hub's picture draws in the middle of its ring (`ImportGraphic`). They are one
+// design in two places, so the script owns both and they cannot drift; a designed icon replaces
+// this file's drawing, or drops a PNG over each of the two outputs.
 // The design lives here so it can be tuned in code: the accent (`Tokens.accent`, #FF7A1A, spec
 // §2.4.2) as the ground, three white bars for a block of text, a play triangle for the speech.
 // Deterministic: the same pixels every run, so the committed PNG is reproducible. The bitmap is
@@ -40,12 +44,18 @@ context.addPath(triangle)
 context.fillPath()
 
 guard let image = context.makeImage() else { fatalError("no image") }
-let defaultOutput = "App/T2SReader/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png"
-let output = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? defaultOutput)
-try? FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
-guard let destination = CGImageDestinationCreateWithURL(output as CFURL, UTType.png.identifier as CFString, 1, nil) else {
-    fatalError("cannot write \(output.path)")
+let defaultOutputs = [
+    "App/T2SReader/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png",
+    "App/T2SReader/Assets.xcassets/AppMark.imageset/AppMark.png",
+]
+let outputs = CommandLine.arguments.dropFirst().isEmpty ? defaultOutputs : Array(CommandLine.arguments.dropFirst())
+for path in outputs {
+    let output = URL(fileURLWithPath: path)
+    try? FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
+    guard let destination = CGImageDestinationCreateWithURL(output as CFURL, UTType.png.identifier as CFString, 1, nil) else {
+        fatalError("cannot write \(output.path)")
+    }
+    CGImageDestinationAddImage(destination, image, nil)
+    guard CGImageDestinationFinalize(destination) else { fatalError("PNG encoding failed") }
+    print("wrote \(output.path)")
 }
-CGImageDestinationAddImage(destination, image, nil)
-guard CGImageDestinationFinalize(destination) else { fatalError("PNG encoding failed") }
-print("wrote \(output.path)")

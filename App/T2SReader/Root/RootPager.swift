@@ -70,6 +70,7 @@ struct RootPager: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .ignoresSafeArea(edges: .bottom)
+                .sensoryFeedback(.selection, trigger: page)
                 .environment(\.readerRoute, ReaderRoute(open: { readerDocument = $0 }))
 
                 // A page pushed from Settings owns the screen (owner, 2026-09-10): the bar and

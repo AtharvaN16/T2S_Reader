@@ -28,7 +28,7 @@ struct PreparePage: View {
         @Bindable var settings = env.prepareSettings
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.section) {
-                PageTitle(text: "Prepare on charge")
+                PageTitle(text: "Prepare on charge", topPadding: Spacing.subpageTitleTop)
 
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .center, spacing: 12) {

@@ -58,7 +58,7 @@ struct VoiceListPage: View {
         let options = env.voices.voices().filter { !$0.isDefault }             // the pointer row is a tag now
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                PageTitle(text: "Voice")
+                PageTitle(text: "Voice", topPadding: Spacing.subpageTitleTop)
                 ForEach(VoiceGroup.allCases, id: \.self) { group in
                     let groupOptions = options.filter { $0.group == group }
                     if !groupOptions.isEmpty {

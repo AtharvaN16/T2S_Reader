@@ -102,6 +102,15 @@ struct RootPager: View {
                             extra: warming ? TopFade.warmSolid : 0,
                             fade: warming ? TopFade.warmFade : TopFade.fadeHeight)
                         .animation(.easeInOut(duration: StatusGlow.fadeOut), value: warming)
+                        // It goes by fading, never by vanishing. `SettingsSubpage` counts itself in
+                        // on *appear*, which is the first frame of the push, so this is removed
+                        // while the page it was veiling is still on screen sliding out — the title
+                        // under it snapped from veiled grey to crisp black and the whole safe area
+                        // changed shade, which read as a bar flashing across the top (owner,
+                        // 2026-09-15). The pushed page brings its own ground in over the same beat,
+                        // so crossing the two is the honest picture of what is happening; the snap
+                        // was not.
+                        .transition(.opacity)
                 }
 
                 if !chrome.isSubpageOpen {
@@ -127,7 +136,7 @@ struct RootPager: View {
                 ToastHost()
                     .padding(.bottom, Spacing.grid + 152)
             }
-            .animation(.snappy, value: chrome.isSubpageOpen)
+            .animation(.easeInOut(duration: 0.3), value: chrome.isSubpageOpen)
         }
         .environment(chrome)
         .background(Tokens.ground.ignoresSafeArea())

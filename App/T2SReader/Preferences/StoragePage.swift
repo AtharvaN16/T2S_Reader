@@ -21,7 +21,7 @@ struct StoragePage: View {
         let storage = env.storage
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.section) {
-                PageTitle(text: "Storage")
+                PageTitle(text: "Storage", topPadding: Spacing.subpageTitleTop)
                 usage
                 if env.kokoroModel.isSupported { voice }
                 limit

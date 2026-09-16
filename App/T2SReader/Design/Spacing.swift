@@ -17,6 +17,12 @@ enum Spacing {
     /// that clearance now — it grows its own ground to `WarmUpLine.bandHeight` while the glow is up
     /// — so the title is free to sit where it looks right rather than where the warm-up allows.
     static let titleTop: CGFloat = 40
+    /// Where a *pushed* page's title sits, which cannot be `titleTop`: a Settings subpage draws its
+    /// own way back as a 36 pt circle at 12 from the top, so the circle reaches 48 and a title at 40
+    /// runs into its foot (owner, 2026-09-15: "their header is way too close to the back button").
+    /// This clears it by 16 — the same air the circle has above it — so the two read as a row and a
+    /// title rather than as two things that collided.
+    static let subpageTitleTop: CGFloat = 64
     static let sheetCorner: CGFloat = 28
     static let artworkSmall: CGFloat = 8
     /// Trailing space on the root pages so their last row scrolls clear of the bottom bar's fill

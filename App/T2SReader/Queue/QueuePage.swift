@@ -48,6 +48,7 @@ struct QueuePage: View {
             .listRowSeparator(.hidden)
             .listRowBackground(Color.clear)            // the pager's ground shows through, and the warm-up wash with it
         }
+        .pageTopEdge()
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .scrollIndicators(.hidden)

@@ -89,30 +89,9 @@ struct RootPager: View {
                     bottomFill(inset: geo.safeAreaInsets.bottom)
                         .transition(.opacity)
                 }
-                // The pager's own top edge, which it keeps whether or not a job is running: a root
-                // page always needs one. It is gated with a pushed page like the fill above — that
-                // page paints its own — and it is ground only. The light that goes over it is the
-                // status band's, drawn in a window of its own above this one (`StatusBandHost`).
-                if !chrome.isSubpageOpen {
-                    // The fade grows to hold the band's rows while they are up, and eases back on
-                    // the band's own timing so the two leave together rather than the ground
-                    // snapping out from under rows that are still fading.
-                    let warming = env.appStatus.isShowing
-                    TopFade(inset: geo.safeAreaInsets.top,
-                            extra: warming ? TopFade.warmSolid : 0,
-                            fade: warming ? TopFade.warmFade : TopFade.fadeHeight)
-                        .animation(.easeInOut(duration: StatusGlow.fadeOut), value: warming)
-                        // It goes by fading, never by vanishing. `SettingsSubpage` counts itself in
-                        // on *appear*, which is the first frame of the push, so this is removed
-                        // while the page it was veiling is still on screen sliding out — the title
-                        // under it snapped from veiled grey to crisp black and the whole safe area
-                        // changed shade, which read as a bar flashing across the top (owner,
-                        // 2026-09-15). The pushed page brings its own ground in over the same beat,
-                        // so crossing the two is the honest picture of what is happening; the snap
-                        // was not.
-                        .transition(.opacity)
-                }
-
+                // No top edge at this level. A page carries its own (`pageTopEdge`): one drawn
+                // here sits above the `TabView`, outside the navigation transition, so every push
+                // left it bright across the screen while UIKit dimmed the pages under it.
                 if !chrome.isSubpageOpen {
                     // 10 to the marks, not 12: the row below is 22 pt now where the icons were 32,
                     // and this stack stands on its foot, so the whole of what the marks gave back

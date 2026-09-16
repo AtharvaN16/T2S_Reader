@@ -110,6 +110,7 @@ struct CollectionPage: View {
             }
             .padding(.horizontal, Spacing.margin)
         }
+        .pageTopEdge()
         .scrollIndicators(.hidden)
         // The kind menu hangs from the title over the shelf, so it lives on the scroll view rather
         // than in the column: inside the column the grid, drawn after it, would cover it.

@@ -122,3 +122,50 @@ struct EdgeFade: View {
             .accessibilityHidden(true)
     }
 }
+
+/// A page's own top edge: the ground its content scrolls under, grown into the status band's long
+/// ramp while the band is up so the page title is read *through* it.
+///
+/// **A page owns this, not the pager, and that is the whole point of it.** The root pager drew one
+/// of these for all three pages, above the `TabView` — and a view above the `TabView` is outside the
+/// navigation transition, so when a Settings subpage was pushed UIKit dimmed both pages underneath
+/// and left this band bright across the full width of the screen. For the length of every push there
+/// was an undimmed strip lying over two dimmed pages: the "bar effect" the owner reported twice
+/// (2026-09-15), and it had nothing to do with the warm-up — it happened on every push, warm or not,
+/// which is how the owner told the two apart.
+///
+/// Owned by the page, it is inside the transition: it slides with its page, dims with its page, and
+/// there is no moment when it belongs to neither. It also makes a horizontal pager swipe honest,
+/// where one shared fade used to sit still over a moving carousel.
+///
+/// The inset is measured rather than read from `safeAreaInsets`: inside a page the proxy sits within
+/// the inset and reports it as zero, so the distance from the window's top down to this frame is the
+/// number, and the same shift puts the ground back on the glass.
+private struct PageTopEdge: ViewModifier {
+    @Environment(AppEnvironment.self) private var env
+    var colour: Color
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            GeometryReader { geo in
+                let top = geo.frame(in: .global).minY
+                let warming = env.appStatus.isShowing
+                TopFade(inset: top,
+                        extra: warming ? TopFade.warmSolid : 0,
+                        fade: warming ? TopFade.warmFade : TopFade.fadeHeight,
+                        colour: colour)
+                    .offset(y: -top)
+                    .animation(.easeInOut(duration: StatusGlow.leave), value: warming)
+            }
+            .allowsHitTesting(false)
+        }
+    }
+}
+
+extension View {
+    /// Draws this page's own top edge. Every page whose content scrolls under the status bar wears
+    /// one; see `PageTopEdge` for why it is the page's and not the pager's.
+    func pageTopEdge(colour: Color = Tokens.ground) -> some View {
+        modifier(PageTopEdge(colour: colour))
+    }
+}

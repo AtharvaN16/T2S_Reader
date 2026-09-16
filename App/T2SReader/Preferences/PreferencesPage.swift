@@ -112,6 +112,7 @@ struct PreferencesPage: View {
             // The stack paints its own opaque background over the pager's ground, which is what
             // kept the warm-up glow off this page alone (owner, 2026-09-10); cleared, the page is
             // as transparent as Home and the Collection.
+            .pageTopEdge()
             .containerBackground(Color.clear, for: .navigation)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showVoices) { voiceList }

@@ -2,12 +2,16 @@
 /// Persisted timelines record all three; a mismatch forces re-derivation (spec §3.7.4).
 public enum Versions {
     public static let schema = 1
+    /// 4 (2026-09-16): a packed utterance shorter than `Segmenter.minUtteranceLength` joins its
+    /// neighbour. Worth the re-derivation: a drop cap or any other line break inside a paragraph left
+    /// a word standing as its own synthesis call, which Kokoro reads well above the voice's narration
+    /// pitch — the owner heard it mid-chapter as a shriek.
     /// 3 (2026-09-16): consecutive blocks a reader cut out of one source element are put back
     /// together before segmenting (`TimelineBuilder.joined`). Worth the re-derivation: a chapter
     /// heading broken by a `<br/>` left its number a one-word utterance, which Kokoro reads up to an
     /// octave above the voice's narration pitch.
     /// 2 (2026-09-06): consecutive sentences of a block pack into one utterance (`Segmenter.packLength`).
-    public static let segmenter = 3
+    public static let segmenter = 4
     /// 4 (2026-09-09): a footnote number glued to sentence-final punctuation is dropped
     /// (`StripCitationsRule.footnotes`) — every chapter of a footnoted book said them aloud, so this
     /// one is worth the re-derivation it costs.

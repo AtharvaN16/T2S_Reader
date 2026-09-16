@@ -48,6 +48,9 @@ spikes/findings/quality-probe/
 spikes/findings/lever-probe/
 # Voice tail probe output (scripts/voice-tail-probe.sh: every voice's call tails, report.md and WAVs)
 spikes/findings/voice-tail-probe/
+# Heading and shriek probes: WAVs, and paragraphs.json — a book's own text, which never goes in here
+spikes/findings/heading-probe/
+spikes/findings/shriek-probe/
 # Compute-unit probe output (scripts/compute-probe.sh: load and render times per policy)
 spikes/findings/compute-probe/
 # Quantization probe output (scripts/quantization-probe.sh: fp16 and int8 WAV pairs, report.txt)

@@ -112,10 +112,15 @@ enum Tokens {
     /// almost exactly and takes the cast alone: red words on paper need the ground *light*, so
     /// darkening there would spend the very contrast this is buying.
     static let destructiveFill = dynamic(light: 0xF6E5E3, dark: 0x3A2120)
-    /// The voice picker's avatar discs: pink for a female voice, blue for a male one. Categorical,
-    /// not accent — they say which of two kinds a row is, never that it is selected or active.
-    static let voiceFemale = dynamic(light: 0xE8558A, dark: 0xF06E9E)
-    static let voiceMale = dynamic(light: 0x3B82F6, dark: 0x5B9CFF)
+    /// The voice picker's names: pink for a female voice, blue for a male one. Categorical, not
+    /// accent — they say which of two kinds a row is, never that it is selected or active.
+    ///
+    /// Light is deeper than the shade a glyph would take (owner, 2026-09-16: the ♀/♂ marks gave way
+    /// to colouring the name itself). A stroke only has to clear 3:1 to read; lettering has to clear
+    /// 4.5:1, and the old pair sat at 3.2 and 3.5 on `ground` — fine as marks, thin as words. Same
+    /// hues, carried down until they pass: 4.9 and 5.6. Dark is untouched, where both already cleared.
+    static let voiceFemale = dynamic(light: 0xC82C68, dark: 0xF06E9E)
+    static let voiceMale = dynamic(light: 0x1A5FCC, dark: 0x5B9CFF)
     /// Lighting on artwork (`BookCover`): a shadow is dark and a highlight is light in both themes,
     /// unlike `ink`, which flips. Neither carries alpha — each use sets its own.
     static let shade = dynamic(light: 0x000000, dark: 0x000000)

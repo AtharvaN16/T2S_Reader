@@ -154,6 +154,36 @@ import T2SCore
 
         #expect(factory.made.isEmpty)
     }
+
+    @Test func theSamplesLengthIsPublishedSoTheRowCanFillAWaveformOverIt() async throws {
+        let engine = FakeEngine(secondsPerCharacter: 0.05)
+        let factory = PlayerFactory()
+        let model = VoicePreviewModel(engine: engine, makePlayer: { factory.make($0) }, beforePreview: {})
+        #expect(model.previewDuration == 0)
+
+        model.toggle(voiceA)
+        while model.isRendering { await Task.yield() }
+
+        let spoken = Double(VoicePreviewModel.sampleText.utf16.count) * 0.05
+        #expect(abs(model.previewDuration - spoken) < 0.001)
+
+        model.stop()
+        #expect(model.previewDuration == 0)
+    }
+
+    @Test func aFailedRenderLeavesNoLengthBehindForTheNextPreview() async throws {
+        let engine = FakeEngine(secondsPerCharacter: 0.05)
+        await engine.fail(on: VoicePreviewModel.sampleText)
+        let factory = PlayerFactory()
+        let model = VoicePreviewModel(engine: engine, makePlayer: { factory.make($0) }, beforePreview: {})
+
+        model.toggle(voiceA)
+        while model.isRendering { await Task.yield() }
+
+        #expect(model.previewing == nil)
+        #expect(model.previewDuration == 0)
+        #expect(model.lastError != nil)
+    }
 }
 
 /// Records every player `VoicePreviewModel` builds, so a test can inspect each one.

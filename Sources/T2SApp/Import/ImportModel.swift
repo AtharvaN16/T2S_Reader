@@ -42,10 +42,13 @@ public final class ImportModel {
 
     private let library: Library
     private let extractor: any ArticleExtracting
+    private let downloader: any BookDownloading
 
-    public init(library: Library, extractor: any ArticleExtracting) {
+    public init(library: Library, extractor: any ArticleExtracting,
+                downloader: any BookDownloading = URLSessionBookDownloader()) {
         self.library = library
         self.extractor = extractor
+        self.downloader = downloader
     }
 
     /// True while a fetch or an import is running. Every entry point refuses to start while it is
@@ -77,12 +80,36 @@ public final class ImportModel {
             return
         }
         phase = .fetching(link)
+        // A link that ends in `.epub` or `.pdf` is the book itself, not a page about it: the app
+        // downloads it and imports it as a file, with no preview step to confirm — there is no
+        // article to look at. This is the way in for a book found on the web (owner, 2026-09-16):
+        // a download on the phone goes straight to Apple Books and never reaches Files, so the
+        // picker below cannot see it, and the only way out of Books is its own Share sheet.
+        // Running the extractor over it instead would park a WKWebView on a binary until it timed
+        // out and then say "No article was found on that page."
+        if Self.sourceType(for: link) != nil {
+            await downloadBook(from: link)
+            return
+        }
         do {
             phase = .preview(try await extractor.extract(from: link))
         } catch let error as ExtractionError {
             phase = .failed(Self.message(for: error))
         } catch {
             phase = .failed("Couldn't load the page: \(error.localizedDescription)")
+        }
+    }
+
+    /// Fetches the book behind `link` into a temporary file and imports it like any other file.
+    /// The copy is ours alone — `Library.importFile` has copied it into the container by the time
+    /// this returns — so it goes as soon as the import is over, however the import ended.
+    private func downloadBook(from link: URL) async {
+        do {
+            let file = try await downloader.downloadBook(from: link)
+            defer { Self.discardDownload(at: file) }
+            await runImport([file])
+        } catch {
+            phase = .failed(Self.message(for: error))
         }
     }
 
@@ -111,6 +138,12 @@ public final class ImportModel {
     /// `.failed` when none succeeded.
     public func importFiles(_ urls: [URL]) async {
         guard !isBusy else { return }
+        await runImport(urls)
+    }
+
+    /// The import itself, without the busy guard: a downloaded book arrives here from `fetch(link:)`
+    /// with the phase already `.fetching`, which the guard would read as somebody else's import.
+    private func runImport(_ urls: [URL]) async {
         fileRows = urls.map { FileRow(id: $0, name: $0.lastPathComponent, state: .pending) }
         phase = .importing
         var imported: [DocumentSummary] = []
@@ -156,6 +189,15 @@ public final class ImportModel {
         }
     }
 
+    /// Removes a downloaded book and the scratch folder `URLSessionBookDownloader` made for it,
+    /// and nothing else: the folder only goes when it is one of ours, so a downloader that hands
+    /// back a file from somewhere shared cannot take its neighbours with it.
+    private static func discardDownload(at file: URL) {
+        try? FileManager.default.removeItem(at: file)
+        let folder = file.deletingLastPathComponent()
+        if folder.lastPathComponent.hasPrefix("t2s-download-") { try? FileManager.default.removeItem(at: folder) }
+    }
+
     static func sourceType(for url: URL) -> SourceType? {
         switch url.pathExtension.lowercased() {
         case "epub": return .epub
@@ -174,6 +216,9 @@ public final class ImportModel {
         case ImportError.malformedBody: return "The article text couldn't be converted."
         case ImportError.differentFile: return "That's a different file."
         case ImportError.alreadyInLibrary: return "That's already in your library."
+        case BookDownloadError.network(let detail): return "Couldn't download that file: \(detail)"
+        case BookDownloadError.server(let code): return "That link didn't work (\(code))."
+        case BookDownloadError.notABook(let kind): return "That link isn't an EPUB or a PDF (\(kind))."
         case ExtractionError.invalidURL: return "That doesn't look like a web address."
         case ExtractionError.network(let detail): return "Couldn't load the page: \(detail)"
         case ExtractionError.noArticle: return "No article was found on that page."

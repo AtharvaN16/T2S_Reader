@@ -132,6 +132,9 @@ final class ShareImportService {
     private func importedIDs(after operation: @escaping () async -> Void,
                              then confirmation: @escaping () async -> Void) async -> [UUID] {
         await operation()
+        // A link that is the book itself — an `.epub` or `.pdf` address shared out of Safari —
+        // downloads and imports in one move, with no preview to confirm (`ImportModel.fetch`).
+        if case .done(let summaries) = model.phase { return summaries.map(\.id) }
         guard case .preview = model.phase else { return [] }
         await confirmation()
         guard case .done(let summaries) = model.phase else { return [] }

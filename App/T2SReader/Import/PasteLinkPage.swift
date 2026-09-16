@@ -67,6 +67,10 @@ struct PasteLinkPage: View {
                 Text("Share  ›  Add to t2s")
             }
             .typeRole(.meta).foregroundStyle(Tokens.ink2)
+            // The way past Apple Books, which takes an EPUB downloaded on the phone before it ever
+            // reaches Files (owner, 2026-09-16): paste the download link and t2s fetches the book.
+            Text("A link that ends in .epub or .pdf brings in the book itself — no need to save it to Files first.")
+                .typeRole(.meta).foregroundStyle(Tokens.ink2)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)

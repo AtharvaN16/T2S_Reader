@@ -43,6 +43,59 @@ import T2SStore
         #expect(model.phase == .failed("This kind of file isn't supported (article)."))
     }
 
+    /// A link straight to a book downloads and imports it, with no preview to confirm: there is no
+    /// article to look at. This is the way past Apple Books, which swallows an EPUB downloaded on
+    /// the phone before it ever reaches Files (owner, 2026-09-16).
+    @Test func aBookLinkDownloadsAndImportsWithoutAPreview() async throws {
+        let f = try AppFixtures()
+        let downloader = FakeBookDownloader(name: "frankenstein.epub")
+        let model = ImportModel(library: f.library, extractor: FakeExtractor(error: .noArticle), downloader: downloader)
+        await model.fetch(link: URL(string: "https://example.com/books/frankenstein.epub")!)
+        guard case .done(let docs) = model.phase else { Issue.record("expected done, got \(model.phase)"); return }
+        #expect(docs.count == 1)
+        #expect(docs[0].document.sourceType == .epub)
+        #expect(model.fileRows.map(\.name) == ["frankenstein.epub"])         // the book's name, not a UUID
+        let file = try #require(downloader.delivered.url)
+        #expect(!FileManager.default.fileExists(atPath: file.path))          // the scratch copy goes with the import
+        #expect(!FileManager.default.fileExists(atPath: file.deletingLastPathComponent().path))
+    }
+
+    @Test func aBookLinkThatFailsSaysWhyInline() async throws {
+        let f = try AppFixtures()
+        let link = URL(string: "https://example.com/books/frankenstein.epub")!
+
+        let missing = ImportModel(library: f.library, extractor: FakeExtractor(),
+                                  downloader: FakeBookDownloader(error: .server(404)))
+        await missing.fetch(link: link)
+        #expect(missing.phase == .failed("That link didn't work (404)."))
+
+        let wall = ImportModel(library: f.library, extractor: FakeExtractor(),
+                               downloader: FakeBookDownloader(error: .notABook("text/html")))
+        await wall.fetch(link: link)
+        #expect(wall.phase == .failed("That link isn't an EPUB or a PDF (text/html)."))
+
+        let offline = ImportModel(library: f.library, extractor: FakeExtractor(),
+                                  downloader: FakeBookDownloader(error: .network("offline")))
+        await offline.fetch(link: link)
+        #expect(offline.phase == .failed("Couldn't download that file: offline"))
+    }
+
+    /// What came back decides what it is: the content type first, the server's filename next, the
+    /// address last — and an HTML page behind a `.epub` address is not a book at all.
+    @Test func whatCameBackDecidesTheKind() {
+        let epubLink = URL(string: "https://example.com/books/frankenstein.epub")!
+        let plainLink = URL(string: "https://example.com/download?id=42")!
+        typealias D = URLSessionBookDownloader
+        #expect(D.bookExtension(mimeType: "application/epub+zip", url: plainLink, suggestedFilename: nil) == "epub")
+        #expect(D.bookExtension(mimeType: "application/pdf; charset=binary", url: plainLink, suggestedFilename: nil) == "pdf")
+        #expect(D.bookExtension(mimeType: "application/octet-stream", url: plainLink, suggestedFilename: "Frankenstein.EPUB") == "epub")
+        #expect(D.bookExtension(mimeType: "application/octet-stream", url: epubLink, suggestedFilename: nil) == "epub")
+        #expect(D.bookExtension(mimeType: "text/html", url: epubLink, suggestedFilename: "login.html") == nil)
+        #expect(D.bookExtension(mimeType: nil, url: plainLink, suggestedFilename: nil) == nil)
+        #expect(D.filename(from: "Frankenstein.EPUB", kind: "epub") == "Frankenstein.epub")
+        #expect(D.filename(from: "", kind: "pdf") == "book.pdf")
+    }
+
     @Test func pastedTextImports() async throws {
         let f = try AppFixtures()
         let model = ImportModel(library: f.library, extractor: FakeExtractor())

@@ -627,6 +627,7 @@ install is under "Resume here" below, and it is the last thing between Plan 6 an
 | Phone-call interruption and resume | — | **pending hardware** |
 | `mediaServicesWereReset` recovery (force it from the debugger) | PR #9 seams only | **pending hardware** |
 | Share sheet payloads: link, plain text, EPUB, PDF — and each failure string | Task 2 merged in PR #15; import through `onOpenURL` works on the simulator | **pending hardware** |
+| A pasted or shared `.epub`/`.pdf` **link** downloads and imports the book | `ImportModelTests` covers the download, the three failure sentences and the type decision, with a fake downloader | **pending hardware** |
 | App-group hand-off: extension writes `ShareInbox`, host finishes the import | the entitlement is why `scripts/build-app.sh` now signs ad hoc, and the ad-hoc-signed simulator app does open its library | **pending hardware** (partial) |
 | Prepare stops on unplug, Low Power Mode, and thermal pressure | Plan 5 Task 3 (PR #12) verified the runner and the visible state on a simulator | **pending hardware** |
 | `BGProcessingTask` forced from the debugger | the simulator rejects the request outright — `BGTaskSchedulerErrorDomain error 1`, seen again in the Task 5f capture | **pending hardware** |
@@ -811,7 +812,11 @@ What remains, in order:
    scheduling and a simulated launch while the device is on charge.
 5. **Share Extension remains unverified on hardware:** Task 2 merged in PR #15. Verify the share
    sheet on a physical device for link, text, EPUB, and PDF input, each failure string, and the
-   app-group hand-off into the host.
+   app-group hand-off into the host. Verify too that **Add to t2s** appears at all for a file shared
+   out of Files or Safari's downloads, not only out of Apple Books: the owner's phone (2026-09-16)
+   could only reach t2s by saving a downloaded EPUB into Books first and sharing it from there.
+   The book-link download (`BookDownloading`) is the way round that; whether the share sheet itself
+   is at fault is still unmeasured.
 6. **Kokoro's gate: the Core ML route is open, the MLX route is not.** Core ML runs on measured
    constants — `KokoroCoreMLDecision.current` carries the A13's RTF 0.181 and 119 MB, every rate up
    to 4x is offered, `KokoroTokenTimingMapper` returns real word timings, and Kokoro Heart is the

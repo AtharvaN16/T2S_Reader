@@ -1,19 +1,22 @@
 // Sources/T2SApp/Preferences/HowItWorks.swift
 import Foundation
 
-/// What Settings → About → "How the app works" says, as data rather than as a view.
+/// What Settings → About → "How it works" says, as data rather than as a view.
 ///
-/// It is here, beside the preferences, for the same reason `WarmUpReading` is a value: every
-/// claim on that sheet is checkable, and some of them are promises. "Nothing leaves the device"
-/// and "about a 620 MB download" are the kind of sentence that goes quietly untrue two refactors
-/// later, and a `body` cannot be asked whether it still holds. A `[Point]` can.
+/// It is here, beside the preferences, because these sentences are checkable and one of them is a
+/// promise. "Nothing you read or listen to leaves the phone" is the kind of line that goes quietly
+/// untrue two refactors later, and a `body` cannot be asked whether it still holds. A `[Point]`
+/// can — and `HowItWorksTests` also holds the writing to its length, which is the part that went
+/// wrong first (owner, 2026-09-16: "too many options and this is very bad UX writing").
 ///
-/// The everyday build has no on-device voice — it reads with the system's — so the sheet is built
-/// from `hasOnDeviceVoice` rather than written once and hedged. A reader whose phone will never
-/// fetch a model should not be told the size of one.
+/// **Four points, short titles, two sentences each.** The first draft had six points of four-line
+/// paragraphs, a download size, an iCloud clause, and titles like "Kept, not remade" — a page of
+/// prose in a place nobody reads prose. What survived is what a reader cannot find out any other
+/// way. The 620 MB download is on the Storage page, beside the model it describes; what iCloud
+/// syncs is on the sync row's own subtitle. Neither needs saying twice.
 public enum HowItWorks {
 
-    /// One point of the sheet: an SF Symbol, a line, and a paragraph under it.
+    /// One point: an SF Symbol, a two- or three-word title, and a line or two under it.
     public struct Point: Sendable, Identifiable, Hashable {
         public let id: String
         public let symbol: String
@@ -28,65 +31,17 @@ public enum HowItWorks {
         }
     }
 
-    /// The sentence above the list — the whole sheet in one breath, for the reader who opens it,
-    /// reads the top and closes it again.
-    public static func lead(hasOnDeviceVoice: Bool) -> String {
-        hasOnDeviceVoice
-            ? "Your books are read aloud by a voice that runs entirely on your iPhone. Nothing you read or listen to leaves the device."
-            : "Your books are read aloud by your iPhone's own system voice. Nothing you read or listen to leaves the device."
-    }
+    /// The one line above the list.
+    public static let lead = "Your books are read aloud by a voice that runs on your iPhone."
 
-    public static func points(hasOnDeviceVoice: Bool) -> [Point] {
-        var points: [Point] = [
-            Point(
-                id: "on-device",
-                symbol: "iphone",
-                title: "Made on this iPhone",
-                body: hasOnDeviceVoice
-                    ? "The speech is synthesized here, from the book's own words, a sentence at a time. No text and no audio is sent to a server — there is no account and nothing to sign in to."
-                    : "This build reads with the iPhone's system voice, which also speaks here. No text and no audio is sent to a server — there is no account and nothing to sign in to."
-            )
-        ]
-        if hasOnDeviceVoice {
-            points.append(Point(
-                id: "one-download",
-                symbol: "arrow.down.circle",
-                title: "The voice arrives once",
-                body: "The voice is about a 620 MB download over Wi-Fi, fetched once on the first launch. After that it needs no network at all: a plane, a tunnel, a week without signal, all the same. Until it lands, books play in the system voice."
-            ))
-        }
-        points.append(contentsOf: [
-            Point(
-                id: "made-ahead",
-                symbol: "waveform",
-                title: "Audio is made ahead",
-                body: "Playing a chapter renders it a little ahead of where you are listening, so the voice and the highlighted words stay together. Prepare on charge can make whole chapters overnight, before you open the book at all."
-            ),
-            Point(
-                id: "kept",
-                symbol: "internaldrive",
-                title: "Kept, not remade",
-                body: "Rendered audio is saved on this iPhone, so going back to a chapter plays at once and costs nothing to hear again. Storage shows what it is taking and clears whatever you no longer want."
-            ),
-            Point(
-                id: "warmth",
-                symbol: "thermometer.medium",
-                title: "The phone may warm up",
-                body: "Because the work happens here, the CPU and Neural Engine run hard while audio is being made, and a long stretch of rendering can produce noticeable warmth. This is normal. Rendering stops on its own when the phone gets hot and picks up once it has cooled."
-            ),
-            Point(
-                id: "synthetic",
-                symbol: "sparkles",
-                title: "A voice, not a narrator",
-                body: "The reading is synthesized rather than performed. Names, foreign words and unusual punctuation can come out wrong, and nothing is acted. Treat it as a good reading voice, not as an audiobook recording."
-            ),
-            Point(
-                id: "icloud",
-                symbol: "icloud",
-                title: "Only your place travels",
-                body: "With iCloud sync on, where you are in a book and the bookmarks you have made follow you between your own devices. The books themselves, and every second of audio, stay on the phone that made them."
-            )
-        ])
-        return points
-    }
+    public static let points: [Point] = [
+        Point(id: "on-device", symbol: "iphone", title: "On device",
+              body: "Speech is made on your iPhone, never on a server. Nothing you read or listen to leaves the phone, and none of it needs a network."),
+        Point(id: "warmth", symbol: "thermometer.medium", title: "May warm up",
+              body: "Making audio works the phone hard, so long chapters can feel warm. Rendering pauses if it gets hot, then picks up once it cools."),
+        Point(id: "kept", symbol: "internaldrive", title: "Saved once made",
+              body: "Audio is kept on this iPhone, so playing a chapter again is instant. Clear it whenever you like in Storage."),
+        Point(id: "synthetic", symbol: "sparkles", title: "Not a narrator",
+              body: "Names and unusual words can come out wrong. It is a reading voice, not an audiobook recording.")
+    ]
 }

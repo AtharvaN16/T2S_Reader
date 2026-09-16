@@ -938,18 +938,20 @@ against a pipeline that is already proven.
 
 ## 11. Changelog
 
-**rev 23 (2026-09-16)** — Settings explains the app to the reader who wants to know
+**rev 23 (2026-09-16)** — Settings answers the four questions the app otherwise answers by surprise
 
-- **§2.4.5** About gains **How the app works**, a sheet of six points: the speech is made on
-  this iPhone and nothing read or heard is sent anywhere; the voice is a one-time 620 MB download
-  and then needs no network; audio is rendered a little ahead of the playhead; what is rendered is
-  kept, so a second listen is free; the phone may warm up and rendering stops itself when it does;
-  the voice is synthesized rather than performed; and with iCloud sync on only positions and
-  bookmarks travel. Every one of those already had a line somewhere — the hold card, Storage's
-  delete warning, the sync row's subtitle — but each was only met at the moment it bit, and
-  only by the reader it bit. The words are `HowItWorks` in T2SApp rather than in the view, so the
-  claims can be tested on the Mac; the download point is omitted in the build with no model to
-  fetch.
+- **§2.4.5** About gains **How it works**, a sheet of four points: speech is made on the phone
+  and never on a server, the phone may warm up and rendering pauses itself when it does, audio is
+  kept once made so a second listen is instant, and the voice is a reading voice rather than a
+  narrator. Each already had a line somewhere — the hold card, Storage's delete warning —
+  but only ever met at the moment it bit, and only by the reader it bit.
+- The first draft ran to six points of four-line paragraphs, with the 620 MB download, an iCloud
+  clause and titles like "Kept, not remade": 233 words of prose on a settings sheet (owner,
+  2026-09-16: "too many options and this is very bad UX writing"). What went is what the app says
+  elsewhere — the download size is on the Storage page beside the model it describes, and what
+  iCloud carries is on the sync row's own subtitle. The words are `HowItWorks` in T2SApp rather
+  than in the view, and `HowItWorksTests` holds them to four points, titles of sixteen characters
+  and bodies of a hundred and forty, so the prose cannot grow back quietly.
 
 **rev 22 (2026-09-11)** — Home's swipe and Archive, and "render whole document" trimmed to a chapter
 - **§2.4.5** the Home row's full-swipe-to-archive and its "Archive" menu item are gone: with Home

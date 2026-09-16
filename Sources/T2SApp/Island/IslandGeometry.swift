@@ -25,12 +25,21 @@ public enum IslandGeometry {
     /// Every model identifier with a Dynamic Island, newest last.
     ///
     /// Note `iPhone17,5` is deliberately absent: the 16e has a notch.
+    /// Note `iPhone18,5` (the 17e) is deliberately absent for the same reason.
+    ///
+    /// The iPhone 18 Pro's cutout is reported to be physically smaller than earlier islands, so
+    /// `cutoutWidth`/`cutoutHeight` above — community-measured for the 14-16 generations — will
+    /// need re-measuring against an 18 Pro before the capsule aligns correctly there.
     public static let islandModels: Set<String> = [
         "iPhone15,2", "iPhone15,3",              // 14 Pro, 14 Pro Max
         "iPhone15,4", "iPhone15,5",              // 15, 15 Plus
         "iPhone16,1", "iPhone16,2",              // 15 Pro, 15 Pro Max
         "iPhone17,3", "iPhone17,4",              // 16, 16 Plus
         "iPhone17,1", "iPhone17,2",              // 16 Pro, 16 Pro Max
+        "iPhone18,1", "iPhone18,2",              // 17 Pro, 17 Pro Max
+        "iPhone18,3",                            // 17
+        "iPhone18,4",                            // Air
+        "iPhone19,2", "iPhone19,3",              // 18 Pro, 18 Pro Max
     ]
 
     public static func hasIsland(machine: String) -> Bool { islandModels.contains(machine) }

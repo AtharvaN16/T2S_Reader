@@ -54,9 +54,15 @@ struct VoiceGlow: View {
     var body: some View {
         let colour = VoicePalette.glow(for: voice, in: voices)
         let form = Form.of(voice, in: voices)
-        // Reduce Motion keeps the light and drops the pulse: the glow still says which voice is
-        // chosen, it just no longer moves while it says it.
-        let breath = reduceMotion ? 0.7 : level
+        // The level read as *presence*, not as opacity outright. `VoiceEnvelope` sits at its floor
+        // between words, which is most of any given frame — mapped straight through, the glow was
+        // a fifth of its strength almost all the time and barely registered in the photograph. A
+        // lamp that is lit is lit: the floor buys most of the brightness and the words buy the
+        // rest, so the light is always present and still visibly breathes.
+        //
+        // Reduce Motion takes the middle of that range and stays there: the glow still says which
+        // voice is chosen, it just no longer moves while it says it.
+        let breath = reduceMotion ? 0.8 : 0.62 + 0.38 * level
         GeometryReader { geo in
             ZStack {
                 ForEach(Array(lamps(for: form).enumerated()), id: \.offset) { _, lamp in
@@ -80,6 +86,18 @@ struct VoiceGlow: View {
             .blur(radius: 26)
         }
         .frame(height: Self.height)
+        // Held to the crown. The glow is drawn *over* the passage — it has to be, because the
+        // crown's solid ground is what hides the text and the light has to be seen on top of that
+        // — so without this its bloom spills down across the first readable lines and tints them.
+        // Michael's blue was washing the top third of the passage. Light comes from above and
+        // falls off; this is that, and it fades rather than clips, because a hard cut on a
+        // 26 pt blur is a line across the screen.
+        .mask(
+            LinearGradient(stops: [.init(color: .black, location: 0),
+                                   .init(color: .black, location: 0.42),
+                                   .init(color: .clear, location: 1)],
+                           startPoint: .top, endPoint: .bottom)
+        )
         .allowsHitTesting(false)
         .accessibilityHidden(true)
         // No animation on `level`. The scene is already inside a `TimelineView(.animation)`, so
@@ -122,17 +140,17 @@ struct VoiceGlow: View {
     private func lamps(for form: Form) -> [Lamp] {
         switch form {
         case .orb:
-            return [Lamp(y: -0.12, radius: 0.46, opacity: 0.55)]
+            return [Lamp(y: -0.12, radius: 0.46, opacity: 0.64)]
         case .band:
-            return [Lamp(y: -0.24, radius: 0.92, squash: 0.36, opacity: 0.42)]
+            return [Lamp(y: -0.24, radius: 0.92, squash: 0.36, opacity: 0.50)]
         case .lobes:
-            return [Lamp(x: -0.22, y: -0.06, radius: 0.38, opacity: 0.40),
-                    Lamp(x: 0.22, y: -0.14, radius: 0.34, opacity: 0.40)]
+            return [Lamp(x: -0.22, y: -0.06, radius: 0.38, opacity: 0.48),
+                    Lamp(x: 0.22, y: -0.14, radius: 0.34, opacity: 0.48)]
         case .ring:
-            return [Lamp(y: -0.10, radius: 0.52, opacity: 0.58, inner: 0.46)]
+            return [Lamp(y: -0.10, radius: 0.52, opacity: 0.68, inner: 0.46)]
         case .core:
-            return [Lamp(y: -0.10, radius: 0.72, opacity: 0.26),
-                    Lamp(y: -0.10, radius: 0.18, opacity: 0.62)]
+            return [Lamp(y: -0.10, radius: 0.72, opacity: 0.32),
+                    Lamp(y: -0.10, radius: 0.18, opacity: 0.72)]
         }
     }
 }

@@ -121,9 +121,11 @@ private struct CoverFan: View {
     }
 }
 
-/// The pool of light under either picture: a circle squashed to a pool, fully faded before its
-/// own edge, so nothing about its frame shows — a hard-cut rectangle did, faintly, at the first look.
-private struct Pool: View {
+/// The pool of light under a picture: a circle squashed to a pool, fully faded before its own edge,
+/// so nothing about its frame shows — a hard-cut rectangle did, faintly, at the first look. Shared
+/// by the two empty shelves and by the Import hub's picture (`ImportGraphic`), so a group of objects
+/// stands on the same light wherever the app draws one.
+struct Pool: View {
     var body: some View {
         Circle()
             .fill(RadialGradient(stops: [

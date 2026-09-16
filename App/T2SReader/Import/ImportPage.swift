@@ -4,7 +4,7 @@ import T2SApp
 import T2SStore
 import UniformTypeIdentifiers
 
-/// Spec §2.4.5 rev 7: three tiles, then the chosen path as its own step on `ImportFrame` — a back
+/// Spec §2.4.5 rev 7: a picture and three rows, then the chosen path as its own step on `ImportFrame` — a back
 /// circle, a centred title, the path's field, and one Listen bar at the foot (ElevenReader's
 /// import, the owner's reference, 2026-09-09). An import that lands does not play by itself any
 /// more (owner, 2026-09-10): the page moves to `ImportDonePage`, which shows what came in, a Play
@@ -23,8 +23,6 @@ struct ImportPage: View {
     enum Path { case link, text, files }
     @State private var path: Path?
     @State private var showFilePicker = false
-
-    private let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
 
     var body: some View {
         let model = env.importModel
@@ -61,50 +59,84 @@ struct ImportPage: View {
         .onDisappear { model.reset() }
     }
 
-    /// The three ways in, as tiles under the page's own title.
+    /// The three ways in, as rows under a picture and two lines (owner, 2026-09-16, from a reference
+    /// import sheet). They were two columns of tiles, which had room for a word each and so could
+    /// only name a path, never say what it takes; a row carries the formats on a second line, which
+    /// is the question this page is actually asked — "will it take my PDF?". The page's big `Import`
+    /// title goes with them: the headline over the picture says it, centred, the way the empty
+    /// shelves do, and the only thing left in the top row is the way out.
     private var hub: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.section) {
-                header
-                LazyVGrid(columns: columns, spacing: 16) {
-                    tile("Paste a link", "link") { path = .link }
-                    tile("Upload a file", "doc") { path = .files; showFilePicker = true }
-                    tile("Write text", "text.alignleft") { path = .text }
+            VStack(spacing: 0) {
+                closeRow
+                ImportGraphic()
+                VStack(spacing: 8) {
+                    Text("Bring anything in").typeRole(.playerTitle).foregroundStyle(Tokens.ink)
+                    Text("A book, a paper, a page you saved, or your own words.")
+                        .typeRole(.rowTitle).foregroundStyle(Tokens.ink2)
                 }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.top, Spacing.row)
+                VStack(spacing: 12) {
+                    // The file row leads: it is the heaviest path, and the only one with formats
+                    // worth naming. The same sentence greets an empty file step (`FileImportRows`),
+                    // so a reader who taps through is told the same thing twice rather than first.
+                    way("Upload a file", "EPUB and PDF, from Files or iCloud Drive.", "doc") {
+                        path = .files
+                        showFilePicker = true
+                    }
+                    way("Paste a link", "Any article or web page.", "link") { path = .link }
+                    way("Write or paste text", "Notes, an email, anything you've copied.", "text.alignleft") { path = .text }
+                }
+                .padding(.top, Spacing.section)
             }
             .padding(.horizontal, Spacing.margin)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, Spacing.section)
         }
         .overlay { GeometryReader { geo in TopFade(inset: geo.safeAreaInsets.top) } }
     }
 
-    private var header: some View {
-        HStack(alignment: .top) {
-            PageTitle(text: "Import")
-            Spacer(minLength: 12)
-            Button { dismiss() } label: {
-                Image(systemName: "xmark").font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Tokens.ink).frame(width: 36, height: 36)
-                    .background(Tokens.surface, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close")
-            .padding(.top, Spacing.titleTop + 4)
+    /// The way out, alone in the top row where the page title used to be — the reference's shape,
+    /// and the one the import steps already wear (`ImportFrame`'s bar, at the same height).
+    private var closeRow: some View {
+        HStack {
+            Spacer()
+            Button { dismiss() } label: { CircleGlyph(systemName: "xmark") }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close")
         }
+        .padding(.top, Spacing.grid * 2)
     }
 
-    /// One of the three ways in: a tile rather than a row, so the choice reads as a menu, not a list.
-    private func tile(_ label: String, _ glyph: String, action: @escaping () -> Void) -> some View {
+    /// One of the three ways in: a glyph on its own disc, the path's name, a line saying what it
+    /// takes, and a chevron, on a `surface` card at the tiles' own 20 pt corner. The disc is
+    /// `ground` — the page's colour, carried up onto the card — so the glyph reads as set into the
+    /// row rather than laid on it, in both themes.
+    private func way(_ title: String, _ detail: String, _ glyph: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(spacing: 12) {
-                Image(systemName: glyph).font(.system(size: 24, weight: .medium))
-                Text(label).typeRole(.rowTitle)
+            HStack(spacing: 16) {
+                Image(systemName: glyph)
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(Tokens.ink)
+                    .frame(width: 44, height: 44)
+                    .background(Tokens.ground, in: Circle())
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).typeRole(.rowTitle).foregroundStyle(Tokens.ink)
+                    Text(detail).typeRole(.meta).foregroundStyle(Tokens.ink2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 12)
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Tokens.ink2)
             }
-            .foregroundStyle(Tokens.ink)
-            .frame(maxWidth: .infinity)
-            .frame(height: 128)
+            .multilineTextAlignment(.leading)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(Tokens.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityHint(detail)
     }
 }

@@ -94,17 +94,34 @@ struct MockIsland: View {
             .accessibilityLabel("\(message.title), \(message.detail)")
     }
 
+    /// The Play disc. Grey rather than white (owner, 2026-09-17): a white disc beside white
+    /// lettering read as a second headline, where the button wants to sit a step back from the
+    /// words and be found when it is looked for.
+    ///
+    /// A fixed grey, not `Tokens.surfaceOnInk`, and that is deliberate. That token flips with the
+    /// theme because the toast it was made for is `ink` — near-black in the light, near-white in
+    /// the dark — so its greys have to run the other way round to stay off the card. This capsule
+    /// is *always* black, on both themes, so a theme-flipping grey would turn near-black on black
+    /// in the light and disappear.
+    private static let playDisc = Color(red: 0.76, green: 0.76, blue: 0.75)
+
     private var content: some View {
-        HStack(alignment: .center, spacing: 12) {
+        // 18, not 12 (owner, 2026-09-17): the cover is a picture rather than a glyph, and it needs
+        // air on its trailing edge or the title reads as a caption printed on it.
+        HStack(alignment: .center, spacing: 18) {
             if let cover {
                 BookCover(relativePath: cover.relativePath, paths: env.paths, height: 40,
                           title: cover.title, isPDF: cover.isPDF)
                     .accessibilityHidden(true)
             } else {
+                // Only when the document has gone — every real announcement carries its book, and
+                // a PDF's cover is the app's own PDF placeholder, which `BookCover` already draws.
                 CircleGlyph(systemName: message.isFailure ? "exclamationmark" : "checkmark",
                             tint: .black, fill: .white)
             }
-            VStack(alignment: .leading, spacing: 2) {
+            // 7, not 2 (owner, 2026-09-17): the headline is what happened and the line under it is
+            // which chapter it happened to. At 2 they read as one wrapped sentence.
+            VStack(alignment: .leading, spacing: 7) {
                 Text(message.title).typeRole(.pill).foregroundStyle(.white)
                 Text(message.detail).typeRole(.meta).foregroundStyle(.white.opacity(0.65))
                     .lineLimit(2).fixedSize(horizontal: false, vertical: true)
@@ -112,7 +129,7 @@ struct MockIsland: View {
             if let action {
                 Spacer(minLength: 8)
                 Button(action: action) {
-                    CircleGlyph(systemName: "play.fill", tint: .black, fill: .white)
+                    CircleGlyph(systemName: "play.fill", tint: .black, fill: Self.playDisc)
                 }
                 .accessibilityLabel("Play")
             }

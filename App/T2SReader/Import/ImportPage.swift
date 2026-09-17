@@ -20,9 +20,14 @@ struct ImportPage: View {
     /// path with the import already running, so the result and any failure are visible (spec §6).
     var initialFiles: [URL] = []
 
-    enum Path { case link, text, files }
+    /// The two paths that still own the whole page. Files is not one of them any more: it is a
+    /// bottom sheet over the hub (owner, 2026-09-17), because a file picker is itself a sheet and a
+    /// step that opens one has no business taking the screen first.
+    enum Path { case link, text }
     @State private var path: Path?
     @State private var showFilePicker = false
+    /// The file flow — choosing, then what landed — as one sheet whose content changes.
+    @State private var fileSheet = false
 
     var body: some View {
         let model = env.importModel
@@ -30,7 +35,9 @@ struct ImportPage: View {
         // to. Back also clears the model, so a failure from one path is not shown under the next.
         let back: (() -> Void)? = initialFiles.isEmpty ? { model.reset(); path = nil } : nil
         Group {
-            if case .done(let documents) = model.phase {
+            // The done step still owns the page for a link or a text; the file flow shows its own
+            // inside the sheet, so the hub is never swapped out from under it.
+            if case .done(let documents) = model.phase, !fileSheet {
                 ImportDonePage(documents: documents,
                                play: { imported = $0; dismiss() },
                                done: { dismiss() })
@@ -38,25 +45,47 @@ struct ImportPage: View {
                 switch path {
                 case .link: PasteLinkPage(onBack: back)
                 case .text: PasteTextPage(onBack: back)
-                case .files: FileImportPage(onBack: back) { showFilePicker = true }
                 case nil: hub
                 }
             }
         }
         .background(Tokens.ground)
-        .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.epub, .pdf], allowsMultipleSelection: true) { result in
-            switch result {
-            case .success(let urls): Task { await model.importFiles(urls) }
-            case .failure: break                                               // the step stays; Choose files is there again
-            }
+        .sheet(isPresented: $fileSheet, onDismiss: { model.reset() }) {
+            fileFlow(model)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(Spacing.sheetCorner)
+                // The picker is opened from inside the sheet, not from the hub: a `fileImporter`
+                // attached to a view that is not the topmost presenter never appears.
+                .fileImporter(isPresented: $showFilePicker, allowedContentTypes: [.epub, .pdf],
+                              allowsMultipleSelection: true) { result in
+                    switch result {
+                    case .success(let urls): Task { await model.importFiles(urls) }
+                    case .failure: break                                       // the sheet stays; Choose files is there again
+                    }
+                }
+                // Tapping "Upload a file" means "show me the picker", so the sheet opens it once on
+                // the way in — unless files were handed to us, which is already an answer.
+                .task { if model.fileRows.isEmpty, initialFiles.isEmpty { showFilePicker = true } }
         }
         .task {
             if !initialFiles.isEmpty {
-                path = .files
+                fileSheet = true
                 await model.importFiles(initialFiles)
             }
         }
         .onDisappear { model.reset() }
+    }
+
+    /// The file sheet's two faces: the picker's step, and what landed once it has.
+    @ViewBuilder private func fileFlow(_ model: ImportModel) -> some View {
+        if case .done(let documents) = model.phase {
+            ImportDonePage(documents: documents, inSheet: true,
+                           play: { imported = $0; fileSheet = false; dismiss() },
+                           done: { fileSheet = false; dismiss() })
+        } else {
+            FileImportSheet { showFilePicker = true }
+        }
     }
 
     /// The three ways in, as rows under a picture and two lines (owner, 2026-09-16, from a reference
@@ -83,8 +112,7 @@ struct ImportPage: View {
                     // worth naming. The same sentence greets an empty file step (`FileImportRows`),
                     // so a reader who taps through is told the same thing twice rather than first.
                     way("Upload a file", "EPUB and PDF, from Files or iCloud Drive.", "doc") {
-                        path = .files
-                        showFilePicker = true
+                        fileSheet = true
                     }
                     way("Paste a link", "Any article or web page.", "link") { path = .link }
                     way("Write or paste text", "Notes, an email, anything you've copied.", "text.alignleft") { path = .text }

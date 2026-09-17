@@ -76,6 +76,8 @@ private enum ShareTokens {
     static let gloss = Color.white
     static let shade = Color.black
     static let ink2 = dynamic(light: 0x8A8A8A, dark: 0x8E8E8E)
+    /// `Tokens.positive`: the tick on the picture, the app's own green rather than the system's.
+    static let positive = dynamic(light: 0x22A559, dark: 0x34C070)
 
     private static func dynamic(light: UInt32, dark: UInt32, lightAlpha: CGFloat = 1, darkAlpha: CGFloat = 1) -> Color {
         Color(UIColor { traits in
@@ -187,10 +189,11 @@ private struct ShareMasthead: View {
     }
 }
 
-/// The picture in the middle: a file with a plus on it, grey and unlit — the sheet's one object
-/// says what is about to happen, and the only thing on the page that asks to be pressed is the key
-/// at the foot. The object tracks the import: the file waiting, a spinner while the library takes
-/// it, a tick once it is in.
+/// The picture in the middle: a grey, unlit file wearing a badge that tracks the import — a plus
+/// while the item is waiting to be added, a spinner while the library takes it, and the app's green
+/// tick once it is in (owner, 2026-09-17). The sheet's one object; the only thing on the page that
+/// asks to be pressed is the key at the foot. The app draws the same picture on its own Upload a
+/// file sheet (`FileMark`), so the two ways in look alike.
 private struct ShareMark: View {
     let status: ShareImportStatus
 
@@ -201,9 +204,15 @@ private struct ShareMark: View {
                     .controlSize(.large)
                     .tint(ShareTokens.ink2)
             } else {
-                Image(systemName: glyph)
+                Image(systemName: "doc")
                     .font(.system(size: 62, weight: .regular))
                     .foregroundStyle(ShareTokens.ink2)
+                    .overlay(alignment: .bottomTrailing) {
+                        Image(systemName: isDone ? "checkmark.circle.fill" : "plus.circle.fill")
+                            .font(.system(size: 27, weight: .semibold))
+                            .foregroundStyle(ShareTokens.ground, isDone ? ShareTokens.positive : ShareTokens.ink2)
+                            .offset(x: 12, y: 5)
+                    }
             }
         }
         .animation(.snappy, value: status)
@@ -213,10 +222,11 @@ private struct ShareMark: View {
         .accessibilityHidden(true)
     }
 
-    private var glyph: String {
-        if case .completed = status { return "checkmark.circle" }
-        return "document.badge.plus"
+    private var isDone: Bool {
+        if case .completed = status { return true }
+        return false
     }
+
 }
 
 /// The app's `RaisedButton` in its `.ink` tone and `.bar` size, carried into this target: the black

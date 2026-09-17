@@ -14,6 +14,10 @@ import T2SStore
 struct ImportDonePage: View {
     @Environment(AppEnvironment.self) private var env
     var documents: [DocumentSummary]
+    /// Drawn as the file sheet's second face rather than as a page of its own (owner, 2026-09-17):
+    /// the same books and the same Done key, without `ImportFrame`'s page furniture, so the file
+    /// flow stays one bottom sheet from the picker to what landed.
+    var inSheet: Bool = false
     /// The book whose pill was pressed, never "the first": every row can start.
     var play: (DocumentSummary) -> Void
     var done: () -> Void
@@ -23,9 +27,31 @@ struct ImportDonePage: View {
             if case .failed(let message) = row.state { return (row.name, message) }
             return nil
         }
-        ImportFrame(title: documents.count == 1 ? "Added to your library" : "\(documents.count) added to your library",
-                    onBack: nil,
-                    action: .init(label: "Done", perform: done)) {
+        let title = documents.count == 1 ? "Added to your library" : "\(documents.count) added to your library"
+        if inSheet {
+            VStack(spacing: 0) {
+                Text(title).typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
+                    .padding(.top, Spacing.row)
+                ScrollView {
+                    books(failures)
+                        .padding(.horizontal, Spacing.margin)
+                        .padding(.top, Spacing.row)
+                }
+                BarButton(label: "Done", isEnabled: true, action: done)
+                    .padding(.horizontal, Spacing.margin)
+                    .padding(.bottom, Spacing.grid * 2)
+            }
+            .frame(maxWidth: .infinity)
+            .background(Tokens.ground)
+        } else {
+            ImportFrame(title: title, onBack: nil, action: .init(label: "Done", perform: done)) {
+                books(failures)
+            }
+        }
+    }
+
+    /// What came in, and anything that did not.
+    private func books(_ failures: [(name: String, message: String)]) -> some View {
             VStack(alignment: .leading, spacing: Spacing.row) {
                 ForEach(documents) { summary in row(summary) }
                 if !failures.isEmpty {
@@ -45,7 +71,6 @@ struct ImportDonePage: View {
                     .padding(.top, Spacing.grid)
                 }
             }
-        }
     }
 
     /// The document as Home shows it: the cover on the shelf slot, the title, one line under it —

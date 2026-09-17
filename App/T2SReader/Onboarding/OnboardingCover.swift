@@ -13,9 +13,10 @@ import T2SApp
 /// 2. **The name.** As the last line tails off, a veil rises from the foot of the screen to the
 ///    crown and uncovers *Welcome to T2S* standing on it (`RisingVeil`). It holds there, silent.
 /// 3. **The page.** The veil rises a second time and brings up the passage: the chosen voice's
-///    light blooming at the crown (`VoiceGlow`), the row of voices under it (`VoiceCarousel`) over
-///    a tall top fade, the words lighting as they are spoken and following themselves the way the
-///    Reader's own page does (`ReadAlongPassage`), and Continue at the foot behind a tall bottom
+///    voice's rim of light at the crown (`VoiceGlow`), the voice named once under it
+///    (`VoicePill`) with a swipe anywhere on the page to try another, the words lighting as they
+///    are spoken and following themselves the way the Reader's own page does
+///    (`ReadAlongPassage`), and the key at the foot behind a tall bottom
 ///    fade, which makes the voice on screen the app's default.
 ///
 /// The scene runs on the wall clock from the moment it appears and plays itself through — there is
@@ -76,8 +77,8 @@ struct OnboardingCover: View {
     var body: some View {
         // Outside every `ignoresSafeArea` below, and the only place the insets can still be read:
         // each veil covers the whole screen, so its content is handed a frame with no insets left
-        // in it, and a row of pills padded from the top of *that* would sit under the Dynamic
-        // Island. Measured once here and passed down instead.
+        // in it, and a pill padded from the top of *that* would sit under the Dynamic Island.
+        // Measured once here and passed down instead.
         GeometryReader { geo in
             let insets = geo.safeAreaInsets
             TimelineView(.animation) { context in
@@ -196,48 +197,99 @@ struct OnboardingCover: View {
                 foot(insets)
             }
         }
+        // The whole page is the voice control (the owner, 2026-09-17: "you can swipe anywhere on
+        // the screen"). A drag rather than a tap, and with a minimum distance, so the key at the
+        // foot and Skip at the crown keep their taps; horizontal only, so a reader brushing the
+        // page vertically does not change who is reading. The passage's own scroll view is
+        // disabled and follows the voice instead, so there is nothing here to fight over.
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 24)
+                .onEnded { drag in
+                    let across = drag.translation.width
+                    guard abs(across) > abs(drag.translation.height), abs(across) > 40 else { return }
+                    step(by: across < 0 ? 1 : -1)
+                }
+        )
         .onChange(of: selectedVoice) { _, voice in play(voice) }
+    }
+
+    /// The next voice along, wrapping: with one pill on screen there is no row to run out of, and
+    /// a swipe that does nothing at the end of the list reads as a dropped gesture.
+    private func step(by delta: Int) {
+        let voices = manifest.voices
+        guard voices.count > 1, let index = voices.firstIndex(of: selectedVoice) else { return }
+        let next = ((index + delta) % voices.count + voices.count) % voices.count
+        withAnimation(.smooth(duration: 0.35)) { selectedVoice = voices[next] }
     }
 
     /// The crown: the voice's light, the row of voices inside it, and the tall fade that carries
     /// the passage up under both.
     private func crown(_ insets: EdgeInsets) -> some View {
         ZStack(alignment: .top) {
-            // Bottom of the three: solid ground as far as the caption's foot, then the app's own
-            // curve read upward. The solid is what the passage is cut against — a cut on opaque
-            // ground is invisible — and the ramp is what it dissolves into on the way up.
-            VStack(spacing: 0) {
-                Tokens.ground
-                    .frame(height: insets.top + Self.crownSolid)
-                LinearGradient(stops: BottomFade.stops(color: Tokens.ground),
-                               startPoint: .bottom, endPoint: .top)
-                    .frame(height: Self.topFade)
-            }
-
-            // The light, over the ground so it is seen at all, under the row so the names stay
-            // legible across the brightest part of it.
+            crownGround(insets)
             VoiceGlow(voice: selectedVoice,
                       voices: manifest.voices,
                       level: VoiceEnvelope(timings: passageTimings(selectedVoice)).level(at: solo.currentTime))
-
-            // Clear of the Skip pill, which keeps the corner it has held since the reel's first
-            // frame.
             VStack(spacing: Spacing.grid) {
-                VoiceCarousel(voices: manifest.voices, selected: $selectedVoice,
-                              isFinished: hasHeard && !solo.isPlaying) { play(selectedVoice) }
-                Text("Swipe to try a voice")
+                VoicePill(voice: selectedVoice,
+                          voices: manifest.voices,
+                          isFinished: hasHeard && !solo.isPlaying) { play(selectedVoice) }
+                Text("Swipe anywhere to try a voice")
                     .typeRole(.meta)
                     .foregroundStyle(Tokens.ink2)
             }
             .padding(.top, insets.top + Spacing.section + Spacing.row)
         }
-        .allowsHitTesting(true)
     }
+
+    /// The ground the pill stands on and the passage goes under: **one** gradient, solid through
+    /// the caption and easing to nothing below it, dithered.
+    ///
+    /// Both halves of that are the owner's band (2026-09-17: "remove the banding caused by the
+    /// voice pill row"). It used to be a solid `Tokens.ground` block with a separate ramp stood
+    /// under it, and however continuous the two are in theory, they are two views with two
+    /// rasterisations meeting on a straight line. And a ramp this shallow asks more of 8 bits than
+    /// they have — it holds one value for ten or twenty rows and then steps, and the eye reads
+    /// every step as a line, which is the same defect `StatusRamp` documents for the warm-up.
+    ///
+    /// So: one gradient, whose eased half starts at full opacity with zero slope (smoothstep
+    /// squared), so there is no join to see even where the solid gives way; and the warm-up's own
+    /// dither tile over it, masked to its own alpha so the noise lands only where there is a ramp
+    /// to break up and never as grain on bare ground.
+    private func crownGround(_ insets: EdgeInsets) -> some View {
+        let ramp = LinearGradient(stops: Self.crownStops, startPoint: .top, endPoint: .bottom)
+        return ramp
+            .frame(height: insets.top + Self.crownFade)
+            .overlay {
+                StatusRamp.ditherTile
+                    .resizable(resizingMode: .tile)
+                    .blendMode(.overlay)
+                    .opacity(0.3)
+                    .mask(ramp)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
+    }
+
+    /// Solid to `crownHold`, then the app's own curve down to nothing.
+    static let crownStops: [Gradient.Stop] = {
+        let hold = 0.46
+        var stops: [Gradient.Stop] = [.init(color: Tokens.ground, location: 0)]
+        let steps = 16
+        for i in 0 ... steps {
+            let t = Double(i) / Double(steps)
+            let eased = pow(t * t * (3 - 2 * t), 2)
+            stops.append(.init(color: Tokens.ground.opacity(1 - eased), location: hold + (1 - hold) * t))
+        }
+        return stops
+    }()
 
     /// The foot: Continue behind the tall bottom fade that carries the passage out of sight under
     /// it (the owner, 2026-09-15: "the bottom fade should be taller").
     private func foot(_ insets: EdgeInsets) -> some View {
-        RaisedButton(label: "Continue", tone: .blue, size: .bar) { finish(setDefault: true) }
+        RaisedButton(label: "Make default", tone: .blue, size: .bar) { finish(setDefault: true) }
             .padding(.horizontal, Spacing.margin)
             .padding(.bottom, insets.bottom + Spacing.grid)
             .background { BottomFade(fade: Self.bottomFade, color: Tokens.ground) }
@@ -259,13 +311,9 @@ struct OnboardingCover: View {
         .ignoresSafeArea()
     }
 
-    /// Solid ground below the safe area, reaching the foot of the caption: the row of pills and
-    /// the line under it both stand on it, so nothing of the passage reads through either. The
-    /// number is the row's own reach — `Spacing.section + Spacing.row` of clearance for the Skip
-    /// pill, the pills, the gap, the caption's line — with a little air under it.
-    static let crownSolid: CGFloat = 164
-    /// The ramp below that solid, which the passage dissolves into on its way up.
-    static let topFade: CGFloat = 150
+    /// How far the crown's ground reaches below the safe area: solid through the pill and the
+    /// caption under it, then easing to nothing well before the middle of the screen.
+    static let crownFade: CGFloat = 330
     /// Taller than a bar's usual 72: the passage runs the whole height of the screen, so the ramp
     /// has to carry it out of sight well above the key (the owner, 2026-09-15: "the bottom fade
     /// should be taller").

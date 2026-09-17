@@ -20,6 +20,21 @@ public struct Segmenter: Sendable {
     /// What the app's `Library` passes: see `packLength`. The initializer's own default is 0 — one
     /// sentence per utterance — so a segmenter built for a test or a tool packs nothing unless asked.
     public static let appPackLength = 160
+    /// A packed utterance shorter than this joins its neighbour however far over `packLength` that
+    /// puts it: one synthesis call this short is read far above the voice's own narration pitch.
+    ///
+    /// Measured (`spikes/findings/2026-09-16-short-utterances.md`): rendering blocks of rising
+    /// length against each voice's narration, a call of 1–11 characters lands +6 to +12 semitones
+    /// high, and by 21 characters it is back on the baseline. The owner heard it as a shriek in the
+    /// middle of a chapter — a drop cap put a line break inside a paragraph, `NLTokenizer` ended a
+    /// sentence at it, and "elizabeth's" became a call of eleven characters that `af_aoede` said at
+    /// 279 Hz against the paragraph's 176 Hz. 24 leaves margin over the 21 that measured clean.
+    ///
+    /// This only ever joins pieces *within one block*. A block that is this short all by itself is
+    /// left alone: there is nothing to join it to, and a one-line paragraph is the author's, not an
+    /// artefact of the markup. It applies only where packing does: a segmenter built with
+    /// `packLength` 0 was asked for one sentence per utterance and gets exactly that.
+    public static let minUtteranceLength = 24
     public var normalizer: TextNormalizer
 
     public init(normalizer: TextNormalizer, maxUtteranceLength: Int = 300, packLength: Int = 0) {
@@ -55,18 +70,30 @@ public struct Segmenter: Sendable {
     /// Joins consecutive pieces into utterances no longer than `packLength` (UTF-16 units of the
     /// block, first piece's start to last piece's end, the original text between them included). A
     /// piece longer than `packLength` on its own is its own utterance. Offsets are UTF-16 into the block.
+    ///
+    /// ``minUtteranceLength`` overrides the budget in one direction only: a run still shorter than it
+    /// keeps taking the next piece however far past `packLength` that goes, and a run left short at
+    /// the end of the block — where there is no next piece — is given back to the utterance before
+    /// it. Never the other way: the budget alone can only make utterances, never split them.
     private func packed(_ pieces: [(text: String, offset: Int)], in text: String) -> [(String, Int)] {
         let ns = text as NSString
+        let minimum = packLength > 0 ? Self.minUtteranceLength : 0
         var result: [(String, Int)] = []
         var start: Int?
         var end = 0
         func flush() {
-            if let s = start { result.append((ns.substring(with: NSRange(location: s, length: end - s)), s)) }
-            start = nil
+            guard let s = start else { return }
+            defer { start = nil }
+            // Short, and something before it in this block to join: extend that utterance to here.
+            if end - s < minimum, let previous = result.last?.1 {
+                result[result.count - 1] = (ns.substring(with: NSRange(location: previous, length: end - previous)), previous)
+            } else {
+                result.append((ns.substring(with: NSRange(location: s, length: end - s)), s))
+            }
         }
         for piece in pieces {
             let pieceEnd = piece.offset + (piece.text as NSString).length
-            if let s = start, pieceEnd - s <= packLength {
+            if let s = start, pieceEnd - s <= packLength || end - s < minimum {
                 end = pieceEnd
             } else {
                 flush()

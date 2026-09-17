@@ -31,6 +31,10 @@ struct T2SReaderApp: App {
                         // and it costs the app no `UIApplicationDelegateAdaptor` it does not
                         // otherwise have. `attach` is idempotent — this closure can run again.
                         StatusBandHost.attach(to: environment)
+                        // The capsule, one level above the band's window. Same reason the band
+                        // has one — it must be over the Reader's full-screen cover — but this
+                        // one answers touches inside itself, because it carries a Play button.
+                        MockIslandHost.attach(to: environment)
                         environment.audioSession.activate(pausing: {
                                                               let wasPlaying = environment.coordinator.state == .playing || environment.coordinator.state == .catchingUp
                                                               environment.coordinator.pause()

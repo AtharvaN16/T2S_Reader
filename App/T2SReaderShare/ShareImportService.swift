@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import T2SApp
+import T2SCore
 import T2SLibrary
 import UniformTypeIdentifiers
 import UIKit
@@ -62,19 +63,22 @@ final class ShareImportService {
         var failures: [String] = []
         for provider in providers {
             do {
-                // The books come first, and the link branch last. A file shared out of Files (or any
-                // document provider) conforms to `public.file-url`, which conforms to `public.url` —
-                // so asking about `.url` first sent every shared EPUB down the web-link path, where
-                // `ImportModel.fetch(link:)` rejected its `file://` scheme with "That doesn't look
-                // like a web address." (owner, 2026-09-10). Kind before container, always.
-                if provider.hasItemConformingToTypeIdentifier(UTType.epub.identifier) {
-                    imported += try await importFile(from: provider, type: .epub)
-                } else if provider.hasItemConformingToTypeIdentifier(UTType.pdf.identifier) {
-                    imported += try await importFile(from: provider, type: .pdf)
-                } else if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
+                // What the item is, decided from every type it registers and the name it suggests
+                // rather than from the order we happen to ask in (`SharedItemKind`). Two senders
+                // taught us the order matters. A file shared out of Files conforms to
+                // `public.file-url`, which conforms to `public.url` — so asking about `.url` first
+                // sent every shared EPUB down the web-link path, where `ImportModel.fetch(link:)`
+                // rejected its `file://` scheme with "That doesn't look like a web address."
+                // (owner, 2026-09-10). And a book AirDropped from the Mac arrives as its bytes
+                // *and* its name as plain text — asking about text early enough imported the name
+                // alone, so the library got a book that was only a title (owner, 2026-09-16).
+                switch SharedItemKind.of(typeIdentifiers: provider.registeredTypeIdentifiers,
+                                         suggestedName: provider.suggestedName) {
+                case .book(let type, let identifier):
+                    imported += try await importFile(from: provider, sourceType: type, typeIdentifier: identifier)
+                case .link:
                     let url = try await loadedURL(from: provider)
-                    // Belt and braces: a file URL that reached here anyway (a provider that declares
-                    // only `public.url` for a document it holds) is imported as the file it is.
+                    // A file URL is the file it points at, not a page to fetch.
                     if url.isFileURL {
                         if ["epub", "pdf"].contains(url.pathExtension.lowercased()) {
                             imported += await importedIDs(after: { await self.model.importFiles([url]) })
@@ -86,13 +90,22 @@ final class ShareImportService {
                             await self.model.confirmPreview()
                         }
                     }
-                } else if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
+                case .text:
                     let text = try await loadedText(from: provider)
+                    // Text that is only a file's name is the sender describing a book it did not
+                    // actually hand over; importing it would make that title-only book again.
+                    guard !SharedItemKind.isJustAFileName(text) else {
+                        failures.append("Only the file's name came through, not the book itself. Share the EPUB from Files, or open it with t2s.")
+                        break
+                    }
                     imported += await importedIDs(after: {
                         await self.model.importText(title: PlainTextArticle.defaultTitle(for: text), body: text)
                     })
-                } else {
-                    failures.append("This shared item isn't a link, EPUB, PDF, or text.")
+                case .unknown:
+                    // The types it did offer, so a failure on the phone says what to fix rather
+                    // than only that something went wrong.
+                    let offered = provider.registeredTypeIdentifiers.joined(separator: ", ")
+                    failures.append("This shared item isn't a link, EPUB, PDF, or text (\(offered)).")
                 }
             } catch {
                 failures.append(error.localizedDescription)
@@ -112,9 +125,14 @@ final class ShareImportService {
         return .failure(error)
     }
 
-    private func importFile(from provider: NSItemProvider, type: UTType) async throws -> [UUID] {
+    private func importFile(from provider: NSItemProvider, sourceType: SourceType,
+                            typeIdentifier: String) async throws -> [UUID] {
         let inbox = paths.root.appendingPathComponent("ShareInbox", isDirectory: true)
-        let copy = try await copiedFile(from: provider, type: type, into: inbox)
+        // The copy is named for the kind we decided it is, not for the identifier it arrived under:
+        // a provider that hands its bytes over as `public.data` still writes `…/<uuid>.epub`, which
+        // is what `ImportModel` reads the type from.
+        let copy = try await copiedFile(from: provider, typeIdentifier: typeIdentifier,
+                                        fileExtension: sourceType == .pdf ? "pdf" : "epub", into: inbox)
         defer { try? FileManager.default.removeItem(at: copy) }
         return await importedIDs(after: { await self.model.importFiles([copy]) })
     }
@@ -169,18 +187,19 @@ final class ShareImportService {
         }
     }
 
-    private func copiedFile(from provider: NSItemProvider, type: UTType, into inbox: URL) async throws -> URL {
+    private func copiedFile(from provider: NSItemProvider, typeIdentifier: String,
+                            fileExtension: String, into inbox: URL) async throws -> URL {
         try await withCheckedThrowingContinuation { continuation in
-            provider.loadFileRepresentation(forTypeIdentifier: type.identifier) { url, error in
+            provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { url, error in
                 guard let url else {
-                    continuation.resume(throwing: error ?? ShareImportError.unavailable(type.identifier))
+                    continuation.resume(throwing: error ?? ShareImportError.unavailable(typeIdentifier))
                     return
                 }
                 do {
                     try FileManager.default.createDirectory(at: inbox, withIntermediateDirectories: true)
                     let name = UUID().uuidString
                     let destination = inbox.appendingPathComponent(name)
-                        .appendingPathExtension(type.preferredFilenameExtension ?? "bin")
+                        .appendingPathExtension(fileExtension)
                     try FileManager.default.copyItem(at: url, to: destination)
                     continuation.resume(returning: destination)
                 } catch {

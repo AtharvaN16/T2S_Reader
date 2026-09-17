@@ -97,10 +97,9 @@ struct PreferencesPage: View {
                     }
                     section("About") {
                         // First in About, above the welcome: the welcome is a thing to be shown
-                        // again, this is a thing to be read, and a reader who has come looking for
-                        // "why is my phone warm" is looking for prose.
+                        // again, this is a thing to be read.
                         Button { showHowItWorks = true } label: {
-                            row("How the app works")
+                            row("How it works")
                         }
                         .buttonStyle(.plain)
                         // The welcome shows once per install; this is the way back to it, for a

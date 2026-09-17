@@ -2,51 +2,42 @@ import Foundation
 import Testing
 @testable import T2SApp
 
-/// Settings → About → "How the app works". The copy is data so it can be read on the Mac: a sheet
-/// of sentences is exactly the kind of thing that goes quietly untrue as the app changes, and the
-/// claims here are load-bearing — one of them is a privacy promise and one of them is a number.
+/// Settings → About → "How it works". The copy is data so it can be read on the Mac: one of these
+/// lines is a privacy promise, and all of them are the kind of writing that grows.
 @Suite struct HowItWorksTests {
     @Test func everyPointCarriesAGlyphATitleAndABody() {
-        for points in [HowItWorks.points(hasOnDeviceVoice: true), HowItWorks.points(hasOnDeviceVoice: false)] {
-            #expect(!points.isEmpty)
-            for point in points {
-                #expect(!point.symbol.isEmpty)
-                #expect(!point.title.isEmpty)
-                #expect(!point.body.isEmpty)
-            }
+        #expect(!HowItWorks.points.isEmpty)
+        for point in HowItWorks.points {
+            #expect(!point.symbol.isEmpty)
+            #expect(!point.title.isEmpty)
+            #expect(!point.body.isEmpty)
         }
     }
 
-    /// The download is the one point that is only true where there is a model to download. The
-    /// everyday build plays in the system voice and must not be told about a 620 MB file it will
-    /// never fetch.
-    @Test func theDownloadIsOnlyPromisedWhereThereIsAModel() {
-        let withVoice = HowItWorks.points(hasOnDeviceVoice: true)
-        let without = HowItWorks.points(hasOnDeviceVoice: false)
-        #expect(withVoice.contains { $0.body.contains("620 MB") })
-        #expect(!without.contains { $0.body.contains("620 MB") })
-        #expect(without.count == withVoice.count - 1)
+    /// The guard on the writing, and the reason this file exists (owner, 2026-09-16: "too many
+    /// options and this is very bad UX writing"). The first draft was six points of 200 characters
+    /// each — 233 words of prose on a settings sheet. A short list of short lines is the whole
+    /// design, so the length is a test rather than a note nobody reads.
+    @Test func theSheetStaysShortEnoughToBeRead() {
+        #expect(HowItWorks.points.count <= 4)
+        #expect(HowItWorks.lead.count <= 80)
+        for point in HowItWorks.points {
+            #expect(point.title.count <= 16)             // two or three plain words
+            #expect(point.body.count <= 140)             // two sentences, no more
+        }
     }
 
-    /// The build without the on-device voice still has to say where its voice comes from, or the
-    /// sheet opens on "Made on your iPhone" and means something it cannot deliver.
-    @Test func theEverydayBuildNamesTheSystemVoice() {
-        let without = HowItWorks.points(hasOnDeviceVoice: false)
-        #expect(without.contains { $0.body.lowercased().contains("system voice") })
+    /// Titles appear once each: a list read straight down with two points named the same thing
+    /// reads as a mistake.
+    @Test func titlesAndIdentifiersAreDistinct() {
+        #expect(Set(HowItWorks.points.map(\.title)).count == HowItWorks.points.count)
+        #expect(Set(HowItWorks.points.map(\.id)).count == HowItWorks.points.count)
     }
 
-    /// Titles are lines, not paragraphs, and each one appears once — a sheet read top to bottom
-    /// with two points called the same thing reads as a mistake.
-    @Test func titlesAreShortAndDistinct() {
-        let points = HowItWorks.points(hasOnDeviceVoice: true)
-        #expect(Set(points.map(\.title)).count == points.count)
-        #expect(Set(points.map(\.id)).count == points.count)
-        for point in points { #expect(point.title.count <= 30) }
-    }
-
-    /// The lead is the sheet's one sentence of summary and sits above the list.
-    @Test func theLeadSaysWhereTheVoiceIsMade() {
-        #expect(HowItWorks.lead(hasOnDeviceVoice: true).contains("iPhone"))
-        #expect(!HowItWorks.lead(hasOnDeviceVoice: false).isEmpty)
+    /// The two facts a reader cannot learn anywhere else in the app: where the speech is made, and
+    /// that the phone getting warm is the app working rather than the app failing.
+    @Test func theSheetKeepsItsTwoLoadBearingClaims() {
+        #expect(HowItWorks.points.contains { $0.body.contains("never on a server") })
+        #expect(HowItWorks.points.contains { $0.title == "May warm up" })
     }
 }

@@ -39,6 +39,14 @@ extension EnvironmentValues {
     }
 }
 
+/// The two facts the sleep Live Activity is drawn from, together, so `onChange` sees a restart of
+/// the option that is already running. `SleepOption` alone does not change when the reader picks
+/// "30 min" a second time, but the deadline does.
+private struct SleepCardKey: Equatable {
+    var option: SleepOption?
+    var deadline: Date?
+}
+
 /// Spec §2.4.4: no tab bar; a three-page pager opening on Queue, a tappable three-glyph indicator,
 /// and the floating mini-player above it on every page.
 struct RootPager: View {
@@ -232,6 +240,24 @@ struct RootPager: View {
             guard let job = env.chapterRenderer.lastFinished else { return }
             showRenderToast(job)
         }
+        // The card follows the queue even when nothing finished — a batch starting, a hold
+        // arriving, the last job leaving. `event: nil` keeps every one of these silent.
+        .onChange(of: env.chapterRenderer.queue.count) { _, _ in updateRenderActivity(event: nil) }
+        .onChange(of: env.chapterRenderer.hold) { _, _ in updateRenderActivity(event: nil) }
+        // The sleep card needs no updates while it counts — the view ticks from the deadline on
+        // its own — so this fires only when the timer starts, changes or is cancelled.
+        //
+        // Both facts, not just the option: choosing "30 min" while "30 min" is already running is
+        // a common gesture, and it moves the deadline without changing the option. Watching the
+        // option alone left the Lock Screen counting down to the moment the reader had just
+        // replaced (review I8).
+        .onChange(of: SleepCardKey(option: env.sleepTimer.active,
+                                   deadline: env.sleepTimer.deadlineDate)) { _, key in
+            let reading = SleepCardReading.make(option: key.option,
+                                                deadline: key.deadline,
+                                                chapterTitle: env.sleepTimer.sleepChapterTitle)
+            env.activities.updateSleep(reading, bookTitle: env.player.current?.document.title ?? "")
+        }
         .onChange(of: env.preferences.defaultRate) { _, rate in
             env.player.setRate(rate)
         }
@@ -351,38 +377,62 @@ struct RootPager: View {
         Task { await env.libraryModel.refresh() }
     }
 
-    /// The one message a finished chapter earns, with the one thing worth doing about it: audio
-    /// that is ready is ready *to play*, so the toast offers to play it. The cover carries the
-    /// book, which frees the line under the headline to name the chapter alone.
+    /// The one message a finished chapter earns, sent to exactly one surface.
+    ///
+    /// App on screen: the capsule at the top says it, wherever in the app the reader is — which
+    /// is the whole reason it exists, since the Book sheet's progress box only exists while that
+    /// sheet is open. App backgrounded: the Live Activity alerts instead. Never both (owner,
+    /// 2026-09-16).
     private func showRenderToast(_ job: ChapterRenderJob) {
         guard let book = env.libraryModel.summaries.first(where: { $0.id == job.documentID }) else { return }
         let cover = ToastContent.Cover(relativePath: book.document.coverImagePath,
                                        title: book.document.title,
                                        isPDF: book.document.sourceType == .pdf)
         let chapters = env.libraryModel.progress(for: book.id)?.chapterCount ?? 0
-        // A document with one chapter is not a book with a chapter in it — an article, or a PDF the
-        // reader imported — and its one piece has no name worth printing, so the line takes the
-        // document's own title instead.
-        let hasChapters = chapters > 1
-        let name = hasChapters ? ChapterLabel.text(for: job.title, ordinal: job.chapterIndex + 1)
-                               : book.document.title
+        let message = ChapterReadyMessage.make(job: job, documentTitle: book.document.title,
+                                               chapterCount: chapters)
+        let play: (() -> Void)? = message.isFailure
+            ? nil
+            : { playRendered(book, chapter: chapters > 1 ? job.chapterIndex : nil) }
 
-        if case .failed(let message) = job.state {
-            env.toasts.show(ToastContent(title: hasChapters ? "Chapter couldn't be rendered"
-                                                            : "Couldn't be rendered",
-                                         detail: message, actionLabel: nil, cover: cover))
-            return
+        switch Announcement.route(isForeground: scenePhase == .active) {
+        case .island:
+            env.island.show(message, cover: cover, action: play)
+            // And the card moves too, silently. `RenderCardReading.make` is handed `canAlert:
+            // false` below while the app is on screen, so the number on the Lock Screen follows
+            // the queue without anything breaking through — which is what "the card updates
+            // silently" asks for. Leaving it out stranded the card at "0 of 8" for hours,
+            // because the queue does not shrink on a finish and nothing else fires (review C2).
+            updateRenderActivity(event: nil, documentID: job.documentID)
+        case .liveActivity:
+            // A failure carries its own two lines rather than the chapter's name: away from the
+            // phone this card is the only place the reader will ever hear about it (review I6).
+            let event: RenderCardReading.Event = message.isFailure
+                ? .failed(title: message.title, reason: message.detail)
+                : .finished(name: message.name)
+            updateRenderActivity(event: event, documentID: job.documentID)
         }
-        // The sentence, not the label: "Chapter 4: The Siege of Delhi has finished rendering" says
-        // both which one and what happened to it, where a bare name left the second half to the
-        // headline (owner, 2026-09-14).
-        env.toasts.show(ToastContent(title: hasChapters ? "Chapter ready to play"
-                                                        : "Document ready to play",
-                                     detail: "\(name) has finished rendering",
-                                     actionLabel: "Play", actionGlyph: "play.fill",
-                                     actionIsGlyph: true, cover: cover)) {
-            playRendered(book, chapter: hasChapters ? job.chapterIndex : nil)
+    }
+
+    /// Pushes one book's share of the queue to the Live Activity. `event` is what makes the
+    /// update break through: a chapter landing, or failing, is the only thing worth a banner —
+    /// and only while the reader is somewhere else.
+    ///
+    /// - Parameter documentID: the book the event belongs to, when the caller knows it. The
+    ///   queue is the whole session's across every document, so without this the card names
+    ///   whichever book the session started with (review C3).
+    private func updateRenderActivity(event: RenderCardReading.Event?, documentID: UUID? = nil) {
+        let jobs = RenderCardReading.focus(env.chapterRenderer.queue, preferring: documentID)
+        let book = jobs.first.flatMap { job in
+            env.libraryModel.summaries.first { $0.id == job.documentID }
         }
+        let title = book?.document.title ?? ""
+        let reading = RenderCardReading.make(jobs: jobs, bookTitle: title,
+                                             hold: env.chapterRenderer.hold,
+                                             event: event,
+                                             canAlert: scenePhase != .active)
+        env.activities.updateRender(reading, bookTitle: title,
+                                    coverPath: book?.document.coverImagePath)
     }
 
     /// Opens the book and starts it, from the chapter that was just made when there is one.

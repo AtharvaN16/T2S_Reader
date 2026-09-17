@@ -63,8 +63,11 @@ targetTemplates:
           - Kokoro
           - KokoroCoreML
         buildPhase: resources
+      - path: ActivityShared
     dependencies:
       - target: T2SReaderShare
+        embed: true
+      - target: T2SReaderActivities
         embed: true
       - sdk: MediaPlayer.framework
       - package: T2S
@@ -91,6 +94,7 @@ targetTemplates:
         T2SCloudVoiceKey: $(T2S_CLOUD_VOICE_KEY)
         UILaunchScreen: {}
         UIBackgroundModes: [audio, processing]
+        NSSupportsLiveActivities: true
         BGTaskSchedulerPermittedIdentifiers: [com.t2s.reader.prepare]
         UIAppFonts:
           - Inter-Regular.ttf
@@ -214,6 +218,22 @@ targets:
     configFiles:
       Debug: Local.xcconfig
       Release: Local.xcconfig
+  T2SReaderActivities:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: T2SReaderActivities
+      - path: ActivityShared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(T2S_BUNDLE_ID).activities
+        INFOPLIST_KEY_CFBundleDisplayName: t2s
+        CODE_SIGN_ENTITLEMENTS: T2SReaderActivities/T2SReaderActivities.entitlements
+    info:
+      path: T2SReaderActivities/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
 # Two schemes with plain names, so the Xcode picker needs no explanation: Phone builds the app you
 # install on an iPhone (the T2SReaderKokoro target); Simulator builds the Mac-only test build
 # (T2SReader). The build scripts and CI use the same two names.

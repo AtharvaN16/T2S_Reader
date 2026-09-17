@@ -217,8 +217,9 @@ struct QueueRow: View {
         .sheet(isPresented: $showSleepTimer) { SleepTimerSheet() }
         .sheet(isPresented: $showVoiceChange) { VoiceChangeSheet(summary: summary) }
         .task(id: glimpseKey) { glimpse = await env.libraryModel.glimpse(for: summary) }
-        // The queue publishes each chapter as it leaves, ready or failed. A failure has its own
-        // toast and nothing to celebrate on the row, so only `.ready` lights this.
+        // The queue publishes each chapter as it leaves, ready or failed. A failure is announced
+        // by the capsule or the Live Activity, never here — there is nothing to celebrate on the
+        // row — so only `.ready` lights this.
         .onChange(of: env.chapterRenderer.finishCount) { _, _ in
             guard let job = env.chapterRenderer.lastFinished,
                   job.documentID == summary.id, job.state == .ready else { return }

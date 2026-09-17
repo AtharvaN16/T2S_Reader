@@ -2,34 +2,22 @@
 import SwiftUI
 import T2SApp
 
-/// Settings → About → "How the app works": the sheet that answers the questions the app otherwise
-/// answers by surprise — why the phone is warm, why the first launch downloads 620 MB, why a
-/// chapter you have heard once starts instantly and a new one takes a moment, and what of all this
-/// ever leaves the device.
+/// Settings → About → "How it works": four short answers to the questions the app otherwise
+/// answers by surprise — why the phone is warm, why a chapter you have heard once starts at
+/// instantly, what the voice can and cannot do, and where any of it goes.
 ///
-/// Every one of those has a line of its own somewhere in the app already — the warm hold's card,
-/// Storage's delete warning, the sync row's subtitle — but each is only met at the moment it bites,
-/// and only by the reader it bit. This is the one place they can be read before anything goes
-/// wrong, which is the whole point of it.
-///
-/// The words are not here; they are `HowItWorks` in T2SApp, where they can be tested on the Mac.
-/// This file is the drawing alone: a glyph column, a line, a paragraph, six times.
+/// The words are `HowItWorks` in T2SApp, where their length is held to by a test. This file is the
+/// drawing alone: a glyph column, a title, a line or two, four times.
 struct HowItWorksSheet: View {
-    @Environment(AppEnvironment.self) private var env
     @Environment(\.dismiss) private var dismiss
-
-    /// The sheet is built for the build it is running in: the everyday one has no model to fetch,
-    /// so it is not told the size of one.
-    private var hasOnDeviceVoice: Bool { env.kokoroModel.isSupported }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.section) {
-                VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 32) {
+                VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .top) {
-                        Text("How the app works")
+                        Text("How it works")
                             .typeRole(.playerTitle).foregroundStyle(Tokens.ink)
-                            .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 12)
                         Button { dismiss() } label: { CircleGlyph(systemName: "xmark") }
                             .buttonStyle(.plain)
@@ -37,52 +25,54 @@ struct HowItWorksSheet: View {
                     }
                     // `.lineLimit(nil)` is not redundant, and it has to sit *inside* `typeRole`:
                     // the `.rowTitle` role puts a limit of 2 in the environment for rows that are
-                    // rows, and the lead is a paragraph. Without it the sheet opens on a summary
-                    // that ends in an ellipsis.
-                    Text(HowItWorks.lead(hasOnDeviceVoice: hasOnDeviceVoice))
+                    // rows, and this is a sentence. Without it the sheet opens on an ellipsis.
+                    Text(HowItWorks.lead)
                         .lineLimit(nil)
-                        .typeRole(.rowTitle).foregroundStyle(Tokens.ink)
+                        .typeRole(.rowTitle).foregroundStyle(Tokens.ink2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                // 28 between points, not the 40 of a Settings section: these are one list read
-                // straight down, and a section's worth of air between each turns six paragraphs
-                // into six screens.
-                VStack(alignment: .leading, spacing: Spacing.row) {
-                    ForEach(HowItWorks.points(hasOnDeviceVoice: hasOnDeviceVoice)) { point in
+                VStack(alignment: .leading, spacing: 28) {
+                    ForEach(HowItWorks.points) { point in
                         HowItWorksRow(point: point)
                     }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Spacing.margin)
-            .padding(.top, Spacing.section)
+            .padding(.top, 32)
             .padding(.bottom, Spacing.section)
         }
         .scrollIndicators(.hidden)
         .presentationBackground(Tokens.ground)
-        .presentationDetents([.large])
+        // Sized to the four points, not to a stock detent. `.medium` is half the screen and cut
+        // the last point off mid-title, which is the one arrangement worse than either extreme —
+        // a reader who does not drag never learns there was a fourth. `.large` for half a screen
+        // of text reads as a page you have been navigated to rather than a thing you read and
+        // dismiss. The fraction is what the content actually comes to at the default text size;
+        // at the accessibility sizes it overflows and the sheet scrolls, which is why the scroll
+        // view stays.
+        .presentationDetents([.fraction(0.72), .large])
         .presentationCornerRadius(Spacing.sheetCorner)
     }
 }
 
-/// One point: the glyph in its own column so the titles and their paragraphs share a left edge,
-/// the way the rows of a settings group do.
+/// One point: the glyph in its own column so the titles and their lines share a left edge, the way
+/// the rows of a settings group do.
 private struct HowItWorksRow: View {
     var point: HowItWorks.Point
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
-            // Aligned to the title's cap height rather than centred on the block: a glyph that
-            // floats halfway down a four-line paragraph reads as belonging to no line in particular.
+            // Aligned to the title's line rather than centred on the block: a glyph that floats
+            // halfway down a paragraph reads as belonging to no line in particular.
             Image(systemName: point.symbol)
-                .font(.system(size: 20, weight: .regular))
+                .font(.system(size: 19, weight: .regular))
                 .foregroundStyle(Tokens.ink)
-                .frame(width: 28, height: 24, alignment: .center)
+                .frame(width: 26, height: 22, alignment: .center)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(point.title)
-                    .typeRole(.groupTitle).foregroundStyle(Tokens.ink)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .typeRole(.sectionHeader).foregroundStyle(Tokens.ink)
                 Text(point.body)
                     .typeRole(.meta).foregroundStyle(Tokens.ink2)
                     .fixedSize(horizontal: false, vertical: true)

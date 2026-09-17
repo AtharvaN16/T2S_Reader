@@ -17,6 +17,9 @@ public final class VoicePreviewModel {
     public private(set) var previewing: String?
     /// True from the moment a preview starts until its synthesis has returned, one way or another.
     public private(set) var isRendering = false
+    /// How long the audio now playing runs, at 1x. The picker row fills a waveform over exactly this
+    /// span, so the mark empties as the sample ends without the model having to tick a progress value.
+    public private(set) var previewDuration: TimeInterval = 0
     public private(set) var lastError: String?
 
     private let engine: any SynthesisEngine
@@ -57,6 +60,7 @@ public final class VoicePreviewModel {
         player = nil
         previewing = nil
         isRendering = false
+        previewDuration = 0
         lastError = nil
     }
 
@@ -81,8 +85,10 @@ public final class VoicePreviewModel {
             player.onSegmentFinished = { [weak self] _ in
                 guard let self, self.previewing == voiceID else { return }
                 self.previewing = nil
+                self.previewDuration = 0
             }
             self.player = player
+            previewDuration = result.audio.duration
             player.enqueue(result.audio, tag: 0)
             player.play()
         case .failure(let error):

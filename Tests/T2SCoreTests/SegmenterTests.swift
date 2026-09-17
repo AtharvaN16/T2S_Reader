@@ -80,10 +80,15 @@ import Testing
         #expect(us.map(\.position.charOffset) == [0, a.utf16.count + 1 + b.utf16.count + 1])
     }
 
+    /// Neighbours here are all at least ``Segmenter/minUtteranceLength`` long, so the only rule under
+    /// test is the budget: a sentence over it is its own utterance. (A five-character "Tiny." would
+    /// now join its neighbour instead, which `aPieceTooShortToStandAloneGoesWithTheNext` covers.)
     @Test func aSentenceLongerThanThePackLengthStaysAlone() {
+        let first = "A short enough opening line."
         let long = "This one sentence is on its own longer than the pack length used here."
-        let us = Segmenter(normalizer: TextNormalizer(), packLength: 40).segment(block("Tiny. \(long) End."))
-        #expect(us.map(\.source) == ["Tiny.", long, "End."])
+        let last = "And a closing line here."
+        let us = Segmenter(normalizer: TextNormalizer(), packLength: 40).segment(block("\(first) \(long) \(last)"))
+        #expect(us.map(\.source) == [first, long, last])
     }
 
     @Test func packingNeverCrossesABlock() {
@@ -118,5 +123,41 @@ import Testing
         let us = Segmenter(normalizer: TextNormalizer(), maxUtteranceLength: 7, packLength: 0).segment(block(text, offset: 0))
         #expect(us.map(\.source).joined() == text)
         #expect(us.allSatisfy { $0.source.utf16.count % 2 == 0 })
+    }
+
+    /// A drop cap puts a line break inside the paragraph — "ELIZABETH'S\nEARLY YEARS were spent…" —
+    /// and `NLTokenizer` ends a sentence at it, so the opening word became an utterance of eleven
+    /// characters. Packing could not take it back: the sentence after it is 188 characters, so the
+    /// pair is over `packLength`. A call that short is read far above the voice's narration pitch —
+    /// `af_aoede` said it at 279 Hz against the paragraph's 176 Hz
+    /// (`spikes/findings/2026-09-16-short-utterances.md`). It goes with the next piece whatever the
+    /// packing budget says.
+    @Test func aPieceTooShortToStandAloneGoesWithTheNext() {
+        let block = SourceBlock(text: "ELIZABETH\u{2019}S\nEARLY YEARS were spent in Washington, D.C., where her father held a succession of jobs at government agencies ranging from the State Department to the Agency for International Development. Her mother worked as an aide on Capitol Hill.",
+                                position: Position(resourceHref: "c", progression: 0, charOffset: 0))
+        let utterances = Segmenter(normalizer: TextNormalizer(), packLength: Segmenter.appPackLength).segment(block)
+        #expect(utterances.count == 2)
+        #expect(utterances[0].source.hasPrefix("ELIZABETH\u{2019}S\nEARLY YEARS were spent"))
+        #expect(utterances[0].position.charOffset == 0)
+        #expect(utterances[1].source.hasPrefix("Her mother worked"))
+    }
+
+    /// The same rule at the end of a block, where there is no next piece: the short tail joins the
+    /// piece before it instead.
+    @Test func aShortTailGoesWithThePieceBeforeIt() {
+        let block = SourceBlock(text: "She had been thinking about the problem for most of the afternoon, and had got nowhere at all with it, nor had anyone else in the building that long day. Not yet.",
+                                position: Position(resourceHref: "c", progression: 0, charOffset: 0))
+        let utterances = Segmenter(normalizer: TextNormalizer(), packLength: Segmenter.appPackLength).segment(block)
+        #expect(utterances.count == 1)
+        #expect(utterances[0].source.hasSuffix("Not yet."))
+    }
+
+    /// A block that is short all by itself stays as it is — there is nothing to join it to, and a
+    /// one-line paragraph is the author's, not an artefact of the markup.
+    @Test func aShortBlockIsLeftAlone() {
+        let block = SourceBlock(text: "Not yet.", position: Position(resourceHref: "c", progression: 0, charOffset: 0))
+        let utterances = Segmenter(normalizer: TextNormalizer(), packLength: Segmenter.appPackLength).segment(block)
+        #expect(utterances.count == 1)
+        #expect(utterances[0].source == "Not yet.")
     }
 }

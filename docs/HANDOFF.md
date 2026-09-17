@@ -560,7 +560,7 @@ Never commit generated files (`*.xcodeproj`, `App/T2SReader/Info.plist`, `App/T2
 
 Everything here is on `dev`.
 
-- **T2SCore** — text pipeline: normalizer with span mapping, sentence segmenter, two-phase timeline (estimated → actual durations), per-chapter codec, `Position` resolution, highlight projection, render policy tiers, render scheduler, audio cache with LRU. Plan 1 + Plan 2.
+- **T2SCore** — text pipeline: normalizer with span mapping, sentence segmenter with a floor under an utterance's length (`Segmenter.minUtteranceLength`), block rejoining for readers that cut one element in pieces (`TimelineBuilder.joined`), two-phase timeline (estimated → actual durations), per-chapter codec, `Position` resolution, highlight projection, render policy tiers, render scheduler, audio cache with LRU. Plan 1 + Plan 2.
 - **T2SAudio** — `AudioPlayer` on `AVAudioEngine` with pitch-corrected rate, `PlaybackCoordinator` (owns the playhead), `AACCodec`, and `SystemSpeechEngine` (AVSpeechSynthesizer; the engine until Kokoro lands). Plan 2 + Plan 4a.
 - **T2SStore** — SwiftData store (`LibraryStore`): documents, per-chapter timeline blobs, queue order, resume positions as flattened columns, bookmarks, pronunciation dictionary; versioned schema; `PlayheadStore` conformance. Plan 3.
 - **T2SLibrary** — `Library` facade (import file / article, delete, re-derive stale timelines, evict audio), `PDFDocumentReader` (PDFKit), stored-only ZIP writer, `ArticleEPUBWriter`, container layout `LibraryPaths`. Plan 3.
@@ -862,7 +862,11 @@ What remains, in order:
    out of Files or Safari's downloads, not only out of Apple Books: the owner's phone (2026-09-16)
    could only reach t2s by saving a downloaded EPUB into Books first and sharing it from there.
    The book-link download (`BookDownloading`) is the way round that; whether the share sheet itself
-   is at fault is still unmeasured.
+   is at fault is still unmeasured. One sender is measured, though: **AirDrop from the Mac** put a
+   book in the library that was only its title, because the item carries the file's name as plain
+   text beside its bytes and the old fixed question order took the name (owner, 2026-09-16).
+   `SharedItemKind` decides by what the item actually carries; re-test that one specifically, and
+   note that an item we cannot place now names the types it offered in its failure string.
 6. **Kokoro's gate: the Core ML route is open, the MLX route is not.** Core ML runs on measured
    constants — `KokoroCoreMLDecision.current` carries the A13's RTF 0.181 and 119 MB, every rate up
    to 4x is offered, `KokoroTokenTimingMapper` returns real word timings, and Kokoro Heart is the

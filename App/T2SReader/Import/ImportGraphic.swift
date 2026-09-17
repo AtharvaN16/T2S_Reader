@@ -35,9 +35,17 @@ import T2SApp
 struct ImportGraphic: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     /// The loop's own zero. `@State`, so it is the moment the picture first appeared and not a
     /// number that jumps when the view is rebuilt.
     @State private var start = Date()
+    /// How far into the loop it was when the scene stopped being active, in seconds; nil while it
+    /// is running. `TimelineView(.animation)` redraws every frame for as long as it is on screen,
+    /// which on a phone left on this page is a 60 fps burn on four blurred, scaled layers for
+    /// nothing. Holding the clock here rather than dropping back to the still ring is what lets it
+    /// pick up exactly where it stopped — a freeze that resumes with a jump is worse than no
+    /// freeze, because the jump is the part a reader notices.
+    @State private var frozen: Double?
 
     /// The frame the picture stands in: the ring's far edge plus half a card, doubled. Cut from
     /// 286 on the owner's word (2026-09-17) — at that height the third row of the list below was
@@ -86,6 +94,7 @@ struct ImportGraphic: View {
         .frame(height: Self.height)
         .frame(maxWidth: .infinity)
         .accessibilityHidden(true)
+        .onChange(of: scenePhase, initial: true) { _, phase in follow(phase) }
     }
 
     @ViewBuilder private var ring: some View {
@@ -99,15 +108,38 @@ struct ImportGraphic: View {
                         .offset(place(angle: Self.entry + Self.turn * step.phase, radius: Self.orbit))
                 }
             }
+        } else if let frozen {
+            // Held mid-loop while the scene is away: the same frame it would have drawn, without a
+            // timeline asking for the next one.
+            wheel(clock: frozen / Self.period)
         } else {
             TimelineView(.animation) { timeline in
-                let clock = timeline.date.timeIntervalSince(start) / Self.period
-                ZStack {
-                    ForEach(Self.phases, id: \.kind) { step in
-                        travelling(step.kind, at: (clock + step.phase).truncatingRemainder(dividingBy: 1))
-                    }
-                }
+                wheel(clock: timeline.date.timeIntervalSince(start) / Self.period)
             }
+        }
+    }
+
+    /// The four kinds at one moment of the loop.
+    private func wheel(clock: Double) -> some View {
+        ZStack {
+            ForEach(Self.phases, id: \.kind) { step in
+                travelling(step.kind, at: (clock + step.phase).truncatingRemainder(dividingBy: 1))
+            }
+        }
+    }
+
+    /// Stop the clock when the scene stops being active — backgrounded, in the switcher, under a
+    /// locked screen — and start it again from the same instant. Nothing here can help an app left
+    /// *foregrounded* and unwatched, which is still active as far as the system is concerned; that
+    /// one is answered by not leaving a simulator booted.
+    private func follow(_ phase: ScenePhase) {
+        if phase == .active {
+            if let frozen {
+                start = Date().addingTimeInterval(-frozen)
+                self.frozen = nil
+            }
+        } else if frozen == nil {
+            frozen = Date().timeIntervalSince(start)
         }
     }
 

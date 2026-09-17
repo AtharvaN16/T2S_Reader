@@ -22,15 +22,15 @@ import T2SApp
 /// Wonderland"); the reel now runs unbroken until the welcome's veil covers it, and Alice is one
 /// book in it like any other.
 ///
-/// **The skew** is what the reel gained in exchange (the owner, 2026-09-16, of a Mobbin screen:
-/// "see how it shows this skew, that's the way we need to proceed"). Each cover is laid back about
-/// its own horizontal axis under a perspective divide, so it reads as a plane going away from the
-/// reader rather than a rectangle sliding up the glass. The lean is not uniform: `tilt` is the
-/// lean at the crown of the screen and it eases in from almost nothing at the foot, so a cover
-/// enters square-on and is well laid back by the time it leaves — the reel goes over a horizon.
+/// **No skew either, any more.** A cut on 2026-09-16 laid every cover back about its horizontal
+/// axis under a perspective divide, so the reel read as a ramp going over a horizon — the owner's
+/// Mobbin reference. Seen moving, it was wrong: a record can be laid near-flat because a record is
+/// legible flat, and a book laid that far back stops looking like a book. The owner's verdict the
+/// next day (2026-09-17: "I don't like that the books are tilted in the start video now, earlier
+/// the way we had it, it was fine"). The reel is a flat field again, with nothing but each cover's
+/// own small roll to keep it from looking machined.
 ///
-/// With Reduce Motion nothing travels: the field stands still, dim, and square-on, since a skew
-/// that never moves is only a distortion.
+/// With Reduce Motion nothing travels: the field stands still and dim.
 struct CoverField: View {
     var books: [OnboardingManifest.Book]
     /// Only to keep the book whose passage beat three reads in the near half of the field, so it
@@ -40,19 +40,6 @@ struct CoverField: View {
 
     @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    /// How far a cover is laid back by the time it reaches the crown of the screen, in degrees
-    /// about the horizontal axis. This is the whole of the skew: one number to turn if the
-    /// reference meant a shallower rake or a steeper one.
-    static let tilt: Double = 46
-    /// The eye's distance from the plane, as `rotation3DEffect` reckons it — smaller is a wider
-    /// lens and a harder divide. Gentle, because a cover is small on the screen and a hard
-    /// perspective on a 150 pt rectangle reads as a glitch rather than as depth.
-    static let perspective: CGFloat = 0.55
-    /// Where the lean has fully come in, as a fraction of the height above the foot. A cover is
-    /// square-on as it enters and reaches its full rake by two thirds of the way up, so the top of
-    /// the screen is a settled rake rather than a rotation still in progress.
-    static let rakeReach: CGFloat = 0.66
 
     /// One floating cover: where it is in depth and across the screen, and how fast it drifts.
     /// All derived from the index, once.
@@ -105,10 +92,7 @@ struct CoverField: View {
             let slot = (index * Self.stride(for: count)) % max(count, 1)
             x = Self.columns[slot % Self.columns.count] + CGFloat(unit(2) - 0.5) * 0.1
             phase = (CGFloat(slot) + CGFloat(unit(3) - 0.5) * 0.4) / CGFloat(max(count, 1))
-            // Cut to a third of what it was: the roll used to be the only thing keeping the field
-            // from looking machined, and now that every cover is raked it only has to break the
-            // rows up. At its old ±12° it fought the rake and the covers read as tumbling.
-            lean = (unit(4) - 0.5) * 8
+            lean = (unit(4) - 0.5) * 24
         }
     }
 
@@ -159,34 +143,14 @@ struct CoverField: View {
         size.height * 2.3 + 240
     }
 
-    /// How far a cover at `y` — measured from the centre of the screen, negative upward — is laid
-    /// back, in degrees. Nothing at the foot, `tilt` from `rakeReach` of the way up, eased between
-    /// so no cover crosses a kink on its way. Covers below the screen are raked as the foot is,
-    /// which matters because the loop is taller than the screen and a cover spends most of its
-    /// life off it.
-    static func rake(atY y: CGFloat, in size: CGSize) -> Double {
-        guard size.height > 0 else { return 0 }
-        let fromFoot = (size.height / 2 - y) / max(size.height * rakeReach, 1)
-        let t = min(max(Double(fromFoot), 0), 1)
-        return tilt * (t * t * (3 - 2 * t))
-    }
-
     @ViewBuilder
     private func card(_ item: Placed, in size: CGSize) -> some View {
         let p = item.placement
-        let y = driftY(p, at: elapsed, in: size)
         BookCover(relativePath: nil, paths: env.paths, height: p.height,
                   title: item.book.title, author: item.book.author, asset: item.book.coverName)
             .rotationEffect(.degrees(p.lean))
-            // The rake, last of the two, so the roll happens in the cover's own plane and the
-            // perspective is applied to the result — roll first and the lean would be raked with
-            // it, which slews the cover sideways instead of laying it back.
-            .rotation3DEffect(.degrees(reduceMotion ? 0 : Self.rake(atY: y, in: size)),
-                              axis: (x: 1, y: 0, z: 0),
-                              anchor: .center,
-                              perspective: Self.perspective)
             .blur(radius: p.blur)
-            .offset(x: size.width * p.x, y: y)
+            .offset(x: size.width * p.x, y: driftY(p, at: elapsed, in: size))
             .opacity(p.opacity * (reduceMotion ? 0.6 : 1))
     }
 }

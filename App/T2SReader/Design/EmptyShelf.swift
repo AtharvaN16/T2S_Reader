@@ -5,24 +5,29 @@ import SwiftUI
 /// "Nothing saved" — a fan of three objects over a soft pool of colour, a headline, one line). The
 /// button that used to sit under the line is gone (owner, 2026-09-14, from Queue's empty pages):
 /// the page's own Import control in the top row becomes the raised blue key while the page is
-/// empty instead, so there is one way in, not two, and the shelf is only the picture and the words. The objects are three real covers, bundled: Alex Aster's *Starside* and Kate Quinn's
-/// *The Astral Library*, two of 2026's popular books, behind Madeline Miller's *Circe*. Three
-/// authors, one each — the first cut had *Circe* and *The Song of Achilles*, both Miller's, and the
-/// owner asked for neither that nor a shelf with nothing new on it (2026-09-10: "don't include 2
-/// books from the same author, also include 2026 popular books").
+/// empty instead, so there is one way in, not two, and the shelf is only the picture and the words.
 ///
-/// They are drawn as every book in the app is drawn — `BookCover`, the Figma mockup: hinge, sheen,
-/// shadow, the fore-edge rounded and the spine square — and each is turned in 3D on its `tilt`, the
-/// way the book sheet's hero turns with the phone, so the fan reads as three objects standing at
-/// angles rather than three pictures laid flat (the owner, on the first cut: "use our book mockup
-/// for the covers"). They rise into place one after another when the page appears, and the one in
-/// front keeps a slow breath after. The pool under them is `glowFaint`, the same blue as the
-/// warm-up's light and the raised key in the page's top row.
+/// The Collection's objects are three real covers, bundled: Alex Aster's *Starside* and Kate
+/// Quinn's *The Astral Library*, two of 2026's popular books, behind Madeline Miller's *Circe*.
+/// Three authors, one each — the first cut had *Circe* and *The Song of Achilles*, both Miller's,
+/// and the owner asked for neither that nor a shelf with nothing new on it (2026-09-10: "don't
+/// include 2 books from the same author, also include 2026 popular books"). They are drawn as
+/// every book in the app is drawn — `BookCover`, the Figma mockup: hinge, sheen, shadow, the
+/// fore-edge rounded and the spine square — and each is turned in 3D on its `tilt`, the way the
+/// book sheet's hero turns with the phone, so the fan reads as three objects standing at angles
+/// rather than three pictures laid flat (the owner, on the first cut: "use our book mockup for the
+/// covers"). They rise into place one after another when the page appears, and the one in front
+/// keeps a slow breath after. The pool under them is `glowFaint`, the same blue as the warm-up's
+/// light and the raised key in the page's top row.
+///
+/// Home's is quieter: grey stand-ins, no covers and no pool (owner, 2026-09-17). Both pictures are
+/// smaller than they were, and the headline and its line each dropped a size, so the shelf takes
+/// less of an empty page than it did.
 struct EmptyShelf: View {
-    /// Which picture stands over the pool. The Collection keeps the fan — three covers standing at
-    /// angles, a shelf with things on it. Home has its own: the same three books small, stacked as
-    /// rows with a grey line or two beside each, the queue it will be (owner, 2026-09-14, from the
-    /// reference's Queue and Collection pages: "use different graphic for home and collection").
+    /// Which picture the page shows. The Collection keeps the fan — three covers standing at
+    /// angles over the pool, a shelf with things on it. Home has its own: three grey rows, a square
+    /// and two lines each, the queue it will be (owner, 2026-09-14, from the reference's Queue and
+    /// Collection pages: "use different graphic for home and collection").
     enum Graphic { case fan, rows }
 
     var graphic: Graphic
@@ -38,22 +43,37 @@ struct EmptyShelf: View {
     /// asked for it ("slightly lower, just above the center") — at 48 it sat in the top third.
     static let topGap: CGFloat = 128
 
+    /// How tall the picture's frame is on each page. Both were 230 before the owner asked for a
+    /// smaller graphic on Home and the Collection to match it (2026-09-17); Home's is the shorter
+    /// of the two now, because its rows lost their covers as well as their size.
+    private var frameHeight: CGFloat {
+        switch graphic {
+        case .fan: return 190
+        case .rows: return 156
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            // One frame for both pictures, so the headline lands on the same line on both pages.
+            // One frame per picture, so the headline lands the same distance under either.
             ZStack {
-                Pool()
                 switch graphic {
-                case .fan: CoverFan()
-                case .rows: RowStack()
+                // Home's rows stand on the page itself: the pool of blue behind them went with the
+                // covers (owner, 2026-09-17: "remove the blue glow from behind the graphic"). The
+                // Collection's fan keeps it — three covers over a pool is the whole picture there.
+                case .fan:
+                    Pool()
+                    CoverFan()
+                case .rows:
+                    RowStack()
                 }
             }
-            .frame(height: 230)
+            .frame(height: frameHeight)
             .accessibilityHidden(true)
-            Text(title).typeRole(.playerTitle).foregroundStyle(Tokens.ink)
+            Text(title).typeRole(.groupTitle).foregroundStyle(Tokens.ink)
                 .padding(.top, Spacing.row)
-            Text(line).typeRole(.rowTitle).foregroundStyle(Tokens.ink2)
-                .padding(.top, 8)
+            Text(line).typeRole(.pill).foregroundStyle(Tokens.ink2)
+                .padding(.top, 6)
                 .padding(.horizontal, Spacing.grid)
         }
         .multilineTextAlignment(.center)
@@ -62,8 +82,10 @@ struct EmptyShelf: View {
 }
 
 /// The three books: two behind, tilted out like the reference's two shapes, the hero in front and
-/// upright. They stand 82 pt out from the middle — at 70 the hero cut both their titles in half. Each starts low, small and clear, and springs up to its place; the two behind land
-/// first, the hero last. With Reduce Motion on, nothing moves — the three only fade in together.
+/// upright. They stand 68 pt out from the middle — far enough that the hero does not cut either
+/// title in half, which is what 82 bought at the old size. Each starts low, small and clear, and
+/// springs up to its place; the two behind land first, the hero last. With Reduce Motion on,
+/// nothing moves — the three only fade in together.
 private struct CoverFan: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -83,12 +105,15 @@ private struct CoverFan: View {
         var tilt: CGPoint
     }
 
+    // Four fifths of the first cut's sizes and spread (136/158 tall, 82 out), so the picture reads
+    // the same and takes less of the page — the owner asked Home's graphic to shrink and the
+    // Collection's to follow it (2026-09-17).
     private static let books = [
-        Book(asset: "EmptyCoverStarside", title: "Starside", angle: -13, x: -82, y: 16, height: 136,
+        Book(asset: "EmptyCoverStarside", title: "Starside", angle: -13, x: -68, y: 13, height: 110,
              delay: 0, tilt: CGPoint(x: 9, y: -3)),
-        Book(asset: "EmptyCoverAstralLibrary", title: "The Astral Library", angle: 13, x: 82, y: 16, height: 136,
+        Book(asset: "EmptyCoverAstralLibrary", title: "The Astral Library", angle: 13, x: 68, y: 13, height: 110,
              delay: 0.15, tilt: CGPoint(x: -9, y: -3)),
-        Book(asset: "EmptyCoverCirce", title: "Circe", angle: 0, x: 0, y: 0, height: 158,
+        Book(asset: "EmptyCoverCirce", title: "Circe", angle: 0, x: 0, y: 0, height: 128,
              delay: 0.32, tilt: CGPoint(x: 0, y: -4)),
     ]
     private static let hero = 2
@@ -121,7 +146,7 @@ private struct CoverFan: View {
     }
 }
 
-/// The pool of light under either picture: a circle squashed to a pool, fully faded before its
+/// The pool of light under the fan: a circle squashed to a pool, fully faded before its
 /// own edge, so nothing about its frame shows — a hard-cut rectangle did, faintly, at the first look.
 private struct Pool: View {
     var body: some View {
@@ -131,48 +156,51 @@ private struct Pool: View {
                 .init(color: Tokens.glowFaint, location: 0.45),
                 .init(color: Tokens.glowFaint.opacity(0), location: 1),
             ], center: .center, startRadius: 0, endRadius: 170))
-            .frame(width: 340, height: 340)
+            .frame(width: 280, height: 280)
             .scaleEffect(x: 1, y: 0.68)
-            .offset(y: 12)
+            .offset(y: 10)
     }
 }
 
-/// Home's picture: the same three books as small covers, one under another, each with a title line
-/// and a shorter second line in grey beside it — three rows of the queue this page will be, the
-/// way the reference draws three episodes with their artwork. The lines are `ink3`, the colour of
-/// a divider, so they read as the shape of text and not as words the reader missed. The rows
-/// slide in from the left one after another when the page appears; with Reduce Motion on they
-/// only fade in together.
+/// Home's picture: three rows of the queue this page will be — a square where a cover will go, a
+/// title line and a shorter second line beside it. All of it is `ink3`, the colour of a divider,
+/// so the whole row reads as the shape of a row and not as a book the reader missed or words they
+/// failed to catch: the three real covers that stood here are gone (owner, 2026-09-17: "use grey
+/// rectangles instead of actual book covers"), and with them the argument for the pool of blue
+/// behind. The rows slide in from the left one after another when the page appears; with Reduce
+/// Motion on they only fade in together.
 private struct RowStack: View {
-    @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var settled = false
 
     private struct Row {
-        var asset: String
-        var title: String
-        /// The two grey lines' widths: a title and a shorter line under it, no two rows alike.
+        /// The two grey lines' widths: a title and a shorter line under it, no two rows alike, so
+        /// the three read as three different books rather than one drawn three times.
         var lines: (CGFloat, CGFloat)
         var delay: Double
     }
 
+    // Four fifths of the first cut's widths, with the cover and the lines to match.
     private static let rows = [
-        Row(asset: "EmptyCoverCirce", title: "Circe", lines: (96, 60), delay: 0),
-        Row(asset: "EmptyCoverStarside", title: "Starside", lines: (120, 72), delay: 0.12),
-        Row(asset: "EmptyCoverAstralLibrary", title: "The Astral Library", lines: (80, 52), delay: 0.24),
+        Row(lines: (78, 48), delay: 0),
+        Row(lines: (96, 58), delay: 0.12),
+        Row(lines: (64, 42), delay: 0.24),
     ]
-    private static let coverHeight: CGFloat = 50
+    /// A cover's place, not a cover: a square the height of the row, the proportion a stand-in
+    /// keeps when it has no book in it.
+    private static let coverSide: CGFloat = 40
 
     var body: some View {
         let moves = !reduceMotion
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             ForEach(Array(Self.rows.enumerated()), id: \.offset) { index, row in
-                HStack(spacing: 12) {
-                    BookCover(relativePath: nil, paths: env.paths, height: Self.coverHeight, title: row.title, asset: row.asset)
-                        .shelved
-                    VStack(alignment: .leading, spacing: 7) {
-                        Capsule().fill(Tokens.ink3).frame(width: row.lines.0, height: 8)
-                        Capsule().fill(Tokens.ink3).frame(width: row.lines.1, height: 8)
+                HStack(spacing: 10) {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Tokens.ink3)
+                        .frame(width: Self.coverSide, height: Self.coverSide)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Capsule().fill(Tokens.ink3).frame(width: row.lines.0, height: 7)
+                        Capsule().fill(Tokens.ink3).frame(width: row.lines.1, height: 7)
                     }
                 }
                 .offset(x: settled || !moves ? 0 : -28)

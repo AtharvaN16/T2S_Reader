@@ -68,7 +68,9 @@ struct MockIsland: View {
     var body: some View {
         content
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
+            // 22, not 16 (owner, 2026-09-17): the cover and the Play disc are objects with their
+            // own edges, and at 16 both sat against the capsule's rim rather than inside it.
+            .padding(.horizontal, 22)
             .padding(.top, contentTopInset)
             .padding(.bottom, 14)
             .background(

@@ -28,6 +28,12 @@ struct ImportPage: View {
     @State private var showFilePicker = false
     /// The file flow — choosing, then what landed — as one sheet whose content changes.
     @State private var fileSheet = false
+    /// Whether this page's import went through that sheet. Set when the sheet opens and never
+    /// cleared while the page lives, unlike `fileSheet` itself: the done step is drawn from
+    /// `model.phase`, which is still `.done` for the frame in which the sheet goes, so testing the
+    /// sheet's own flag put the full-page "Added to your library" on screen on the way out (owner,
+    /// 2026-09-17: "it is redundant now"). A file import has already been told what it got.
+    @State private var wentThroughSheet = false
 
     var body: some View {
         let model = env.importModel
@@ -35,9 +41,10 @@ struct ImportPage: View {
         // to. Back also clears the model, so a failure from one path is not shown under the next.
         let back: (() -> Void)? = initialFiles.isEmpty ? { model.reset(); path = nil } : nil
         Group {
-            // The done step still owns the page for a link or a text; the file flow shows its own
-            // inside the sheet, so the hub is never swapped out from under it.
-            if case .done(let documents) = model.phase, !fileSheet {
+            // The done step still owns the page for a link or a text. The file flow shows its own
+            // inside the sheet and never here, so closing that sheet uncovers the hub it was opened
+            // from rather than a second copy of the news.
+            if case .done(let documents) = model.phase, !wentThroughSheet {
                 ImportDonePage(documents: documents,
                                play: { imported = $0; dismiss() },
                                done: { dismiss() })
@@ -70,6 +77,7 @@ struct ImportPage: View {
         }
         .task {
             if !initialFiles.isEmpty {
+                wentThroughSheet = true
                 fileSheet = true
                 await model.importFiles(initialFiles)
             }
@@ -112,6 +120,7 @@ struct ImportPage: View {
                     // worth naming. The same sentence greets an empty file step (`FileImportRows`),
                     // so a reader who taps through is told the same thing twice rather than first.
                     way("Upload a file", "EPUB and PDF, from Files or iCloud Drive.", "doc") {
+                        wentThroughSheet = true
                         fileSheet = true
                     }
                     way("Paste a link", "Any article or web page.", "link") { path = .link }

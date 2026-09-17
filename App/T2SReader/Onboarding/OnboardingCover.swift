@@ -244,30 +244,27 @@ struct OnboardingCover: View {
     }
 
     /// The ground the pill stands on and the passage goes under: **one** gradient, solid through
-    /// the caption and easing to nothing below it, dithered.
+    /// the caption and easing to nothing below it.
     ///
-    /// Both halves of that are the owner's band (2026-09-17: "remove the banding caused by the
-    /// voice pill row"). It used to be a solid `Tokens.ground` block with a separate ramp stood
-    /// under it, and however continuous the two are in theory, they are two views with two
-    /// rasterisations meeting on a straight line. And a ramp this shallow asks more of 8 bits than
-    /// they have — it holds one value for ten or twenty rows and then steps, and the eye reads
-    /// every step as a line, which is the same defect `StatusRamp` documents for the warm-up.
+    /// One, because that is the owner's band (2026-09-17: "remove the banding caused by the voice
+    /// pill row"). It used to be a solid `Tokens.ground` block with a separate ramp stood under it,
+    /// and however continuous the two are in theory, they are two views with two rasterisations
+    /// meeting on a straight line. The eased half here leaves full opacity with zero slope
+    /// (smoothstep squared), so there is no join to see where the solid gives way.
     ///
-    /// So: one gradient, whose eased half starts at full opacity with zero slope (smoothstep
-    /// squared), so there is no join to see even where the solid gives way; and the warm-up's own
-    /// dither tile over it, masked to its own alpha so the noise lands only where there is a ramp
-    /// to break up and never as grain on bare ground.
+    /// **Not dithered**, though the warm-up's ramps are and the first cut of this copied them.
+    /// `StatusRamp.ditherTile` is grey noise blended `.overlay` against the real backdrop, and
+    /// `StatusGlow` already records what that costs: "grey noise lands *on* the blue and greys it".
+    /// Over a coloured light that is a fair trade for breaking a step. Over `Tokens.ground` — which
+    /// is near-white, and which this paints across the whole top of the screen — it is the whole
+    /// surface that goes grey, and the photograph showed a crown visibly dirtier than the page
+    /// under it. A band traded for a stain. The gradient's own 16 stops over 330 pt are shallow
+    /// enough not to need it; if stepping ever does show here, it wants the `compositingGroup`
+    /// arrangement `StatusRamp` uses — noise scattered against an opaque ground of its own — and
+    /// not this one.
     private func crownGround(_ insets: EdgeInsets) -> some View {
-        let ramp = LinearGradient(stops: Self.crownStops, startPoint: .top, endPoint: .bottom)
-        return ramp
+        LinearGradient(stops: Self.crownStops, startPoint: .top, endPoint: .bottom)
             .frame(height: insets.top + Self.crownFade)
-            .overlay {
-                StatusRamp.ditherTile
-                    .resizable(resizingMode: .tile)
-                    .blendMode(.overlay)
-                    .opacity(0.3)
-                    .mask(ramp)
-            }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .ignoresSafeArea(edges: .top)
             .allowsHitTesting(false)

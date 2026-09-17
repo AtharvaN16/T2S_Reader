@@ -3,9 +3,22 @@ import SwiftUI
 import T2SApp
 
 /// The picture over the Import hub: the app's mark in the middle, and the four kinds it takes —
-/// a book, a PDF, a web page and a page of text — circling in toward it, shrinking and fading as
-/// they pass behind it, over and over (owner, 2026-09-16, with a reference: a podcast app drawing
-/// artwork into its icon while it sets a library up). Everything the app can read becomes the app.
+/// a book, a PDF, a web page and a page of text — circling it and then drawn down into it, over
+/// and over (owner, 2026-09-16, with a reference: a podcast app pulling artwork into its icon
+/// while it sets a library up). Everything the app can read becomes the app.
+///
+/// **One path, four followers.** Every kind travels the *same* spiral; they differ only in how far
+/// along it they are (`phase`). That is what makes it read as a whirlpool rather than as four
+/// objects each doing their own turn — the owner's note, 2026-09-17, on the first cut, which gave
+/// each kind its own entry angle *and* its own phase and so drew four separate spirals at once.
+/// The angle advances a full turn per loop, so kinds a quarter of a loop apart sit a quarter of a
+/// circle apart while they are still out on the ring.
+///
+/// **Sharp on the ring, soft down the throat.** A kind is perfectly sharp for as long as it is
+/// circling, and only begins to blur and fade once the pull has hold of it, deepening the closer
+/// it gets to the mark (owner, 2026-09-17). The very first cut had this backwards — it faded each
+/// kind *up* out of a blur as it arrived, which read as the picture being soft rather than as
+/// depth, so arrival is now instant and clear and it is the departure that dissolves.
 ///
 /// **Swapping the mark.** It is one image asset, `AppMark`, and nothing here knows what is on it:
 /// drop a PNG over `App/T2SReader/Assets.xcassets/AppMark.imageset/AppMark.png` and the picture
@@ -14,10 +27,11 @@ import T2SApp
 /// nothing in this file changes.
 ///
 /// The four are the app's own placeholder covers at the size that is too small for words, which is
-/// the face they were drawn for: a cloth binding with the title's letter, the PDF's light red
-/// badged "PDF", a browser page with a globe, a notepad with the text glyph. Nothing here stands
-/// for a real document — this is the shape of what the page accepts, so a real book's artwork
-/// (*Circe*, on the first cut) said the wrong thing.
+/// the face they were drawn for: cloth badged "EPUB", the PDF's light red badged "PDF", a browser
+/// page with a globe, a notepad with the text glyph. Nothing here stands for a real document —
+/// this is the shape of what the page accepts, so a real book's artwork (*Circe*, on the first
+/// cut) said the wrong thing, and so did a lone "B". The badge names the *format*, not the idea:
+/// "EPUB" beside "PDF" is the pair the file row already promises (owner, 2026-09-17).
 struct ImportGraphic: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -25,51 +39,43 @@ struct ImportGraphic: View {
     /// number that jumps when the view is rebuilt.
     @State private var start = Date()
 
-    /// The frame the picture stands in: the ring's far edge (`orbit`) plus half a card, doubled.
-    /// A card is faded almost to nothing that far out, so the couple of points it overhangs at the
-    /// very start of its trip cost nothing.
-    static let height: CGFloat = 286
-    /// The mark, a half again the cards it pulls in — the reference's proportion.
-    private static let markSize: CGFloat = 96
-    /// The radius a kind enters at, and spirals in from. It has to clear the mark's own corner
-    /// (68 pt out) by a card's half-width, or the four begin their trip already touching it, which
-    /// is what 96 did: a huddle round the icon rather than a ring with room in it.
-    private static let orbit: CGFloat = 116
-    /// One trip in, in seconds. Four kinds a quarter-turn of the loop apart means one arrives
-    /// every 1.8 s, which is about the pace of the reference.
-    private static let period: Double = 7.2
-    /// How far round the mark a kind travels on its way in. Under about 70° it reads as a fall
-    /// straight inward rather than as circling; much over 120° and the card crosses the path of
-    /// the one behind it.
-    private static let sweep: Double = 96
+    /// The frame the picture stands in: the ring's far edge plus half a card, doubled. Cut from
+    /// 286 on the owner's word (2026-09-17) — at that height the third row of the list below was
+    /// pushed off the bottom of the screen.
+    static let height: CGFloat = 200
+    /// The mark. Smaller than the ring it sits in, so the four have room to come round it.
+    private static let markSize: CGFloat = 76
+    /// The radius the kinds circle at before they are drawn in.
+    private static let orbit: CGFloat = 80
+    /// One trip round and in, in seconds.
+    private static let period: Double = 9
+    /// How much of a trip is spent out on the ring before the pull begins. At a half, two of the
+    /// four are circling at any moment and two are on their way down.
+    private static let ringFraction: Double = 0.5
+    /// A full turn per loop: with the four a quarter-loop apart in `phase`, that puts them a
+    /// quarter-circle apart on the ring without any of them owning an angle of its own.
+    private static let turn: Double = 360
+    /// Extra turn spent while being drawn in — the water speeding up as it narrows.
+    private static let spinUp: Double = 140
     /// A card's height: under `ClothCover`'s 64 pt, so all four wear their compact faces.
-    private static let cardHeight: CGFloat = 62
+    private static let cardHeight: CGFloat = 46
+    /// How soft a kind goes as it reaches the mark. It is zero for the whole of the ring, so
+    /// nothing is ever blurred on the way in — only on the way down.
+    private static let throatBlur: CGFloat = 4
 
     private enum Kind: CaseIterable, Identifiable {
         case pdf, book, link, text
         var id: Self { self }
     }
 
-    private struct Orbiter: Identifiable {
-        var kind: Kind
-        /// Where it comes in, in degrees clockwise from twelve o'clock.
-        var entry: Double
-        /// Where in the loop it starts, 0..1 — the stagger.
-        var phase: Double
-        /// The card's own tilt, so the four read as objects dropped onto the ring rather than as
-        /// icons pegged to it.
-        var lean: Double
-        var id: Kind { kind }
-    }
-
-    /// The PDF enters from the left, on the owner's word (2026-09-16); the other three take the
-    /// remaining quarters, each a quarter of the loop behind the last.
-    private static let orbiters = [
-        Orbiter(kind: .pdf, entry: 270, phase: 0, lean: -7),
-        Orbiter(kind: .book, entry: 0, phase: 0.25, lean: 5),
-        Orbiter(kind: .link, entry: 90, phase: 0.5, lean: 8),
-        Orbiter(kind: .text, entry: 180, phase: 0.75, lean: -6),
+    /// Where each kind is on the one path, a quarter of a loop apart. The PDF leads, so it is the
+    /// one on the left as the picture opens (the owner's word, 2026-09-16).
+    private static let phases: [(kind: Kind, phase: Double)] = [
+        (.pdf, 0), (.book, 0.25), (.link, 0.5), (.text, 0.75),
     ]
+    /// Where the path begins, in degrees clockwise from twelve o'clock: nine o'clock, so the kind
+    /// at phase zero enters on the left.
+    private static let entry: Double = 270
 
     var body: some View {
         ZStack {
@@ -84,49 +90,48 @@ struct ImportGraphic: View {
 
     @ViewBuilder private var ring: some View {
         if reduceMotion {
-            // Nothing travels with Reduce Motion on: the four stand still where they enter, and
-            // the picture is a diagram of what the page takes rather than an animation of it.
+            // Nothing travels with Reduce Motion on: the four stand still, evenly spaced on the
+            // ring — which is where the path puts them anyway — so the picture is a diagram of
+            // what the page takes rather than an animation of it.
             ZStack {
-                ForEach(Self.orbiters) { orbiter in
-                    card(orbiter.kind)
-                        .rotationEffect(.degrees(orbiter.lean))
-                        .offset(place(angle: orbiter.entry, radius: Self.orbit))
+                ForEach(Self.phases, id: \.kind) { step in
+                    card(step.kind)
+                        .offset(place(angle: Self.entry + Self.turn * step.phase, radius: Self.orbit))
                 }
             }
         } else {
             TimelineView(.animation) { timeline in
                 let clock = timeline.date.timeIntervalSince(start) / Self.period
                 ZStack {
-                    ForEach(Self.orbiters) { orbiter in
-                        travelling(orbiter, at: (clock + orbiter.phase).truncatingRemainder(dividingBy: 1))
+                    ForEach(Self.phases, id: \.kind) { step in
+                        travelling(step.kind, at: (clock + step.phase).truncatingRemainder(dividingBy: 1))
                     }
                 }
             }
         }
     }
 
-    /// One kind, `progress` of the way in. Radius, angle and size all run off one smoothstep, so a
-    /// card drifts at the far edge, gathers pace across the middle and settles as it reaches the
-    /// mark — one movement, not three that happen to overlap. It is blurred while it is far out
-    /// (the reference's depth) and gone before it touches the mark's edge, so nothing is ever seen
-    /// being clipped by it; `zIndex` is not needed, because the mark is drawn after the whole ring.
-    private func travelling(_ orbiter: Orbiter, at progress: Double) -> some View {
-        let eased = progress * progress * (3 - 2 * progress)
-        return card(orbiter.kind)
-            .rotationEffect(.degrees(orbiter.lean))
-            .scaleEffect(1 - 0.52 * eased)
-            .blur(radius: 2.6 * max(0, 1 - progress / 0.42))
-            .opacity(fade(progress))
-            .offset(place(angle: orbiter.entry + Self.sweep * eased, radius: Self.orbit * (1 - eased)))
+    /// One kind, `progress` of the way round and in. The first half of a trip is the ring at full
+    /// radius; after that the pull takes over, easing the radius to nothing while the turn speeds
+    /// up and the card shrinks. Every kind runs this same function, so they follow one another
+    /// down one path instead of each tracing its own.
+    private func travelling(_ kind: Kind, at progress: Double) -> some View {
+        let pull = max(0, (progress - Self.ringFraction) / (1 - Self.ringFraction))
+        let drawn = pull * pull * (3 - 2 * pull)                                // smoothstep
+        return card(kind)
+            .scaleEffect(1 - 0.58 * drawn)
+            .blur(radius: Self.throatBlur * CGFloat(pow(drawn, 1.3)))
+            .opacity(arrival(progress) * (1 - pow(drawn, 1.8)))
+            .offset(place(angle: Self.entry + Self.turn * progress + Self.spinUp * drawn,
+                          radius: Self.orbit * (1 - drawn)))
     }
 
-    /// In over the first beat, out over the last third: a kind arrives out of the blur and has gone
-    /// by the time it is behind the mark, so the loop's seam — the jump from the middle back to the
-    /// ring — happens at nothing and cannot be seen.
-    private func fade(_ progress: Double) -> Double {
-        if progress < 0.16 { return progress / 0.16 }
-        if progress > 0.68 { return max(0, (1 - progress) / 0.32) }
-        return 1
+    /// A kind's arrival on the ring, and nothing else: up over the first breath of a trip so it
+    /// does not pop into being, then out of the way. What takes it away again is the pull itself
+    /// (`drawn`), not the clock — which is what guarantees it is gone exactly as it reaches the
+    /// middle, so the seam where the loop restarts always happens at nothing.
+    private func arrival(_ progress: Double) -> Double {
+        min(1, progress / 0.07)
     }
 
     /// A point on the ring, in degrees clockwise from twelve o'clock.
@@ -142,7 +147,7 @@ struct ImportGraphic: View {
             .resizable()
             .frame(width: Self.markSize, height: Self.markSize)
             .clipShape(RoundedRectangle(cornerRadius: Self.markSize * 0.2237, style: .continuous))
-            .shadow(color: Tokens.shade.opacity(0.18), radius: 16, y: 8)
+            .shadow(color: Tokens.shade.opacity(0.18), radius: 12, y: 6)
     }
 
     /// The light the mark gives off, and the only ground under the ring. The empty shelves stand
@@ -154,24 +159,25 @@ struct ImportGraphic: View {
                 .init(color: Tokens.accentSoft, location: 0),
                 .init(color: Tokens.accentFaint, location: 0.4),
                 .init(color: Tokens.accentFaint.opacity(0), location: 1),
-            ], center: .center, startRadius: 0, endRadius: 112))
-            .frame(width: 224, height: 224)
+            ], center: .center, startRadius: 0, endRadius: 92))
+            .frame(width: 184, height: 184)
     }
 
-    /// One kind's placeholder cover. The titles are only what deals each one its colour
-    /// (`CoverStyle.paletteIndex`) and letters the book: a teal book, the PDF's light red, an
-    /// indigo globe on a white page, a forest-green text glyph on cream — four cards no two of
-    /// which are the same colour or the same shape of thing.
+    /// One kind's placeholder cover, lifted off the page by its own shadow — the two sheets are
+    /// white and cream paper, and on `ground` they would otherwise read as holes in it.
     private func card(_ kind: Kind) -> some View {
-        face(kind).shadow(color: Tokens.shade.opacity(0.12), radius: 7, y: 3)
+        face(kind).shadow(color: Tokens.shade.opacity(0.12), radius: 6, y: 3)
     }
 
-    /// The two sheets are white and cream paper; on `ground` they need the shadow `card` adds or
-    /// they read as holes in the page rather than as things standing over it.
+    /// The titles are only what deals each one its colour (`CoverStyle.paletteIndex`): a teal
+    /// cloth, the PDF's light red, an indigo globe on a white page, a forest-green text glyph on
+    /// cream — four cards no two of which are the same colour or the same shape of thing.
     @ViewBuilder private func face(_ kind: Kind) -> some View {
         switch kind {
         case .book:
-            BookCover(relativePath: nil, paths: env.paths, height: Self.cardHeight, title: "Book")
+            // The title is only what deals the cloth its colour — slate teal. "EPUB" as the title
+            // would deal charcoal olive, which sits too near the notepad's cream to tell apart.
+            BookCover(relativePath: nil, paths: env.paths, height: Self.cardHeight, title: "Book", badge: "EPUB")
         case .pdf:
             BookCover(relativePath: nil, paths: env.paths, height: Self.cardHeight, title: "PDF", isPDF: true)
         case .link:

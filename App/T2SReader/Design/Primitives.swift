@@ -317,6 +317,10 @@ struct BookCover: View {
     /// A cover from the app bundle in place of one from the library: the empty shelf's three
     /// (`EmptyShelf`). Wins over `relativePath`; the same proportion rule applies.
     var asset: String? = nil
+    /// A word lettered on the placeholder cloth in place of the title's first letter, the way a
+    /// PDF is always badged "PDF". Only the Import hub's picture passes one (`ImportGraphic`):
+    /// a card that small has room for one word, and "BOOK" says what "B" only hints at.
+    var badge: String? = nil
 
     /// The mockup's own proportions (1461 × 2192); a real cover uses its own, within the book range.
     /// Internal, not private: the book sheet's hero sizes from it.
@@ -433,7 +437,8 @@ struct BookCover: View {
             ClothCover(title: title, author: author, height: height, cloth: Tokens.pdfCover, ink: Tokens.pdfInk, badge: "PDF")
         } else {
             let index = CoverStyle.paletteIndex(for: title, count: Tokens.coverCount)
-            ClothCover(title: title, author: author, height: height, cloth: Tokens.coverInk(index), ink: Tokens.coverText)
+            ClothCover(title: title, author: author, height: height, cloth: Tokens.coverInk(index),
+                       ink: Tokens.coverText, badge: badge)
         }
     }
 
@@ -489,12 +494,16 @@ private struct ClothCover: View {
     private var compact: some View {
         Group {
             if let badge {
-                Text(badge).font(.custom("Inter-Bold", fixedSize: height * 0.26))
+                Text(badge)
+                    .font(.custom("Inter-Bold", fixedSize: height * 0.26))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)                                    // "BOOK" is wider than "PDF"
             } else {
                 Text(CoverStyle.monogram(for: title)).font(.custom("InterDisplay-ExtraBold", fixedSize: height * 0.42))
             }
         }
         .foregroundStyle(ink)
+        .padding(.horizontal, height * 0.08)
     }
 
     private var lettering: some View {

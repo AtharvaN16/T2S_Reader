@@ -1,15 +1,18 @@
 import SwiftUI
 import T2SApp
 
-/// Spec §2.4.5 Preferences, titled "Settings" since 2026-09-09. Three cards of rows since
-/// 2026-09-18 (owner, from a reference whose rows each lead with a coloured tile): the two things
-/// about a book being read to you, then Preferences, then About. A row is a tile, a title, a grey
-/// line that carries its *value* — the voice, the size, the speed, the mode — and at its end the one
-/// mark that says what it does: a chevron opens, an arrow acts, a switch switches.
+/// Spec §2.4.5 Preferences, titled "Settings" since 2026-09-09: sections as a heavy header plus rows
+/// of title, an optional grey subtitle that carries a value (never an explanation), and a
+/// right-aligned mark — a chevron where the row opens something, an arrow where it acts at once,
+/// a switch where it is one. No card, no divider: the row gap is the rhythm, as on Home.
 ///
-/// It used to be six headed sections for nine rows, three of them sections of one, with "Reading"
-/// holding the app-wide theme and Storage holding Prepare-on-charge; the chevron opened pages,
-/// opened sheets, replaced the page with the welcome, and on the licence line did nothing at all.
+/// Three groups since 2026-09-18: the two things about a book being read to you, straight under
+/// the title; then Preferences; then About, with the version as a line under it rather than a row.
+/// It was six headed sections for nine rows before that, three of them sections of one, with
+/// "Reading" holding the app-wide theme and Storage holding Prepare-on-charge; the chevron opened
+/// pages, opened sheets, replaced the page with the welcome, and on the licence line did nothing.
+/// For a day it was the reference's cards of coloured tiles too, until the owner asked for the
+/// app's own language back.
 struct PreferencesPage: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(Chrome.self) private var chrome
@@ -23,83 +26,63 @@ struct PreferencesPage: View {
     /// is not on this path; it is only ever woken by an MLX voice ID.
     @State private var resolvedDefaultVoiceID: String?
 
-    /// Between a card and the next header; tighter than `Spacing.section`, which was sized for
-    /// headed sections of loose rows and leaves cards adrift.
-    private let cardGap: CGFloat = 28
-
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: cardGap) {
+                VStack(alignment: .leading, spacing: Spacing.section) {
                     PageTitle(text: "Settings")
-                        .padding(.bottom, Spacing.section - cardGap)
-
-                    // No header: these are the page, the way the reference's first card is.
-                    card {
+                    // No header: these are the page, the way Home's rows sit under its title.
+                    group {
                         NavigationLink {
                             voiceList
                         } label: {
-                            SettingsRow(icon: "waveform", color: Tokens.tilePink,
-                                        title: "Voice", subtitle: defaultVoiceSubtitle)
+                            row("Voice", subtitle: defaultVoiceSubtitle)
                         }
                         NavigationLink {
                             RenderingPage()
                         } label: {
-                            SettingsRow(icon: "bolt.fill", color: Tokens.glow,
-                                        title: "Rendering", subtitle: renderingSubtitle, separator: true)
+                            row("Rendering", subtitle: renderingSubtitle)
                         }
                     }
-
-                    card("Preferences") {
+                    group("Preferences") {
                         NavigationLink {
                             PlaybackPage()
                         } label: {
-                            SettingsRow(icon: "play.fill", color: Tokens.accent,
-                                        title: "Playback", subtitle: playbackSubtitle)
+                            row("Playback", subtitle: playbackSubtitle)
                         }
                         Button { showAppearance = true } label: {
-                            SettingsRow(icon: "paintpalette.fill", color: Tokens.tilePurple,
-                                        title: "Appearance", subtitle: appearanceSubtitle, separator: true)
+                            row("Appearance", subtitle: appearanceSubtitle)
                         }
                         .buttonStyle(.plain)
-                        SettingsRow(icon: "icloud.fill", color: Tokens.tileTeal,
-                                    title: "iCloud sync", subtitle: syncSubtitle, separator: true) {
+                        row("iCloud sync", subtitle: syncSubtitle) {
                             Toggle("", isOn: Binding(get: { env.syncModel.isEnabled },
                                                      set: { on in Task { await env.syncModel.setEnabled(on) } }))
                                 .labelsHidden()
                                 .disabled(!env.syncModel.canEnable && !env.syncModel.isEnabled)
                         }
                     }
-
-                    card("About") {
+                    group("About") {
                         // First in About, above the welcome: the welcome is a thing to be shown
                         // again, this is a thing to be read.
                         Button { showHowItWorks = true } label: {
-                            SettingsRow(icon: "book.fill", color: Tokens.tileGrey, title: "How it works")
+                            row("How it works")
                         }
                         .buttonStyle(.plain)
                         // The welcome shows once per install; this is the way back to it, for a
                         // reader who skipped it and for a photograph. An arrow, not a chevron: the
                         // tap does not open a page, it replaces this one.
                         Button { chrome.showsWelcome = true } label: {
-                            SettingsRow(icon: "hand.wave.fill", color: Tokens.positive,
-                                        title: "Show the welcome again", separator: true) { RowArrow() }
+                            row("Show the welcome again") { RowArrow() }
                         }
                         .buttonStyle(.plain)
                         NavigationLink {
                             AcknowledgementsPage()
                         } label: {
-                            SettingsRow(icon: "info", color: Tokens.tileGrey,
-                                        title: "Acknowledgements", separator: true)
+                            row("Acknowledgements")
                         }
+                        // A fact, not a row: nothing to tap, so nothing dressed as if there were.
+                        Text(versionLine).typeRole(.meta).foregroundStyle(Tokens.ink2)
                     }
-
-                    // A fact, not a row: nothing to tap, so nothing dressed as if there were.
-                    Text(versionLine)
-                        .typeRole(.meta).foregroundStyle(Tokens.ink2)
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, -cardGap / 2)
-
                     Color.clear.frame(height: Spacing.bottomClearance)
                 }
                 .padding(.horizontal, Spacing.margin)
@@ -183,17 +166,38 @@ struct PreferencesPage: View {
         return "\(option.name) · \(detail)"
     }
 
-    // MARK: - Cards
+    // MARK: - Rows
 
-    /// A header in grey over a `SettingsGroup`, or the group alone. Grey, where the old sections'
-    /// headers were ink: the rows carry the ink now, and a header's job is to say which card this
-    /// is without competing with what is on it.
-    private func card<Content: View>(_ title: String? = nil, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+    /// A heavy header over its rows, or the rows alone.
+    private func group<Content: View>(_ title: String? = nil, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 20) {
             if let title {
-                Text(title).typeRole(.groupTitle).foregroundStyle(Tokens.ink2)
+                Text(title).typeRole(.groupTitle).foregroundStyle(Tokens.ink)
             }
-            SettingsGroup { content() }
+            content()
         }
+    }
+
+    /// A row that opens something.
+    private func row(_ title: String, subtitle: String = "") -> some View {
+        row(title, subtitle: subtitle) { RowChevron() }
+    }
+
+    private func row<Control: View>(_ title: String, subtitle: String = "", @ViewBuilder control: () -> Control) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).typeRole(.settingsRow).foregroundStyle(Tokens.ink).multilineTextAlignment(.leading)
+                if !subtitle.isEmpty {
+                    // A value fits in one line; the sync row's line is a status sentence, and cut
+                    // to "Needs an iCloud-enabled b…" it says nothing.
+                    Text(subtitle).typeRole(.meta).foregroundStyle(Tokens.ink2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer()
+            control()
+        }
+        .contentShape(Rectangle())
     }
 }

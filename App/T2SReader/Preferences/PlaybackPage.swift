@@ -2,10 +2,9 @@
 import SwiftUI
 import T2SApp
 
-/// Settings → Preferences → Playback (owner, 2026-09-18): the three numbers the Player starts from.
-/// They sat on Settings' root as pills until the root became cards of rows; a pill is `surface`,
-/// and inside a `surface` group it vanishes, so each value is a word with the up-down chevron a
-/// menu wears in the system's own Settings.
+/// Settings → Preferences → Playback (owner, 2026-09-18): the three numbers the Player starts from,
+/// each a row with its value in a pill that is the menu — exactly as they sat on Settings' root
+/// before Playback became one row there.
 struct PlaybackPage: View {
     @Environment(AppEnvironment.self) private var env
 
@@ -14,26 +13,32 @@ struct PlaybackPage: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 PageTitle(text: "Playback", topPadding: Spacing.subpageTitleTop)
-                SettingsGroup {
-                    SettingsGroupRow(title: "Default speed") {
-                        menu(SpeedPickerModel.label(for: preferences.defaultRate)) {
+                VStack(alignment: .leading, spacing: 20) {
+                    row("Default speed") {
+                        Menu {
                             ForEach(SpeedPickerModel.rates, id: \.self) { rate in
                                 Button(SpeedPickerModel.label(for: rate)) { preferences.defaultRate = rate }
                             }
+                        } label: {
+                            valuePill(SpeedPickerModel.label(for: preferences.defaultRate))
                         }
                     }
-                    SettingsGroupRow(title: "Skip back", separator: true) {
-                        menu("\(preferences.skipBackSeconds) s") {
+                    row("Skip back") {
+                        Menu {
                             ForEach(ReaderPreferences.skipBackOptions, id: \.self) { seconds in
                                 Button("\(seconds) s") { preferences.skipBackSeconds = seconds }
                             }
+                        } label: {
+                            valuePill("\(preferences.skipBackSeconds) s")
                         }
                     }
-                    SettingsGroupRow(title: "Skip forward", separator: true) {
-                        menu("\(preferences.skipForwardSeconds) s") {
+                    row("Skip forward") {
+                        Menu {
                             ForEach(ReaderPreferences.skipForwardOptions, id: \.self) { seconds in
                                 Button("\(seconds) s") { preferences.skipForwardSeconds = seconds }
                             }
+                        } label: {
+                            valuePill("\(preferences.skipForwardSeconds) s")
                         }
                     }
                 }
@@ -47,20 +52,20 @@ struct PlaybackPage: View {
         .settingsSubpage()
     }
 
-    /// The value in ink with the menu's mark after it, the whole of it the tap.
-    private func menu<Items: View>(_ value: String, @ViewBuilder items: () -> Items) -> some View {
-        Menu {
-            items()
-        } label: {
-            HStack(spacing: 6) {
-                Text(value).typeRole(.pill).foregroundStyle(Tokens.ink).monospacedDigit()
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Tokens.ink3)
-            }
-            .padding(.vertical, 10)
-            .padding(.leading, 10)
-            .contentShape(Rectangle())
+    private func row<Control: View>(_ title: String, @ViewBuilder control: () -> Control) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(title).typeRole(.settingsRow).foregroundStyle(Tokens.ink)
+            Spacer()
+            control()
         }
+    }
+
+    private func valuePill(_ text: String) -> some View {
+        Text(text)
+            .typeRole(.pill)
+            .foregroundStyle(Tokens.ink)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(Tokens.surface, in: Capsule())
     }
 }

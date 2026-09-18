@@ -181,7 +181,11 @@ enum StatusRamp {
             shape.stroke(light.opacity(0.38 * pulse), lineWidth: 36).blur(radius: 14)
             shape.stroke(light.opacity(0.78 * pulse), lineWidth: 10).blur(radius: 4)
         }
-        .frame(height: height * 3)                                             // the bottom edge is outside the ramp
+        // The bottom edge and its corners are outside the ramp: the mask is clear from 0.85 of
+        // `height` down, and a halo's reach is under 60 pt, so nothing below 1.5 × `height` can
+        // land on a visible pixel. It was 3 ×, which is the same picture blurred over twice the
+        // canvas, every frame, for the whole of a warm-up.
+        .frame(height: height * 1.5)
         .frame(height: height, alignment: .top)
         .mask(
             LinearGradient(stops: [
@@ -327,7 +331,12 @@ struct StatusRim: View {
         let showing = tone != nil
         return ZStack {
             if showing {
-            TimelineView(.animation) { context in
+            // Thirty frames a second, not the display's own rate: the breath is a three-second
+            // cosine, and at 120 Hz each of those frames re-blurred two full-width strokes and
+            // re-masked a dither tile over them — for the whole of a warm-up, which is exactly
+            // when the CPU is busiest building the voice's plans. At 30 the ramp is visibly the
+            // same and the GPU does a quarter of the work.
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
                 // Both endings ride the same curve: the breath eases up to full while the colour
                 // crosses over `readyEase`, so green and amber each arrive the way the blue moved.
                 // Amber settles to two thirds rather than full — a warning that keeps breathing at

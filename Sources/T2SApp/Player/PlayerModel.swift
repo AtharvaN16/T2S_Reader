@@ -103,10 +103,12 @@ public final class PlayerModel {
     /// Keyed on the chapter as well as the revision: walking into the next chapter has to redo the
     /// pass even though the timeline has not changed.
     @ObservationIgnored private var chapterTickCache: (revision: Int, chapter: Int, ticks: [Bool])?
-    /// The other O(timeline) facts the 10 Hz bodies read — whether every utterance is rendered, and
-    /// each chapter's place on the time axis — cached against `timelineRevision` like the ticks
-    /// (Plan 17, audit §7). `chapterIndexCache` is keyed on the playhead's utterance as well.
-    @ObservationIgnored private var derivedCache: (revision: Int, isFullyRendered: Bool, axis: [ChapterSpan])?
+    /// The other O(timeline) fact the 10 Hz bodies read — each chapter's place on the time axis —
+    /// cached against `timelineRevision` like the ticks (Plan 17, audit §7). Whether every
+    /// utterance is rendered is the coordinator's own count now (`isFullyRendered`), so it no
+    /// longer costs a pass per revision. `chapterIndexCache` is keyed on the playhead's utterance
+    /// as well.
+    @ObservationIgnored private var derivedCache: (revision: Int, axis: [ChapterSpan])?
     @ObservationIgnored private var chapterIndexCache: (revision: Int, utterance: Int, chapter: Int?)?
     /// The scrubber's and chapter list's derived shapes over `bookmarks` — cached on the timeline
     /// revision *and* the bookmark count, since the revision alone does not change when a bookmark
@@ -144,7 +146,7 @@ public final class PlayerModel {
     public var isCatchingUp: Bool { state == .catchingUp }
     public var elapsed: TimeInterval { coordinator.timeIndex.time(at: coordinator.playhead) }
     public var total: TimeInterval { coordinator.timeIndex.totalDuration }
-    public var isTotalApproximate: Bool { !derived().isFullyRendered }
+    public var isTotalApproximate: Bool { !coordinator.isFullyRendered }
     public var elapsedText: String { DurationFormatter.clock(elapsed) }
     public var remainingText: String { DurationFormatter.remaining(total - elapsed, approximate: isTotalApproximate) }
     public var totalText: String { (isTotalApproximate ? "~" : "") + DurationFormatter.clock(total) }
@@ -159,15 +161,15 @@ public final class PlayerModel {
         return chapter
     }
 
-    public var chapters: [ChapterEntry] { ChapterEntry.entries(axis: derived().axis, elapsed: elapsed) }
+    public var chapters: [ChapterEntry] { ChapterEntry.entries(axis: axis(), elapsed: elapsed) }
 
-    private func derived() -> (isFullyRendered: Bool, axis: [ChapterSpan]) {
+    private func axis() -> [ChapterSpan] {
         let revision = coordinator.timelineRevision
-        if let derivedCache, derivedCache.revision == revision { return (derivedCache.isFullyRendered, derivedCache.axis) }
-        guard let timeline = coordinator.timeline else { return (false, []) }
-        let facts = (timeline.isFullyRendered, ChapterEntry.axis(timeline: timeline, timeIndex: coordinator.timeIndex))
-        derivedCache = (revision, facts.0, facts.1)
-        return facts
+        if let derivedCache, derivedCache.revision == revision { return derivedCache.axis }
+        guard let timeline = coordinator.timeline else { return [] }
+        let axis = ChapterEntry.axis(timeline: timeline, timeIndex: coordinator.timeIndex)
+        derivedCache = (revision, axis)
+        return axis
     }
 
     public var scrubber: ScrubberModel {

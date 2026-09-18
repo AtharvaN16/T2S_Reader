@@ -807,6 +807,40 @@ import T2SCore
         #expect(await engine.requests.count == 2)
         #expect(actuals(c) == [0, 1])
     }
+
+    /// "Every utterance has audio and a measured duration" is read from a count the coordinator
+    /// keeps, not a pass over the book on every timeline revision — and it agrees with the
+    /// timeline's own answer at every step.
+    @Test func fullyRenderedFollowsRendersAndLoads() async throws {
+        let (c, _, engine, _, _, doc, timeline) = fixture()
+        #expect(c.isFullyRendered == false)                                 // nothing loaded
+        await engine.hold()
+        c.load(doc, timeline: timeline)
+        #expect(c.isFullyRendered == false)
+        #expect(c.isFullyRendered == c.timeline?.isFullyRendered)
+        await engine.release()
+        await c.waitForRenderIdle()                                         // the 60 s window renders all three
+        #expect(c.isFullyRendered == true)
+        #expect(c.isFullyRendered == c.timeline?.isFullyRendered)
+        c.load(doc, timeline: timeline)                                     // the unrendered original again
+        #expect(c.isFullyRendered == false)
+        c.unload()
+        #expect(c.isFullyRendered == false)
+    }
+
+    /// A clip the store has lost takes the fact back with it: the self-heal in `fill` clears the
+    /// reference, and the count follows.
+    @Test func anEvictedClipIsNoLongerFullyRendered() async throws {
+        let (c, _, _, store, _, doc, timeline) = fixture()
+        c.load(doc, timeline: timeline)
+        await c.waitForRenderIdle()
+        #expect(c.isFullyRendered == true)
+        let ref = try #require(c.timeline?[utterance: 1].audioRef)
+        try await store.remove(RenderKey(rawValue: ref))
+        await c.play()
+        await c.waitForRenderIdle()                                         // re-rendered, so true again…
+        #expect(c.isFullyRendered == c.timeline?.isFullyRendered)          // …and either way the two agree
+    }
 }
 
 private struct KeyRejectedEngine: SynthesisEngine {

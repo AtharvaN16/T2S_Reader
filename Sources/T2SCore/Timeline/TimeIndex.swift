@@ -27,6 +27,26 @@ public struct TimeIndex: Hashable, Sendable {
         durations = d
     }
 
+    /// The same index with utterance `i` lasting `seconds`: the starts after it shift by the
+    /// difference. What a `.rendered` event needs, without walking the whole book again on the
+    /// main actor for the one duration that moved.
+    public func replacingDuration(ofUtterance i: Int, with seconds: TimeInterval) -> TimeIndex {
+        precondition(i >= 0 && i < utteranceCount, "utterance \(i) out of range (\(utteranceCount))")
+        var durations = durations
+        var starts = starts
+        let delta = seconds - durations[i]
+        durations[i] = seconds
+        if delta != 0 {
+            for j in (i + 1) ..< starts.count { starts[j] += delta }
+        }
+        return TimeIndex(starts: starts, durations: durations)
+    }
+
+    private init(starts: [TimeInterval], durations: [TimeInterval]) {
+        self.starts = starts
+        self.durations = durations
+    }
+
     public var utteranceCount: Int { starts.count - 1 }
     public var totalDuration: TimeInterval { starts[starts.count - 1] }
 

@@ -73,6 +73,9 @@ public final class PlaybackCoordinator {
     /// estimate for an actual. Anything O(timeline) a view derives can be cached against it
     /// instead of recomputed per body evaluation.
     public private(set) var timelineRevision = 0
+    /// Whether every utterance of the loaded timeline has its audio and a measured duration —
+    /// `timeline.isFullyRendered`, without the pass over the book. False with nothing loaded.
+    public var isFullyRendered: Bool { timeline != nil && unrenderedCount == 0 }
     /// Chapters whose utterances this coordinator changed since `takeChangedChapters()`: a
     /// `.rendered` event, an audio ref cleared because the store lost the clip, or a stale ref a load
     /// cleared. `PlayerModel` — its one owner — persists exactly these (Plan 16; it used to hash every
@@ -106,6 +109,11 @@ public final class PlaybackCoordinator {
     private let scheduler: RenderScheduler
     private let configuration: CoordinatorConfiguration
     private var rendered: [Bool] = []
+    /// How many utterances still lack audio or a measured duration — `Timeline.isFullyRendered`
+    /// kept as a number that moves with each `.rendered` event and each cleared reference, so the
+    /// fact costs nothing to read at 10 Hz and nothing per revision, where a pass over a 24-hour
+    /// book on every render was several milliseconds on the main actor. Reset by `load`.
+    private var unrenderedCount = 0
     private var manualRequested = false
     /// The rate the listener last asked for, clamped to what was sustainable when they asked. The
     /// ceiling `refreshRates` raises back towards as the measured RTF recovers; a load leaves it,
@@ -174,19 +182,28 @@ public final class PlaybackCoordinator {
         changedChapters = []
         let voice = document.voiceID ?? "default"
         for i in 0..<timeline.utteranceCount {
+            // No key for an utterance with nothing to compare it against: a fresh book hashes
+            // nothing, and a rendered one hashes once per clip rather than once per sentence.
+            guard let ref = timeline[utterance: i].audioRef else {
+                rendered.append(false)
+                continue
+            }
             let expected = RenderKey(documentID: document.id, utteranceIndex: i, voiceID: voice,
                                      engineID: engine.engineID, normalizerVersion: timeline.normalizerVersion,
                                      segmenterVersion: timeline.segmenterVersion)
-            let isCurrent = timeline[utterance: i].audioRef == expected.rawValue
+            let isCurrent = ref == expected.rawValue
             rendered.append(isCurrent)
             // `audioRef` is cache metadata, not proof that this build/voice still owns the clip.
             // Clear old identities so the next persistence cannot revive an invalid cache hit — and
             // persist the clearing, or the store keeps counting the clip as rendered.
-            if !isCurrent, timeline[utterance: i].audioRef != nil {
+            if !isCurrent {
                 self.timeline?[utterance: i].audioRef = nil
                 changedChapters.insert(timeline.chapterIndex(forUtterance: i) ?? 0)
             }
         }
+        unrenderedCount = self.timeline?.chapters.reduce(0) { count, chapter in
+            count + chapter.utterances.reduce(0) { $0 + (Self.isComplete($1) ? 0 : 1) }
+        } ?? 0
         manualRequested = false
         lastPlayed = document.id
         lastRenderError = nil
@@ -216,6 +233,7 @@ public final class PlaybackCoordinator {
         timeline = nil
         timeIndex = TimeIndex(Timeline(chapters: []))
         rendered = []
+        unrenderedCount = 0
         changedChapters = []
         manualRequested = false
         lastPlayed = nil
@@ -255,7 +273,7 @@ public final class PlaybackCoordinator {
             var flipped = false
             for (entry, isPresent) in zip(keyed, present) where !isPresent {
                 self.rendered[entry.index] = false
-                self.timeline?[utterance: entry.index].audioRef = nil
+                self.clearAudioRef(ofUtterance: entry.index)
                 self.markChanged(utterance: entry.index)
                 flipped = true
             }
@@ -416,7 +434,7 @@ public final class PlaybackCoordinator {
                 // eviction, most likely (spec §3.7.3). Self-heal: clear the stale record and ask
                 // the scheduler to render it again rather than deadlocking here forever.
                 rendered[next] = false
-                self.timeline?[utterance: next].audioRef = nil
+                clearAudioRef(ofUtterance: next)
                 markChanged(utterance: next)
                 awaitingIndex = next
                 replan()
@@ -570,6 +588,7 @@ public final class PlaybackCoordinator {
             guard let document, document.id == r.documentID, timeline != nil, r.utteranceIndex < rendered.count else { return }
             if streaming?.index == r.utteranceIndex { closeStream(r.utteranceIndex) }
             var u = timeline![utterance: r.utteranceIndex]
+            let wasComplete = Self.isComplete(u)
             u.duration = .actual(r.duration)
             // A cache-hit `.rendered` carries empty word timings (spec: RenderScheduler); don't
             // let it clobber real timings this utterance already has.
@@ -578,12 +597,15 @@ public final class PlaybackCoordinator {
             }
             u.audioRef = r.key.rawValue
             timeline![utterance: r.utteranceIndex] = u
+            if !wasComplete { unrenderedCount -= 1 }
             markChanged(utterance: r.utteranceIndex)
             rendered[r.utteranceIndex] = true
             // A render for any utterance but the one that just failed is the voice working again.
             failureRun.rendered(utterance: r.utteranceIndex)
             if !failureRun.isPersistent { lastRenderError = nil }
-            timeIndex = TimeIndex(timeline!)
+            // The one duration that moved, shifted through the prefix sums; a rebuild walked the
+            // whole book on the main actor for every render of a fill.
+            timeIndex = timeIndex.replacingDuration(ofUtterance: r.utteranceIndex, with: r.duration)
             refreshHighlight()
             // The RTF moves with every render, and a throttling phone shows it here first (§3.6).
             chain { await self.refreshRates() }
@@ -683,7 +705,7 @@ public final class PlaybackCoordinator {
             guard timeline[utterance: i].audioRef != expected.rawValue else { continue }
             rendered[i] = false
             if timeline[utterance: i].audioRef != nil {
-                self.timeline?[utterance: i].audioRef = nil
+                clearAudioRef(ofUtterance: i)
                 changedChapters.insert(timeline.chapterIndex(forUtterance: i) ?? 0)
             }
         }
@@ -699,6 +721,18 @@ public final class PlaybackCoordinator {
 
     private func markChanged(utterance i: Int) {
         if let c = timeline?.chapterIndex(forUtterance: i) { changedChapters.insert(c) }
+    }
+
+    /// What `Timeline.isFullyRendered` asks of one utterance.
+    private static func isComplete(_ u: Utterance) -> Bool { u.duration.isActual && u.audioRef != nil }
+
+    /// Takes an utterance's audio reference away and moves the count with it. Every clearing goes
+    /// through here — a load's stale keys, the store's missing clips, a hand-off's old voice — so
+    /// `isFullyRendered` never says more than the timeline does.
+    private func clearAudioRef(ofUtterance i: Int) {
+        guard let u = timeline?[utterance: i] else { return }
+        if Self.isComplete(u) { unrenderedCount += 1 }
+        timeline?[utterance: i].audioRef = nil
     }
 
     private func save() {

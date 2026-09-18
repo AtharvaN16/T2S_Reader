@@ -68,4 +68,22 @@ import Testing
         #expect(ix.duration(ofUtterance: 2) == 1.2)                         // exactly, not 1.1999999999999997
         #expect(ix.clamp(Playhead(utteranceIndex: 9, offset: 0)).offset == ix.duration(ofUtterance: 3))
     }
+
+    /// A `.rendered` event changes one utterance's duration; shifting the prefix sums after it
+    /// gives the index a rebuild would, without walking the whole book on the main actor.
+    @Test func replacingOneDurationMatchesARebuild() {
+        let ix = TimeIndex(t)
+        var changed = t
+        changed[utterance: 1].duration = .actual(5)
+        let expected = TimeIndex(changed)
+        let shifted = ix.replacingDuration(ofUtterance: 1, with: 5)
+        #expect(shifted.starts == expected.starts)
+        #expect(shifted.durations == expected.durations)
+        #expect(shifted.totalDuration == 13)
+        #expect(shifted.time(at: Playhead(utteranceIndex: 3, offset: 1)) == 10)
+        // The last utterance: only the total moves.
+        let last = ix.replacingDuration(ofUtterance: 3, with: 0.5)
+        #expect(last.starts == TimeIndex({ var u = t; u[utterance: 3].duration = .actual(0.5); return u }()).starts)
+        #expect(last.totalDuration == 6.5)
+    }
 }

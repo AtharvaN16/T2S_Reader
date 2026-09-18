@@ -95,7 +95,7 @@ second, narrow protocol is what the model talks to, and `AudioPlayer` adopts bot
 
 `AudioPlayer`:
 - `makeGraph()` attaches `bedPlayer: AVAudioPlayerNode` and connects it to the mixer in the bed's
-  own format (mono, the loop's sample rate — 44.1 kHz for the recordings and the noises). If a bed
+  own format (mono, the loop's sample rate — 48 kHz for the recordings and the noises). If a bed
   buffer is retained, it is rescheduled here, which is what makes the media-services rebuild carry
   the bed across.
 - `setBed(_:)` converts the `PCMAudio` to an `AVAudioPCMBuffer`, stops the node, schedules the
@@ -112,7 +112,7 @@ Pure helpers in `T2SAudio`, each tested on its own:
 - `LoopSeam.bake(_ audio: PCMAudio, crossfadeSeconds: 2) -> PCMAudio` — equal-power crossfade of
   the last X seconds into the first X, returning N − X samples. A constant signal comes out
   constant across the seam; the length is exact.
-- `NoiseLoop.make(_ colour: NoiseColour, seconds: 30, sampleRate: 44_100, seed: UInt64) -> PCMAudio`
+- `NoiseLoop.make(_ colour: NoiseColour, seconds: 30, sampleRate: 48_000, seed: UInt64) -> PCMAudio`
   — brown (leaky integrator over white) and pink (Kellet's filter). Deterministic for a seed;
   a 30 s loop of noise is indistinguishable from an endless one.
 - `Loudness.normalised(_ audio: PCMAudio, toRMS dB: Float = -20) -> PCMAudio` — the equal-loudness

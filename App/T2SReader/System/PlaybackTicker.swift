@@ -9,6 +9,7 @@ import T2SApp
 private struct PlaybackTicking: ViewModifier {
     let player: PlayerModel
     let sleepTimer: SleepTimer
+    let soundscape: SoundscapeModel
     let continuation: QueueContinuation
     let nowPlaying: NowPlayingController
     @State private var handledFinish = false
@@ -20,6 +21,7 @@ private struct PlaybackTicking: ViewModifier {
                 if playing { player.tick() }
                 nowPlaying.update()
                 sleepTimer.tick()
+                soundscape.tick()
                 if player.state == .finished {
                     if !handledFinish {
                         handledFinish = true
@@ -28,15 +30,18 @@ private struct PlaybackTicking: ViewModifier {
                 } else {
                     handledFinish = false
                 }
-                try? await Task.sleep(for: .milliseconds(playing ? 100 : 1000))
+                // 20 Hz while a fade is in flight: the bed's ramp is stepped by this loop, and at
+                // 1 Hz a fade behind a paused book would be three steps.
+                try? await Task.sleep(for: .milliseconds(soundscape.isRamping ? 50 : playing ? 100 : 1000))
             }
         }
     }
 }
 
 extension View {
-    func playbackTicking(_ player: PlayerModel, sleepTimer: SleepTimer, continuation: QueueContinuation,
-                         nowPlaying: NowPlayingController) -> some View {
-        modifier(PlaybackTicking(player: player, sleepTimer: sleepTimer, continuation: continuation, nowPlaying: nowPlaying))
+    func playbackTicking(_ player: PlayerModel, sleepTimer: SleepTimer, soundscape: SoundscapeModel,
+                         continuation: QueueContinuation, nowPlaying: NowPlayingController) -> some View {
+        modifier(PlaybackTicking(player: player, sleepTimer: sleepTimer, soundscape: soundscape,
+                                 continuation: continuation, nowPlaying: nowPlaying))
     }
 }

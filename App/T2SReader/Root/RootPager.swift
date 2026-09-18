@@ -153,7 +153,7 @@ struct RootPager: View {
             }
         }
 
-        .playbackTicking(env.player, sleepTimer: env.sleepTimer, continuation: env.continuation, nowPlaying: env.nowPlaying)
+        .playbackTicking(env.player, sleepTimer: env.sleepTimer, soundscape: env.soundscape, continuation: env.continuation, nowPlaying: env.nowPlaying)
         .task {
             // `System` left the picker with the Reader's papers (owner, 2026-09-14), so a reader
             // who was on it settles once, here, on whatever the device was showing at that moment.

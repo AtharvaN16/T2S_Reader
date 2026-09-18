@@ -7,6 +7,17 @@ older and dated as marked. The dated per-session entries that used to stack here
 for the lot, `git log` for the rest), and what mattered from them lives in `crashreport.md`,
 `docs/research/` and the specs._
 
+## The sleep timer is a ruler and a switch (2026-09-18)
+
+`SleepTimerSheet` was redrawn after the owner's reference (Tide's focus sheet): one large value,
+a ruler under it dragged in five-minute stops from 5 to 120 (`SleepDial`, tested), the old six
+chips kept as taller named landmarks, "End of chapter" as a switch on a `surface` slab that dims
+the ruler when on, the blue key at the foot. The length and the switch are `ReaderPreferences`
+(`sleepMinutes`, `sleepsAtChapterEnd`), so the sheet opens where it was left. `SleepOption.all`
+and `chipLabel` went with the grid. The owner also asked whether a soundscape could play under the
+voice: `docs/research/2026-09-18-soundscapes-under-the-narration.md` — a second player node on
+the engine, a day or two of code, the recordings are the cost.
+
 ## Onboarding rebuilt in three beats: the reel, the name, the page (2026-09-16)
 
 Design: `docs/superpowers/specs/2026-09-16-onboarding-reel-welcome-page-design.md`, which supersedes

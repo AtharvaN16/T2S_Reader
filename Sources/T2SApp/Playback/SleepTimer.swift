@@ -4,18 +4,6 @@ import Observation
 public enum SleepOption: Hashable, Sendable {
     case minutes(Int)
     case endOfChapter
-
-    /// Spec §2.4.5 chips.
-    public static let all: [SleepOption] = [
-        .minutes(10), .minutes(20), .minutes(30), .minutes(45), .minutes(60), .endOfChapter,
-    ]
-
-    public var chipLabel: String {
-        switch self {
-        case .minutes(let minutes): return "\(minutes) min"
-        case .endOfChapter: return "End of chapter"
-        }
-    }
 }
 
 /// Spec §2.4.5: pauses playback when the time is up or the chapter ends; ends early if the document does.

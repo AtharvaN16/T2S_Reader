@@ -85,6 +85,8 @@ public final class ReaderPreferences {
         static let skipForward = "playback.skipForward"
         static let rate = "playback.defaultRate"
         static let autoplay = "playback.autoplayNext"
+        static let sleepMinutes = "sleep.minutes"
+        static let sleepAtChapterEnd = "sleep.atChapterEnd"
         static let voice = "voice.default"
         static let favoriteVoices = "voice.favorites"
     }
@@ -161,6 +163,22 @@ public final class ReaderPreferences {
         didSet { defaults.set(autoplayNext, forKey: Key.autoplay) }
     }
 
+    /// The sleep sheet's last length, so it opens where it was left (2026-09-18): a sleep timer is
+    /// a habit rather than a decision made fresh each night. Always a stop on `SleepDial`'s ruler,
+    /// whatever was stored.
+    public var sleepMinutes: Int {
+        didSet {
+            let snapped = SleepDial.snapped(sleepMinutes)
+            if sleepMinutes != snapped { sleepMinutes = snapped }
+            defaults.set(sleepMinutes, forKey: Key.sleepMinutes)
+        }
+    }
+
+    /// The sheet's other answer, remembered the same way: stop at the end of the chapter instead.
+    public var sleepsAtChapterEnd: Bool {
+        didSet { defaults.set(sleepsAtChapterEnd, forKey: Key.sleepAtChapterEnd) }
+    }
+
     /// nil = the engine's language default ("default" in render keys).
     public var defaultVoiceID: String? {
         didSet { defaults.set(defaultVoiceID, forKey: Key.voice) }
@@ -197,6 +215,8 @@ public final class ReaderPreferences {
         skipForwardSeconds = defaults.object(forKey: Key.skipForward) as? Int ?? 30
         defaultRate = defaults.object(forKey: Key.rate) as? Double ?? 1.0
         autoplayNext = defaults.object(forKey: Key.autoplay) as? Bool ?? true
+        sleepMinutes = SleepDial.snapped(defaults.object(forKey: Key.sleepMinutes) as? Int ?? SleepDial.defaultMinutes)
+        sleepsAtChapterEnd = defaults.object(forKey: Key.sleepAtChapterEnd) as? Bool ?? false
         defaultVoiceID = defaults.string(forKey: Key.voice)
         favoriteVoiceIDs = Set(defaults.stringArray(forKey: Key.favoriteVoices) ?? [])
         prepareBudgetSeconds = defaults.object(forKey: AppPaths.prepareBudgetKey) as? Double ?? 3 * 3600
@@ -216,6 +236,8 @@ public final class ReaderPreferences {
         skipForwardSeconds = 30
         defaultRate = 1.0
         autoplayNext = true
+        sleepMinutes = SleepDial.defaultMinutes
+        sleepsAtChapterEnd = false
         defaultVoiceID = nil
         favoriteVoiceIDs = []
         prepareBudgetSeconds = 3 * 3600

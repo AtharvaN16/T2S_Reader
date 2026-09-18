@@ -3,7 +3,7 @@
     "repository": "https://github.com/abhinandansharma/ambiently",
     "commit": "8b99d668e91957d80b66d419fae5cb0dba2be528",
     "path": "demo/public/sounds",
-    "note": "CC0 Freesound field recordings, cut to ~32 s AAC loops (48 kHz stereo) by the ambiently project (MIT). The loop's seam and its loudness are handled in the app when a file is loaded — see docs/superpowers/specs/2026-09-18-soundscapes-design.md §4.2."
+    "note": "CC0 Freesound field recordings, cut to ~32 s AAC loops (48 kHz, mono or stereo) by the ambiently project (MIT). The loop's seam and its loudness are handled in the app when a file is loaded — see docs/superpowers/specs/2026-09-18-soundscapes-design.md §4.2."
   },
   "recordings": [
     { "id": "rain",   "file": "rain.m4a",      "title": "Soft Rain Ambience",          "author": "visionear",       "freesound": 573335, "licence": "cc0", "url": "https://freesound.org/people/visionear/sounds/573335/" },

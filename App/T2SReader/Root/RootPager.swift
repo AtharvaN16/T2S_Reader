@@ -262,11 +262,17 @@ struct RootPager: View {
             env.player.setRate(rate)
         }
         .onChange(of: env.player.current?.id, initial: true) { _, _ in env.nowPlaying.update() }
-        .onChange(of: env.player.state) { _, _ in env.nowPlaying.update() }
-        .onChange(of: env.player.elapsed) { _, _ in env.nowPlaying.update() }
+        // A seek made while paused, so the Lock Screen moves with it at once rather than on the
+        // idle ticker's next second. Only while paused: `elapsed` moves ten times a second while
+        // playing, and watching it here re-ran this whole body — the pager, its three pages and
+        // every observer below — at that rate to make a call the ticker already makes on every
+        // tick (audit §7, the one item left open). The `isPlaying` test comes first so the body
+        // never reads `elapsed` while playing and takes no dependency on it.
+        .onChange(of: env.player.isPlaying ? nil : env.player.elapsed) { _, _ in env.nowPlaying.update() }
         .onChange(of: env.player.chapterIndex) { _, _ in env.nowPlaying.update() }
         .onChange(of: env.coordinator.rate) { _, _ in env.nowPlaying.update() }
         .onChange(of: env.player.state) { _, state in
+            env.nowPlaying.update()
             if state == .playing || state == .catchingUp {
                 env.prepareRunner.cancel()
                 // Playing is what puts a book on Home, latest first, three at most (`LibraryModel.notePlaying`).

@@ -59,7 +59,8 @@ struct SettingsSubpage: ViewModifier {
                     let warming = env.appStatus.isShowing
                     TopFade(inset: top,
                             extra: warming ? TopFade.warmSolid : 0,
-                            fade: warming ? TopFade.warmFade : TopFade.fadeHeight)
+                            fade: warming ? TopFade.warmFade : TopFade.fadeHeight,
+                            curve: warming ? TopFade.warmCurve : TopFade.pageCurve)
                         .offset(y: -top)
                         .animation(.easeInOut(duration: StatusGlow.leave), value: warming)
                 }

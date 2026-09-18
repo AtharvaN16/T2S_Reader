@@ -1,0 +1,16 @@
+{
+  "source": {
+    "repository": "https://github.com/abhinandansharma/ambiently",
+    "commit": "8b99d668e91957d80b66d419fae5cb0dba2be528",
+    "path": "demo/public/sounds",
+    "note": "CC0 Freesound field recordings, cut to ~32 s AAC loops (48 kHz, mono or stereo) by the ambiently project (MIT). The loop's seam and its loudness are handled in the app when a file is loaded — see docs/superpowers/specs/2026-09-18-soundscapes-design.md §4.2."
+  },
+  "recordings": [
+    { "id": "rain",   "file": "rain.m4a",      "title": "Soft Rain Ambience",          "author": "visionear",       "freesound": 573335, "licence": "cc0", "url": "https://freesound.org/people/visionear/sounds/573335/" },
+    { "id": "fire",   "file": "fireplace.m4a", "title": "Fire in the stove",           "author": "mcmikai",         "freesound": 532191, "licence": "cc0", "url": "https://freesound.org/people/mcmikai/sounds/532191/" },
+    { "id": "ocean",  "file": "ocean.m4a",     "title": "Waves of Hawaii",             "author": "florianreichelt", "freesound": 450755, "licence": "cc0", "url": "https://freesound.org/people/florianreichelt/sounds/450755/" },
+    { "id": "stream", "file": "stream.m4a",    "title": "Stream River Water Up Close", "author": "jackthemurray",   "freesound": 433589, "licence": "cc0", "url": "https://freesound.org/people/jackthemurray/sounds/433589/" },
+    { "id": "forest", "file": "forest.m4a",    "title": "Early summer, Czech wood",    "author": "J.Zazvurek",      "freesound": 353311, "licence": "cc0", "url": "https://freesound.org/people/J.Zazvurek/sounds/353311/" },
+    { "id": "night",  "file": "night.m4a",     "title": "Crickets, night forest",      "author": "kyles",           "freesound": 453862, "licence": "cc0", "url": "https://freesound.org/people/kyles/sounds/453862/" }
+  ]
+}

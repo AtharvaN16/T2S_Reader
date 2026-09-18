@@ -17,6 +17,7 @@ resolved tags in `Packages/T2SReadium/.build/checkouts` and `Packages/T2SKokoro/
 | MLXUtilsLibrary | 0.0.6 + our patch | Apache-2.0 | `Packages/MLXUtilsLibrary/LICENSE` |
 | KokoroPipeline | `mattmireles/kokoro-coreml` @ `66d8cf5108cce0991b8868b01b4d8a8b2e98881d` | Apache-2.0 | `Packages/KokoroPipeline/LICENSE` |
 | Onboarding book covers (24 JPEGs, `App/Resources/Onboarding/onboarding-cover-*.jpg`) | fetched 2026-09-14 by `scripts/fetch-onboarding-covers.sh` from Open Library (`covers.openlibrary.org`); the manifest pins the edition of each classic by `coverID` | **publishers' cover art, not licensed** — used as the empty shelf's three covers are (`Assets.xcassets/EmptyCovers`), by the owner's decision of 2026-09-14 after the rights point was raised; the Standard Ebooks (CC0) set that preceded it is in git at `a5e09af` if it is ever needed back | https://openlibrary.org/dev/docs/api/covers |
+| Soundscape loops (6 `.m4a`, `App/Resources/Soundscapes/soundscape-*.m4a`) | fetched 2026-09-18 by `scripts/fetch-soundscapes.sh` from the ambiently repository at `8b99d66`; the Freesound id and author of each is in `App/Resources/Soundscapes/soundscapes-manifest.json` | CC0 1.0 (public domain; no attribution required, recorded anyway) | `App/Resources/Soundscapes/soundscapes-credits.json` |
 
 ## Swift Package Manager
 

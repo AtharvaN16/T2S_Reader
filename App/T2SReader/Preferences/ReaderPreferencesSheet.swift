@@ -74,6 +74,9 @@ struct ReaderPreferencesSheet: View {
                                detail: "Shows the bookmarks' positions on the scrubber.",
                                isOn: $preferences.showsBookmarkMarks)
                     }
+                    // How the book sounds, after how it looks and what it does (soundscape design
+                    // §2.6): the third part, and the one a reader would look for here.
+                    SoundscapePicker()
                 } else {
                     modes($preferences.theme, note: "Applies to the whole app.")
                 }

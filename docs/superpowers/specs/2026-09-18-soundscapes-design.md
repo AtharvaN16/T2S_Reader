@@ -272,3 +272,10 @@ demand; stereo; an overflow item; a copy in Settings' Appearance sheet; the refe
 timer" cell; a footnote pointing at iOS's own Background
 Sounds (Settings → Accessibility → Audio & Visual), which does the same job system-wide and is
 worth knowing about, but is not a thing to advertise inside our own sheet.
+
+## Changelog
+
+- 2026-09-18: written; the owner's review moved the setting from the overflow into the Reader's
+  Preferences sheet (§2.6) and made the audition a window (§2.7). The recordings are 48 kHz; the
+  bed's default connection is 48 kHz and a loop's own rate wins (§4.1).
+- 2026-09-18: implemented per `docs/superpowers/plans/2026-09-18-soundscapes.md`.

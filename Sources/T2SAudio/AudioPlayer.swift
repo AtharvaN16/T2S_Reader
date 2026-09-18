@@ -5,7 +5,7 @@ import T2SCore
 
 /// Spec §3.5: AVAudioEngine → AVAudioPlayerNode → AVAudioUnitTimePitch → mainMixer.
 @MainActor
-public final class AudioPlayer: AudioPlaying {
+public final class AudioPlayer: AudioPlaying, BedPlaying {
     public enum Error: Swift.Error { case badFormat }
 
     private static let log = Logger(subsystem: "com.t2s.reader", category: "audio")
@@ -32,6 +32,18 @@ public final class AudioPlayer: AudioPlaying {
     private var generation = 0
     /// Kept only so the observer is registered once; the app owns the player for its lifetime.
     private var configurationObserver: NSObjectProtocol?
+    /// The ambient bed (soundscape design §4.1): a second player on the same engine, straight into
+    /// the mixer so the time-pitch unit never touches it, looping one mono buffer. Like `player`,
+    /// a fresh node every `makeGraph()`; unlike it, its buffer is kept, so a media-services rebuild
+    /// puts the same bed back.
+    private var bedPlayer: AVAudioPlayerNode
+    private var bedBuffer: AVAudioPCMBuffer?
+    private var bedVolume: Float = 0
+    /// Manual rendering only: the loudest sample of the last `renderOffline(seconds:)`, so a test
+    /// can tell silence from sound without reading the mixer.
+    private(set) var lastRenderPeak: Float = 0
+    /// The bed's connection before any loop has said its rate: the six recordings' 48 kHz.
+    private static let defaultBedFormat = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 1)!
     /// Manual mode only: segments in schedule order with the cumulative source-frame count at
     /// which each one ends. `deliverManualCompletions()` walks this from the front and fires
     /// `onSegmentFinished` for every segment whose end has been consumed so far — computed
@@ -72,6 +84,7 @@ public final class AudioPlayer: AudioPlaying {
         engine = AVAudioEngine()
         player = AVAudioPlayerNode()
         timePitch = AVAudioUnitTimePitch()
+        bedPlayer = AVAudioPlayerNode()
         try makeGraph()
     }
 
@@ -92,6 +105,9 @@ public final class AudioPlayer: AudioPlaying {
         freshEngine.attach(freshTimePitch)
         freshEngine.connect(freshPlayer, to: freshTimePitch, format: format)
         freshEngine.connect(freshTimePitch, to: freshEngine.mainMixerNode, format: format)
+        let freshBed = AVAudioPlayerNode()
+        freshEngine.attach(freshBed)
+        freshEngine.connect(freshBed, to: freshEngine.mainMixerNode, format: bedBuffer?.format ?? Self.defaultBedFormat)
         if manual {
             try freshEngine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: 4096)
         }
@@ -109,6 +125,11 @@ public final class AudioPlayer: AudioPlaying {
         engine = freshEngine
         player = freshPlayer
         timePitch = freshTimePitch
+        bedPlayer = freshBed
+        freshBed.volume = bedVolume
+        if let bedBuffer {
+            freshBed.scheduleBuffer(bedBuffer, at: nil, options: .loops, completionHandler: nil)
+        }
         installConfigurationObserver()
     }
 
@@ -119,22 +140,33 @@ public final class AudioPlayer: AudioPlaying {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 // A route or format change while paused needs nothing now; the next `play()` starts
-                // the engine on the new configuration.
-                guard let self, self.isPlaying else { return }
+                // the engine on the new configuration. But the bed can be wanted with the voice
+                // paused (the audition, the linger), and a route change is common enough during
+                // listening that it must not go unheard.
+                guard let self, self.isPlaying || (self.bedBuffer != nil && self.bedVolume > 0) else { return }
                 self.restartEngineIfNeeded()
             }
         }
     }
 
-    /// Starts the engine when the graph was never started or was torn down, and resumes the
-    /// player if we were playing. Only `play()` and a configuration change while playing reach
-    /// here: a paused or idle app leaves the engine alone.
+    /// Starts the engine when the graph was never started or was torn down, and resumes whichever
+    /// of the voice and the bed was playing. Only `play()`, `startBedIfWanted()`, and a
+    /// configuration change while either is wanted reach here: an app with nothing playing and no
+    /// bed wanted leaves the engine alone. The engine start and the voice's replay stay behind the
+    /// manual-rendering guard, as before — manual mode is never torn down by a live route change;
+    /// the bed's replay does not, matching manual rendering's own tests, which drive it through
+    /// this same path with nothing "playing" in the voice's sense.
     private func restartEngineIfNeeded() {
-        guard !manual else { return }
-        if !engine.isRunning {
-            do { try engine.start() } catch { Self.log.error("Audio engine start failed: \(error.localizedDescription, privacy: .public)") }
+        if !manual {
+            if !engine.isRunning {
+                do { try engine.start() } catch { Self.log.error("Audio engine start failed: \(error.localizedDescription, privacy: .public)") }
+            }
+            if isPlaying { player.play() }
         }
-        if isPlaying { player.play() }
+        // `play()` on a playing node is a no-op — no `!bedPlayer.isPlaying` guard needed, and
+        // none wanted: after the engine stops itself on a configuration change, exactly the case
+        // this line exists for, `isPlaying` cannot be trusted to already read false.
+        if bedBuffer != nil, bedVolume > 0 { bedPlayer.play() }
     }
 
     /// Manual mode: folds the output rendered so far at the current rate into the accumulator and
@@ -250,20 +282,70 @@ public final class AudioPlayer: AudioPlaying {
         do {
             try makeGraph()
             if manual { manualBaseline = engine.manualRenderingSampleTime }
+            startBedIfWanted()
         } catch {
             Self.log.error("Audio graph recovery failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    // MARK: - The bed
+
+    public func setBed(_ loop: PCMAudio?) {
+        bedPlayer.stop()
+        bedBuffer = nil
+        guard let loop, !loop.samples.isEmpty,
+              let format = AVAudioFormat(standardFormatWithSampleRate: loop.sampleRate, channels: 1),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(loop.samples.count))
+        else { return }
+        buffer.frameLength = AVAudioFrameCount(loop.samples.count)
+        loop.samples.withUnsafeBufferPointer { src in
+            buffer.floatChannelData![0].update(from: src.baseAddress!, count: loop.samples.count)
+        }
+        // The node was connected at the default rate; a loop at another rate reconnects it, which
+        // the engine allows while running.
+        if bedPlayer.outputFormat(forBus: 0).sampleRate != format.sampleRate {
+            engine.disconnectNodeOutput(bedPlayer)
+            engine.connect(bedPlayer, to: engine.mainMixerNode, format: format)
+        }
+        bedBuffer = buffer
+        bedPlayer.scheduleBuffer(buffer, at: nil, options: .loops, completionHandler: nil)
+        startBedIfWanted()
+    }
+
+    public func setBedVolume(_ volume: Float) {
+        bedVolume = max(0, min(1, volume))
+        bedPlayer.volume = bedVolume
+        if bedVolume > 0 {
+            startBedIfWanted()
+        } else if bedPlayer.isPlaying {
+            bedPlayer.pause()                                                  // a silent bed costs nothing
+        }
+    }
+
+    /// The bed sounds only when there is a loop and a volume: then the engine must be up — the
+    /// audition before the first play is the one time it may not be — and the node playing.
+    /// `restartEngineIfNeeded()` does both, so this is just the guard (and stays out of the
+    /// mutual recursion the obvious version — each calling the other back — would create).
+    private func startBedIfWanted() {
+        guard bedBuffer != nil, bedVolume > 0 else { return }
+        restartEngineIfNeeded()
     }
 
     /// Manual rendering only: advances the offline engine by `seconds` of output.
     func renderOffline(seconds: TimeInterval) throws {
         precondition(manual, "renderOffline requires manualRendering")
         guard let out = AVAudioPCMBuffer(pcmFormat: engine.manualRenderingFormat, frameCapacity: engine.manualRenderingMaximumFrameCount) else { return }
+        lastRenderPeak = 0
         var remaining = AVAudioFrameCount((seconds * format.sampleRate).rounded())
         while remaining > 0 {
             let n = min(remaining, engine.manualRenderingMaximumFrameCount)
             let status = try engine.renderOffline(n, to: out)
             guard status == .success || status == .insufficientDataFromInputNode else { break }
+            if let data = out.floatChannelData, out.frameLength > 0 {
+                var peak: Float = 0
+                for i in 0..<Int(out.frameLength) { peak = max(peak, abs(data[0][i])) }
+                lastRenderPeak = max(lastRenderPeak, peak)
+            }
             remaining -= n
         }
         deliverManualCompletions()

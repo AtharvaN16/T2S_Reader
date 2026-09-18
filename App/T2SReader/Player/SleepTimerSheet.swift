@@ -26,6 +26,7 @@ struct SleepTimerSheet: View {
     /// paper or the light behind it left every sheet painted in the old one.
     private var palette: ReaderPalette { wearsPaper ? ReaderPalette(env.preferences.readerPaper) : .app }
     @Environment(\.dismiss) private var dismiss
+    @State private var showSoundscape = false
 
     var body: some View {
         @Bindable var preferences = env.preferences
@@ -66,7 +67,16 @@ struct SleepTimerSheet: View {
                         .accessibilityHidden(atChapterEnd)
                         .animation(.easeInOut(duration: 0.2), value: atChapterEnd)
                         .padding(.bottom, Spacing.row)
-                        ChapterEndRow(isOn: $preferences.sleepsAtChapterEnd)
+                        // One slab, two rows: the switch, and the way to the soundscape (soundscape
+                        // design §4.3) — a second door to the Reader's own setting, here because
+                        // a bed is most wanted at bedtime.
+                        VStack(spacing: 0) {
+                            ChapterEndRow(isOn: $preferences.sleepsAtChapterEnd)
+                            Rectangle().fill(palette.ink3).frame(height: 1).opacity(0.7)
+                                .padding(.horizontal, 16)
+                            SoundscapeRow(title: env.soundscape.choice?.title ?? "Off") { showSoundscape = true }
+                        }
+                        .background(palette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                     }
                 }
                 .padding(.bottom, Spacing.row)
@@ -99,9 +109,11 @@ struct SleepTimerSheet: View {
         .environment(\.readerPalette, palette)
         // A shade taller than `.medium` (owner, 2026-09-12: air between the content and the key).
         // Medium is a fixed fraction of the screen, and at that height the switch sat on the key;
-        // this is the fraction the content actually asks for, with the air the key needs.
-        .presentationDetents([.fraction(0.62)])
+        // this is the fraction the content actually asks for, with the air the key needs — raised
+        // again for the soundscape row (2026-09-18).
+        .presentationDetents([.fraction(0.7)])
         .presentationCornerRadius(Spacing.sheetCorner)
+        .sheet(isPresented: $showSoundscape) { SoundscapeSheet(wearsPaper: wearsPaper) }
     }
 }
 
@@ -212,8 +224,8 @@ private struct SleepRuler: View {
     }
 }
 
-/// The other answer, as a switch on its own `surface` slab: the whole row is the switch's label,
-/// so a tap on the words flips it too.
+/// The other answer, as a switch: the whole row is the switch's label, so a tap on the words
+/// flips it too.
 private struct ChapterEndRow: View {
     @Environment(\.readerPalette) private var palette
     @Binding var isOn: Bool
@@ -231,6 +243,30 @@ private struct ChapterEndRow: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .background(palette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+}
+
+/// The second row of the slab: the soundscape's name, and the way to change it.
+private struct SoundscapeRow: View {
+    @Environment(\.readerPalette) private var palette
+    var title: String
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Text("Soundscape").typeRole(.settingsRow).foregroundStyle(palette.ink)
+                Spacer(minLength: 12)
+                Text(title).typeRole(.meta).foregroundStyle(palette.ink2)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(palette.ink3)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Soundscape, \(title)")
     }
 }

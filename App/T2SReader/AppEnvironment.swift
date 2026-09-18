@@ -51,6 +51,8 @@ final class AppEnvironment {
     let voiceChange: VoiceChangeModel
     let readerModel: ReaderModel
     let sleepTimer: SleepTimer
+    /// The Reader-wide soundscape (soundscape design §4.2): one for the app, like the sleep timer.
+    let soundscape: SoundscapeModel
     let continuation: QueueContinuation
     let audioSession = AudioSessionController()
     let nowPlaying: NowPlayingController
@@ -93,7 +95,7 @@ final class AppEnvironment {
     var isWarmingUp: Bool { player.isCatchingUp && kokoroStatus.status.isWarming }
 
     init(paths: LibraryPaths, store: LibraryStore, audioStore: any AudioStore, library: Library,
-         importModel: ImportModel, coordinator: PlaybackCoordinator, engine: any SynthesisEngine,
+         importModel: ImportModel, coordinator: PlaybackCoordinator, bed: any BedPlaying, engine: any SynthesisEngine,
          renderArbiter: RenderArbiter, cloudRoute: CloudVoiceConfigurationStore,
          cloudRouter: RoutedEngine,
          kokoro: KokoroComposition, foregroundGate: ForegroundGate, cpuBudget: CPUBudget?, syncModel: SyncModel) {
@@ -130,6 +132,8 @@ final class AppEnvironment {
         voiceChange = VoiceChangeModel(library: library, player: player, libraryModel: libraryModel)
         readerModel = ReaderModel(player: player)
         sleepTimer = SleepTimer(player: player)
+        soundscape = SoundscapeModel(bed: bed, loader: BundleSoundscapeLoader(bundle: .main), preferences: preferences,
+                                     isVoicePlaying: { [player] in player.isPlaying })
         continuation = QueueContinuation(player: player, library: libraryModel, preferences: preferences)
         nowPlaying = NowPlayingController(player: player, libraryModel: libraryModel, preferences: preferences, paths: paths)
         player.defaultVoiceID = preferences.defaultVoiceID
@@ -191,6 +195,7 @@ final class AppEnvironment {
         // appears, and a source installed on a view's first appearance would be a source that
         // missed the beginning of the only job it speaks for.
         appStatus.register(VoiceStatusSource(status: kokoroStatus, player: player))
+        sleepTimer.onFire = { [soundscape] in soundscape.linger() }
     }
 
     static func live() throws -> AppEnvironment {
@@ -242,7 +247,9 @@ final class AppEnvironment {
         if let window = kokoro.playAheadWindowSeconds { configuration.windowSeconds = window }
         configuration.foregroundFill = kokoro.foregroundFillSeconds
         configuration.foregroundFillRate = kokoro.foregroundFillSeconds == nil ? nil : 2
-        let coordinator = PlaybackCoordinator(engine: cloudRouter, store: shared.audioStore, player: try AudioPlayer(),
+        // One player by name: the coordinator drives its voice, the soundscape its bed.
+        let audioPlayer = try AudioPlayer()
+        let coordinator = PlaybackCoordinator(engine: cloudRouter, store: shared.audioStore, player: audioPlayer,
                                               playheadStore: shared.store, timeSource: SystemTimeSource(),
                                               configuration: configuration,
                                               arbiter: renderArbiter, budget: cpuBudget)
@@ -254,7 +261,7 @@ final class AppEnvironment {
         let syncModel = SyncModel(provider: provider, library: shared.library, deviceName: UIDevice.current.name)
         return AppEnvironment(paths: shared.paths, store: shared.store, audioStore: shared.audioStore,
                               library: shared.library, importModel: shared.importModel, coordinator: coordinator,
-                              engine: cloudRouter, renderArbiter: renderArbiter,
+                              bed: audioPlayer, engine: cloudRouter, renderArbiter: renderArbiter,
                               cloudRoute: configurationStore, cloudRouter: cloudRouter,
                               kokoro: kokoro, foregroundGate: foregroundGate, cpuBudget: cpuBudget, syncModel: syncModel)
     }

@@ -43,24 +43,26 @@ struct EmptyShelf: View {
     /// asked for it ("slightly lower, just above the center") — at 48 it sat in the top third.
     static let topGap: CGFloat = 128
 
-    /// How tall the picture's frame is on each page. Both were 230 before the owner asked for a
-    /// smaller graphic on Home and the Collection to match it (2026-09-17); Home's is the shorter
-    /// of the two now, because its rows lost their covers as well as their size.
-    private var frameHeight: CGFloat {
-        switch graphic {
-        case .fan: return 190
-        case .rows: return 156
-        }
-    }
+    /// The frame both pictures are drawn in — 230 until the owner asked for a smaller graphic
+    /// (2026-09-17). One height, not one per picture: each is centred in it, so Home's rows and
+    /// the Collection's fan sit on the same line and the headline under them lands at the same
+    /// height on both pages ("make sure that the position of the two graphics aligns vertically").
+    private static let pictureHeight: CGFloat = 190
+
+    /// How wide the line under the headline may run. It is a sentence, not a paragraph: at the
+    /// page's full width "Everything you're listening to will appear right here." ran nearly edge
+    /// to edge in one long line (owner, 2026-09-17). Narrower than the text it breaks, so it wraps
+    /// to two short centred lines under the headline instead.
+    private static let lineWidth: CGFloat = 260
 
     var body: some View {
         VStack(spacing: 0) {
-            // One frame per picture, so the headline lands the same distance under either.
+            // One frame for both pictures, so the headline lands on the same line on both pages.
             ZStack {
                 switch graphic {
-                // Home's rows stand on the page itself: the pool of blue behind them went with the
-                // covers (owner, 2026-09-17: "remove the blue glow from behind the graphic"). The
-                // Collection's fan keeps it — three covers over a pool is the whole picture there.
+                // Home's rows stand on the page itself: the pool of blue went with the covers
+                // (owner, 2026-09-17: "remove the blue glow from behind the graphic"). The
+                // Collection's fan keeps both — three covers over a pool is the picture there.
                 case .fan:
                     Pool()
                     CoverFan()
@@ -68,12 +70,13 @@ struct EmptyShelf: View {
                     RowStack()
                 }
             }
-            .frame(height: frameHeight)
+            .frame(height: Self.pictureHeight)
             .accessibilityHidden(true)
             Text(title).typeRole(.groupTitle).foregroundStyle(Tokens.ink)
                 .padding(.top, Spacing.row)
             Text(line).typeRole(.pill).foregroundStyle(Tokens.ink2)
                 .padding(.top, 6)
+                .frame(maxWidth: Self.lineWidth)
                 .padding(.horizontal, Spacing.grid)
         }
         .multilineTextAlignment(.center)
@@ -146,17 +149,23 @@ private struct CoverFan: View {
     }
 }
 
-/// The pool of light under the fan: a circle squashed to a pool, fully faded before its
-/// own edge, so nothing about its frame shows — a hard-cut rectangle did, faintly, at the first look.
+/// The pool of light under the fan: a circle squashed to a pool, fully faded before its own edge,
+/// so nothing about its frame shows — a hard-cut rectangle did, faintly, at the first look. The
+/// gradient's outer stop is the circle's own radius, not a number of its own: when the pool shrank
+/// with the picture (2026-09-17) a fixed 170 outran the 140 it now had, so the fade was cut off
+/// part-way and the pool arrived as a flat disc with a rim (owner: "it is just a plain circle").
 private struct Pool: View {
+    /// Wider than the fan it stands under, so the light reaches past the outermost cover.
+    static let size: CGFloat = 280
+
     var body: some View {
         Circle()
             .fill(RadialGradient(stops: [
                 .init(color: Tokens.glowSoft, location: 0),
                 .init(color: Tokens.glowFaint, location: 0.45),
                 .init(color: Tokens.glowFaint.opacity(0), location: 1),
-            ], center: .center, startRadius: 0, endRadius: 170))
-            .frame(width: 280, height: 280)
+            ], center: .center, startRadius: 0, endRadius: Self.size / 2))
+            .frame(width: Self.size, height: Self.size)
             .scaleEffect(x: 1, y: 0.68)
             .offset(y: 10)
     }

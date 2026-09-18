@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 import T2SAudio
 import T2SCore
 
@@ -14,6 +15,7 @@ import T2SCore
 @MainActor
 @Observable
 public final class SoundscapeModel {
+    private static let log = Logger(subsystem: "com.t2s.reader", category: "soundscape")
     /// The floor: below anything audible, and told to the player as zero.
     public static let silence: Float = -80
     static let auditionSeconds: TimeInterval = 8
@@ -51,6 +53,9 @@ public final class SoundscapeModel {
     /// The level the bed is at, in dB; `silence` when off.
     private var level: Float = SoundscapeModel.silence
     private var generation = 0
+    /// Set once `tick()` has started the remembered choice's lazy load, so a recording that never
+    /// arrives (or a load still in flight) is not retried on every following tick.
+    private var startedInitialLoad = false
 
     public init(bed: any BedPlaying, loader: any SoundscapeLoading, preferences: ReaderPreferences,
                 isVoicePlaying: @escaping @MainActor () -> Bool,
@@ -62,9 +67,8 @@ public final class SoundscapeModel {
         self.clock = clock
         choice = Soundscape.named(preferences.soundscapeID)
         volume = preferences.soundscapeVolume
-        // The remembered choice is loaded on the first tick that wants it, through `choose`'s
-        // path, so a launch does not decode a file nobody is listening to yet.
-        if let choice { Task { await self.choose(choice, auditioning: false) } }
+        // The remembered choice is loaded on the first tick that wants it (see `tick()`), so a
+        // launch does not decode a file nobody is listening to yet.
     }
 
     /// The bed the reader wants. Persists at once and auditions; the audio follows — the current
@@ -77,9 +81,12 @@ public final class SoundscapeModel {
         preferences.soundscapeID = soundscape?.id
         choice = soundscape
         if auditioning { audition() }
-        guard soundscape != loaded || pending != nil else { return }
+        // Bumped on every call, even one about to return early: that is what invalidates a load
+        // already in flight from an earlier call, so a tap back onto the bed's current sound
+        // cannot lose to a slower load a moment before it (finding #1).
         generation += 1
         let mine = generation
+        guard soundscape != loaded || pending != nil else { return }
         let loop: PCMAudio? = if let soundscape { await loader.load(soundscape) } else { nil }
         guard mine == generation else { return }                              // a later choice won
         pending = (soundscape, loop)
@@ -101,6 +108,9 @@ public final class SoundscapeModel {
         let now = clock()
         if let pending {
             if level <= Self.silence, ramp == nil {
+                if pending.soundscape != nil, pending.loop == nil {
+                    Self.log.error("No recording for '\(pending.soundscape?.id ?? "?", privacy: .public)'; behaving as Off.")
+                }
                 bed.setBed(pending.loop)
                 loaded = pending.loop == nil ? nil : pending.soundscape
                 self.pending = nil
@@ -111,6 +121,14 @@ public final class SoundscapeModel {
             }
         }
         let auditioning = auditionUntil.map { now < $0 } ?? false
+        // The remembered choice's own load: started here, not at init, so a launch that never
+        // wants the bed never decodes one. `startedInitialLoad` keeps it to one attempt — a
+        // missing recording stays `loaded == nil` forever and must not be retried every tick.
+        if choice != nil, loaded == nil, pending == nil, !startedInitialLoad, isVoicePlaying() || auditioning {
+            startedInitialLoad = true
+            let remembered = choice
+            Task { await self.choose(remembered, auditioning: false) }
+        }
         let wanted = loaded != nil && (isVoicePlaying() || auditioning) ? Self.decibels(volume) : Self.silence
         if wanted > Self.silence {
             lingerUntil = nil                                                  // a play cancels the linger

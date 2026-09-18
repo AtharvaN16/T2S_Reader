@@ -6,7 +6,7 @@ import T2SApp
 /// second room. Wears the book's paper as the sleep sheet does.
 struct SoundscapeSheet: View {
     @Environment(AppEnvironment.self) private var env
-    var wearsPaper = true
+    var wearsPaper: Bool
 
     private var palette: ReaderPalette { wearsPaper ? ReaderPalette(env.preferences.readerPaper) : .app }
 
@@ -32,7 +32,7 @@ struct SoundscapeSheet: View {
         .presentationBackground(palette.sheet)
         .appTheme()
         .environment(\.readerPalette, palette)
-        .presentationDetents([.fraction(0.5), .large])
+        .presentationDetents([.medium, .large])
         .presentationCornerRadius(Spacing.sheetCorner)
     }
 }

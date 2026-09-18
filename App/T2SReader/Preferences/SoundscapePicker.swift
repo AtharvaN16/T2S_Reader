@@ -36,6 +36,9 @@ struct SoundscapePicker: View {
                 Slider(value: $soundscape.volume, in: 0...1) { _ in soundscape.audition() }
                     .tint(palette.ink)
                     .accessibilityLabel("Volume")
+                    // `onEditingChanged` fires at drag start and end, which VoiceOver's swipe-up/
+                    // swipe-down adjustment never triggers — this is what auditions for that reader.
+                    .onChange(of: soundscape.volume) { soundscape.audition() }
             }
             .padding(.top, 8)
             .opacity(isOff ? 0.3 : 1)

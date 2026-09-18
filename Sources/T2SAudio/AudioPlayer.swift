@@ -140,22 +140,30 @@ public final class AudioPlayer: AudioPlaying, BedPlaying {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 // A route or format change while paused needs nothing now; the next `play()` starts
-                // the engine on the new configuration.
-                guard let self, self.isPlaying else { return }
+                // the engine on the new configuration. But the bed can be wanted with the voice
+                // paused (the audition, the linger), and a route change is common enough during
+                // listening that it must not go unheard.
+                guard let self, self.isPlaying || (self.bedBuffer != nil && self.bedVolume > 0) else { return }
                 self.restartEngineIfNeeded()
             }
         }
     }
 
-    /// Starts the engine when the graph was never started or was torn down, and resumes the
-    /// player if we were playing. Only `play()` and a configuration change while playing reach
-    /// here: a paused or idle app leaves the engine alone.
+    /// Starts the engine when the graph was never started or was torn down, and resumes whichever
+    /// of the voice and the bed was playing. Only `play()`, `startBedIfWanted()`, and a
+    /// configuration change while either is wanted reach here: an app with nothing playing and no
+    /// bed wanted leaves the engine alone. The engine start and the voice's replay stay behind the
+    /// manual-rendering guard, as before — manual mode is never torn down by a live route change;
+    /// the bed's replay does not, matching manual rendering's own tests, which drive it through
+    /// this same path with nothing "playing" in the voice's sense.
     private func restartEngineIfNeeded() {
-        guard !manual else { return }
-        if !engine.isRunning {
-            do { try engine.start() } catch { Self.log.error("Audio engine start failed: \(error.localizedDescription, privacy: .public)") }
+        if !manual {
+            if !engine.isRunning {
+                do { try engine.start() } catch { Self.log.error("Audio engine start failed: \(error.localizedDescription, privacy: .public)") }
+            }
+            if isPlaying { player.play() }
         }
-        if isPlaying { player.play() }
+        if bedBuffer != nil, bedVolume > 0, !bedPlayer.isPlaying { bedPlayer.play() }
     }
 
     /// Manual mode: folds the output rendered so far at the current rate into the accumulator and
@@ -313,10 +321,11 @@ public final class AudioPlayer: AudioPlaying, BedPlaying {
 
     /// The bed sounds only when there is a loop and a volume: then the engine must be up — the
     /// audition before the first play is the one time it may not be — and the node playing.
+    /// `restartEngineIfNeeded()` does both, so this is just the guard (and stays out of the
+    /// mutual recursion the obvious version — each calling the other back — would create).
     private func startBedIfWanted() {
         guard bedBuffer != nil, bedVolume > 0 else { return }
         restartEngineIfNeeded()
-        if !bedPlayer.isPlaying { bedPlayer.play() }
     }
 
     /// Manual rendering only: advances the offline engine by `seconds` of output.

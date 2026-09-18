@@ -23,7 +23,7 @@ public final class BundleSoundscapeLoader: SoundscapeLoading, @unchecked Sendabl
             raw = NoiseLoop.make(colour)
         case .recording(let resource):
             guard let url = bundle.url(forResource: resource, withExtension: "m4a") else { return nil }
-            raw = await Task.detached(priority: .utility) { Self.decodeMono(url) }.value
+            raw = await Task.detached(priority: .userInitiated) { Self.decodeMono(url) }.value
         }
         guard let raw else { return nil }
         return Loudness.normalised(LoopSeam.bake(raw))

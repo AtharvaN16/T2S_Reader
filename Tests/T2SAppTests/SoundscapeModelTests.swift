@@ -24,6 +24,35 @@ import T2SCore
         }
     }
 
+    /// The fetch script never ran for this one id: the loader returns nil, as a missing bundle
+    /// resource does for real.
+    struct NilLoader: SoundscapeLoading {
+        func load(_ soundscape: Soundscape) async -> PCMAudio? { nil }
+    }
+
+    /// Resolves at once for every soundscape except `suspendsFor`, which hangs on a
+    /// `CheckedContinuation` until `resume()` is called — so a test can hold one load open while
+    /// another choice is made around it and see which one lands.
+    final class SuspendingLoader: SoundscapeLoading, @unchecked Sendable {
+        private let suspendsFor: String
+        private var continuation: CheckedContinuation<PCMAudio?, Never>?
+        var isSuspended: Bool { continuation != nil }
+
+        init(suspendsFor: String) { self.suspendsFor = suspendsFor }
+
+        func load(_ soundscape: Soundscape) async -> PCMAudio? {
+            guard soundscape.id == suspendsFor else {
+                return PCMAudio(sampleRate: 48_000, samples: [Float](repeating: 0.1, count: 10))
+            }
+            return await withCheckedContinuation { continuation = $0 }
+        }
+
+        func resume() {
+            continuation?.resume(returning: PCMAudio(sampleRate: 48_000, samples: [Float](repeating: 0.2, count: 10)))
+            continuation = nil
+        }
+    }
+
     final class Voice { var playing = false }
 
     struct Rig {
@@ -34,14 +63,24 @@ import T2SCore
         let defaults: UserDefaults
     }
 
-    func make() -> Rig {
+    func make(loader: any SoundscapeLoading = FakeLoader()) -> Rig {
         let suite = "t2s-soundscape-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
         let clock = Clock(), bed = FakeBed(), voice = Voice()
-        let model = SoundscapeModel(bed: bed, loader: FakeLoader(), preferences: ReaderPreferences(defaults: defaults),
+        let model = SoundscapeModel(bed: bed, loader: loader, preferences: ReaderPreferences(defaults: defaults),
                                     isVoicePlaying: { voice.playing }, clock: { clock.now })
         return Rig(model: model, bed: bed, clock: clock, voice: voice, defaults: defaults)
+    }
+
+    /// A second model sharing `rig`'s defaults (and so its remembered choice), with its own bed
+    /// and clock — as a fresh launch would build one.
+    func relaunch(_ rig: Rig, loader: any SoundscapeLoading = FakeLoader(), voicePlaying: @escaping @MainActor () -> Bool = { false }) -> (model: SoundscapeModel, bed: FakeBed) {
+        let bed = FakeBed()
+        let clock = rig.clock                                                 // Sendable on its own; `rig` is not
+        let model = SoundscapeModel(bed: bed, loader: loader, preferences: ReaderPreferences(defaults: rig.defaults),
+                                    isVoicePlaying: voicePlaying, clock: { clock.now })
+        return (model, bed)
     }
 
     /// The ticker's part: a tick every 50 ms for `seconds`.
@@ -153,5 +192,63 @@ import T2SCore
         let next = SoundscapeModel(bed: FakeBed(), loader: FakeLoader(), preferences: ReaderPreferences(defaults: rig.defaults),
                                    isVoicePlaying: { false }, clock: { clock.now })
         #expect(next.choice?.id == "pink" && next.volume == 0.7)
+    }
+
+    /// Finding #1: `generation` used to be bumped only after the "already loaded" guard, so a tap
+    /// back onto the sound already playing returned without invalidating a slower load still in
+    /// flight from the tap before it — and that late load would land anyway, leaving the bed on a
+    /// sound the picker no longer shows.
+    @Test func aTapBackWhileTheEarlierChoiceIsStillLoadingWinsTheRace() async {
+        let loader = SuspendingLoader(suspendsFor: "fire")
+        let rig = make(loader: loader)
+        await rig.model.choose(Soundscape.named("rain"))                      // loaded and playing
+        #expect(rig.bed.loops.count == 1)
+        let fireLoad = Task { await rig.model.choose(Soundscape.named("fire")) }
+        while !loader.isSuspended { await Task.yield() }                      // Fire's load is now in flight
+        await rig.model.choose(Soundscape.named("rain"))                      // tap back: rain == loaded, returns at once
+        loader.resume()                                                        // Fire's held-open load completes, late
+        await fireLoad.value
+        run(rig, seconds: 2)
+        #expect(rig.bed.loops.count == 1)                                     // Fire's late load never landed
+    }
+
+    /// Finding #3: the remembered choice used to decode in a `Task` at `init`, contradicting the
+    /// model's own comment and running in every background Prepare pass. A launch that never
+    /// wants the bed (paused, no audition) must not load anything at all.
+    @Test func aLaunchWithARememberedChoiceDoesNotLoadUntilTheBedIsWanted() async {
+        let rig = make()
+        await rig.model.choose(Soundscape.named("rain"))
+        let (next, nextBed) = relaunch(rig)                                   // paused, no audition
+        for _ in 0..<40 { rig.clock.advance(0.05); next.tick() }
+        #expect(nextBed.loops.isEmpty)                                        // never decoded: nobody was listening
+        #expect(nextBed.volumes.isEmpty || nextBed.volumes.allSatisfy { $0 == 0 })
+    }
+
+    /// The other half of finding #3: once the voice plays, the remembered choice loads on the
+    /// next tick that wants it and rises exactly as any other choice would.
+    @Test func aLaunchWithARememberedChoiceLoadsAndRisesOnceTheVoicePlays() async {
+        let rig = make()
+        await rig.model.choose(Soundscape.named("rain"))
+        let voice = Voice()
+        let (next, nextBed) = relaunch(rig, voicePlaying: { voice.playing })
+        rig.clock.advance(0.05); next.tick()                                  // still paused: no load yet
+        #expect(nextBed.loops.isEmpty)
+        voice.playing = true
+        rig.clock.advance(0.05); next.tick()                                  // wanted now: the lazy load starts
+        while nextBed.loops.isEmpty { await Task.yield() }                    // let the spawned load land
+        #expect(nextBed.loops.count == 1 && nextBed.loops[0] != nil)
+        for _ in 0..<Int((1.6 / 0.05).rounded()) { rig.clock.advance(0.05); next.tick() }
+        #expect(abs((nextBed.volumes.last ?? 0) - heard) < 1e-4)              // rises like any other choice
+    }
+
+    /// Finding #4: the fetch script never having run for a soundscape must still behave as Off —
+    /// the choice stays selected, but nothing plays — and now logs, rather than saying nothing.
+    @Test func aMissingRecordingBehavesAsOff() async {
+        let rig = make(loader: NilLoader())
+        rig.voice.playing = true
+        await rig.model.choose(Soundscape.named("rain"))
+        #expect(rig.model.choice?.id == "rain")                               // the pill still shows the choice
+        #expect(rig.bed.loops == [nil])                                       // the loader returned nil; no loop set
+        #expect(rig.bed.volumes.allSatisfy { $0 == 0 })                       // never heard
     }
 }

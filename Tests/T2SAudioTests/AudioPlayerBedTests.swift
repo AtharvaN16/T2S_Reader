@@ -10,6 +10,14 @@ import T2SCore
         PCMAudio(sampleRate: 48_000, samples: (0..<48_000).map { Float(sin(Double($0) * 2 * .pi * 220 / 48_000)) * 0.5 })
     }
 
+    /// One second of a 220 Hz tone at the manual engine's own rate (`PCMAudio.defaultSampleRate`,
+    /// 24 kHz) — a loop at another rate than the bed's default 48 kHz connection, so `setBed` must
+    /// disconnect and reconnect the node at the loop's own format.
+    private func toneAtEngineRate() -> PCMAudio {
+        let rate = PCMAudio.defaultSampleRate
+        return PCMAudio(sampleRate: rate, samples: (0..<Int(rate)).map { Float(sin(Double($0) * 2 * .pi * 220 / rate)) * 0.5 })
+    }
+
     @Test func theBedIsHeardAtVolumeAndSilentAtZero() throws {
         let p = try AudioPlayer(manualRendering: true)
         p.setBed(tone())
@@ -40,6 +48,16 @@ import T2SCore
         p.setBed(tone())
         p.setBedVolume(0.5)
         p.rebuildAfterMediaServicesReset()
+        try p.renderOffline(seconds: 0.2)
+        #expect(p.lastRenderPeak > 0.1)
+    }
+
+    /// All eight beds are 48 kHz today, so the reconnect-at-another-rate branch in `setBed` is
+    /// otherwise never exercised. A loop at the manual engine's own rate forces it.
+    @Test func theBedIsHeardAfterReconnectingAtAnotherRate() throws {
+        let p = try AudioPlayer(manualRendering: true)
+        p.setBed(toneAtEngineRate())
+        p.setBedVolume(0.5)
         try p.renderOffline(seconds: 0.2)
         #expect(p.lastRenderPeak > 0.1)
     }

@@ -196,9 +196,17 @@ struct CollectionPage: View {
             HStack(spacing: 8) {
                 Button {
                     withAnimation(.snappy) { isSearching.toggle(); if !isSearching { searchText = "" } }
-                } label: { CircleGlyph(systemName: "magnifyingglass") }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(isSearching ? "Hide search" : "Search")
+                } label: {
+                    // Filled with `accent` while open, so the one way to close the bar — tapping
+                    // this again — reads as a state to leave rather than a plain icon to retap.
+                    CircleGlyph(
+                        systemName: "magnifyingglass",
+                        tint: isSearching ? Tokens.onAccent : Tokens.ink,
+                        fill: isSearching ? Tokens.accent : Tokens.surface
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isSearching ? "Hide search" : "Search")
                 if !all.isEmpty {
                     Button {
                         withAnimation(.snappy) { env.preferences.collectionLayout = layout == .grid ? .list : .grid }
@@ -498,12 +506,22 @@ private struct ShelfProgress: View {
         // Rounded first, then read: a book at 0.998 is finished to a reader, and rounding after the
         // test would have it say "100%" instead.
         let percent = Int((fraction * 100).rounded())
+        let isFinished = percent >= 100
         HStack(spacing: 6) {
-            CircularProgress(fraction: fraction, lineWidth: 2, size: size)
-            Text(percent >= 100 ? "Finished" : "\(percent)%")
+            if isFinished {
+                // A tick, not the same ring it replaces: finishing a book is an event, not a
+                // measurement caught at its ceiling, and `positive` is what the rest of the app
+                // already uses to say "done" (owner, 2026-09-18 — the ring read as still in
+                // progress, and the accent it borrowed is the colour of listening, not of done).
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: size))
+            } else {
+                CircularProgress(fraction: fraction, lineWidth: 2, size: size)
+            }
+            Text(isFinished ? "Finished" : "\(percent)%")
         }
         .font(.custom("Inter-SemiBold", size: size, relativeTo: .footnote))
-        .foregroundStyle(fraction > 0 ? Tokens.ink2 : Tokens.ink3)
+        .foregroundStyle(isFinished ? Tokens.positive : (fraction > 0 ? Tokens.ink2 : Tokens.ink3))
         .padding(.bottom, 4)                                                   // air before the title, as the Queue's line keeps
         .accessibilityHidden(true)                                             // the cell's label says it in words
     }

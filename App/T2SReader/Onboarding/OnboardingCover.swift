@@ -33,6 +33,13 @@ struct OnboardingCover: View {
     @State private var timings: [String: OnboardingClipTimings] = [:]
     /// Debug only: a clock pinned at one instant, so a beat can be photographed. See `onAppear`.
     @State private var frozen: TimeInterval?
+    /// Which of the flow's screens is up. `.scene` is the timed three-beat run; the three after it
+    /// are ordinary pages that wait for a tap.
+    @State private var step: Step = .scene
+    /// Held, unsent: there is nothing to redeem a code against yet. See `ReferralPage`.
+    @State private var referral: String?
+
+    enum Step: Hashable { case scene, signup, referral, paywall }
 
     private let script = WelcomeScript()
 
@@ -90,7 +97,21 @@ struct OnboardingCover: View {
                     .ignoresSafeArea()
 
                     skip(insets)
+                        .opacity(step == .scene ? 1 : 0)
+
+                    // The three after the scene. Each covers what is under it outright — they are
+                    // pages, not beats, so they arrive on a tap rather than on the clock and have
+                    // no veil: a wipe that a reader triggers reads as a transition, where the
+                    // scene's wipes read as the scene continuing.
+                    if step != .scene {
+                        Tokens.ground.ignoresSafeArea()
+                        pages(insets)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                removal: .opacity))
+                    }
                 }
+                .animation(.smooth(duration: 0.4), value: step)
                 .onChange(of: context.date) { _, _ in
                     // Driven here rather than in the body, which must not mutate.
                     guard startedAt != nil else { return }
@@ -135,6 +156,18 @@ struct OnboardingCover: View {
             case "opening":
                 frozen = script.pageStart + script.rise * 0.45
                 beat = .page
+            case "signup":
+                frozen = script.pageSettled + 0.1
+                beat = .page
+                step = .signup
+            case "referral":
+                frozen = script.pageSettled + 0.1
+                beat = .page
+                step = .referral
+            case "paywall":
+                frozen = script.pageSettled + 0.1
+                beat = .page
+                step = .paywall
             case "page", "reading":
                 frozen = script.pageSettled + 0.1
                 beat = .page
@@ -278,7 +311,7 @@ struct OnboardingCover: View {
     /// The foot: Continue behind the tall bottom fade that carries the passage out of sight under
     /// it (the owner, 2026-09-15: "the bottom fade should be taller").
     private func foot(_ insets: EdgeInsets) -> some View {
-        RaisedButton(label: "Make default", tone: .blue, size: .bar) { finish(setDefault: true) }
+        RaisedButton(label: "Make default", tone: .blue, size: .bar) { chooseVoice() }
             .padding(.horizontal, Spacing.margin)
             .padding(.bottom, insets.bottom + Spacing.grid)
             .background { BottomFade(fade: Self.bottomFade, color: Tokens.ground) }
@@ -325,6 +358,35 @@ struct OnboardingCover: View {
         if beat == .page, settled, !solo.hasPlayed { play(selectedVoice) }
     }
 
+    @ViewBuilder
+    private func pages(_ insets: EdgeInsets) -> some View {
+        switch step {
+        case .scene:
+            EmptyView()
+        case .signup:
+            SignupPage(onSignIn: { step = .referral }, onSkip: { step = .referral })
+        case .referral:
+            ReferralPage(offer: .standard) { code in
+                referral = code
+                step = .paywall
+            }
+        case .paywall:
+            // Neither key charges anything; both end the welcome. The difference is only which
+            // one the reader pressed, and nothing downstream reads it yet.
+            PaywallPage(offer: .standard, onSubscribe: { _ in finish(setDefault: false) },
+                        onSkip: { finish(setDefault: false) })
+        }
+    }
+
+    /// The voice is written as the app's default here rather than at the end, because the three
+    /// screens after this one can all be skipped and one of them could be quit out of — a reader
+    /// who chose a voice should keep it whatever they do next.
+    private func chooseVoice() {
+        solo.stop()
+        setDefaultVoice()
+        step = .signup
+    }
+
     private func play(_ voice: String) {
         solo.play(passageClip(voice))
     }
@@ -333,9 +395,13 @@ struct OnboardingCover: View {
     /// the same on-device voice; Skip leaves the default alone.
     private func finish(setDefault: Bool) {
         solo.stop()
-        if setDefault, let option = env.voices.voices().first(where: { $0.id.hasSuffix(":\(selectedVoice)") }) {
+        if setDefault { setDefaultVoice() }
+        onFinish()
+    }
+
+    private func setDefaultVoice() {
+        if let option = env.voices.voices().first(where: { $0.id.hasSuffix(":\(selectedVoice)") }) {
             env.preferences.defaultVoiceID = option.id
         }
-        onFinish()
     }
 }

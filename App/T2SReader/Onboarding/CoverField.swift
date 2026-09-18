@@ -33,9 +33,6 @@ import T2SApp
 /// With Reduce Motion nothing travels: the field stands still and dim.
 struct CoverField: View {
     var books: [OnboardingManifest.Book]
-    /// Only to keep the book whose passage beat three reads in the near half of the field, so it
-    /// is one of the sharp ones as it goes by. It gets no other treatment.
-    var hero: String
     var elapsed: TimeInterval
 
     @Environment(AppEnvironment.self) private var env
@@ -60,10 +57,13 @@ struct CoverField: View {
         var blur: CGFloat { depth >= 0.66 ? 0 : 3.5 * CGFloat(1 - depth / 0.66) }
         var opacity: Double { 0.5 + depth * 0.5 }
 
-        /// The columns the covers take in turn along the loop, as fractions of the width from the
-        /// centre: each is on the other side from the one before, and a column repeats only every
-        /// few covers, so neighbours along the loop never stack.
-        static let columns: [CGFloat] = [-0.34, 0.34, 0.02, -0.26, 0.30, -0.08, 0.36, -0.36, 0.12, -0.20, 0.24, -0.32]
+        /// The turn of the golden angle, in fractions of a circle. Taking this much of the width
+        /// per cover and wrapping is a low-discrepancy sequence: consecutive covers land far apart
+        /// across the screen, and the set as a whole fills the width evenly without ever settling
+        /// into a rhythm. A fixed table of twelve columns did the first of those and not the
+        /// second — twelve covers in, the thirteenth stood exactly under the first, and the eye
+        /// found the grid (the owner, 2026-09-18: "scatter them more organically").
+        static let goldenTurn: Double = 0.618_033_988_75
 
         /// The first integer at or above two fifths of `count` that shares no factor with it, so
         /// `index * stride % count` visits every slot once.
@@ -76,22 +76,25 @@ struct CoverField: View {
         }
 
         /// Placed by slot, not by chance: cover `index` of `count` takes an even share of the loop
-        /// and the next column in turn, with a little jitter on each, so the field is spaced at
-        /// the start and stays spaced. Depth and lean are hashed from the index, so the field is
-        /// the same every launch. A book that speaks is kept to the near half of the depth.
-        init(index: Int, count: Int, near: Bool) {
+        /// and its own turn across the width, with a little jitter on each, so the field is spaced
+        /// at the start and stays spaced. Depth and lean are hashed from the index, so the field is
+        /// the same every launch.
+        init(index: Int, count: Int) {
             func unit(_ salt: UInt32) -> Double {
                 var h = UInt32(truncatingIfNeeded: index) &* 2_654_435_761 &+ salt &* 40_503
                 h ^= h >> 13; h = h &* 1_274_126_177; h ^= h >> 16
                 return Double(h % 10_007) / 10_007
             }
-            depth = near ? 0.62 + unit(1) * 0.38 : unit(1)
-            // The slot is the index times a stride coprime with the count, so books that sit
-            // together in the manifest — the voiced ones do — are spread around the loop rather
-            // than arriving as a bunch.
+            depth = unit(1)
+            // The slot is the index times a stride coprime with the count, so the covers take even
+            // turns along the loop rather than arriving in the manifest's own order.
             let slot = (index * Self.stride(for: count)) % max(count, 1)
-            x = Self.columns[slot % Self.columns.count] + CGFloat(unit(2) - 0.5) * 0.1
-            phase = (CGFloat(slot) + CGFloat(unit(3) - 0.5) * 0.4) / CGFloat(max(count, 1))
+            // Across the width by the golden angle, then nudged. The turn does the spreading and
+            // the jitter takes the last of the regularity out of it, so no two neighbours share a
+            // column and no column is ever exactly repeated.
+            let turn = (Double(slot) * Self.goldenTurn).truncatingRemainder(dividingBy: 1)
+            x = CGFloat(turn - 0.5) * 0.82 + CGFloat(unit(2) - 0.5) * 0.08
+            phase = (CGFloat(slot) + CGFloat(unit(3) - 0.5) * 0.5) / CGFloat(max(count, 1))
             lean = (unit(4) - 0.5) * 24
         }
     }
@@ -119,9 +122,7 @@ struct CoverField: View {
     private var placed: [Placed] {
         books.enumerated()
             .map { index, book in
-                Placed(book: book,
-                       index: index,
-                       placement: Placement(index: index, count: books.count, near: book.isVoiced || book.id == hero))
+                Placed(book: book, index: index, placement: Placement(index: index, count: books.count))
             }
             .sorted { $0.placement.depth < $1.placement.depth }
     }
@@ -135,12 +136,15 @@ struct CoverField: View {
         return loop / 2 - along
     }
 
-    /// The loop is well over two screens tall and the same for every cover, so at any moment under
-    /// half the field is on screen with white space between (the owner, 2026-09-14: "too crowded,
-    /// not enough white space"; Queue shows about a dozen at once), and a slot along it is the
-    /// same distance for a small cover as for a large one.
+    /// The loop is over three screens tall and the same for every cover, so at any moment well
+    /// under a third of the field is on screen with room between (the owner, 2026-09-14: "too
+    /// crowded, not enough white space", and again 2026-09-18: "enough hidespace between them"),
+    /// and a slot along it is the same distance for a small cover as for a large one.
+    ///
+    /// It was 2.3 screens, which put about ten covers up at once on a 24-book manifest. At 3.4 it
+    /// is nearer six, and the reel reads as a few books passing rather than a crowd.
     private static func loop(in size: CGSize) -> CGFloat {
-        size.height * 2.3 + 240
+        size.height * 3.4 + 240
     }
 
     @ViewBuilder

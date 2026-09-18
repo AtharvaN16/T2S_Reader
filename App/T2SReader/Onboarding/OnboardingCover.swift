@@ -6,55 +6,39 @@ import T2SApp
 /// `docs/superpowers/specs/2026-09-16-onboarding-reel-welcome-page-design.md`). One scene in three
 /// beats, wiped between rather than cut, with `Skip` top-right from the first frame:
 ///
-/// 1. **The reel.** Every book in the manifest drifts upward in one field, laid back in
-///    perspective, while a few opening lines chatter past — each heard whole and the next fading
-///    into its tail (`ChatterSchedule`). No cover leaves the drift; the reel is the shelf, not a
+/// 1. **The reel.** Every book in the manifest drifts upward in one field, scattered wide and
+///    silent, for a few seconds only. No cover leaves the drift; the reel is the shelf, not a
 ///    shortlist.
 /// 2. **The name.** As the last line tails off, a veil rises from the foot of the screen to the
 ///    crown and uncovers *Welcome to T2S* standing on it (`RisingVeil`). It holds there, silent.
 /// 3. **The page.** The veil rises a second time and brings up the passage: the chosen voice's
-///    voice's rim of light at the crown (`VoiceGlow`), the voice named once under it
-///    (`VoicePill`) with a swipe anywhere on the page to try another, the words lighting as they
-///    are spoken and following themselves the way the Reader's own page does
-///    (`ReadAlongPassage`), and the key at the foot behind a tall bottom
+///    voice's rim of light at the crown (`VoiceGlow`) and every voice as a row that plays it
+///    (`VoiceList`), and the key at the foot behind a tall bottom
 ///    fade, which makes the voice on screen the app's default.
 ///
 /// The scene runs on the wall clock from the moment it appears and plays itself through — there is
-/// no key between the beats, which extends the owner's 2026-09-14 decision that the clips start
-/// with the cards. Everything drawn is a function of `elapsed` through `WelcomeScript`, so the
-/// field, the veils, the chatter and the player agree without any of them owning a timer. It
-/// follows the app's theme — covers on the ground, light or dark.
+/// no key between the beats. Everything drawn is a function of `elapsed` through `WelcomeScript`,
+/// so the field, the veils and the player agree without any of them owning a timer. It follows the
+/// app's theme — covers on the ground, light or dark.
 struct OnboardingCover: View {
     var manifest: OnboardingManifest
     var onFinish: () -> Void
 
     @Environment(AppEnvironment.self) private var env
 
-    @State private var chatter: ClipPlayer
     @State private var solo = SoloClipPlayer()
     @State private var startedAt: Date?
     @State private var beat: WelcomeScript.Beat = .reel
     @State private var selectedVoice: String
-    @State private var hasHeard = false
     @State private var timings: [String: OnboardingClipTimings] = [:]
     /// Debug only: a clock pinned at one instant, so a beat can be photographed. See `onAppear`.
     @State private var frozen: TimeInterval?
 
-    private let schedule: ChatterSchedule
-    private let script: WelcomeScript
+    private let script = WelcomeScript()
 
     init(manifest: OnboardingManifest, onFinish: @escaping () -> Void) {
         self.manifest = manifest
         self.onFinish = onFinish
-        let voiced = manifest.voiced
-        let player = ClipPlayer(urls: voiced.map { book in
-            guard let voice = book.voice else { return nil }
-            return Bundle.main.url(forResource: OnboardingManifest.clipName(book: book.id, voice: voice), withExtension: "m4a")
-        })
-        _chatter = State(initialValue: player)
-        let chatter = ChatterSchedule(durations: player.durations)
-        schedule = chatter
-        script = WelcomeScript(chatter: chatter)
         _selectedVoice = State(initialValue: manifest.voices.first ?? "af_heart")
     }
 
@@ -92,11 +76,11 @@ struct OnboardingCover: View {
                     // rise. All of them are in the tree the whole time rather than switched in:
                     // the passage has to be laid out where it will stay before its first word is
                     // spoken, and a view inserted as its veil passes would reflow under the edge.
-                    CoverField(books: manifest.books, hero: manifest.hero, elapsed: elapsed)
+                    CoverField(books: manifest.books, elapsed: elapsed)
                         .ignoresSafeArea()
 
                     RisingVeil(progress: script.welcomeSweep(at: elapsed)) {
-                        welcomeName
+                        welcomeName(elapsed)
                     }
                     .ignoresSafeArea()
 
@@ -110,9 +94,7 @@ struct OnboardingCover: View {
                 .onChange(of: context.date) { _, _ in
                     // Driven here rather than in the body, which must not mutate.
                     guard startedAt != nil else { return }
-                    chatter.update(gains: schedule.gains(at: elapsed))
                     advance(to: script.beat(at: elapsed), settled: elapsed >= script.pageSettled)
-                    if beat == .page, hasHeard == false, solo.hasPlayed, !solo.isPlaying { hasHeard = true }
                 }
             }
         }
@@ -143,8 +125,13 @@ struct OnboardingCover: View {
                 frozen = script.reelEnd * 0.6
             case "rising":
                 frozen = script.welcomeStart + script.rise * 0.45
-            case "welcome":
+            case "greeting":
+                // The veil home and the name not yet arrived — the stagger's first half.
                 frozen = script.welcomeStart + script.rise
+            case "welcome":
+                // Both words up. Freezing on the veil's arrival photographs the greeting alone,
+                // because the name is on its own clock and has not started.
+                frozen = script.welcomeStart + script.rise + script.nameDelay + script.nameFade
             case "opening":
                 frozen = script.pageStart + script.rise * 0.45
                 beat = .page
@@ -157,39 +144,79 @@ struct OnboardingCover: View {
             }
             #endif
         }
-        .onDisappear { chatter.stop(); solo.stop() }
+        .onDisappear { solo.stop() }
     }
 
-    /// Beat two: the app's name, standing on the first veil so the rising edge uncovers it rather
-    /// than fading it in over the covers.
-    private var welcomeName: some View {
-        ZStack {
+    /// Beat two: the greeting and the app's name, standing on the first veil so the rising edge
+    /// uncovers them rather than fading them in over the covers — and staggered, the greeting
+    /// first and the name after it (the owner, 2026-09-18, with Queue's own welcome as the
+    /// reference: "the T2S reveal should be in staggered formation so welcome to and then T2S
+    /// fades in").
+    ///
+    /// The stagger is `WelcomeScript.nameIn`, not a transition. The veil uncovers upward and the
+    /// name sits under the greeting, so anything carried up by the veil arrives in the wrong order;
+    /// the name waits for its own clock and then rises the last few points into place as it fades.
+    private func welcomeName(_ elapsed: TimeInterval) -> some View {
+        let arrival = script.nameIn(at: elapsed)
+        return ZStack {
             Tokens.ground
-            Text("Welcome to T2S")
-                .typeRole(.pageTitle)
-                .foregroundStyle(Tokens.ink)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, Spacing.margin)
+            WelcomeWash()
+            VStack(spacing: 4) {
+                Text("Welcome to")
+                    .typeRole(.playerTitle)
+                    .foregroundStyle(Tokens.ink2)
+                Text("T2S")
+                    .font(.custom("InterDisplay-Black", size: 68))
+                    .foregroundStyle(Tokens.ink)
+                    // Up into place as it comes in, and softened on the way: a name that only
+                    // fades reads as a layer being switched on, where one that travels a little
+                    // reads as arriving. Eight points is enough to see and too few to notice.
+                    .opacity(arrival)
+                    .offset(y: 8 * (1 - arrival))
+                    .blur(radius: 5 * (1 - arrival))
+            }
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, Spacing.margin)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Welcome to T2S")
         }
     }
 
-    /// Beat three: the passage, with the voice's light and the row of voices at the crown and
-    /// Continue at the foot, each behind a fade of its own so the text dissolves under them
-    /// instead of colliding with them (the owner, 2026-09-16: "over a tall fade and there is a
-    /// bottom fade. The text moves between these two phases").
+    /// Beat three: the voices as a list, under the chosen one's rim of light (the owner,
+    /// 2026-09-18: "for the voice screen, I am thinking let us just keep a list", with Queue's
+    /// *Add Podcasts* as the reference — a title, rows that scroll under it, one key at the foot).
+    ///
+    /// The passage and its read-along are gone from here; `VoiceList` records what that cost and
+    /// what it bought. The sample still plays when a row is tapped, and `VoiceGlow` still breathes
+    /// with it, so the light at the crown is the only thing left saying a voice is sounding.
     private func page(_ insets: EdgeInsets) -> some View {
         ZStack {
             Tokens.ground
 
-            // Full-bleed, top to bottom, with no padding of its own. The crown's solid ground and
-            // the foot's cover its two ends, so the block is *cut* where the ground is opaque and
-            // *fades* on the ramps below and above that — which is what makes the words rise out
-            // of one fade and sink into the other. Padded to start below the crown instead, it
-            // scrolled up into a hard edge in clear air just under the caption.
-            ReadAlongPassage(timings: passageTimings(selectedVoice),
-                             fallback: heroBook?.passage ?? heroBook?.line ?? "",
-                             time: solo.currentTime,
-                             isFinished: hasHeard && !solo.isPlaying)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Choose a voice")
+                        .typeRole(.pageTitle)
+                        .foregroundStyle(Tokens.ink)
+                    Text("You can change it later in Settings.")
+                        .typeRole(.meta)
+                        .foregroundStyle(Tokens.ink2)
+                        .padding(.top, 6)
+                    VoiceList(voices: manifest.voices,
+                              selected: $selectedVoice,
+                              isPlaying: solo.isPlaying,
+                              onPlay: { play($0) },
+                              onStop: { solo.stop() })
+                        .padding(.top, Spacing.row)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Spacing.margin)
+                // Clear of the crown's light above and the key's fade below, so the title is never
+                // under the glow and the last row is never under the key.
+                .padding(.top, insets.top + Self.listTop)
+                .padding(.bottom, insets.bottom + Self.bottomFade)
+            }
+            .scrollIndicators(.hidden)
 
             VStack(spacing: 0) {
                 crown(insets)
@@ -197,54 +224,19 @@ struct OnboardingCover: View {
                 foot(insets)
             }
         }
-        // The whole page is the voice control (the owner, 2026-09-17: "you can swipe anywhere on
-        // the screen"). A drag rather than a tap, and with a minimum distance, so the key at the
-        // foot and Skip at the crown keep their taps; horizontal only, so a reader brushing the
-        // page vertically does not change who is reading. The passage's own scroll view is
-        // disabled and follows the voice instead, so there is nothing here to fight over.
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 24)
-                .onEnded { drag in
-                    let across = drag.translation.width
-                    guard abs(across) > abs(drag.translation.height), abs(across) > 40 else { return }
-                    step(by: across < 0 ? 1 : -1)
-                }
-        )
-        .onChange(of: selectedVoice) { _, voice in play(voice) }
     }
 
-    /// The next voice along, wrapping: with one pill on screen there is no row to run out of, and
-    /// a swipe that does nothing at the end of the list reads as a dropped gesture.
-    private func step(by delta: Int) {
-        let voices = manifest.voices
-        guard voices.count > 1, let index = voices.firstIndex(of: selectedVoice) else { return }
-        let next = ((index + delta) % voices.count + voices.count) % voices.count
-        withAnimation(.smooth(duration: 0.35)) { selectedVoice = voices[next] }
-    }
-
-    /// The crown: the voice's light, the row of voices inside it, and the tall fade that carries
-    /// the passage up under both.
     private func crown(_ insets: EdgeInsets) -> some View {
         ZStack(alignment: .top) {
             crownGround(insets)
             VoiceGlow(voice: selectedVoice,
                       voices: manifest.voices,
                       level: VoiceEnvelope(timings: passageTimings(selectedVoice)).level(at: solo.currentTime))
-            VStack(spacing: Spacing.grid) {
-                VoicePill(voice: selectedVoice,
-                          voices: manifest.voices,
-                          isFinished: hasHeard && !solo.isPlaying) { play(selectedVoice) }
-                Text("Swipe anywhere to try a voice")
-                    .typeRole(.meta)
-                    .foregroundStyle(Tokens.ink2)
-            }
-            .padding(.top, insets.top + Spacing.section + Spacing.row)
         }
     }
 
-    /// The ground the pill stands on and the passage goes under: **one** gradient, solid through
-    /// the caption and easing to nothing below it.
+    /// The ground the light stands on and the list scrolls under: **one** gradient, solid across
+    /// the status bar and the Skip pill, then easing to nothing above the first row.
     ///
     /// One, because that is the owner's band (2026-09-17: "remove the banding caused by the voice
     /// pill row"). It used to be a solid `Tokens.ground` block with a separate ramp stood under it,
@@ -308,35 +300,38 @@ struct OnboardingCover: View {
         .ignoresSafeArea()
     }
 
-    /// How far the crown's ground reaches below the safe area: solid through the pill and the
-    /// caption under it, then easing to nothing well before the middle of the screen.
-    static let crownFade: CGFloat = 330
+    /// How far the crown's ground reaches below the safe area: solid across the status bar and the
+    /// Skip pill, then easing to nothing *above* the list's title.
+    ///
+    /// It has only the Skip pill to clear, not a pill and a caption as it did when this beat was a
+    /// page of prose, so it is less than half what it was. At 240 the ramp reached 300 points down
+    /// and the title sat inside it — "Choose a voice" came out greyed at the crown, which reads as
+    /// a disabled control rather than as a heading (seen in the first photograph of the list).
+    static let crownFade: CGFloat = 120
+    /// Where the list's own content begins: clear of the ramp above, and clear of the glow's
+    /// bezel, whose mask has let go by `StatusRamp.height * 0.85`.
+    static let listTop: CGFloat = 150
     /// Taller than a bar's usual 72: the passage runs the whole height of the screen, so the ramp
     /// has to carry it out of sight well above the key (the owner, 2026-09-15: "the bottom fade
     /// should be taller").
     static let bottomFade: CGFloat = 200
 
-    /// One place the beat changes, so the audio and the flag never disagree: the chatter stops as
-    /// the name goes up, and the passage starts once the page is fully uncovered rather than while
+    /// One place the beat changes, so the audio and the flag never disagree: the passage starts
+    /// once the page is fully uncovered rather than while
     /// its veil is still travelling — a voice reading words that are half under a fade reads as a
     /// mistimed clip.
     private func advance(to next: WelcomeScript.Beat, settled: Bool) {
-        if next != beat {
-            beat = next
-            if next == .welcome { chatter.stop() }
-        }
+        if next != beat { beat = next }
         if beat == .page, settled, !solo.hasPlayed { play(selectedVoice) }
     }
 
     private func play(_ voice: String) {
-        hasHeard = false
         solo.play(passageClip(voice))
     }
 
     /// Continue writes the chosen voice as the app's default, by the id the voice picker uses for
     /// the same on-device voice; Skip leaves the default alone.
     private func finish(setDefault: Bool) {
-        chatter.stop()
         solo.stop()
         if setDefault, let option = env.voices.voices().first(where: { $0.id.hasSuffix(":\(selectedVoice)") }) {
             env.preferences.defaultVoiceID = option.id

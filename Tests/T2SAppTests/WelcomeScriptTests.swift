@@ -50,8 +50,18 @@ import Testing
         #expect(WelcomeScript.ramp(0.9) > 0.9)
     }
 
-    @Test func theReelEndsWhereTheChatterDoes() {
-        let chatter = ChatterSchedule(durations: [2, 3], fadeIn: 0.5, crossfade: 1)
-        #expect(WelcomeScript(chatter: chatter).reelEnd == chatter.chatterEnd)
+    /// The greeting rides the veil; the name arrives after it, and is fully in well before the
+    /// hold is over — otherwise the second veil would take it away mid-word.
+    @Test func theNameArrivesAfterTheVeilAndBeforeTheHoldIsOver() {
+        let script = WelcomeScript(reelEnd: 10, rise: 1, hold: 2)
+        #expect(script.nameIn(at: 11) == 0)                      // veil just home, name not yet
+        #expect(script.nameIn(at: 11 + script.nameDelay) == 0)   // and not until its delay is up
+        #expect(script.nameIn(at: 11 + script.nameDelay + script.nameFade) == 1)
+        #expect(script.nameIn(at: script.pageStart) == 1)        // whole before the page rises
+    }
+
+    @Test func theReelIsShortAndOwnsItsOwnLength() {
+        #expect(WelcomeScript().reelEnd == WelcomeScript.defaultReel)
+        #expect(WelcomeScript.defaultReel < 8)
     }
 }

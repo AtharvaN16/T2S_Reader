@@ -153,8 +153,20 @@ struct ReaderPage: View {
                 // Two kinds of animation doing one job. Tied to the same number, the ground's foot
                 // and the header's crown are the same edge on every frame: the band retracts
                 // upward and the header follows it, and no text is ever uncovered.
+                //
+                // The warm ramp, not the default 30 pt edge, and the reason is the chrome. While
+                // the title bar is up its own ground is opaque from `bandHeight` down past 112,
+                // so a 30 pt fade ends well inside it and nothing of the cut ever reaches the
+                // screen. Tap the chrome away and the bar's ground goes with it while this stays,
+                // by design — and what the reader is left with is a slab of paper ending in a
+                // straight line across the book's text. The long ramp is already what every other
+                // surface shows the veil as; here it also means the veil looks the same whether
+                // the chrome is up or not. Below the bar it costs nothing: where the bar's own
+                // ground lets go, this is down to about 5%.
                 TopFade(inset: geo.frame(in: .global).minY,
                         extra: statusBandHeight,
+                        fade: TopFade.warmFade,
+                        curve: TopFade.warmCurve,
                         colour: palette.page)
                     .opacity(statusBandHeight > 0 ? 1 : 0)
                     .animation(.easeInOut(duration: StatusGlow.leave), value: statusBandHeight)

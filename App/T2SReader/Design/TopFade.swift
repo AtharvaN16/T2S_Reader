@@ -26,6 +26,9 @@ struct TopFade: View {
     /// title dissolves under it rather than meeting an edge; see `warmFade`.
     var fade: CGFloat = fadeHeight
     static let fadeHeight: CGFloat = 30
+    /// How hard the ramp falls away from the solid band; see `shape`. `pageCurve` everywhere the
+    /// fade is a short edge on a scrolling page, `warmCurve` under the warm-up's rows.
+    var curve: Double = pageCurve
     /// The ground this paints. `Tokens.ground` is the app's, and is what every caller outside
     /// the Reader wants; the Reader passes its paper, because a band of app grey across the top
     /// of a chosen paper is the seam the owner reported on 2026-09-15.
@@ -57,10 +60,18 @@ struct TopFade: View {
     /// The solid is the band's own reach less 18, rather than a number of its own: the rows end at
     /// `StatusRows.bandHeight` below the inset, and those 18 pt are what keeps the band's hard edge
     /// off the top of a page title — stop short by less and the cut lands on the letters again. The
-    /// ramp is not derived from anything: 116 is how long it has to be to read as smooth, found by
+    /// ramp is not derived from anything: 152 is how long it has to be to read as smooth, found by
     /// eye, and it answers to the title below rather than to the band above.
+    ///
+    /// 152 and a softer curve since the owner called the foot of it "a very abrupt cutoff"
+    /// (2026-09-18). Length alone was not the answer and had already been tried: at 116 the ramp
+    /// was `pageCurve`, which spends nearly all of its fall in the middle third — measured, the
+    /// veil went from 0.85 to 0.15 in 45 pt and then trailed a long, nearly-clear tail nobody can
+    /// see. The eye reads that steep middle as the edge, and moving the tail further down does not
+    /// touch it. `warmCurve` is what flattens the middle; the extra 36 pt is what stops the
+    /// flattening from simply pulling the same drop into a shorter run.
     static let warmSolid: CGFloat = StatusRows.bandHeight - 18
-    static let warmFade: CGFloat = 116
+    static let warmFade: CGFloat = 152
 
     var body: some View {
         let solid = inset + extra
@@ -70,7 +81,7 @@ struct TopFade: View {
         // transparent. The glow is a `WarmRim` over this now (`RootPager`), which needs nothing of
         // the bar.
         colour
-            .mask(Self.shape(solidThrough: solid, fade: fade))
+            .mask(Self.shape(solidThrough: solid, fade: fade, curve: curve))
             .frame(height: height)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .ignoresSafeArea(edges: .top)
@@ -78,17 +89,34 @@ struct TopFade: View {
             .accessibilityHidden(true)
     }
 
+    /// How hard the ramp falls. The curve is mirrored smoothstep raised to this power: 1 is the
+    /// plain S, and every power above it bends the fall earlier, so the ramp lets go of the solid
+    /// faster and lands in a longer, fainter tail.
+    ///
+    /// **2 for an edge, less for a veil.** Where the ramp is a short edge on a scrolling page its
+    /// whole job is to stop a row being sliced by the status bar, and falling early is right: the
+    /// page is clear again within a few points and the content below is untouched. The warm-up's
+    /// veil is the opposite job — it is 150 pt of ground the reader looks *through*, and an early
+    /// fall puts the entire transition in one band across the middle of it. That band is what
+    /// reads as a cutoff, however long the tail underneath it runs.
+    static let pageCurve: Double = 2
+    static let warmCurve: Double = 1.6
+
     /// The bar's shape, as a mask: solid through `solidThrough`, then an eased ramp to clear over
-    /// `fade`. Smoothstep squared, mirrored — solid at the bar, zero slope into the page — so no
-    /// line shows where the fade meets the page.
-    static func shape(solidThrough: CGFloat, fade: CGFloat) -> some View {
+    /// `fade`. Mirrored smoothstep to the power of `curve` — solid at the bar, zero slope into the
+    /// page — so no line shows where the fade meets the page.
+    ///
+    /// 16 steps rather than 8: SwiftUI runs a straight line between neighbouring stops, so the
+    /// stops themselves are kinks in the curve, and halving the distance between them is what
+    /// keeps a gentler ramp from showing the approximation it is made of.
+    static func shape(solidThrough: CGFloat, fade: CGFloat, curve: Double = pageCurve) -> some View {
         let height = solidThrough + fade
         let solidEnd = solidThrough / height
-        let steps = 8
+        let steps = 16
         var stops: [Gradient.Stop] = [.init(color: .black, location: 0), .init(color: .black, location: solidEnd)]
         for i in 0...steps {
             let t = Double(i) / Double(steps)
-            let eased = pow((1 - t) * (1 - t) * (1 + 2 * t), 2)
+            let eased = pow((1 - t) * (1 - t) * (1 + 2 * t), curve)
             stops.append(.init(color: .black.opacity(eased), location: solidEnd + (1 - solidEnd) * t))
         }
         return LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom).frame(height: height)
@@ -153,6 +181,7 @@ private struct PageTopEdge: ViewModifier {
                 TopFade(inset: top,
                         extra: warming ? TopFade.warmSolid : 0,
                         fade: warming ? TopFade.warmFade : TopFade.fadeHeight,
+                        curve: warming ? TopFade.warmCurve : TopFade.pageCurve,
                         colour: colour)
                     .offset(y: -top)
                     .animation(.easeInOut(duration: StatusGlow.leave), value: warming)

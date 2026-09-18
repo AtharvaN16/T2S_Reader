@@ -163,7 +163,10 @@ public final class AudioPlayer: AudioPlaying, BedPlaying {
             }
             if isPlaying { player.play() }
         }
-        if bedBuffer != nil, bedVolume > 0, !bedPlayer.isPlaying { bedPlayer.play() }
+        // `play()` on a playing node is a no-op — no `!bedPlayer.isPlaying` guard needed, and
+        // none wanted: after the engine stops itself on a configuration change, exactly the case
+        // this line exists for, `isPlaying` cannot be trusted to already read false.
+        if bedBuffer != nil, bedVolume > 0 { bedPlayer.play() }
     }
 
     /// Manual mode: folds the output rendered so far at the current rate into the accumulator and

@@ -54,7 +54,11 @@ public final class SoundscapeModel {
     private var level: Float = SoundscapeModel.silence
     private var generation = 0
     /// Set once `tick()` has started the remembered choice's lazy load, so a recording that never
-    /// arrives (or a load still in flight) is not retried on every following tick.
+    /// arrives (or a load still in flight) is not retried on every following tick. Also set by an
+    /// explicit `choose`, which makes the remembered-load trigger moot for whatever it decides:
+    /// otherwise `choice` is set and `loaded`/`pending` are still nil for the whole of `choose`'s
+    /// await, and a tick landing in that window would start a second, redundant load of the same
+    /// soundscape.
     private var startedInitialLoad = false
 
     public init(bed: any BedPlaying, loader: any SoundscapeLoading, preferences: ReaderPreferences,
@@ -78,6 +82,7 @@ public final class SoundscapeModel {
     }
 
     private func choose(_ soundscape: Soundscape?, auditioning: Bool) async {
+        startedInitialLoad = true
         preferences.soundscapeID = soundscape?.id
         choice = soundscape
         if auditioning { audition() }

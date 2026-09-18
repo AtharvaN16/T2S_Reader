@@ -15,8 +15,6 @@ struct QueueRow: View {
     /// row used to open the Reader from either the cover's title or the pill).
     var onOpenBook: () -> Void
     var onDetails: () -> Void
-    @State private var showSleepTimer = false
-    @State private var showVoiceChange = false
     /// True only while the Play pill's own tap is resuming a paused, already-current document —
     /// the one branch that awaits playback before opening the reader, otherwise silently.
     @State private var isStarting = false
@@ -214,8 +212,6 @@ struct QueueRow: View {
             }
         }
         .contextMenu { contextItems }
-        .sheet(isPresented: $showSleepTimer) { SleepTimerSheet() }
-        .sheet(isPresented: $showVoiceChange) { VoiceChangeSheet(summary: summary) }
         .task(id: glimpseKey) { glimpse = await env.libraryModel.glimpse(for: summary) }
         // The queue publishes each chapter as it leaves, ready or failed. A failure is announced
         // by the capsule or the Live Activity, never here — there is nothing to celebrate on the
@@ -233,8 +229,9 @@ struct QueueRow: View {
             Label(summary.isFinished ? "Mark as unfinished" : "Mark as finished", systemImage: "checkmark.circle")
         }
         Button(action: onDetails) { Label("Details", systemImage: "info.circle") }
-        Button { showSleepTimer = true } label: { Label("Sleep timer", systemImage: "moon.zzz") }
-        Button { showVoiceChange = true } label: { Label("Change voice", systemImage: "person.wave.2") }
+        // No sleep timer and no voice here (owner, 2026-09-18). Both are about the listening
+        // rather than the book, and both already live where the listening is — the Reader's own
+        // menu and the player — so on Home they were two rows between a book and what to do with it.
         // The book's resume chapter — chapter 1 if it has never been played — without loading it.
         // The `load` this used to do made pressing "Render chapter" on a book you were not
         // listening to silently make it your current book (chapter-rendering design, "Entry points").

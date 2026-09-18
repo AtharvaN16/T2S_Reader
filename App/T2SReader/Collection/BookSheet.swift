@@ -283,6 +283,13 @@ struct BookSheet: View {
     private var bookMenu: some View {
         Menu {
             Button { showBookmarks = true } label: { Label("Bookmarks", systemImage: "bookmark") }
+            // The one place a finished book can be unfinished from wherever it is (owner,
+            // 2026-09-18). Finishing takes a book off Home — that is the point of it — so the row
+            // that offered "Mark as finished" is gone the moment it is pressed, and the book's own
+            // sheet is the surface that is still there to take it back.
+            Button { Task { await env.libraryModel.markFinished(live.id, !live.isFinished) } } label: {
+                Label(live.isFinished ? "Mark as unfinished" : "Mark as finished", systemImage: "checkmark.circle")
+            }
             Button(role: .destructive) { confirmDelete = true } label: { Label("Delete", systemImage: "trash") }
         } label: {
             CircleGlyph(systemName: "ellipsis")

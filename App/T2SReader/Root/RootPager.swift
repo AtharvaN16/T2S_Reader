@@ -326,6 +326,12 @@ struct RootPager: View {
                 env.prepareRunner.cancel()
                 persistUnderBackgroundTask()
                 if env.deviceMonitor.deviceState.charging { PrepareTask.schedule() }
+                // A pause made right as the screen locks can lose the race with the `onChange`/ticker
+                // publish that would otherwise carry it to the Lock Screen — this transition is
+                // guaranteed to run before the process suspends, so it is the last safe point to make
+                // sure the Lock Screen isn't left showing a stale playing state (`update()` no-ops if
+                // nothing changed).
+                env.nowPlaying.update()
             default:
                 break
             }

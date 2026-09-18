@@ -1,15 +1,24 @@
 // App/T2SReader/System/AudioSessionController.swift
 import AVFoundation
 import Foundation
+import Observation
 import os
+import T2SApp
 
 /// Spec §3.5. Activates the spoken-audio playback session, pauses on interruptions (a call,
 /// another app taking the output) and when headphones are unplugged, and — the half that keeps
 /// playback alive — reactivates the session when the interruption ends, resuming only what the
 /// interruption itself stopped.
+///
+/// Also says where the sound is going: `castingTo` is the AirPlay or Bluetooth device the route
+/// currently ends at, read again on every route change, so the Reader's header can say so.
 @MainActor
+@Observable
 final class AudioSessionController {
     private static let log = Logger(subsystem: "com.t2s.reader", category: "audio")
+    /// The device the book is casting to, or nil while it plays on the phone or through a wire.
+    /// The system's own AirPlay picker (`RoutePickerView`) changes the route; this only reports it.
+    private(set) var castingTo: String?
     private var observers: [NSObjectProtocol] = []
     /// `.onAppear` can fire more than once for a `WindowGroup`'s root; registering twice would
     /// deliver every notification twice.
@@ -25,6 +34,7 @@ final class AudioSessionController {
         started = true
         let session = AVAudioSession.sharedInstance()
         configureAndActivate(session)
+        readRoute(session)
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: session, queue: .main) { note in
             let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
@@ -37,7 +47,10 @@ final class AudioSessionController {
         })
         observers.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: session, queue: .main) { note in
             let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
-            if raw == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { MainActor.assumeIsolated { _ = pause() } }
+            MainActor.assumeIsolated {
+                if raw == AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue { _ = pause() }
+                self.readRoute(session)
+            }
         })
         observers.append(center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: session, queue: .main) { _ in
             MainActor.assumeIsolated { self.mediaServicesWereReset(session, recovering: recover) }
@@ -76,6 +89,13 @@ final class AudioSessionController {
     /// session first, then hand recovery to the coordinator, its sole playback owner.
     private func mediaServicesWereReset(_ session: AVAudioSession, recovering recover: @MainActor () -> Void) {
         configureAndActivate(session)
+        readRoute(session)
         recover()
+    }
+
+    private func readRoute(_ session: AVAudioSession) {
+        let outputs = session.currentRoute.outputs.map { CastRoute.Output(kind: $0.portType.rawValue, name: $0.portName) }
+        let device = CastRoute.castingTo(outputs)
+        if device != castingTo { castingTo = device }
     }
 }

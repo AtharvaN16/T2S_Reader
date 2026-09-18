@@ -20,6 +20,7 @@ struct ReaderPage: View {
     @State private var showSleepTimer = false
     @State private var showVoiceChange = false
     @State private var showDetails = false
+    @State private var showCast = false
     @State private var voiceName = "Voice"
     /// Where the book proper starts, for the "Skip to Chapter 1" pill; nil when there is no front
     /// matter to skip. Read once per document in `open`.
@@ -245,6 +246,7 @@ struct ReaderPage: View {
         .sheet(isPresented: $showDetails) {
             if let current = env.player.current { DetailsSheet(summary: current) }
         }
+        .sheet(isPresented: $showCast) { CastSheet(wearsPaper: true) }
         .sheet(item: $noteTarget) { entry in
             if let current = env.player.current {
                 BookmarkNoteSheet(summary: current, entry: entry,
@@ -265,14 +267,42 @@ struct ReaderPage: View {
     /// visibly fades into the text (the first cut faded within the bar alone and read as no fade
     /// at all).
     private var topBar: some View {
-        ZStack {
-            Text(summary.document.title)
-                .typeRole(.pill)
-                .foregroundStyle(palette.ink)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity)
+        let castingTo = env.audioSession.castingTo
+        return ZStack {
+            // While the book is casting, the title's slot says where to instead (owner, 2026-09-18):
+            // the header is the one area the listener is not reading while the sound is on a
+            // speaker across the room, and the Reader has floating pills enough. A capsule, so it
+            // reads as something to tap — it reopens the Cast sheet — where the title does not.
+            if let castingTo {
+                Button { showCast = true } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "airplayaudio")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Casting to \(castingTo)")
+                            .typeRole(.pill)
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(palette.ink)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(palette.surface, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Tokens.edge, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
                 .padding(.horizontal, 60)                                  // clear of one circle each side
-                .accessibilityAddTraits(.isHeader)
+                .accessibilityLabel("Casting to \(castingTo)")
+                .accessibilityHint("Opens the AirPlay picker")
+                .transition(.opacity)
+            } else {
+                Text(summary.document.title)
+                    .typeRole(.pill)
+                    .foregroundStyle(palette.ink)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 60)                              // clear of one circle each side
+                    .accessibilityAddTraits(.isHeader)
+                    .transition(.opacity)
+            }
             HStack {
                 icon("chevron.left", "Back") { dismiss() }
                 Spacer()
@@ -282,6 +312,7 @@ struct ReaderPage: View {
                     Button { showAppearance = true } label: { Label("Preferences", systemImage: "slider.horizontal.3") }
                     Button { showVoiceChange = true } label: { Label("Change voice", systemImage: "person.wave.2") }
                     Button { showSleepTimer = true } label: { Label("Sleep timer", systemImage: "moon.zzz") }
+                    Button { showCast = true } label: { Label("Cast", systemImage: "airplayaudio") }
                     Button { showDetails = true } label: { Label("Details", systemImage: "info.circle") }
                     Button(action: renderThisChapter) {
                         Label(env.player.chapters.count > 1 ? "Render chapter" : "Render whole document", systemImage: "waveform")
@@ -295,6 +326,7 @@ struct ReaderPage: View {
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.2), value: castingTo)
         .padding(.horizontal, Spacing.margin)
         .padding(.top, 2 * Spacing.grid)
         .padding(.bottom, 2 * Spacing.grid)                                  // a taller band, at the owner's ask
@@ -648,11 +680,14 @@ struct ReaderPage: View {
     }
 
     /// "Chapter title ▾" on the left opens the chapter list (after the reference the owner sent,
-    /// 2026-09-09). Hidden for a document with one chapter or none — an article has nothing to pick.
+    /// 2026-09-09). Hidden for a document with one chapter or none — an article has nothing to pick
+    /// — and while the book is casting, when the header's pill has taken the title's and the
+    /// chapter's place together (owner, 2026-09-18); the overflow's "Chapters" still opens the list.
     @ViewBuilder private var chapterRow: some View {
         let player = env.player
         let chapters = player.chapters
-        if chapters.count > 1, let index = scrubChapter ?? player.chapterIndex, chapters.indices.contains(index) {
+        if chapters.count > 1, env.audioSession.castingTo == nil,
+           let index = scrubChapter ?? player.chapterIndex, chapters.indices.contains(index) {
             HStack {
                 Button { showChapters = true } label: {
                     // The chevron stands 8 pt off the title, centred on its height, in `ink` like

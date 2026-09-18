@@ -42,6 +42,23 @@ import Testing
         #expect(!ReaderPreferences(defaults: defaults).sleepsAtChapterEnd)
     }
 
+    /// The Reader-wide soundscape (soundscape design §4.2): off until chosen, 0.4 on the slider.
+    @Test func theSoundscapeIsRememberedAndTheVolumeClamps() {
+        let defaults = fresh()
+        let first = ReaderPreferences(defaults: defaults)
+        #expect(first.soundscapeID == nil && first.soundscapeVolume == 0.4)
+        first.soundscapeID = "rain"
+        first.soundscapeVolume = 0.7
+        let again = ReaderPreferences(defaults: defaults)
+        #expect(again.soundscapeID == "rain" && again.soundscapeVolume == 0.7)
+        again.soundscapeVolume = 3
+        #expect(again.soundscapeVolume == 1)
+        again.soundscapeID = nil
+        #expect(ReaderPreferences(defaults: defaults).soundscapeID == nil)
+        again.reset()
+        #expect(ReaderPreferences(defaults: defaults).soundscapeVolume == 0.4)
+    }
+
     @Test func scopeFlipsToTheOther() {
         #expect(ScrubberScope.book.other == .chapter)
         #expect(ScrubberScope.chapter.other == .book)

@@ -25,6 +25,10 @@ public final class SleepTimer {
     /// names it. Nil for a timed sleep.
     public var sleepChapterTitle: String? { chapterTitleAtStart }
 
+    /// Called once when the timer stops the voice — after the pause, never on a cancel — so the
+    /// soundscape can take its twenty seconds to go (soundscape design §4.2).
+    public var onFire: (() -> Void)?
+
     private var chapterAtStart: Int?
     private var chapterTitleAtStart: String?
 
@@ -103,5 +107,6 @@ public final class SleepTimer {
             player.coordinator.pause()
         }
         cancel()
+        onFire?()
     }
 }

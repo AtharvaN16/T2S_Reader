@@ -66,4 +66,25 @@ import T2SStore
         timer.tick()
         #expect(timer.active == nil)
     }
+
+    /// The soundscape lingers after the timer, so the timer says when it fires — once, and not
+    /// on a cancel.
+    @Test func firingIsAnnouncedOnceAndCancelIsNot() async throws {
+        let fixtures = try AppFixtures()
+        let id = try await fixtures.importFake()
+        let player = try makePlayer(fixtures)
+        await player.load(try #require(try await fixtures.store.summary(id: id)), play: true)
+        let clock = Clock()
+        let timer = SleepTimer(player: player) { clock.now }
+        var fired = 0
+        timer.onFire = { fired += 1 }
+        timer.start(.minutes(1))
+        timer.cancel()
+        #expect(fired == 0)
+        timer.start(.minutes(1))
+        clock.advance(61)
+        timer.tick()
+        timer.tick()
+        #expect(fired == 1 && !player.isPlaying)
+    }
 }

@@ -89,6 +89,8 @@ public final class ReaderPreferences {
         static let sleepAtChapterEnd = "sleep.atChapterEnd"
         static let voice = "voice.default"
         static let favoriteVoices = "voice.favorites"
+        static let soundscape = "soundscape.id"
+        static let soundscapeVolume = "soundscape.volume"
     }
 
     public var textScale: Double {
@@ -179,6 +181,20 @@ public final class ReaderPreferences {
         didSet { defaults.set(sleepsAtChapterEnd, forKey: Key.sleepAtChapterEnd) }
     }
 
+    /// The Reader-wide soundscape (soundscape design §4.2): the bed's id, nil for Off.
+    public var soundscapeID: String? {
+        didSet { defaults.set(soundscapeID, forKey: Key.soundscape) }
+    }
+
+    /// The bed's volume, 0…1; 0.4 is −24 dB under the voice.
+    public var soundscapeVolume: Double {
+        didSet {
+            let clamped = min(1, max(0, soundscapeVolume))
+            if soundscapeVolume != clamped { soundscapeVolume = clamped }
+            defaults.set(soundscapeVolume, forKey: Key.soundscapeVolume)
+        }
+    }
+
     /// nil = the engine's language default ("default" in render keys).
     public var defaultVoiceID: String? {
         didSet { defaults.set(defaultVoiceID, forKey: Key.voice) }
@@ -217,6 +233,8 @@ public final class ReaderPreferences {
         autoplayNext = defaults.object(forKey: Key.autoplay) as? Bool ?? true
         sleepMinutes = SleepDial.snapped(defaults.object(forKey: Key.sleepMinutes) as? Int ?? SleepDial.defaultMinutes)
         sleepsAtChapterEnd = defaults.object(forKey: Key.sleepAtChapterEnd) as? Bool ?? false
+        soundscapeID = defaults.string(forKey: Key.soundscape)
+        soundscapeVolume = min(1, max(0, defaults.object(forKey: Key.soundscapeVolume) as? Double ?? 0.4))
         defaultVoiceID = defaults.string(forKey: Key.voice)
         favoriteVoiceIDs = Set(defaults.stringArray(forKey: Key.favoriteVoices) ?? [])
         prepareBudgetSeconds = defaults.object(forKey: AppPaths.prepareBudgetKey) as? Double ?? 3 * 3600
@@ -238,6 +256,8 @@ public final class ReaderPreferences {
         autoplayNext = true
         sleepMinutes = SleepDial.defaultMinutes
         sleepsAtChapterEnd = false
+        soundscapeID = nil
+        soundscapeVolume = 0.4
         defaultVoiceID = nil
         favoriteVoiceIDs = []
         prepareBudgetSeconds = 3 * 3600

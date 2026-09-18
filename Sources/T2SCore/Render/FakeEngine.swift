@@ -24,6 +24,8 @@ public actor FakeEngine: SynthesisEngine {
     /// rather than parking.
     private var pieceReleases = 0
     public private(set) var requests: [SynthesisRequest] = []
+    /// The task priority each `synthesize` ran at, in order — what the scheduler's tiers ask for.
+    public private(set) var observedPriorities: [TaskPriority] = []
     /// The requests that came through `synthesizeStreaming`, in order — which utterances a plan
     /// asked for in pieces.
     public private(set) var streamedRequests: [SynthesisRequest] = []
@@ -70,6 +72,7 @@ public actor FakeEngine: SynthesisEngine {
     public func synthesize(_ request: SynthesisRequest) async throws -> SynthesisResult {
         while held { await withCheckedContinuation { parked.append($0) } }
         requests.append(request)
+        observedPriorities.append(Task.currentPriority)
         if failures.contains(request.spoken) { throw SynthesisError.failed(request.spoken) }
         let rate = PCMAudio.defaultSampleRate
         let sampleCount = Int((Double(request.spoken.utf16.count) * secondsPerCharacter * rate).rounded())

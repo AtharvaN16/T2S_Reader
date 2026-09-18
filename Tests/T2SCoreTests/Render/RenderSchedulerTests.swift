@@ -333,6 +333,23 @@ import Testing
         _ = await events
         #expect(await s.measuredRTF == nil)                                // nothing learned from that batch
     }
+
+    /// The play-ahead tier is what the listener is waiting on and renders at the UI's own
+    /// priority; every other tier — the fill, a prime, Prepare, a chapter by hand — runs a step
+    /// under it, so a fill in progress yields the cores to a scroll or the read-along.
+    @Test func playAheadRendersAtUserInitiatedAndTheRestUnderIt() async throws {
+        let engine = FakeEngine(secondsPerCharacter: 0.1)
+        let s = RenderScheduler(engine: engine, store: InMemoryAudioStore(codec: RawPCMCodec(), capacityBytes: 10_000_000),
+                                timeSource: ManualTimeSource())
+        async let events = collect(s)
+        let fill = RenderRequest(job: RenderJob(documentID: doc, utteranceIndex: 1, tier: .chapterAhead),
+                                 key: key(1), spoken: "def", voiceID: "v", stream: false)
+        let prepare = RenderRequest(job: RenderJob(documentID: doc, utteranceIndex: 2, tier: .prepare),
+                                    key: key(2), spoken: "ghi", voiceID: "v", stream: false)
+        await s.setPlan([request(0, "abc"), fill, prepare])
+        _ = await events
+        #expect(await engine.observedPriorities == [.userInitiated, .medium, .medium])
+    }
 }
 
 @Suite struct RenderSchedulerPacingTests {

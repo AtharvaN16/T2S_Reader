@@ -122,7 +122,10 @@ public actor RenderScheduler {
         pending = requests
         if !running {
             running = true
-            Task { await self.run() }
+            // A step under the UI's own priority: started from the main actor the loop inherited
+            // user-initiated, and Core ML's threads under it ran the fill at the same standing as
+            // a scroll or the read-along. The head is raised back per batch (`priority(for:)`).
+            Task(priority: .medium) { await self.run() }
             return true
         }
         return false
@@ -141,7 +144,11 @@ public actor RenderScheduler {
             guard !isPausedForStorage, !pending.isEmpty else { break }
             let batch = takeBatch()
             var paused = false
-            for outcome in await render(batch) {
+            // The whole batch — the lease, the cache reads, the synthesis, the write — at its
+            // tier's priority, raised for the head the listener is waiting on.
+            let priority = Self.priority(for: batch[0].job.tier)
+            let outcomes = await Task(priority: priority) { await self.render(batch) }.value
+            for outcome in outcomes {
                 switch outcome {
                 case .events(let events):
                     events.forEach { continuation.yield($0) }
@@ -156,6 +163,15 @@ public actor RenderScheduler {
         }
         running = false
         continuation.yield(.idle)
+    }
+
+    /// What a tier renders at. Play-ahead is the sound the listener is waiting for and runs at the
+    /// UI's own priority; every other tier — the fill, a prime, Prepare, a chapter by hand — is
+    /// work for later and runs a step under it, so it yields the cores to a scroll and never to an
+    /// efficiency core alone: `.medium` is the default class, still eligible for the fast cores,
+    /// where `.utility` would slow the render and depress the measured RTF the rate limits read.
+    static func priority(for tier: RenderTier) -> TaskPriority {
+        tier == .playAhead ? .userInitiated : .medium
     }
 
     /// Up to the engine's width for the first request's voice, from the front of `pending`, and

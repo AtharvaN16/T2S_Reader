@@ -51,6 +51,25 @@ the header's menu, eight sheets — re-bodies at 10 Hz on `elapsed`; lift it int
 first play* rather than at launch was skipped: no measurement here, and the class's reset path
 assumes a graph exists. The 2026-09-08 audit's remaining open items (§2's list) still stand.
 
+
+## Soundscapes under the narration (2026-09-18)
+
+Design: `docs/superpowers/specs/2026-09-18-soundscapes-design.md`; plan:
+`docs/superpowers/plans/2026-09-18-soundscapes.md`. A soft ambient bed under the voice — six CC0
+recordings (Rain, Fire, Ocean, Stream, Forest, Night; `scripts/fetch-soundscapes.sh` fetches them
+from the ambiently repository at a pinned commit, no key) and two noises made in code (Brown, Pink)
+— as a Reader-wide setting: the last part of the Reader's Preferences sheet (`SoundscapePicker`),
+with a row under the sleep sheet's switch opening the same picker alone (`SoundscapeSheet`).
+
+`AudioPlayer` carries the bed as a second node straight into the mixer (`BedPlaying`), looping one
+mono buffer whose seam (`LoopSeam`) and loudness (`Loudness`) are baked at load
+(`BundleSoundscapeLoader`). `SoundscapeModel` follows the voice through the ticker: up while the
+book plays, down when it pauses, an eight-second audition after a tap, a twenty-second linger after
+the sleep timer (`SleepTimer.onFire`). Levels are decibels until the player's door. Off by default;
+choice and volume in `ReaderPreferences` (`soundscapeID`, `soundscapeVolume`).
+
+**Not done, by design (spec §8):** mixing beds, per-book choices, a bed that outlives the book,
+stereo, an overflow item, a copy in Settings' Appearance sheet.
 ## The sleep timer is a ruler and a switch (2026-09-18)
 
 `SleepTimerSheet` was redrawn after the owner's reference (Tide's focus sheet): one large value,

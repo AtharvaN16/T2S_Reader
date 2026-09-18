@@ -229,6 +229,15 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: $(T2S_BUNDLE_ID).activities
         INFOPLIST_KEY_CFBundleDisplayName: t2s
         CODE_SIGN_ENTITLEMENTS: T2SReaderActivities/T2SReaderActivities.entitlements
+        CODE_SIGN_STYLE: Automatic
+    # The app and the Share Extension have had these two lines since the team moved out of
+    # `project.pbxproj`; this target never did, so it alone came back with Team: None after every
+    # `xcodegen generate` — that is, after every build-script run — and had to be set by hand in
+    # Signing & Capabilities again (owner, 2026-09-18). A target only sees `Local.xcconfig` if it
+    # is named here: the project-level `configFiles` above belongs to the `T2SReaderApp` template.
+    configFiles:
+      Debug: Local.xcconfig
+      Release: Local.xcconfig
     info:
       path: T2SReaderActivities/Info.plist
       properties:

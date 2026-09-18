@@ -7,6 +7,50 @@ older and dated as marked. The dated per-session entries that used to stack here
 for the lot, `git log` for the rest), and what mattered from them lives in `crashreport.md`,
 `docs/research/` and the specs._
 
+## Smoothness pass (2026-09-18)
+
+A desk audit of what was left after the 2026-09-08 performance audit and Plans 13–17, then the
+fixes, six commits from `61f18f2` to `c9bf84a`, all verified (357 package tests green; the
+Simulator scheme builds; the glow photographed before and after). None changes what the app
+draws; each removes work nobody could see:
+
+- **A rendered sentence no longer walks the book on the main actor.** `Timeline.chapterStarts`
+  (derived, kept in step with `chapters`, never encoded) makes a chapter's range a lookup and the
+  chapter of an utterance a binary search; `TimeIndex.replacingDuration` shifts the prefix sums
+  after the one utterance that moved; the coordinator keeps the count behind `isFullyRendered`
+  and the player model reads that Bool; a load hashes a render key only where there is a
+  reference to check it against.
+- **The fill renders at `.medium`, the head at `.userInitiated`.** `RenderScheduler.priority(for:)`.
+  `.utility` was rejected on purpose: it can land on the efficiency cores, and a slow fill
+  depresses the measured RTF the rate limits read. `FakeEngine.observedPriorities` is the test's
+  window. Watch for "catching up" on a hot A13 during a fill; the head is unaffected.
+- **Covers.** `Artwork.image(at:)` decodes through ImageIO's thumbnail path at 720 px on the long
+  side (the largest slot, the Collection's 240 pt preview, at 3x), proportions preserved, never
+  scaled up, with a cost ceiling on the cache; an EPUB cover is stored capped at 1,200 px at
+  import. The one cover on this Mac's simulator measured 500 × 714, so the premise (publishers'
+  1,500 px originals) is not yet seen here — measure a real library before assuming the gain.
+- **The warm-up's rims** tick at 30 fps and the bezel's frame is 1.5 × the ramp, not 3 ×. Pixel-
+  compared on the simulator under `T2S_WARMUP=1`: old against new differs by exactly what two
+  runs of the same build differ by (the dither tile is random per launch, delta ≤ 15).
+- **`RootPager`** reads `player.elapsed` only while paused (the audit's last open UI item), and
+  the two `player.state` observers are one.
+- **`SystemVoiceCatalog`** asks the speech daemon once and drops the cache on
+  `availableVoicesDidChangeNotification`; the Now Playing artwork cache is eight entries.
+
+**Left undone, on purpose.** *The welcome* (`OnboardingCover`): its `TimelineView(.animation)`
+keeps the 24 blurred covers of the reel moving under the opaque sign-up, referral and paywall
+pages, and under the second veil once the page beat is home — pause it with
+`.animation(paused:)` once `step != .scene`, or once `elapsed >= script.pageSettled` and no sample
+plays (the crown's rim breathes with the sample). Not touched because another session was
+redesigning the flow while this ran (`019de51` landed meanwhile); do it after the redesign
+settles. *`ReaderPage`'s bottom bar* is a computed property, so the whole page — the text view,
+the header's menu, eight sheets — re-bodies at 10 Hz on `elapsed`; lift it into its own `View`
+(the file was another session's, uncommitted, during this pass). *The read-along fade's per-word
+`collapseRead`* looked redundant beside its own comment, but `eb5c1df` did it on purpose
+(two runs and the fading word, whatever the hour) — leave it. *Building the audio engine on
+first play* rather than at launch was skipped: no measurement here, and the class's reset path
+assumes a graph exists. The 2026-09-08 audit's remaining open items (§2's list) still stand.
+
 ## Onboarding rebuilt in three beats: the reel, the name, the page (2026-09-16)
 
 Design: `docs/superpowers/specs/2026-09-16-onboarding-reel-welcome-page-design.md`, which supersedes

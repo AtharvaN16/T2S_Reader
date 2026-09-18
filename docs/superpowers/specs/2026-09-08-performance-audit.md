@@ -64,6 +64,13 @@ buckets are pinned, staged and vended (+~250 MB of bundle; the weights are byte-
 plans are not). #12: the OOV cache needs an upstream MisakiSwift hook (the fallback is private);
 the overlap and the encode wait for §8. #14: nothing to do at launch; the BART port is its own project.
 
+**Progress (2026-09-18 smoothness pass):** the rest of #7 — `RootPager` no longer watches
+`elapsed` while playing; a `.rendered` event shifts the time index and a count rather than
+rebuilding both (`Timeline.chapterStarts`, `TimeIndex.replacingDuration`,
+`PlaybackCoordinator.isFullyRendered`); the fill renders at `.medium` with the head at
+`.userInitiated`; covers decode at display size; the warm-up's rims tick at 30 fps. Details and
+what was left in `docs/HANDOFF.md`.
+
 | # | Recommendation | Listener-visible effect | Effort | Section |
 |---|---|---|---|---|
 | 1 | Ship the phone build as **Release** (`run: config: Release` on the Phone scheme; xcodegen regenerates the scheme, so the by-hand flip in HANDOFF does not stick) | every Swift-side stage (hn-NSF DSP, seam/tail-click scans, crossfade, tokenizer, segmentation, TextKit) runs `-O` instead of `-Onone`; the measured RTF 0.18 was a Release harness | S | §6.1 |

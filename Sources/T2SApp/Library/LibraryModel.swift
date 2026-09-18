@@ -209,7 +209,7 @@ public final class LibraryModel {
     public func move(_ id: UUID, to index: Int) async { await perform { try await self.library.store.moveInQueue(id, to: index) } }
 
     /// How many books Home keeps under Continue Listening.
-    public static let recentLimit = 3
+    public static let recentLimit = 4
 
     /// Home is the books played most recently, latest first, at most `recentLimit` of them (owner's
     /// rule, 2026-09-09: there is no queue a reader manages). Called when playback starts: the book
@@ -236,6 +236,15 @@ public final class LibraryModel {
     /// Finished leaves the Queue; un-finishing puts the document back at the end (spec §2.4.5 context menu).
     public func markFinished(_ id: UUID, _ finished: Bool) async {
         await perform { try await self.library.store.finish(id, finished) }
+    }
+
+    /// Renames a document in place — the title alone; nothing else about it changes.
+    public func rename(_ id: UUID, to title: String) async {
+        await perform {
+            guard var document = try await self.library.store.document(id: id) else { return }
+            document.title = title
+            try await self.library.store.update(document)
+        }
     }
 
     public func delete(_ id: UUID, everywhere: Bool = false) async { await perform { try await self.library.delete(id, everywhere: everywhere) } }

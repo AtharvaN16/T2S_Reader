@@ -9,18 +9,21 @@ focus sheet ("Ocean · Soundscape" under the timer); the layout is borrowed, the
 
 ## 1. What it does
 
-- The Reader's overflow gains **Soundscape**, which opens a sheet: nine tiles — Off, Rain, Fire,
-  Ocean, Stream, Forest, Night, Brown noise, Pink noise — and a Volume slider. Tapping a tile
-  chooses it and plays it at once, so the choice is heard while the sheet is open, even with the
-  book paused.
+- **A Reader-wide setting** (owner, 2026-09-18: "not just restricted to the sleep timer"). The
+  Reader's Preferences sheet gains a third part after how the book looks and what it does: how it
+  sounds — "Soundscape", a wrapping row of nine pills (Off, Rain, Fire, Ocean, Stream, Forest,
+  Night, Brown noise, Pink noise) and a Volume slider under them. Tapping a pill chooses it and
+  plays it at once for a few seconds if the book is paused, so the choice is heard where it is made.
 - The sleep sheet shows the choice under its switch — "Soundscape · Rain" with a chevron — and
-  opens the same sheet.
+  opens the same picker on its own sheet.
 - **The bed follows the voice.** It fades in when the book plays and out when it pauses, whether
   the pause is the listener's, an interruption's, or the end of the document. It never plays on
   its own, except while the Soundscape sheet is open (the audition) and for twenty seconds after
   the sleep timer stops the voice (the linger), so the room does not fall silent the instant the
-  reading does.
-- The choice and the volume are remembered across books and launches. Off by default.
+  reading does. The audition is the third exception: eight seconds after a tap on a pill or a
+  move of the slider while the book is paused, extended by each further tap, then a fade.
+- The choice and the volume are remembered across books and launches. Off by default. One
+  setting for the whole Reader, not per book.
 - Speed does not change it; the bed does not pass through the time-pitch unit.
 - The simulator's `T2S_SILENT=1` silences it, as it silences the voice.
 
@@ -45,8 +48,16 @@ Each was made so the work could proceed; any of them can be flipped in review.
    and no audio editing is ever needed. All beds are normalised to the same loudness at load, so
    the one Volume slider means the same for Rain as for Fire.
 5. **Mono.** Halves memory and bundle size; at −24 dB under a voice, stereo width is not heard.
-6. **The sheet lives in the Reader**, not in Preferences: like speed, it is about this listening,
-   and its audition needs the book's engine.
+6. **It is a setting of the Reader's Preferences sheet** — the owner's call (2026-09-18), replacing
+   a first draft that hung it off the overflow and the sleep sheet. The sheet already divides into
+   how the book looks and what it does; the soundscape is how it sounds, and it takes the place a
+   reader would look for it. The sleep sheet keeps a row for it because the reference put one
+   there and it is where a bed is most wanted; that row opens the same picker, not a second one.
+   Settings' "Appearance" copy of the sheet (`showsReaderControls: false`) does not show it, by
+   the sheet's own rule: nothing about a book being read appears where no book is.
+7. **The audition is a window, not a mode.** A bed that started the moment the Preferences sheet
+   opened would play rain at a reader who came to change the type size. Eight seconds after a
+   tap, then out, is enough to hear a choice and never a surprise.
 
 ## 3. Approaches considered
 
@@ -131,11 +142,13 @@ loop decodes in well under a second and lives in about 5 MB.
 
 `SoundscapeModel` (`@MainActor`, `@Observable`) owns the behaviour:
 - `choice: Soundscape?` and `volume: Double` (0…1), both written through to `ReaderPreferences`.
-- `isAuditioning: Bool`, set by the sheet on appear and cleared on disappear.
+- `audition()`, called by the picker on every tap and slider move: sets `auditionUntil` eight
+  seconds from now (the injected clock). The bed is wanted while `now < auditionUntil`, whatever
+  the voice is doing.
 - `linger()`, called by the sleep timer when it stops the voice: the bed fades over 20 s instead of
   1.5 s. A play before it ends cancels it.
 - `tick()` from `PlaybackTicker`, next to `sleepTimer.tick()`: the wanted gain is `volume`'s gain
-  while the voice plays or the sheet auditions, else zero; the ramp towards it runs at 20 Hz in
+  while the voice plays or the audition window is open, else zero; the ramp towards it runs at 20 Hz in
   its own short task for as long as a ramp is in flight (the ticker is 1 Hz while paused, too
   slow for a fade), driven by an injected clock so tests do not wait.
 - Changing the choice: fade out over 0.8 s, `setBed(newLoop)`, fade in over 1.5 s. Choosing Off
@@ -158,19 +171,27 @@ Double` (`soundscape.volume`, default 0.4, clamped to 0…1), both reset by `res
 coordinator's initialiser). It sets
 `sleepTimer.onFire` to the model's `linger()`, and `PlaybackTicker` calls `soundscape.tick()`.
 
-**`SoundscapeSheet`** (`App/T2SReader/Player/`), a Reader sheet wearing the paper like the sleep
-sheet: a glyph (`cloud.rain`, `ink3`) over the title "Soundscape" in the section-header role; a
-3 × 3 `LazyVGrid` of tiles on one `surface` card, each a glyph over its name, the chosen one the
-`.selected` chip's ink slab (the form the sleep sheet's tiles had until today); under the card,
-"Volume" in the meta role over a `Slider` tinted `ink`, dimmed to 0.3 and disabled while Off;
-under that, one meta line: "Plays softly under the voice while the book is read." No key: a tap
-is the choice, and closing the sheet is done. Detent as the content asks, about the sleep sheet's.
+**`SoundscapePicker`** (`App/T2SReader/Preferences/`), one view with two hosts. "Soundscape" in
+the meta role, `ink2`, as the sheet's other parts are labelled; under it a wrapping row of
+capsule pills in the paper's own colours — the `modePill` the sheet already draws for light and
+dark, each with its glyph and name, the chosen one `ink` on the page, Off first — laid out by the
+app's `FlowRow` layout; under the pills, "Volume" in the meta role over a `Slider` tinted `ink`
+(the text-size slider's form), dimmed to 0.3 and disabled while Off; under that, one fine line:
+"Plays softly under the voice while the book is read." A tap is the choice; there is no key.
+Every tap and slider move calls `soundscape.audition()`.
+
+**`ReaderPreferencesSheet`**: the picker is the sheet's last part, after the two switches, only
+when `showsReaderControls` is on. The sheet already scrolls and pulls to large.
+
+**`SoundscapeSheet`** (`App/T2SReader/Player/`): the picker alone on a Reader sheet wearing the
+paper, for the sleep sheet's row — a glyph (`cloud.rain`, `ink3`) over the title "Soundscape" in
+the section-header role, the picker under it, a detent as the content asks.
 
 **`SleepTimerSheet`**: the switch's slab becomes a two-row group — the switch, a hairline, then a
 row "Soundscape" with the choice's title (or "Off") in `ink2` and a `RowChevron`, which presents
 `SoundscapeSheet` over the sleep sheet. The detent grows to fit, measured on the simulator.
 
-**`ReaderPage`**: a "Soundscape" item in the overflow menu after "Sleep timer", `cloud.rain`.
+**`ReaderPage`**: no new overflow item; Preferences is the door.
 
 ### 4.4 The content pipeline
 
@@ -200,7 +221,7 @@ row "Soundscape" with the choice's title (or "Off") in `ink2` and a `RowChevron`
   and behaves as Off; the tile still shows, so a developer sees the gap.
 - **Background**: nothing new. The engine already runs after the first play; a bed at zero
   volume has its node paused and adds nothing.
-- **VoiceOver**: each tile is a button with its title and the selected trait; the slider is a
+- **VoiceOver**: each pill is a button with its title and the selected trait; the slider is a
   slider named Volume; the sleep sheet's row reads "Soundscape, Rain, button".
 
 ## 6. Tests
@@ -220,7 +241,8 @@ T2SApp:
 - `SoundscapeModelTests` with a `FakeBed: BedPlaying` (in T2SAppTests, ten lines) that records
   `bedLoops` and `bedVolumes`:
   choose → loop set; voice plays → volume ramps to the mapped gain over 1.5 s; pause → to zero;
-  auditioning holds it up while paused; `linger()` takes 20 s; a play cancels the linger; changing
+  an audition holds it up for eight seconds while paused and each tap extends it; `linger()`
+  takes 20 s; a play cancels the linger; changing
   the choice fades out, swaps, fades in; Off drops the loop after the fade; the volume slider moves
   the gain while playing; preferences persist.
 - `SoundscapeCatalogTests`: ids unique, every recording's resource name is `soundscape-<id>`,
@@ -237,8 +259,8 @@ The sheets are photographed on the simulator in light and dark, with a probe as 
 3. T2SAudio: `BedPlaying`, the bed node in `AudioPlayer`, the manual-rendering test.
 4. T2SApp: `Soundscape`, `SoundscapeLoader`, `GainRamp`, `SoundscapeModel`, preferences,
    `SleepTimer.onFire`, with tests.
-5. App: `AppEnvironment` wiring and the ticker; `SoundscapeSheet`; the overflow item; the sleep
-   sheet's row; photographs.
+5. App: `AppEnvironment` wiring and the ticker; `SoundscapePicker` in the Preferences sheet;
+   `SoundscapeSheet` and the sleep sheet's row; photographs.
 6. Docs: HANDOFF, README (the script), `licenses.md`, this spec's changelog.
 
 About three days. Steps 1 and 2 have no dependency on each other or on 3; 4 needs 2 and 3; 5 needs 4.
@@ -246,6 +268,7 @@ About three days. Steps 1 and 2 have no dependency on each other or on 3; 4 need
 ## 8. Not in this design
 
 Mixing several beds; per-book choices; a bed that outlives the book; downloading sounds on
-demand; stereo; the reference's "Goal timer" cell; a footnote pointing at iOS's own Background
+demand; stereo; an overflow item; a copy in Settings' Appearance sheet; the reference's "Goal
+timer" cell; a footnote pointing at iOS's own Background
 Sounds (Settings → Accessibility → Audio & Visual), which does the same job system-wide and is
 worth knowing about, but is not a thing to advertise inside our own sheet.

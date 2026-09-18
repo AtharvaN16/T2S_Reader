@@ -16,7 +16,12 @@ final class NowPlayingController {
     private let center = MPNowPlayingInfoCenter.default()
     private let commands = MPRemoteCommandCenter.shared()
     private var commandTargets: [(command: MPRemoteCommand, token: Any)] = []
-    private var artworkCache: [UUID: MPMediaItemArtwork] = [:]
+    /// The last few books' artwork; a session that wanders the shelf does not keep every cover.
+    private let artworkCache: NSCache<NSUUID, MPMediaItemArtwork> = {
+        let cache = NSCache<NSUUID, MPMediaItemArtwork>()
+        cache.countLimit = 8
+        return cache
+    }()
     /// Artwork handlers are formed off the main actor (`NowPlayingArtwork`): MediaPlayer calls them
     /// on its own queue, and a main-actor-isolated handler traps there.
     private lazy var fallbackArtwork: MPMediaItemArtwork = {
@@ -247,11 +252,11 @@ final class NowPlayingController {
     }
 
     private func artwork(for document: T2SCore.Document) -> MPMediaItemArtwork {
-        if let cached = artworkCache[document.id] { return cached }
+        if let cached = artworkCache.object(forKey: document.id as NSUUID) { return cached }
         let path = document.coverImagePath.map(paths.url(forRelativePath:)) ?? paths.coverURL(document.id)
         guard let image = UIImage(contentsOfFile: path.path) else { return fallbackArtwork }
         let artwork = NowPlayingArtwork.make(image)
-        artworkCache[document.id] = artwork
+        artworkCache.setObject(artwork, forKey: document.id as NSUUID)
         return artwork
     }
 }

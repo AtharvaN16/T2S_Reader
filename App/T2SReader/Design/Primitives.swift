@@ -1,6 +1,7 @@
 // App/T2SReader/Design/Primitives.swift
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import ImageIO
 import SwiftUI
 import T2SApp
 import T2SCore
@@ -220,7 +221,19 @@ struct CheckMark: View {
 struct Artwork: View {
     /// SwiftUI re-evaluates a `LazyVGrid` cell's body on every scroll pass, so without this the
     /// Collection grid re-reads and re-decodes each visible cover from disk while scrolling.
-    private static let cache = NSCache<NSString, UIImage>()
+    /// Bounded: a shelf of forty books is not forty covers held decoded forever.
+    private static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.totalCostLimit = 48 * 1024 * 1024
+        return cache
+    }()
+
+    /// The most pixels a cover is ever drawn at on its long side: the Collection's 240 pt
+    /// long-press preview and the book sheet's 200 pt hero, on a 3x screen. A cover decoded past
+    /// this is memory and decode time for pixels the screen never shows — an EPUB ships its cover
+    /// at whatever size the publisher chose, often 1,500 px and more, and `UIImage(contentsOfFile:)`
+    /// decoded every one of them whole, on the main thread, to draw an 80 pt cell.
+    private static let maxPixelSize = 720
 
     var relativePath: String?
     var paths: LibraryPaths
@@ -235,9 +248,26 @@ struct Artwork: View {
     static func image(at path: String) -> UIImage? {
         let key = path as NSString
         if let hit = cache.object(forKey: key) { return hit }
-        guard let image = UIImage(contentsOfFile: path) else { return nil }
-        cache.setObject(image, forKey: key)
+        guard let image = decode(at: path) else { return nil }
+        let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
+        cache.setObject(image, forKey: key, cost: cost)
         return image
+    }
+
+    /// ImageIO's thumbnail path: a JPEG is decoded at a fraction of its size rather than whole and
+    /// then scaled, the bitmap is made now rather than at first draw, and the proportions — which
+    /// `BookCover` reads off `size` to decide whether an image is a cover at all — are the file's.
+    /// A file already under the ceiling comes back at its own size; nothing is ever scaled up.
+    private static func decode(at path: String) -> UIImage? {
+        guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return UIImage(cgImage: image)
     }
 
     var body: some View {

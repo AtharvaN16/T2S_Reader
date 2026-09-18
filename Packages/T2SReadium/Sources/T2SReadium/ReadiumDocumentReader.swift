@@ -94,7 +94,7 @@ public struct ReadiumDocumentReader: DocumentReader {
         // Collapsed, not just joined: an OPF that names its author twice — the plain `dc:creator`
         // and the role-tagged one — gave "Jane Austen, Jane Austen" (owner, 2026-09-11).
         let author = AuthorNames.collapse(publication.metadata.authors.map(\.name))
-        let cover = (try? await publication.cover().get())?.flatMap { $0.jpegData(compressionQuality: 0.8) }
+        let cover = (try? await publication.cover().get())?.flatMap(Self.coverJPEG)
         let skipped = readingOrder.filter { blocksByHref[$0] == nil }
         return ReadDocument(
             title: (title?.isEmpty == false ? title : nil) ?? fileURL.deletingPathExtension().lastPathComponent,
@@ -102,6 +102,23 @@ public struct ReadiumDocumentReader: DocumentReader {
             coverImage: cover,
             chapters: chapters,
             skippedResources: skipped)
+    }
+
+    /// The most pixels a stored cover keeps on its long side. The app draws a cover at 720 px at
+    /// the largest (`Artwork.maxPixelSize`); 1,200 leaves room for a bigger slot later without
+    /// keeping a publisher's 3,000 px original — which some EPUBs ship — on disk and in the decode
+    /// path for every shelf. PDF covers have been capped since the start (`PDFCover`, 600 px wide).
+    private static let coverMaxPixels: CGFloat = 1200
+
+    /// The cover as the file it is stored as, scaled down to `coverMaxPixels` when it is larger,
+    /// never up. Nil when the image cannot be encoded.
+    private static func coverJPEG(_ image: UIImage) -> Data? {
+        let longest = max(image.size.width, image.size.height) * image.scale
+        guard longest > coverMaxPixels else { return image.jpegData(compressionQuality: 0.8) }
+        let factor = coverMaxPixels / longest
+        let size = CGSize(width: (image.size.width * image.scale * factor).rounded(),
+                          height: (image.size.height * image.scale * factor).rounded())
+        return (image.preparingThumbnail(of: size) ?? image).jpegData(compressionQuality: 0.8)
     }
 
     private func open(_ fileURL: URL) async throws -> Publication {

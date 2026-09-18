@@ -13,69 +13,7 @@
       "title": "Alice's Adventures in Wonderland",
       "author": "Lewis Carroll",
       "standardEbooks": "lewis-carroll/alices-adventures-in-wonderland",
-      "passage": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it, \"and what is the use of a book,\" thought Alice, \"without pictures or conversations?\" So she was considering in her own mind, as well as she could, for the hot day made her feel very sleepy and stupid, whether the pleasure of making a daisy-chain would be worth the trouble of getting up and picking the daisies, when suddenly a White Rabbit with pink eyes ran close by her. There was nothing so very remarkable in that; nor did Alice think it so very much out of the way to hear the Rabbit say to itself, \"Oh dear! Oh dear! I shall be late!\" But when the Rabbit actually took a watch out of its waistcoat-pocket, and looked at it, and then hurried on, Alice started to her feet, for it flashed across her mind that she had never before seen a rabbit with either a waistcoat-pocket, or a watch to take out of it, and burning with curiosity, she ran across the field after it, and was just in time to see it pop down a large rabbit-hole under the hedge. In another moment down went Alice after it, never once considering how in the world she was to get out again.",
-      "coverID": 13772446
-    },
-    {
-      "id": "moby-dick",
-      "title": "Moby-Dick",
-      "author": "Herman Melville",
-      "voice": "am_michael",
-      "line": "Call me Ishmael.",
-      "coverID": 14702332
-    },
-    {
-      "id": "pride-and-prejudice",
-      "title": "Pride and Prejudice",
-      "author": "Jane Austen",
-      "voice": "af_alloy",
-      "line": "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.",
-      "coverID": 15223895
-    },
-    {
-      "id": "a-tale-of-two-cities",
-      "title": "A Tale of Two Cities",
-      "author": "Charles Dickens",
-      "voice": "am_echo",
-      "line": "It was the best of times, it was the worst of times.",
-      "coverID": 12503144
-    },
-    {
-      "id": "the-great-gatsby",
-      "title": "The Great Gatsby",
-      "author": "F. Scott Fitzgerald",
-      "voice": "af_aoede",
-      "line": "In my younger and more vulnerable years my father gave me some advice that I've been turning over in my mind ever since.",
-      "coverID": 13853193
-    },
-    {
-      "id": "anna-karenina",
-      "title": "Anna Karenina",
-      "author": "Leo Tolstoy",
-      "voice": "bf_emma",
-      "line": "All happy families are alike; each unhappy family is unhappy in its own way.",
-      "coverID": 14843312
-    },
-    {
-      "id": "jane-eyre",
-      "title": "Jane Eyre",
-      "author": "Charlotte Brontë",
-      "voice": "bf_lily",
-      "line": "There was no possibility of taking a walk that day.",
-      "coverID": 14083354
-    },
-    {
-      "id": "the-adventures-of-sherlock-holmes",
-      "title": "The Adventures of Sherlock Holmes",
-      "author": "Arthur Conan Doyle",
-      "voice": "bm_lewis",
-      "line": "To Sherlock Holmes she is always the woman.",
-      "coverID": 14622714
-    },
-    {
-      "id": "circe",
-      "title": "Circe",
-      "author": "Madeline Miller"
+      "passage": "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it, \"and what is the use of a book,\" thought Alice, \"without pictures or conversations?\" So she was considering in her own mind, as well as she could, for the hot day made her feel very sleepy and stupid, whether the pleasure of making a daisy-chain would be worth the trouble of getting up and picking the daisies, when suddenly a White Rabbit with pink eyes ran close by her. There was nothing so very remarkable in that; nor did Alice think it so very much out of the way to hear the Rabbit say to itself, \"Oh dear! Oh dear! I shall be late!\" But when the Rabbit actually took a watch out of its waistcoat-pocket, and looked at it, and then hurried on, Alice started to her feet, for it flashed across her mind that she had never before seen a rabbit with either a waistcoat-pocket, or a watch to take out of it, and burning with curiosity, she ran across the field after it, and was just in time to see it pop down a large rabbit-hole under the hedge. In another moment down went Alice after it, never once considering how in the world she was to get out again."
     },
     {
       "id": "project-hail-mary",
@@ -83,14 +21,24 @@
       "author": "Andy Weir"
     },
     {
-      "id": "the-midnight-library",
-      "title": "The Midnight Library",
-      "author": "Matt Haig"
+      "id": "klara-and-the-sun",
+      "title": "Klara and the Sun",
+      "author": "Kazuo Ishiguro"
     },
     {
-      "id": "where-the-crawdads-sing",
-      "title": "Where the Crawdads Sing",
-      "author": "Delia Owens"
+      "id": "the-four-winds",
+      "title": "The Four Winds",
+      "author": "Kristin Hannah"
+    },
+    {
+      "id": "crying-in-h-mart",
+      "title": "Crying in H Mart",
+      "author": "Michelle Zauner"
+    },
+    {
+      "id": "the-last-thing-he-told-me",
+      "title": "The Last Thing He Told Me",
+      "author": "Laura Dave"
     },
     {
       "id": "tomorrow-and-tomorrow-and-tomorrow",
@@ -98,49 +46,9 @@
       "author": "Gabrielle Zevin"
     },
     {
-      "id": "fourth-wing",
-      "title": "Fourth Wing",
-      "author": "Rebecca Yarros"
-    },
-    {
-      "id": "the-seven-husbands-of-evelyn-hugo",
-      "title": "The Seven Husbands of Evelyn Hugo",
-      "author": "Taylor Jenkins Reid"
-    },
-    {
       "id": "lessons-in-chemistry",
       "title": "Lessons in Chemistry",
       "author": "Bonnie Garmus"
-    },
-    {
-      "id": "educated",
-      "title": "Educated",
-      "author": "Tara Westover"
-    },
-    {
-      "id": "dune",
-      "title": "Dune",
-      "author": "Frank Herbert"
-    },
-    {
-      "id": "the-hunger-games",
-      "title": "The Hunger Games",
-      "author": "Suzanne Collins"
-    },
-    {
-      "id": "normal-people",
-      "title": "Normal People",
-      "author": "Sally Rooney"
-    },
-    {
-      "id": "the-silent-patient",
-      "title": "The Silent Patient",
-      "author": "Alex Michaelides"
-    },
-    {
-      "id": "klara-and-the-sun",
-      "title": "Klara and the Sun",
-      "author": "Kazuo Ishiguro"
     },
     {
       "id": "demon-copperhead",
@@ -148,10 +56,84 @@
       "author": "Barbara Kingsolver"
     },
     {
-      "id": "the-alchemist",
-      "title": "The Alchemist",
-      "author": "Paulo Coelho",
-      "coverID": 11556102
+      "id": "book-lovers",
+      "title": "Book Lovers",
+      "author": "Emily Henry"
+    },
+    {
+      "id": "the-maid",
+      "title": "The Maid",
+      "author": "Nita Prose"
+    },
+    {
+      "id": "sea-of-tranquility",
+      "title": "Sea of Tranquility",
+      "author": "Emily St. John Mandel"
+    },
+    {
+      "id": "im-glad-my-mom-died",
+      "title": "I'm Glad My Mom Died",
+      "author": "Jennette McCurdy"
+    },
+    {
+      "id": "fourth-wing",
+      "title": "Fourth Wing",
+      "author": "Rebecca Yarros"
+    },
+    {
+      "id": "yellowface",
+      "title": "Yellowface",
+      "author": "R. F. Kuang"
+    },
+    {
+      "id": "happy-place",
+      "title": "Happy Place",
+      "author": "Emily Henry"
+    },
+    {
+      "id": "tom-lake",
+      "title": "Tom Lake",
+      "author": "Ann Patchett"
+    },
+    {
+      "id": "the-covenant-of-water",
+      "title": "The Covenant of Water",
+      "author": "Abraham Verghese"
+    },
+    {
+      "id": "hello-beautiful",
+      "title": "Hello Beautiful",
+      "author": "Ann Napolitano"
+    },
+    {
+      "id": "james",
+      "title": "James",
+      "author": "Percival Everett"
+    },
+    {
+      "id": "the-heaven-and-earth-grocery-store",
+      "title": "The Heaven & Earth Grocery Store",
+      "author": "James McBride"
+    },
+    {
+      "id": "trust",
+      "title": "Trust",
+      "author": "Hernan Diaz"
+    },
+    {
+      "id": "verity",
+      "title": "Verity",
+      "author": "Colleen Hoover"
+    },
+    {
+      "id": "the-housemaid",
+      "title": "The Housemaid",
+      "author": "Freida McFadden"
+    },
+    {
+      "id": "horse",
+      "title": "Horse",
+      "author": "Geraldine Brooks"
     }
   ]
 }

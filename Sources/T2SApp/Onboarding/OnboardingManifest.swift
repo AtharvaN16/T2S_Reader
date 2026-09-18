@@ -64,6 +64,17 @@ public struct OnboardingManifest: Codable, Hashable, Sendable {
 
     public var heroBook: Book? { books.first { $0.id == hero } }
 
+    /// The books the reel shows: every one but the hero.
+    ///
+    /// The hero is not a cover any more, and has not been since the reel stopped resolving onto
+    /// one. What it is now is the *voice sample's* book — the passage every voice is rendered
+    /// reading — and that text has to be public domain, which no bestseller of the last five years
+    /// is. So the manifest holds one classic for its words and two dozen recent books for their
+    /// jackets (the owner, 2026-09-18: "for book covers let us use book covers from the past 5
+    /// years popular books"), and Alice's own cover would be the one old jacket in a reel of new
+    /// ones.
+    public var coverBooks: [Book] { books.filter { $0.id != hero } }
+
     /// The books that speak on the way up, in manifest order; never the hero.
     public var voiced: [Book] { books.filter { $0.isVoiced && $0.id != hero } }
 

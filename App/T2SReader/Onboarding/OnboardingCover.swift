@@ -83,7 +83,7 @@ struct OnboardingCover: View {
                     // rise. All of them are in the tree the whole time rather than switched in:
                     // the passage has to be laid out where it will stay before its first word is
                     // spoken, and a view inserted as its veil passes would reflow under the edge.
-                    CoverField(books: manifest.books, elapsed: elapsed)
+                    CoverField(books: manifest.coverBooks, elapsed: elapsed)
                         .ignoresSafeArea()
 
                     RisingVeil(progress: script.welcomeSweep(at: elapsed)) {

@@ -33,8 +33,12 @@ Two concurrent builds fight over the same build database and each other's CPU. S
 exit 137. Wait for the other build to finish before starting yours:
 
 ```bash
-while pgrep -f "Developer/usr/bin/xcodebuild" >/dev/null; do sleep 5; done
+while pgrep -x xcodebuild >/dev/null; do sleep 5; done
 ```
+
+`-x`, not `-f` with a path: the harness runs a command through `zsh -c`, so a `-f` pattern matches
+the shell running the loop as well as the build, and on 2026-09-18 two sessions each waiting on
+the other's *loop* sat deadlocked with no build running at all.
 
 `scripts/build-app.sh` builds into `.build/DerivedData-App`, which is separate from Xcode's own
 DerivedData — but the CPU and the disk are still shared.

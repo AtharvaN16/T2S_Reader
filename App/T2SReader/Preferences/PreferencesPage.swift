@@ -1,9 +1,15 @@
 import SwiftUI
 import T2SApp
 
-/// Spec §2.4.5 Preferences, titled "Settings" since 2026-09-09: sections as a heavy header plus rows
-/// of title, an optional grey subtitle that carries a value (never an explanation), and a
-/// right-aligned control.
+/// Spec §2.4.5 Preferences, titled "Settings" since 2026-09-09. Three cards of rows since
+/// 2026-09-18 (owner, from a reference whose rows each lead with a coloured tile): the two things
+/// about a book being read to you, then Preferences, then About. A row is a tile, a title, a grey
+/// line that carries its *value* — the voice, the size, the speed, the mode — and at its end the one
+/// mark that says what it does: a chevron opens, an arrow acts, a switch switches.
+///
+/// It used to be six headed sections for nine rows, three of them sections of one, with "Reading"
+/// holding the app-wide theme and Storage holding Prepare-on-charge; the chevron opened pages,
+/// opened sheets, replaced the page with the welcome, and on the licence line did nothing at all.
 struct PreferencesPage: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(Chrome.self) private var chrome
@@ -16,100 +22,84 @@ struct PreferencesPage: View {
     /// returns at once — so the subtitle is settled a redraw after the page appears. The MLX probe
     /// is not on this path; it is only ever woken by an MLX voice ID.
     @State private var resolvedDefaultVoiceID: String?
-    @State private var showVoices = false
+
+    /// Between a card and the next header; tighter than `Spacing.section`, which was sized for
+    /// headed sections of loose rows and leaves cards adrift.
+    private let cardGap: CGFloat = 28
 
     var body: some View {
-        @Bindable var preferences = env.preferences
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.section) {
+                VStack(alignment: .leading, spacing: cardGap) {
                     PageTitle(text: "Settings")
-                    section("Voice") {
+                        .padding(.bottom, Spacing.section - cardGap)
+
+                    // No header: these are the page, the way the reference's first card is.
+                    card {
                         NavigationLink {
                             voiceList
                         } label: {
-                            row("Default voice", subtitle: defaultVoiceSubtitle)
+                            SettingsRow(icon: "waveform", color: Tokens.tilePink,
+                                        title: "Voice", subtitle: defaultVoiceSubtitle)
+                        }
+                        NavigationLink {
+                            RenderingPage()
+                        } label: {
+                            SettingsRow(icon: "bolt.fill", color: Tokens.glow,
+                                        title: "Rendering", subtitle: renderingSubtitle, separator: true)
                         }
                     }
-                    section("Playback") {
-                        row("Skip back") {
-                            Menu {
-                                ForEach(ReaderPreferences.skipBackOptions, id: \.self) { seconds in
-                                    Button("\(seconds) s") { preferences.skipBackSeconds = seconds }
-                                }
-                            } label: {
-                                valuePill("\(preferences.skipBackSeconds) s")
-                            }
+
+                    card("Preferences") {
+                        NavigationLink {
+                            PlaybackPage()
+                        } label: {
+                            SettingsRow(icon: "play.fill", color: Tokens.accent,
+                                        title: "Playback", subtitle: playbackSubtitle)
                         }
-                        row("Skip forward") {
-                            Menu {
-                                ForEach(ReaderPreferences.skipForwardOptions, id: \.self) { seconds in
-                                    Button("\(seconds) s") { preferences.skipForwardSeconds = seconds }
-                                }
-                            } label: {
-                                valuePill("\(preferences.skipForwardSeconds) s")
-                            }
-                        }
-                        row("Default speed") {
-                            Menu {
-                                ForEach(SpeedPickerModel.rates, id: \.self) { rate in
-                                    Button(SpeedPickerModel.label(for: rate)) { preferences.defaultRate = rate }
-                                }
-                            } label: {
-                                valuePill(SpeedPickerModel.label(for: preferences.defaultRate))
-                            }
-                        }
-                    }
-                    section("Reading") {
                         Button { showAppearance = true } label: {
-                            row("Appearance")
+                            SettingsRow(icon: "paintpalette.fill", color: Tokens.tilePurple,
+                                        title: "Appearance", subtitle: appearanceSubtitle, separator: true)
                         }
                         .buttonStyle(.plain)
-                    }
-                    section("Storage") {
-                        NavigationLink {
-                            StoragePage()
-                        } label: {
-                            row(
-                                storageRowTitle,
-                                subtitle: ByteCountFormatter.string(
-                                    fromByteCount: Int64(env.storage.stats.bytes),
-                                    countStyle: .file
-                                )
-                            )
-                        }
-                        // Its own row rather than a section of Storage (owner, 2026-09-14): making
-                        // audio ahead and capping how much room it may take are two questions, and
-                        // sharing a screen taught each other's numbers to be misread.
-                        NavigationLink {
-                            PreparePage()
-                        } label: {
-                            row("Prepare on charge", subtitle: prepareSubtitle)
-                        }
-                    }
-                    section("iCloud sync") {
-                        row("Sync positions and bookmarks", subtitle: env.syncModel.unavailableReason ?? env.syncModel.statusText) {
+                        SettingsRow(icon: "icloud.fill", color: Tokens.tileTeal,
+                                    title: "iCloud sync", subtitle: syncSubtitle, separator: true) {
                             Toggle("", isOn: Binding(get: { env.syncModel.isEnabled },
                                                      set: { on in Task { await env.syncModel.setEnabled(on) } }))
                                 .labelsHidden()
                                 .disabled(!env.syncModel.canEnable && !env.syncModel.isEnabled)
                         }
                     }
-                    section("About") {
+
+                    card("About") {
                         // First in About, above the welcome: the welcome is a thing to be shown
                         // again, this is a thing to be read.
                         Button { showHowItWorks = true } label: {
-                            row("How it works")
+                            SettingsRow(icon: "book.fill", color: Tokens.tileGrey, title: "How it works")
                         }
                         .buttonStyle(.plain)
                         // The welcome shows once per install; this is the way back to it, for a
-                        // reader who skipped it and for a photograph.
+                        // reader who skipped it and for a photograph. An arrow, not a chevron: the
+                        // tap does not open a page, it replaces this one.
                         Button { chrome.showsWelcome = true } label: {
-                            row("Show the welcome again")
+                            SettingsRow(icon: "hand.wave.fill", color: Tokens.positive,
+                                        title: "Show the welcome again", separator: true) { RowArrow() }
                         }
                         .buttonStyle(.plain)
-                        row("Fonts: Inter (SIL OFL) · Reader: Readium (BSD-3) · Extraction: Readability (Apache-2.0)")
+                        NavigationLink {
+                            AcknowledgementsPage()
+                        } label: {
+                            SettingsRow(icon: "info", color: Tokens.tileGrey,
+                                        title: "Acknowledgements", separator: true)
+                        }
                     }
+
+                    // A fact, not a row: nothing to tap, so nothing dressed as if there were.
+                    Text(versionLine)
+                        .typeRole(.meta).foregroundStyle(Tokens.ink2)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, -cardGap / 2)
+
                     Color.clear.frame(height: Spacing.bottomClearance)
                 }
                 .padding(.horizontal, Spacing.margin)
@@ -122,9 +112,8 @@ struct PreferencesPage: View {
             .pageTopEdge()
             .containerBackground(Color.clear, for: .navigation)
             .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(isPresented: $showVoices) { voiceList }
             // The "voice model removed" toast's action, tapped from any page (`Chrome.opensStorage`).
-            .navigationDestination(isPresented: Bindable(chrome).opensStorage) { StoragePage() }
+            .navigationDestination(isPresented: Bindable(chrome).opensStorage) { RenderingPage() }
         }
         .sheet(isPresented: $showAppearance) { ReaderPreferencesSheet(showsReaderControls: false) }
         .sheet(isPresented: $showHowItWorks) { HowItWorksSheet() }
@@ -135,25 +124,41 @@ struct PreferencesPage: View {
         .task { await env.syncModel.refreshAvailability() }
     }
 
-    /// What Prepare is set to, in the fewest words that are still true: off, or the mode and — when
-    /// it is not the default — the window it keeps to.
-    private var prepareSubtitle: String {
+    // MARK: - Values
+
+    /// What Rendering holds and whether it works ahead: the size of the audio on the phone, then
+    /// the one word about Prepare that matters at this distance.
+    private var renderingSubtitle: String {
+        // The formatter's word for nothing is "Zero KB", which is a number pretending to be a size.
+        let bytes = env.storage.stats.bytes == 0
+            ? "No audio yet"
+            : ByteCountFormatter.string(fromByteCount: Int64(env.storage.stats.bytes), countStyle: .file)
         let settings = env.prepareSettings
-        guard settings.isEnabled else { return "Off" }
-        let what = settings.mode == .keepUp ? "Keeping up with your reading" : picksSubtitle
-        return settings.window == .overnight ? "\(what) · overnight" : what
+        guard settings.isEnabled else { return "\(bytes) · Prepare off" }
+        return settings.window == .overnight ? "\(bytes) · Prepare overnight" : "\(bytes) · Prepare on charge"
     }
 
-    private var picksSubtitle: String {
-        let count = env.prepareSettings.pickedChapterCount
-        guard count > 0 else { return "Nothing picked" }
-        return "\(count) \(count == 1 ? "chapter" : "chapters") picked"
+    /// The three playback values in one line, in the order the page under it lists them.
+    private var playbackSubtitle: String {
+        let preferences = env.preferences
+        return "\(SpeedPickerModel.label(for: preferences.defaultRate)) · \(preferences.skipBackSeconds) s back · \(preferences.skipForwardSeconds) s forward"
     }
 
-    /// The row names the voice model only where there is one to name: the everyday build has no
-    /// model, and a row offering to manage what does not exist is worse than a shorter row.
-    private var storageRowTitle: String {
-        env.kokoroModel.isSupported ? "Voice model and rendered audio" : "Rendered audio"
+    private var appearanceSubtitle: String {
+        env.preferences.theme == .dark ? "Dark" : "Light"
+    }
+
+    /// Status rather than a value, and the only row whose grey line is: a switch has no value
+    /// beyond its own position, and what a reader wants under it is whether it is working.
+    private var syncSubtitle: String {
+        env.syncModel.unavailableReason ?? env.syncModel.statusText
+    }
+
+    private var versionLine: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? "—"
+        let build = info["CFBundleVersion"] as? String ?? "—"
+        return "t2s \(version) (\(build))"
     }
 
     /// The default voice: the radio moves, "Make default" applies.
@@ -178,42 +183,17 @@ struct PreferencesPage: View {
         return "\(option.name) · \(detail)"
     }
 
-    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text(title).typeRole(.groupTitle).foregroundStyle(Tokens.ink)
-            content()
-        }
-    }
+    // MARK: - Cards
 
-    private func row(_ title: String, subtitle: String = "") -> some View {
-        row(title, subtitle: subtitle) {
-            Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(Tokens.ink3)
-        }
-    }
-
-    private func row<Control: View>(_ title: String, subtitle: String = "", @ViewBuilder control: () -> Control) -> some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                // A title that wraps ("Rendered audio and prepare on charge") stays on the left edge.
-                Text(title).typeRole(.settingsRow).foregroundStyle(Tokens.ink).multilineTextAlignment(.leading)
-                if !subtitle.isEmpty {
-                    Text(subtitle).typeRole(.meta).foregroundStyle(Tokens.ink2)
-                }
+    /// A header in grey over a `SettingsGroup`, or the group alone. Grey, where the old sections'
+    /// headers were ink: the rows carry the ink now, and a header's job is to say which card this
+    /// is without competing with what is on it.
+    private func card<Content: View>(_ title: String? = nil, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let title {
+                Text(title).typeRole(.groupTitle).foregroundStyle(Tokens.ink2)
             }
-            Spacer()
-            control()
+            SettingsGroup { content() }
         }
-        .contentShape(Rectangle())
-    }
-
-    private func valuePill(_ text: String) -> some View {
-        Text(text)
-            .typeRole(.pill)
-            .foregroundStyle(Tokens.ink)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-            .background(Tokens.surface, in: Capsule())
     }
 }

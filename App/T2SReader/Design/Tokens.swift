@@ -89,6 +89,17 @@ enum Tokens {
     static let heartBottom = dynamic(light: 0xDB1729, dark: 0xE62E3E)
     static let heartShade = dynamic(light: 0x99000D, dark: 0x000000)
     static let positive = dynamic(light: 0x22A559, dark: 0x34C070)
+    /// The tiles Settings' rows wear (owner, 2026-09-18, from a reference whose rows each lead
+    /// with a small coloured square): one hue a row, so a reader finds Rendering by its blue
+    /// before reading the word. Lifted in the dark as `glow` is, for the same reason. Rows that
+    /// already have a colour in the app use it — Playback is `accent`, Rendering is `glow`, the
+    /// welcome is `positive` — and these are the hues the app did not have.
+    static let tilePink = dynamic(light: 0xE64980, dark: 0xF0679B)
+    static let tilePurple = dynamic(light: 0x7C4DFF, dark: 0x9A7BFF)
+    static let tileTeal = dynamic(light: 0x1BA6C4, dark: 0x3FC1DD)
+    static let tileGrey = dynamic(light: 0x6E6E73, dark: 0x8E8E93)
+    /// The glyph on a tile: white in both modes, as the reference draws it.
+    static let onTile = dynamic(light: 0xFFFFFF, dark: 0xFFFFFF)
     /// The toast's status disc and the tick on it (owner, 2026-09-13: "black circle with white tick
     /// on light mode and white circle with dark tick on dark mode"). The card is `ink`, so the disc
     /// is the card's own colour carried one step further — true black on the near-black card, true

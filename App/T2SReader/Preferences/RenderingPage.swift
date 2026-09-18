@@ -2,15 +2,18 @@ import Foundation
 import SwiftUI
 import T2SApp
 
-/// Preferences → Storage (spec §2.4.5), rebuilt 2026-09-14 on the owner's read of it: one picture
-/// of what the app is holding, then the three things it holds, in descending order of what they
-/// cost you — the voice, the cache's ceiling, and the books' audio.
+/// Settings → Rendering (spec §2.4.5; "Storage" until 2026-09-18): everything about the audio the
+/// app makes. One picture of what it is holding, then the row for making audio ahead, then the
+/// three things it holds in descending order of what they cost you — the voice, the cache's
+/// ceiling, and the books' audio.
 ///
-/// What left: the prepare-on-charge budget, which is about *making* audio and now has its own page
-/// (`PreparePage`); the per-document progress bar and its "2%", which measured utterances on a
+/// Prepare-on-charge left this page on 2026-09-14, when its four chips sat directly over the
+/// limit's four and read as the same dial; it is back as a *row* (owner, 2026-09-18: rendering is
+/// one menu, and prepare belongs inside it), which keeps the two sets of chips on separate screens.
+/// Also gone since 09-14: the per-document progress bar and its "2%", which measured utterances on a
 /// screen whose unit is megabytes; and the word Evict, which the Book sheet had already replaced
 /// with Delete.
-struct StoragePage: View {
+struct RenderingPage: View {
     @Environment(AppEnvironment.self) private var env
     @State private var confirmsVoiceModelDelete = false
     @State private var confirmsPlansClear = false
@@ -21,8 +24,9 @@ struct StoragePage: View {
         let storage = env.storage
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.section) {
-                PageTitle(text: "Storage", topPadding: Spacing.subpageTitleTop)
+                PageTitle(text: "Rendering", topPadding: Spacing.subpageTitleTop)
                 usage
+                prepare
                 if env.kokoroModel.isSupported { voice }
                 limit
                 documents
@@ -71,6 +75,35 @@ struct StoragePage: View {
             }
         }
         .accessibilityElement(children: .contain)
+    }
+
+    // MARK: - Ahead of time
+
+    /// The way to `PreparePage`, with what it is set to in the fewest words that are still true:
+    /// off, or the mode and — when it is not the default — the window it keeps to.
+    @ViewBuilder private var prepare: some View {
+        section("Ahead of time") {
+            SettingsGroup {
+                NavigationLink {
+                    PreparePage()
+                } label: {
+                    SettingsGroupRow(title: "Prepare on charge", subtitle: prepareSubtitle) { RowChevron() }
+                }
+            }
+        }
+    }
+
+    private var prepareSubtitle: String {
+        let settings = env.prepareSettings
+        guard settings.isEnabled else { return "Off" }
+        let what = settings.mode == .keepUp ? "Keeping up with your reading" : picksSubtitle
+        return settings.window == .overnight ? "\(what) · overnight" : what
+    }
+
+    private var picksSubtitle: String {
+        let count = env.prepareSettings.pickedChapterCount
+        guard count > 0 else { return "Nothing picked" }
+        return "\(count) \(count == 1 ? "chapter" : "chapters") picked"
     }
 
     // MARK: - Voice

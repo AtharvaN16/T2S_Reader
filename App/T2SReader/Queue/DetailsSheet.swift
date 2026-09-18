@@ -21,8 +21,13 @@ struct DetailsSheet: View {
     @State private var contentHeight: CGFloat = 0
 
     /// The cover here, smaller than the book sheet's 200: this sheet is a list of facts with the
-    /// book above it, not the book with its chapters under it.
-    private static let coverHeight: CGFloat = 148
+    /// book above it, not the book with its chapters under it. 124 since the owner asked for a
+    /// slightly smaller one (2026-09-18), which also buys the room the top now takes.
+    private static let coverHeight: CGFloat = 124
+    /// The air above the cover. The sheet's own margin, 24, put the book right under the grab
+    /// handle (owner, 2026-09-18: "too close to the top of the sheet"); this clears the handle and
+    /// gives the book the same kind of opening the book sheet's `Spacing.section` gives its hero.
+    private static let topGap: CGFloat = Spacing.section
     /// The shortest the sheet may be: the frame it opens in before the first layout has said how
     /// tall its contents are. Nothing caps it from above — the system clamps a `.height` detent to
     /// what the screen allows, and the scroll view underneath carries the remainder on a small
@@ -39,7 +44,8 @@ struct DetailsSheet: View {
         ScrollView {
             content
                 .padding(.horizontal, Spacing.margin)
-                .padding(.vertical, Spacing.margin)
+                .padding(.top, Self.topGap)
+                .padding(.bottom, Spacing.margin)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
         }

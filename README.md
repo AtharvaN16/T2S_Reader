@@ -51,7 +51,7 @@ App/                   the iOS app: project.yml → T2SReader.xcodeproj (generat
                        git-ignored, installed by scripts/fetch-kokoro-coreml.sh --app)
 scripts/               build and CI helpers (check-licenses.sh, test-readium.sh, test-kokoro.sh,
                        build-app.sh, build-device.sh, fetch-kokoro-model.sh,
-                       fetch-kokoro-coreml.sh, fetch-fonts.sh, fetch-readability.sh)
+                       fetch-kokoro-coreml.sh, fetch-fonts.sh, fetch-readability.sh, fetch-soundscapes.sh)
 spikes/                throwaway experiments — never imported by shipping code
   SpikeHarness/        iOS harness for spec §7; project.yml → generated .xcodeproj (ignored)
   findings/            one markdown file per spike result, from findings/TEMPLATE.md

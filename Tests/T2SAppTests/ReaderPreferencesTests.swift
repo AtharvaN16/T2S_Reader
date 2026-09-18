@@ -23,6 +23,25 @@ import Testing
         #expect(ReaderPreferences(defaults: defaults).scrubberScope == .book)
     }
 
+    /// The sleep sheet opens on what was chosen last time (2026-09-18): a sleep timer is a habit.
+    /// A stale or hand-edited value lands on a stop of the ruler rather than between two.
+    @Test func sleepChoiceIsRememberedAndSnapsToTheRuler() {
+        let defaults = fresh()
+        let fresh = ReaderPreferences(defaults: defaults)
+        #expect(fresh.sleepMinutes == 30 && !fresh.sleepsAtChapterEnd)
+        fresh.sleepMinutes = 45
+        fresh.sleepsAtChapterEnd = true
+        let again = ReaderPreferences(defaults: defaults)
+        #expect(again.sleepMinutes == 45 && again.sleepsAtChapterEnd)
+        again.sleepMinutes = 7
+        #expect(again.sleepMinutes == 5)
+        again.sleepMinutes = 999
+        #expect(ReaderPreferences(defaults: defaults).sleepMinutes == 120)
+        again.reset()
+        #expect(ReaderPreferences(defaults: defaults).sleepMinutes == 30)
+        #expect(!ReaderPreferences(defaults: defaults).sleepsAtChapterEnd)
+    }
+
     @Test func scopeFlipsToTheOther() {
         #expect(ScrubberScope.book.other == .chapter)
         #expect(ScrubberScope.chapter.other == .book)

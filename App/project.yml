@@ -133,6 +133,9 @@ targetTemplates:
         # `Local.xcconfig.example`), wired in through `configFiles` below.
         INFOPLIST_KEY_UIUserInterfaceStyle: Automatic
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # The other nine liveries of the icon, chosen on Settings → Appearance. `AppIconTests` holds
+        # this list to `AppIcon`; the asset catalog carries one `AppIcon-<Name>.appiconset` per name.
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-Dark AppIcon-Stealth AppIcon-Rainbow AppIcon-Halloween AppIcon-Amber AppIcon-Candy AppIcon-Zen AppIcon-Metal AppIcon-Pixel"
     configFiles:
       Debug: Local.xcconfig
       Release: Local.xcconfig

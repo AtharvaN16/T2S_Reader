@@ -100,7 +100,6 @@ scripts/test-kokoro.sh         # Packages/T2SKokoro with xcodebuild on macOS (ML
 scripts/check-licenses.sh      # fails on any copyleft dependency, in every package
 cd spikes/SpikeHarness && xcodegen generate && open SpikeHarness.xcodeproj
 scripts/build-app.sh           # regenerate App/T2SReader.xcodeproj and build for the simulator
-swift scripts/make-app-icon.swift  # regenerate the app icon PNG after editing the script
 scripts/build-device.sh        # compile proof of the Kokoro target for a device (Release, unsigned)
 scripts/audio-probe.sh         # render one passage nine ways (Core ML variants + MLX control) into spikes/findings/audio-probe/
 swift scripts/analyze-wav.swift spikes/findings/audio-probe/*.wav   # pitch spread, pauses, impulses per WAV

@@ -22,9 +22,9 @@ import T2SApp
 ///
 /// **Swapping the mark.** It is one image asset, `AppMark`, and nothing here knows what is on it:
 /// drop a PNG over `App/T2SReader/Assets.xcassets/AppMark.imageset/AppMark.png` and the picture
-/// takes it, at whatever `markSize` says. `scripts/make-app-icon.swift` writes that file and the
-/// app icon from one drawing, so today they are the same pixels; a designed icon replaces both and
-/// nothing in this file changes.
+/// takes it, at whatever `markSize` says. Since 2026-09-19 it is the default app icon — the wizard
+/// from the Figma file, the same picture as `AppIcon.appiconset` at half the size — so the mark on
+/// this page is the icon on the home screen, whichever livery the reader has picked for the latter.
 ///
 /// The four are the app's own placeholder covers at the size that is too small for words, which is
 /// the face they were drawn for: cloth badged "EPUB", the PDF's light red badged "PDF", a browser

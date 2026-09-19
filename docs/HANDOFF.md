@@ -7,6 +7,48 @@ older and dated as marked. The dated per-session entries that used to stack here
 for the lot, `git log` for the rest), and what mattered from them lives in `crashreport.md`,
 `docs/research/` and the specs._
 
+## Merlin Reader: the icon in ten liveries, and Appearance (2026-09-19)
+
+The app has a name — **Merlin Reader** (the owner's call, 2026-09-19, after a survey of forty-odd
+names in `docs/design/2026-09-18-name-and-icon-concepts.html`) — and an icon: the owner's own
+wizard reading by the light of his book, in ten liveries in the Figma file "T2S Reader" (section
+"App icons", node 97:36). Default, Dark, Stealth, Rainbow, Halloween, Amber, Candy, Zen, Metal and
+Pixel.
+
+- **The pixels.** `scripts/fetch-app-icons.sh` pulls each node as a 1024 px screenshot through the
+  Figma desktop app's local Dev Mode MCP server (Figma open and signed in; 127.0.0.1:3845; no
+  token — the plugin's remote server wants OAuth this harness cannot do). A screenshot is the
+  rounded rectangle standing on the section's grey canvas with a margin, so
+  `scripts/flatten-app-icon.swift` crops to it, cuts the corners along the icon's own outline (a
+  smoothed curve, not a circle — a circle wide enough to clear the canvas bit into the picture on
+  the diagonal), fills under them with the picture drawn at 1.6× behind itself, and writes opaque
+  RGB (App Store Connect rejects an alpha channel, ITMS-90717) at 1024 for the icon set, 256 for
+  the grid's preview and, for the default, 512 for `AppMark`. `scripts/make-app-icon.swift`, which
+  drew the placeholder, is gone.
+- **The build.** `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES` in `App/project.yml` names the
+  nine alternates; the built Info.plist carries them under `CFBundleAlternateIcons` (checked).
+  `AppIcon` in T2SApp is the catalog — titles, alternate names, preview names — and
+  `AppIconTests` holds it, the build setting and the asset folders to one another.
+- **Settings → Appearance** is its own sheet now (`AppearanceSheet`, after the owner's reference,
+  Luma's Appearance page): Colour scheme as three cards, System back among them, and App icon as a
+  four-column grid with the app's radio mark under the chosen one. The choice is asked of iOS
+  (`alternateIconName`) rather than kept as a preference, so the two can never disagree; the sheet
+  opens at the large detent because the grid is its point. `ReaderPreferencesSheet` is the
+  Reader's alone again; its two pills light for the face in force, so a reader on System is not
+  shown neither. `RootPager` no longer settles `system` onto light or dark at launch — that
+  migration existed only because System had left the picker.
+- **Verified** on the iPhone 17 simulator (iOS 26): the sheet in both schemes at both detents,
+  the wizard as the Import hub's mark, an icon change accepted by iOS (Candy on the home screen)
+  and read back by the grid; 5 new tests green with the preferences suite.
+
+**Owed.** The strings still say T2S: `CFBundleDisplayName` (`t2s`, so iOS's own alert reads "You
+have changed the icon for “t2s”"), "Welcome to T2S", "T2S Pro", the referral lines, "Add to t2s",
+the version line. Not renamed here because "Merlin Reader" is 13 characters — wider than the
+welcome's 68 pt and likely truncated under a home-screen icon — so the owner has to choose the
+short form (the label "Merlin" with the full name in the app is the obvious one). Also owed: an
+Icon Composer `.icon` for the iOS 26 tinted and clear home-screen modes, which a flat PNG cannot
+serve.
+
 ## Smoothness pass (2026-09-18)
 
 A desk audit of what was left after the 2026-09-08 performance audit and Plans 13–17, then the

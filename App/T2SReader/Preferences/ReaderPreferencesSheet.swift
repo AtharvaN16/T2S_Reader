@@ -6,9 +6,10 @@ import T2SApp
 /// beside them rather than in app Settings, where they would be a page away from the only screen
 /// they describe — so it is "Preferences" now, and the sliders are one of its three parts.
 ///
-/// Settings presents the same sheet with `showsReaderControls` off, and there it is still
-/// "Appearance": the theme is the only thing in here that is not about a book being read, and a
-/// slider that moves text nobody is looking at is a control without a subject.
+/// Settings presented this same sheet with the Reader's controls hidden until 2026-09-19, when its
+/// Appearance became a sheet of its own (`AppearanceSheet`, with the app icon in it). The light and
+/// dark pills here still move the app-wide switch — it is the only thing in here that is not about
+/// a book being read, and the paper picker under it needs it close by.
 ///
 /// The read-along highlight used to be picked here too. The swatches are gone (owner, 2026-09-12:
 /// "remove the highlight section ... we no longer have it"); `highlightTheme` stays as the reader's
@@ -17,18 +18,13 @@ struct ReaderPreferencesSheet: View {
     @Environment(AppEnvironment.self) private var env
     /// The Reader's paper. The sheet that chooses a paper had better be drawn on one (owner,
     /// 2026-09-14) — and from Settings, where there is no Reader, this is the app's own greys.
-    /// Only consulted while the app-wide switch still says `system`; see `showsDarkFaces`.
+    /// Consulted while the app-wide switch says `system`; see `showsDarkFaces`.
     @Environment(\.colorScheme) private var scheme
-    /// Everything that only means something while a book is open: the two sliders and the two
-    /// switches. Off in Settings, which shows the theme alone.
-    var showsReaderControls: Bool = true
 
-    /// The Reader's presentation wears the book's paper; Settings' wears the app's greys. Read from
-    /// the model here rather than handed in, so changing the paper — or the light behind it —
-    /// repaints the sheet that is doing the changing (owner, 2026-09-14).
-    private var palette: ReaderPalette {
-        showsReaderControls ? ReaderPalette(env.preferences.readerPaper) : .app
-    }
+    /// The sheet wears the book's paper. Read from the model here rather than handed in, so
+    /// changing the paper — or the light behind it — repaints the sheet that is doing the changing
+    /// (owner, 2026-09-14).
+    private var palette: ReaderPalette { ReaderPalette(env.preferences.readerPaper) }
 
     var body: some View {
         @Bindable var preferences = env.preferences
@@ -36,50 +32,46 @@ struct ReaderPreferencesSheet: View {
         // sheet scrolls and can be pulled to large.
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.section) {
-                Text(showsReaderControls ? "Preferences" : "Appearance")
+                Text("Preferences")
                     .typeRole(.sectionHeader)
                     .foregroundStyle(palette.ink)
                     .padding(.top, Spacing.section)
-                if showsReaderControls {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Text size").typeRole(.meta).foregroundStyle(palette.ink2)
-                        Slider(value: $preferences.textScale, in: ReaderPreferences.textScaleRange, step: 0.1)
-                            .tint(palette.ink)
-                    }
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Line height").typeRole(.meta).foregroundStyle(palette.ink2)
-                        Slider(value: $preferences.lineHeight, in: ReaderPreferences.lineHeightRange, step: 0.1)
-                            .tint(palette.ink)
-                    }
-                    // Under the two sliders rather than under everything (owner, 2026-09-14):
-                    // type size, line height and the page's colour are the three things about how
-                    // the book *looks*, and the switches below them are about what it does.
-                    //
-                    // Light and dark come first because they decide what the papers under them can
-                    // even look like (owner, 2026-09-14: "you should be able to switch between app
-                    // level light and dark, which then makes the reader theme easier to select").
-                    // A swatch shows one face now — the one you are in — so the way to see the
-                    // other eight is to stand in it.
-                    modes($preferences.theme)
-                    papers($preferences.readerPaper)
-                    // Two switches, both about what the Reader does rather than how it looks. Each
-                    // carries a grey line saying what it governs — these are gestures and marks a
-                    // reader may never have noticed, so the row has to name them before it can
-                    // sensibly ask whether to keep them.
-                    VStack(alignment: .leading, spacing: 20) {
-                        toggle("Hold to change chapter",
-                               detail: "Press and hold the skip buttons to jump chapters.",
-                               isOn: $preferences.holdSkipChangesChapter)
-                        toggle("Bookmark positions",
-                               detail: "Shows the bookmarks' positions on the scrubber.",
-                               isOn: $preferences.showsBookmarkMarks)
-                    }
-                    // How the book sounds, after how it looks and what it does (soundscape design
-                    // §2.6): the third part, and the one a reader would look for here.
-                    SoundscapePicker()
-                } else {
-                    modes($preferences.theme, note: "Applies to the whole app.")
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Text size").typeRole(.meta).foregroundStyle(palette.ink2)
+                    Slider(value: $preferences.textScale, in: ReaderPreferences.textScaleRange, step: 0.1)
+                        .tint(palette.ink)
                 }
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Line height").typeRole(.meta).foregroundStyle(palette.ink2)
+                    Slider(value: $preferences.lineHeight, in: ReaderPreferences.lineHeightRange, step: 0.1)
+                        .tint(palette.ink)
+                }
+                // Under the two sliders rather than under everything (owner, 2026-09-14):
+                // type size, line height and the page's colour are the three things about how
+                // the book *looks*, and the switches below them are about what it does.
+                //
+                // Light and dark come first because they decide what the papers under them can
+                // even look like (owner, 2026-09-14: "you should be able to switch between app
+                // level light and dark, which then makes the reader theme easier to select").
+                // A swatch shows one face now — the one you are in — so the way to see the
+                // other eight is to stand in it.
+                modes($preferences.theme)
+                papers($preferences.readerPaper)
+                // Two switches, both about what the Reader does rather than how it looks. Each
+                // carries a grey line saying what it governs — these are gestures and marks a
+                // reader may never have noticed, so the row has to name them before it can
+                // sensibly ask whether to keep them.
+                VStack(alignment: .leading, spacing: 20) {
+                    toggle("Hold to change chapter",
+                           detail: "Press and hold the skip buttons to jump chapters.",
+                           isOn: $preferences.holdSkipChangesChapter)
+                    toggle("Bookmark positions",
+                           detail: "Shows the bookmarks' positions on the scrubber.",
+                           isOn: $preferences.showsBookmarkMarks)
+                }
+                // How the book sounds, after how it looks and what it does (soundscape design
+                // §2.6): the third part, and the one a reader would look for here.
+                SoundscapePicker()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, Spacing.margin)
@@ -93,23 +85,22 @@ struct ReaderPreferencesSheet: View {
     }
 
     /// Light or dark, app-wide — the same switch that used to be called Theme, and still the thing
-    /// that governs every screen. `System` is gone with the rename (owner, 2026-09-14): a paper is
-    /// an explicit choice, and a page that changed under the reader at sunset would change which
-    /// eight swatches they were looking at with it.
-    @ViewBuilder private func modes(_ choice: Binding<ReaderTheme>, note: String? = nil) -> some View {
+    /// that governs every screen. No `System` pill here (owner, 2026-09-14): a paper is an explicit
+    /// choice, and a page that changed under the reader at sunset would change which eight swatches
+    /// they were looking at with it. System is offered in Settings' Appearance instead (2026-09-19),
+    /// and a reader who took it sees the pill lit for the face the device is showing; a tap on
+    /// either pill then makes that face explicit.
+    @ViewBuilder private func modes(_ choice: Binding<ReaderTheme>) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Light and dark").typeRole(.meta).foregroundStyle(palette.ink2)
             HStack(spacing: Spacing.grid) {
                 ForEach([ReaderTheme.light, .dark], id: \.self) { theme in
                     modePill(theme.rawValue.capitalized,
                              glyph: theme == .light ? "sun.max.fill" : "moon.fill",
-                             isOn: choice.wrappedValue == theme) {
+                             isOn: (theme == .dark) == showsDarkFaces) {
                         withAnimation(.snappy(duration: 0.2)) { choice.wrappedValue = theme }
                     }
                 }
-            }
-            if let note {
-                Text(note).typeRole(.fine).foregroundStyle(palette.ink2)
             }
         }
     }
@@ -192,9 +183,8 @@ struct ReaderPreferencesSheet: View {
         }
     }
 
-    /// Which face a swatch shows: the one the app's own light/dark switch has chosen, and the
-    /// device's answer only while that switch still says `system` — which, after the 2026-09-14
-    /// migration, it no longer does for anyone.
+    /// Which face a swatch shows, and which pill is lit: the one the app's own light/dark switch
+    /// has chosen, and the device's answer while that switch says `system`.
     private var showsDarkFaces: Bool {
         switch env.preferences.theme {
         case .light: return false

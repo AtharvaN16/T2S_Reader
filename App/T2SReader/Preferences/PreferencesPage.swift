@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import T2SApp
 
 /// Spec §2.4.5 Preferences, titled "Settings" since 2026-09-09: sections as a heavy header plus rows
@@ -17,6 +18,9 @@ struct PreferencesPage: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(Chrome.self) private var chrome
     @State private var showAppearance = false
+    /// Which icon is on, as iOS reports it — read when the page appears and again when the
+    /// Appearance sheet closes, since a change there is the system's to keep, not a preference's.
+    @State private var icon: AppIcon = .standard
     @State private var showHowItWorks = false
     /// What "System default" actually resolves to on this device: Kokoro Heart where the Core ML
     /// route is available, the system voice otherwise (spec §6). Resolved in `.task` because
@@ -98,7 +102,9 @@ struct PreferencesPage: View {
             // The "voice model removed" toast's action, tapped from any page (`Chrome.opensStorage`).
             .navigationDestination(isPresented: Bindable(chrome).opensStorage) { RenderingPage() }
         }
-        .sheet(isPresented: $showAppearance) { ReaderPreferencesSheet(showsReaderControls: false) }
+        .sheet(isPresented: $showAppearance) { AppearanceSheet() }
+        .onChange(of: showAppearance) { _, shown in if !shown { readIcon() } }
+        .onAppear(perform: readIcon)
         .sheet(isPresented: $showHowItWorks) { HowItWorksSheet() }
         .task {
             resolvedDefaultVoiceID = await env.voiceRouting.effectiveVoiceID(VoiceOption.systemDefault.id)
@@ -127,8 +133,15 @@ struct PreferencesPage: View {
         return "\(SpeedPickerModel.label(for: preferences.defaultRate)) · \(preferences.skipBackSeconds) s back · \(preferences.skipForwardSeconds) s forward"
     }
 
+    /// The scheme's word, and the icon's after it when it is not the default: two values, the way
+    /// the Playback row lists three.
     private var appearanceSubtitle: String {
-        env.preferences.theme == .dark ? "Dark" : "Light"
+        let scheme = env.preferences.theme.title
+        return icon == .standard ? scheme : "\(scheme) · \(icon.title) icon"
+    }
+
+    private func readIcon() {
+        icon = AppIcon(alternateIconName: UIApplication.shared.alternateIconName)
     }
 
     /// Status rather than a value, and the only row whose grey line is: a switch has no value

@@ -52,7 +52,6 @@ private struct SleepCardKey: Equatable {
 struct RootPager: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.colorScheme) private var scheme
     @State private var page: RootPage = .queue
     /// A file handed to us by another app (`onOpenURL`), shown through the Import page like any other
     /// import rather than imported invisibly.
@@ -155,12 +154,9 @@ struct RootPager: View {
 
         .playbackTicking(env.player, sleepTimer: env.sleepTimer, soundscape: env.soundscape, continuation: env.continuation, nowPlaying: env.nowPlaying)
         .task {
-            // `System` left the picker with the Reader's papers (owner, 2026-09-14), so a reader
-            // who was on it settles once, here, on whatever the device was showing at that moment.
-            // Done in a view rather than in `ReaderPreferences`: this is the first place that can
-            // ask what the device actually resolved to, and with `.system` in force `appTheme()`
-            // sets no override, so `colorScheme` *is* the device's answer.
-            if env.preferences.theme == .system { env.preferences.theme = scheme == .dark ? .dark : .light }
+            // Until 2026-09-19 this settled a reader on `system` onto whichever face the device
+            // was showing, because System had left the Reader's picker (2026-09-14). Settings'
+            // Appearance offers it again, so a reader who chooses it has to be left on it.
             await env.libraryModel.refresh()
             presentWelcomeIfNeeded()
             #if DEBUG

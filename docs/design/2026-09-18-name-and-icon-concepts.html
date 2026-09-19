@@ -1,0 +1,132 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>Name and icon concepts — 2026-09-18</title>
+<style>
+@font-face{font-family:"InterDisplay";src:url("file:///Users/atharvanayak/Developer/t2s_reader/App/Resources/Fonts/InterDisplay-Black.ttf");font-weight:900}
+@font-face{font-family:"Inter";src:url("file:///Users/atharvanayak/Developer/t2s_reader/App/Resources/Fonts/Inter-Regular.ttf");font-weight:400}
+@font-face{font-family:"Inter";src:url("file:///Users/atharvanayak/Developer/t2s_reader/App/Resources/Fonts/Inter-Medium.ttf");font-weight:500}
+@font-face{font-family:"Inter";src:url("file:///Users/atharvanayak/Developer/t2s_reader/App/Resources/Fonts/Inter-SemiBold.ttf");font-weight:600}
+*{box-sizing:border-box}
+body{margin:0;width:1400px;background:#1c1c1e;color:#ECEDF0;font-family:Inter,-apple-system,sans-serif;padding:36px 48px}
+h1{font-size:22px;font-weight:600;margin:0 0 4px}
+h2{font-size:13px;font-weight:500;color:#94969E;letter-spacing:.06em;text-transform:uppercase;margin:34px 0 14px}
+p.note{color:#94969E;font-size:13px;margin:0 0 6px}
+.row{display:flex;gap:40px;align-items:flex-start}
+.big{width:220px}
+.big svg{width:220px;height:220px;border-radius:22.37%;display:block}
+.cap{font-size:13px;color:#ECEDF0;margin-top:12px;font-weight:500}
+.sub{font-size:12px;color:#94969E;margin-top:3px;line-height:1.4}
+.home{display:flex;gap:28px}
+.screen{border-radius:18px;padding:22px 26px 16px;display:flex;gap:28px}
+.screen.light{background:linear-gradient(160deg,#dfe6f1,#f3e9de)}
+.screen.dark{background:linear-gradient(160deg,#1b2233,#2e1d1a)}
+.app{width:60px;text-align:center}
+.app svg{width:60px;height:60px;border-radius:22.37%;display:block;margin:0 auto}
+.app .l{font-size:11px;margin-top:6px;color:#fff;font-weight:500;letter-spacing:-.01em}
+.screen.light .app .l{color:#111}
+.phones{display:flex;gap:28px}
+.phone{width:300px;height:360px;border-radius:34px;background:#101010;position:relative;overflow:hidden;border:1px solid #333}
+.phone .wash{position:absolute;inset:0;background:radial-gradient(60% 45% at 50% 0%,rgba(255,140,58,.28),rgba(255,140,58,0) 70%)}
+.phone .t{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.phone .w{font-family:Inter;font-weight:500;font-size:17px;color:#8E8E8E}
+.phone .n{font-family:InterDisplay;font-weight:900;font-size:52px;color:#F2F2F2;letter-spacing:-.02em}
+.phone .s{position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:11px;color:#8E8E8E}
+table{border-collapse:collapse;font-size:13px;width:1300px}td,th{text-align:left;vertical-align:top;padding:8px 12px;border-top:1px solid #333;line-height:1.45}th{color:#94969E;font-weight:500;font-size:12px;letter-spacing:.04em;text-transform:uppercase;border-top:0}td.n{font-weight:600;white-space:nowrap}td.ok{color:#37D97C}td.no{color:#FF6B5E}td.mid{color:#E0A64A}
+</style></head><body>
+<h1>Name and icon concepts</h1>
+<p class="note">Four icon directions drawn from the app's own motifs — the word lit as it is spoken, and the voice's light blooming at the crown — beside the placeholder. Then the same at home-screen size, and the welcome beat with candidate names in it.</p>
+
+<h2>1 · Icons at 220 pt</h2>
+<div class="row">
+
+<div class="big"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+<rect width="1024" height="1024" fill="#FF7A1A"/>
+<g fill="#fff"><rect x="232" y="320" width="560" height="72" rx="36"/><rect x="232" y="440" width="440" height="72" rx="36"/><rect x="232" y="560" width="320" height="72" rx="36"/></g>
+<path d="M632 560 L792 640 L632 720 Z" fill="#fff"/>
+</svg><div class="cap">Today: the placeholder</div><div class="sub">Text lines and a play triangle. It is the mark every TTS app on the store already uses.</div></div>
+
+<div class="big"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+<defs><radialGradient id="ga" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#FF8C3A" stop-opacity=".5"/><stop offset="1" stop-color="#FF8C3A" stop-opacity="0"/></radialGradient>
+<filter id="ba" x="-50%" y="-100%" width="200%" height="300%"><feGaussianBlur stdDeviation="26"/></filter></defs>
+<rect width="1024" height="1024" fill="#101010"/>
+<ellipse cx="560" cy="448" rx="360" ry="250" fill="url(#ga)"/>
+<rect x="440" y="416" width="240" height="64" rx="32" fill="#FF8C3A" opacity=".85" filter="url(#ba)"/>
+<g fill="#F2F2F2"><rect x="192" y="288" width="640" height="64" rx="32"/><rect x="192" y="416" width="208" height="64" rx="32"/></g>
+<rect x="440" y="416" width="240" height="64" rx="32" fill="#FF8C3A"/>
+<g fill="#F2F2F2" opacity=".26"><rect x="720" y="416" width="112" height="64" rx="32"/><rect x="192" y="544" width="568" height="64" rx="32"/><rect x="192" y="672" width="400" height="64" rx="32"/></g>
+</svg><div class="cap">A · The lit word, dark</div><div class="sub">What has been read is ink, what is being read is the accent and glows, what is coming is dim. The Reader's page as a mark.</div></div>
+
+<div class="big"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+<defs><radialGradient id="gb" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#FF7A1A" stop-opacity=".38"/><stop offset="1" stop-color="#FF7A1A" stop-opacity="0"/></radialGradient>
+<filter id="bb" x="-50%" y="-100%" width="200%" height="300%"><feGaussianBlur stdDeviation="22"/></filter></defs>
+<rect width="1024" height="1024" fill="#F8F8F7"/>
+<ellipse cx="560" cy="448" rx="360" ry="250" fill="url(#gb)"/>
+<rect x="440" y="416" width="240" height="64" rx="32" fill="#FF7A1A" opacity=".7" filter="url(#bb)"/>
+<g fill="#111"><rect x="192" y="288" width="640" height="64" rx="32"/><rect x="192" y="416" width="208" height="64" rx="32"/></g>
+<rect x="440" y="416" width="240" height="64" rx="32" fill="#FF7A1A"/>
+<g fill="#111" opacity=".22"><rect x="720" y="416" width="112" height="64" rx="32"/><rect x="192" y="544" width="568" height="64" rx="32"/><rect x="192" y="672" width="400" height="64" rx="32"/></g>
+</svg><div class="cap">B · The lit word, paper</div><div class="sub">The same mark on the light ground. Rarer on a home screen than a dark tile, and it is the Reader's default page.</div></div>
+
+<div class="big"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+<defs><radialGradient id="gc" cx=".5" cy="0" r=".62"><stop offset="0" stop-color="#FF8C3A" stop-opacity=".95"/><stop offset=".55" stop-color="#FF8C3A" stop-opacity=".22"/><stop offset="1" stop-color="#FF8C3A" stop-opacity="0"/></radialGradient></defs>
+<rect width="1024" height="1024" fill="#101010"/>
+<rect width="1024" height="1024" fill="url(#gc)"/>
+<g fill="#F2F2F2"><rect x="192" y="400" width="640" height="64" rx="32" opacity="1"/><rect x="192" y="528" width="520" height="64" rx="32" opacity=".55"/><rect x="192" y="656" width="600" height="64" rx="32" opacity=".3"/><rect x="192" y="784" width="380" height="64" rx="32" opacity=".18"/></g>
+</svg><div class="cap">C · The light at the crown, dark</div><div class="sub">The voice's bloom from the welcome and the voice page, with the page falling away beneath it. Quieter, less literal.</div></div>
+
+<div class="big"><svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+<defs><radialGradient id="gd" cx=".5" cy="0" r=".62"><stop offset="0" stop-color="#FF7A1A" stop-opacity=".9"/><stop offset=".55" stop-color="#FF7A1A" stop-opacity=".18"/><stop offset="1" stop-color="#FF7A1A" stop-opacity="0"/></radialGradient></defs>
+<rect width="1024" height="1024" fill="#F8F8F7"/>
+<rect width="1024" height="1024" fill="url(#gd)"/>
+<g fill="#111"><rect x="192" y="400" width="640" height="64" rx="32" opacity="1"/><rect x="192" y="528" width="520" height="64" rx="32" opacity=".5"/><rect x="192" y="656" width="600" height="64" rx="32" opacity=".26"/><rect x="192" y="784" width="380" height="64" rx="32" opacity=".14"/></g>
+</svg><div class="cap">D · The light at the crown, paper</div><div class="sub">C on the light ground. The warmest of the four at a glance; the least distinct from a weather or sunrise app.</div></div>
+
+</div>
+
+<h2>2 · On the home screen at 60 pt</h2>
+<div class="home">
+<div class="screen light">
+<div class="app"><svg viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="#FF7A1A"/><g fill="#fff"><rect x="232" y="320" width="560" height="72" rx="36"/><rect x="232" y="440" width="440" height="72" rx="36"/><rect x="232" y="560" width="320" height="72" rx="36"/></g><path d="M632 560 L792 640 L632 720 Z" fill="#fff"/></svg><div class="l">t2s</div></div>
+<div class="app"><svg viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="#101010"/><ellipse cx="560" cy="448" rx="360" ry="250" fill="url(#ga)"/><g fill="#F2F2F2"><rect x="192" y="288" width="640" height="64" rx="32"/><rect x="192" y="416" width="208" height="64" rx="32"/></g><rect x="440" y="416" width="240" height="64" rx="32" fill="#FF8C3A"/><g fill="#F2F2F2" opacity=".26"><rect x="720" y="416" width="112" height="64" rx="32"/><rect x="192" y="544" width="568" height="64" rx="32"/><rect x="192" y="672" width="400" height="64" rx="32"/></g></svg><div class="l">Lector</div></div>
+<div class="app"><svg viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="#F8F8F7"/><ellipse cx="560" cy="448" rx="360" ry="250" fill="url(#gb)"/><g fill="#111"><rect x="192" y="288" width="640" height="64" rx="32"/><rect x="192" y="416" width="208" height="64" rx="32"/></g><rect x="440" y="416" width="240" height="64" rx="32" fill="#FF7A1A"/><g fill="#111" opacity=".22"><rect x="720" y="416" width="112" height="64" rx="32"/><rect x="192" y="544" width="568" height="64" rx="32"/><rect x="192" y="672" width="400" height="64" rx="32"/></g></svg><div class="l">Lector</div></div>
+<div class="app"><svg viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="#101010"/><rect width="1024" height="1024" fill="url(#gc)"/><g fill="#F2F2F2"><rect x="192" y="400" width="640" height="64" rx="32"/><rect x="192" y="528" width="520" height="64" rx="32" opacity=".55"/><rect x="192" y="656" width="600" height="64" rx="32" opacity=".3"/><rect x="192" y="784" width="380" height="64" rx="32" opacity=".18"/></g></svg><div class="l">Softspoken</div></div>
+<div class="app"><svg viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="#F8F8F7"/><rect width="1024" height="1024" fill="url(#gd)"/><g fill="#111"><rect x="192" y="400" width="640" height="64" rx="32"/><rect x="192" y="528" width="520" height="64" rx="32" opacity=".5"/><rect x="192" y="656" width="600" height="64" rx="32" opacity=".26"/><rect x="192" y="784" width="380" height="64" rx="32" opacity=".14"/></g></svg><div class="l">Pagelight</div></div>
+</div>
+<div class="screen dark">
+<div class="app"><svg viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="#FF7A1A"/><g fill="#fff"><rect x="232" y="320" width="560" height="72" rx="36"/><rect x="232" y="440" width="440" height="72" rx="36"/><rect x="232" y="560" width="320" height="72" rx="36"/></g><path d="M632 560 L792 640 L632 720 Z" fill="#fff"/></svg><div class="l">t2s</div></div>
+<div class="app"><svg viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="#101010"/><ellipse cx="560" cy="448" rx="360" ry="250" fill="url(#ga)"/><g fill="#F2F2F2"><rect x="192" y="288" width="640" height="64" rx="32"/><rect x="192" y="416" width="208" height="64" rx="32"/></g><rect x="440" y="416" width="240" height="64" rx="32" fill="#FF8C3A"/><g fill="#F2F2F2" opacity=".26"><rect x="720" y="416" width="112" height="64" rx="32"/><rect x="192" y="544" width="568" height="64" rx="32"/><rect x="192" y="672" width="400" height="64" rx="32"/></g></svg><div class="l">Lector</div></div>
+<div class="app"><svg viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="#F8F8F7"/><ellipse cx="560" cy="448" rx="360" ry="250" fill="url(#gb)"/><g fill="#111"><rect x="192" y="288" width="640" height="64" rx="32"/><rect x="192" y="416" width="208" height="64" rx="32"/></g><rect x="440" y="416" width="240" height="64" rx="32" fill="#FF7A1A"/><g fill="#111" opacity=".22"><rect x="720" y="416" width="112" height="64" rx="32"/><rect x="192" y="544" width="568" height="64" rx="32"/><rect x="192" y="672" width="400" height="64" rx="32"/></g></svg><div class="l">Lector</div></div>
+<div class="app"><svg viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="#101010"/><rect width="1024" height="1024" fill="url(#gc)"/><g fill="#F2F2F2"><rect x="192" y="400" width="640" height="64" rx="32"/><rect x="192" y="528" width="520" height="64" rx="32" opacity=".55"/><rect x="192" y="656" width="600" height="64" rx="32" opacity=".3"/><rect x="192" y="784" width="380" height="64" rx="32" opacity=".18"/></g></svg><div class="l">Softspoken</div></div>
+<div class="app"><svg viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="#F8F8F7"/><rect width="1024" height="1024" fill="url(#gd)"/><g fill="#111"><rect x="192" y="400" width="640" height="64" rx="32"/><rect x="192" y="528" width="520" height="64" rx="32" opacity=".5"/><rect x="192" y="656" width="600" height="64" rx="32" opacity=".26"/><rect x="192" y="784" width="380" height="64" rx="32" opacity=".14"/></g></svg><div class="l">Pagelight</div></div>
+</div>
+</div>
+
+<h2>3 · The welcome beat with a candidate name in it</h2>
+<div class="phones">
+<div class="phone"><div class="wash"></div><div class="t"><div class="w">Welcome to</div><div class="n">Lector</div></div><div class="s">68 pt, as today</div></div>
+<div class="phone"><div class="wash"></div><div class="t"><div class="w">Welcome to</div><div class="n" style="font-size:40px">Softspoken</div></div><div class="s">52 pt: at 68 pt it is wider than the phone</div></div>
+<div class="phone"><div class="wash"></div><div class="t"><div class="w">Welcome to</div><div class="n">Pagelight</div></div><div class="s">68 pt, as today</div></div>
+</div>
+<div class="phones" style="margin-top:28px">
+<div class="phone"><div class="wash"></div><div class="t"><div class="w">Welcome to</div><div class="n">Gloaming</div></div><div class="s">68 pt, as today</div></div>
+<div class="phone"><div class="wash"></div><div class="t"><div class="w">Welcome to</div><div class="n">Evensong</div></div><div class="s">68 pt, as today</div></div>
+<div class="phone"><div class="wash"></div><div class="t"><div class="w">Welcome to</div><div class="n" style="font-size:40px">Bookfellow</div></div><div class="s">52 pt: at 68 pt it is wider than the phone</div></div>
+<div class="phone"><div class="wash"></div><div class="t"><div class="w">Welcome to</div><div class="n">Endpaper</div></div><div class="s">68 pt, as today</div></div>
+</div>
+<h2>4 · The name survey (App Store, 2026-09-18)</h2>
+<table>
+<tr><th>Name</th><th>Why it fits</th><th>On the store today</th><th>Verdict</th></tr>
+<tr><td class="n">Lector</td><td>Latin for reader; the person whose job is to read aloud to a room — the lector of a service, or the one who read novels to the cigar rollers of Havana and Tampa all day. A reading voice, not a narrator, which is the app's own line.</td><td>Nothing of that exact name. A Linux desktop e-book reader on GitHub; Spanish-language "Lector de voz" apps (lector is the ordinary Spanish word for reader); Lectory and Lectern nearby.</td><td class="ok">Clean. Recommended.</td></tr>
+<tr><td class="n">Softspoken</td><td>How the voice reads, and what the beds under it are for. Warm, bedtime, the sleep ruler and the soundscapes.</td><td>No app of that name; a music artist and an ElevenLabs voice tag.</td><td class="ok">Clean. Ten letters; the welcome would drop to 52 pt.</td></tr>
+<tr><td class="n">Pagelight</td><td>The light on the page — the icon, literally.</td><td>No app of that exact name; Lightpage (an AI journal) is the same two words reversed, and reading-light utilities cluster near it.</td><td class="mid">Usable; some confusion with Lightpage.</td></tr>
+<tr><td class="n">Gloaming</td><td>Scots for twilight, the hour the app is for. Reads as a quiet word even to people who have not met it.</td><td>Nothing; only "Gloam", a Korean beauty booking app.</td><td class="ok">Clean.</td></tr>
+<tr><td class="n">Evensong</td><td>The evening service that is sung rather than said: a voice at the end of the day.</td><td>Nothing; the word is on Apple Music, not the App Store.</td><td class="ok">Clean. Carries a church note.</td></tr>
+<tr><td class="n">Bookfellow</td><td>The one who reads with you. Warm, a little old-fashioned, plainly about books.</td><td>Nothing of that name; Bookmate and BookBuddy are neighbours.</td><td class="ok">Clean. Ten letters; 52 pt on the welcome.</td></tr>
+<tr><td class="n">Endpaper</td><td>The leaf that binds a book to its cover; a quiet, bookish word almost nobody has claimed.</td><td>No iOS app; endpaper.app is an AI ghostwriting service on the web, and Endpaper Labs makes Android puzzles.</td><td class="mid">Usable; the ghostwriting site is an awkward neighbour.</td></tr>
+<tr><td class="n">Dulcet</td><td>Dulcet tones: sweet-sounding. The voice, in one word.</td><td>A habit-breaking app of that name exists on social media; no clear store listing found.</td><td class="mid">Probably free; check in App Store Connect.</td></tr>
+<tr><td class="n">Nightjar</td><td>The bird that sings at dusk. Short, strange, memorable.</td><td>"The Nightjar", a 2013 audio game, was delisted years ago; the name may still be held by its developer.</td><td class="mid">Usable if the name has been released.</td></tr>
+<tr><td class="n">Lilt</td><td>The rise and fall of a pleasant voice: exactly what a good reading voice has. Four letters.</td><td>No app of that name, but Lilt Inc. is an AI translation company with the word as its mark in software.</td><td class="mid">Trademark risk, not store risk.</td></tr>
+<tr><td class="n">Told</td><td>A story, told. Four letters, calm.</td><td>"Told." — a predictions game — took the name in 2026; TELL (family stories) nearby.</td><td class="mid">Same name, unrelated category. Apple may refuse the exact string.</td></tr>
+<tr><td class="n">Taken</td><td colspan="2">Aloud (Aloud!, a TTS reader since 2014), Narro (Narro Reader, TTS), Timbre (Timbre – Text to Speech), Orate (Orate – Listen to Your Docs), Octavo (Octavo Reader), Recto (a reading tracker), Lectio (Lectio 365), Quire (task manager), Hearth, Sotto, Wick, Voce, Prosody, Booklight, Lamplight, Firelight, Rhapsode, Alight, Aglow, Alcove, Wren, Bedside, Earmark, Undertone, Wordlight, Inkvoice (VoiceInk), Merlin (Merlin Bird ID, three Merlin AI chatbots), Bard (BARD Mobile, the Library of Congress audiobook app for blind readers; Google's Bard mark), Libretto, Flyleaf (Flyleaf: Read Later), Deckle, Vesper, Murmur, Skald, Raconteur, Along (a dozen Read Along apps), Calliope, Wordsworth, Verbatim, Ochre, Nightingale, Tallow, Ellipsis.</td><td class="no">Do not use.</td></tr>
+</table>
+</body></html>
